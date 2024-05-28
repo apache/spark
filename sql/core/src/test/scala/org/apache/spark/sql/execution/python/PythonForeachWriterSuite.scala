@@ -72,6 +72,7 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       sleepPerRowReadMs: Int = 0
     )(f: BufferTester => Unit): Unit = {
 
+    System.gc()
     test(name) {
       var tester: BufferTester = null
       try {

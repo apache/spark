@@ -406,19 +406,21 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("SPARK-10849: test schemaString - from createTableColumnTypes option values") {
     def testCreateTableColDataTypes(types: Seq[String]): Unit = {
+      val dialect = JdbcDialects.get(url1)
       val colTypes = types.zipWithIndex.map { case (t, i) => (s"col$i", t) }
       val schema = colTypes
         .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
       val createTableColTypes =
         colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
 
-      val expectedSchemaStr =
-        colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
+      val expectedSchemaStr = schema.map { f =>
+          s""""${f.name}" ${JdbcUtils.getJdbcType(f.dataType, dialect).databaseTypeDefinition} """
+        }.mkString(", ")
 
       assert(JdbcUtils.schemaString(
+        dialect,
         schema,
         spark.sessionState.conf.caseSensitiveAnalysis,
-        url1,
         Option(createTableColTypes)) == expectedSchemaStr)
     }
 

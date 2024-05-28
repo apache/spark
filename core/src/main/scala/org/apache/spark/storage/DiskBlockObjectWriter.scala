@@ -24,7 +24,8 @@ import java.util.zip.Checksum
 
 import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
@@ -74,8 +75,8 @@ private[spark] class DiskBlockObjectWriter(
         // get IOException when flushing the buffered data. We should catch and log the exception
         // to ensure the revertPartialWritesAndClose() function doesn't throw an exception.
         case e: IOException =>
-          logError("Exception occurred while manually close the output stream to file "
-            + file + ", " + e.getMessage)
+          logError(log"Exception occurred while manually close the output stream to file "
+            + log"${MDC(PATH, file)}, ${MDC(ERROR, e.getMessage)}")
       }
     }
   }
@@ -267,10 +268,11 @@ private[spark] class DiskBlockObjectWriter(
         // don't log the exception stack trace to avoid confusing users.
         // See: SPARK-28340
         case ce: ClosedByInterruptException =>
-          logError("Exception occurred while reverting partial writes to file "
-            + file + ", " + ce.getMessage)
+          logError(log"Exception occurred while reverting partial writes to file "
+            + log"${MDC(PATH, file)}, ${MDC(ERROR, ce.getMessage)}")
         case e: Exception =>
-          logError("Uncaught exception while reverting partial writes to file " + file, e)
+          logError(
+            log"Uncaught exception while reverting partial writes to file ${MDC(PATH, file)}", e)
       } finally {
         if (truncateStream != null) {
           truncateStream.close()
@@ -295,7 +297,7 @@ private[spark] class DiskBlockObjectWriter(
       }
     } {
       if (!Files.deleteIfExists(file.toPath)) {
-        logWarning(s"Error deleting $file")
+        logWarning(log"Error deleting ${MDC(FILE_NAME, file)}")
       }
     }
   }

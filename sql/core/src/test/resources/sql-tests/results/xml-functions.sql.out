@@ -357,17 +357,9 @@ select from_xml(
   'd date',
   map('dateFormat', 'MM-dd'))
 -- !query schema
-struct<>
+struct<from_xml(<p><d>02-29</d></p>):struct<d:date>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'02-29'"
-  }
-}
+{"d":null}
 
 
 -- !query
@@ -376,17 +368,9 @@ select from_xml(
   't timestamp',
   map('timestampFormat', 'MM-dd'))
 -- !query schema
-struct<>
+struct<from_xml(<p><t>02-29</t></p>):struct<t:timestamp>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'02-29'"
-  }
-}
+{"t":null}
 
 
 -- !query

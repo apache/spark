@@ -188,6 +188,11 @@ class JSONOptions(
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
 
+  // This option takes in a column name and specifies that the entire JSON record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints
@@ -282,6 +287,7 @@ object JSONOptions extends DataSourceOptions {
   val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
+  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

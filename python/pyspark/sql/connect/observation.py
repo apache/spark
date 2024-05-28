@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     PySparkAssertionError,
 )
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
 import pyspark.sql.connect.plan as plan
@@ -82,6 +82,7 @@ Observation.__doc__ = PySparkObservation.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -90,7 +91,7 @@ def _test() -> None:
     globs = pyspark.sql.connect.observation.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.observation tests")
-        .remote("local[4]")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
         .getOrCreate()
     )
 

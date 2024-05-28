@@ -783,6 +783,7 @@ object View {
         "spark.sql.hive.convertMetastoreParquet",
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertInsertingUnpartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
       ).contains(key) || key.startsWith("spark.sql.catalog.")
     }
@@ -1070,7 +1071,8 @@ case class Range(
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def simpleString(maxFields: Int): String = {
-    s"Range ($start, $end, step=$step, splits=$numSlices)"
+    val splits = if (numSlices.isDefined) { s", splits=$numSlices" } else { "" }
+    s"Range ($start, $end, step=$step$splits)"
   }
 
   override def maxRows: Option[Long] = {
@@ -2055,6 +2057,8 @@ case class LateralJoin(
     right: LateralSubquery,
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
+
+  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

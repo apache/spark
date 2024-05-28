@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
+private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   /**
    * Handle to the stateful processor that provides access to the state store and other
@@ -40,11 +40,11 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
    * Function that will be invoked as the first method that allows for users to
    * initialize all their state variables and perform other init actions before handling data.
    * @param outputMode - output mode for the stateful processor
-   * @param timeoutMode - timeout mode for the stateful processor
+   * @param timeMode - time mode for the stateful processor.
    */
   def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit
+      timeMode: TimeMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
@@ -90,4 +90,26 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
     }
     statefulProcessorHandle
   }
+}
+
+/**
+ * Stateful processor with support for specifying initial state.
+ * Accepts a user-defined type as initial state to be initialized in the first batch.
+ * This can be used for starting a new streaming query with existing state from a
+ * previous streaming query.
+ */
+@Experimental
+@Evolving
+private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
+  extends StatefulProcessor[K, I, O] {
+
+  /**
+   * Function that will be invoked only in the first batch for users to process initial states.
+   *
+   * @param key - grouping key
+   * @param initialState - A row in the initial state to be processed
+   * @param timerValues  - instance of TimerValues that provides access to current processing/event
+   *                     time if available
+   */
+  def handleInitialState(key: K, initialState: S, timerValues: TimerValues): Unit
 }

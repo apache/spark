@@ -23,6 +23,7 @@ import unittest
 
 import numpy as np
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -194,7 +195,10 @@ class FeatureTestsMixin:
             assembler2.transform(pandas_df)["out"].tolist()
 
 
-@unittest.skipIf(not should_test_connect, connect_requirement_message)
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "pyspark-connect cannot test classic Spark",
+)
 class FeatureTests(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

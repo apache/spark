@@ -23,7 +23,6 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -151,6 +150,8 @@ class DatetimeNTZOps(DatetimeOps):
     """
 
     def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+        from pyspark import SparkContext
+
         jvm = SparkContext._active_spark_context._jvm
         return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
 

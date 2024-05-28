@@ -19,6 +19,7 @@ import unittest
 
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
@@ -26,16 +27,32 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
         df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
         super().check_help_command(df)
 
-    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
-    def test_sample(self):
-        super().test_sample()
+    def test_cached_property_is_copied(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+                StructField("age", IntegerType(), True),
+                StructField("city", StringType(), True),
+            ]
+        )
+        # Create some dummy data
+        data = [
+            (1, "Alice", 30, "New York"),
+            (2, "Bob", 25, "San Francisco"),
+            (3, "Cathy", 29, "Los Angeles"),
+            (4, "David", 35, "Chicago"),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        df_columns = df.columns
+        assert len(df.columns) == 4
+        for col in ["id", "name"]:
+            df_columns.remove(col)
+        assert len(df.columns) == 4
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
-
-    def test_toDF_with_string(self):
-        super().test_toDF_with_string()
 
 
 if __name__ == "__main__":

@@ -110,7 +110,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
@@ -126,7 +126,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       exception = intercept[SparkArithmeticException] {
         OneRowRelation().select(lit("66666666666666.666").cast("DECIMAL(8, 1)")).collect()
       },
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       sqlState = "22003",
       parameters = Map(
         "value" -> "66666666666666.666",
@@ -251,12 +251,10 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       val tableName = "overflowTable"
       withTable(tableName) {
         sql(s"CREATE TABLE $tableName(i $targetType) USING parquet")
-        val ex = intercept[SparkException] {
-          sql(s"insert into $tableName values 12345678901234567890D")
-        }
-        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = ex.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into $tableName values 12345678901234567890D")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -289,12 +287,10 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       sql("CREATE TABLE t2 (x tinyint) USING parquet")
       val insertCmd = "insert into t2 select 0 - (case when x = 1.2345678901234567E19D " +
         "then 1.2345678901234567E19D else x end) from t1 where x = 1.2345678901234567E19D;"
-      val ex = intercept[SparkException] {
-        sql(insertCmd).collect()
-      }
-      assert(ex.getErrorClass == "TASK_WRITE_FAILED")
       checkError(
-        exception = ex.getCause.asInstanceOf[SparkArithmeticException],
+        exception = intercept[SparkArithmeticException] {
+          sql(insertCmd).collect()
+        },
         errorClass = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",

@@ -23,7 +23,8 @@ import scala.concurrent.Future
 
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
@@ -41,7 +42,7 @@ class BlockManagerMaster(
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
     tell(RemoveExecutor(execId))
-    logInfo("Removed " + execId + " successfully in removeExecutor")
+    logInfo(log"Removed ${MDC(EXECUTOR_ID, execId)} successfully in removeExecutor")
   }
 
   /** Decommission block managers corresponding to given set of executors
@@ -61,7 +62,7 @@ class BlockManagerMaster(
    */
   def removeExecutorAsync(execId: String): Unit = {
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
-    logInfo("Removal of executor " + execId + " requested")
+    logInfo(log"Removal of executor ${MDC(EXECUTOR_ID, execId)} requested")
   }
 
   /**
@@ -76,7 +77,7 @@ class BlockManagerMaster(
       maxOffHeapMemSize: Long,
       storageEndpoint: RpcEndpointRef,
       isReRegister: Boolean = false): BlockManagerId = {
-    logInfo(s"Registering BlockManager $id")
+    logInfo(log"Registering BlockManager ${MDC(BLOCK_MANAGER_ID, id)}")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
       RegisterBlockManager(
         id,
@@ -89,9 +90,9 @@ class BlockManagerMaster(
     )
     if (updatedId.executorId == BlockManagerId.INVALID_EXECUTOR_ID) {
       assert(isReRegister, "Got invalid executor id from non re-register case")
-      logInfo(s"Re-register BlockManager $id failed")
+      logInfo(log"Re-register BlockManager ${MDC(BLOCK_MANAGER_ID, id)} failed")
     } else {
-      logInfo(s"Registered BlockManager $updatedId")
+      logInfo(log"Registered BlockManager ${MDC(BLOCK_MANAGER_ID, updatedId)}")
     }
     updatedId
   }
@@ -189,7 +190,8 @@ class BlockManagerMaster(
   def removeRdd(rddId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Int]]](RemoveRdd(rddId))
     future.failed.foreach(e =>
-      logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}", e)
+      logWarning(log"Failed to remove RDD ${MDC(RDD_ID, rddId)} - " +
+        log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
@@ -201,7 +203,8 @@ class BlockManagerMaster(
   def removeShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     val future = driverEndpoint.askSync[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.failed.foreach(e =>
-      logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}", e)
+      logWarning(log"Failed to remove shuffle ${MDC(SHUFFLE_ID, shuffleId)} - " +
+        log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
@@ -214,8 +217,9 @@ class BlockManagerMaster(
     val future = driverEndpoint.askSync[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.failed.foreach(e =>
-      logWarning(s"Failed to remove broadcast $broadcastId" +
-        s" with removeFromMaster = $removeFromMaster - ${e.getMessage}", e)
+      logWarning(log"Failed to remove broadcast ${MDC(BROADCAST_ID, broadcastId)}" +
+        log" with removeFromMaster = ${MDC(REMOVE_FROM_MASTER, removeFromMaster)} - " +
+        log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
       // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here

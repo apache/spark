@@ -47,6 +47,8 @@ from pyspark.sql.types import (
     NullType,
     DataType,
     UserDefinedType,
+    VariantType,
+    VariantVal,
     _create_row,
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
@@ -108,6 +110,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(dt.sqlType())
+    elif type(dt) == VariantType:
+        fields = [
+            pa.field("value", pa.binary(), nullable=False),
+            pa.field("metadata", pa.binary(), nullable=False),
+        ]
+        arrow_type = pa.struct(fields)
     else:
         raise PySparkTypeError(
             error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
@@ -762,6 +770,20 @@ def _create_converter_to_pandas(
                         return udt.deserialize(conv(value))
 
             return convert_udt
+
+        elif isinstance(dt, VariantType):
+
+            def convert_variant(value: Any) -> Any:
+                if (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
+                    return VariantVal(value["value"], value["metadata"])
+                else:
+                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+
+            return convert_variant
 
         else:
             return None

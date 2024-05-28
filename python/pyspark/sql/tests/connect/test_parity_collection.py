@@ -23,9 +23,6 @@ class DataFrameCollectionParityTests(
     DataFrameCollectionTestsMixin,
     ReusedConnectTestCase,
 ):
-    def test_to_local_iterator_not_fully_consumed(self):
-        self.check_to_local_iterator_not_fully_consumed()
-
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.
         super().check_to_pandas_for_array_of_struct(True)

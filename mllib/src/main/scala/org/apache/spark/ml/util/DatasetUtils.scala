@@ -18,7 +18,8 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, LABEL_COLUMN, NUM_CLASSES}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.feature.Instance
@@ -195,8 +196,9 @@ private[spark] object DatasetUtils extends Logging {
           s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
           s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
           s" StringIndexer to the label column.")
-        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
-          s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
+        logInfo(log"${MDC(CLASS_NAME, this.getClass.getCanonicalName)} inferred ${MDC(
+          NUM_CLASSES, numClasses)} classes for labelCol=${MDC(LABEL_COLUMN, labelCol)}" +
+          log" since numClasses was not specified in the column metadata.")
         numClasses
     }
   }

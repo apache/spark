@@ -24,7 +24,7 @@ check_dependencies(__name__)
 import warnings
 from typing import List, Type, TYPE_CHECKING, Optional, Union
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import ColumnReference, Expression, NamedArgumentExpression
 from pyspark.sql.connect.plan import (
@@ -141,7 +141,10 @@ class UserDefinedTableFunction:
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedTableFunction:
         def to_expr(col: "ColumnOrName") -> Expression:
-            return col._expr if isinstance(col, Column) else ColumnReference(col)
+            if isinstance(col, Column):
+                return col._expr
+            else:
+                return ColumnReference(col)  # type: ignore[arg-type]
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()

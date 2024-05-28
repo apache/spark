@@ -16,10 +16,14 @@
 #
 
 import os
+import gc
 import unittest
 import shutil
 import tempfile
+import io
+from contextlib import redirect_stdout
 
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -32,6 +36,7 @@ from pyspark.sql.types import (
     ArrayType,
     Row,
 )
+from pyspark.testing.utils import eventually
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -52,6 +57,7 @@ if should_test_connect:
     from pyspark.sql.connect import functions as CF
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
@@ -130,6 +136,14 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_serialization(self):
+        from pyspark.cloudpickle import dumps, loads
+
+        cdf = self.connect.range(10)
+        data = dumps(cdf)
+        cdf2 = loads(data)
+        self.assertEqual(cdf.collect(), cdf2.collect())
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
@@ -340,6 +354,24 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         result = df._explain_string()
         self.assertGreater(len(result), 0)
 
+    def _check_print_schema(self, query: str):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.sql(query).printSchema()
+            print1 = buf.getvalue()
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.connect.sql(query).printSchema()
+            print2 = buf.getvalue()
+        self.assertEqual(print1, print2, query)
+
+        for level in [-1, 0, 1, 2, 3, 4]:
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.spark.sql(query).printSchema(level)
+                print1 = buf.getvalue()
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.connect.sql(query).printSchema(level)
+                print2 = buf.getvalue()
+            self.assertEqual(print1, print2, query)
+
     def test_schema(self):
         schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
@@ -361,6 +393,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test TimestampType, DateType
         query = """
@@ -374,6 +407,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test DayTimeIntervalType
         query = """ SELECT INTERVAL '100 10:30' DAY TO MINUTE AS interval """
@@ -381,6 +415,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test MapType
         query = """
@@ -394,6 +429,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test ArrayType
         query = """
@@ -407,6 +443,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test StructType
         query = """
@@ -420,6 +457,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
@@ -1155,6 +1193,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
 
+    def test_self_join(self):
+        # SPARK-47713: this query fails in classic spark
+        df1 = self.connect.createDataFrame([(1, "a")], schema=["i", "j"])
+        df1_filter = df1.filter(df1.i > 0)
+        df2 = df1.join(df1_filter, df1.i == 1)
+        self.assertEqual(df2.count(), 1)
+        self.assertEqual(df2.columns, ["i", "j", "i", "j"])
+        self.assertEqual(list(df2.first()), [1, "a", 1, "a"])
+
     def test_with_metadata(self):
         cdf = self.connect.createDataFrame(data=[(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         self.assertEqual(cdf.schema["age"].metadata, {})
@@ -1208,6 +1255,222 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df.cache()
         self.assert_eq(10, df.count())
         self.assertTrue(df.is_cached)
+
+    def test_parse_col_name(self):
+        from pyspark.sql.connect.types import parse_attr_name
+
+        self.assert_eq(parse_attr_name(""), [""])
+
+        self.assert_eq(parse_attr_name("a"), ["a"])
+        self.assert_eq(parse_attr_name("`a`"), ["a"])
+        self.assert_eq(parse_attr_name("`a"), None)
+        self.assert_eq(parse_attr_name("a`"), None)
+
+        self.assert_eq(parse_attr_name("`a`.b"), ["a", "b"])
+        self.assert_eq(parse_attr_name("`a`.`b`"), ["a", "b"])
+        self.assert_eq(parse_attr_name("`a```.b"), ["a`", "b"])
+        self.assert_eq(parse_attr_name("`a``.b"), None)
+
+        self.assert_eq(parse_attr_name("a.b.c"), ["a", "b", "c"])
+        self.assert_eq(parse_attr_name("`a`.`b`.`c`"), ["a", "b", "c"])
+        self.assert_eq(parse_attr_name("a.`b`.c"), ["a", "b", "c"])
+
+        self.assert_eq(parse_attr_name("`a.b.c`"), ["a.b.c"])
+        self.assert_eq(parse_attr_name("a.`b.c`"), ["a", "b.c"])
+        self.assert_eq(parse_attr_name("`a.b`.c"), ["a.b", "c"])
+        self.assert_eq(parse_attr_name("`a.b.c"), None)
+        self.assert_eq(parse_attr_name("a.b.c`"), None)
+        self.assert_eq(parse_attr_name("`a.`b.`c"), None)
+        self.assert_eq(parse_attr_name("a`.b`.c`"), None)
+
+        self.assert_eq(parse_attr_name("`ab..c`e.f"), None)
+
+    def test_verify_col_name(self):
+        from pyspark.sql.connect.types import verify_col_name
+
+        cdf = (
+            self.connect.range(10)
+            .withColumn("v", CF.lit(123))
+            .withColumn("s", CF.struct("id", "v"))
+            .withColumn("m", CF.struct("s", "v"))
+            .withColumn("a", CF.array("s"))
+        )
+
+        # root
+        # |-- id: long (nullable = false)
+        # |-- v: integer (nullable = false)
+        # |-- s: struct (nullable = false)
+        # |    |-- id: long (nullable = false)
+        # |    |-- v: integer (nullable = false)
+        # |-- m: struct (nullable = false)
+        # |    |-- s: struct (nullable = false)
+        # |    |    |-- id: long (nullable = false)
+        # |    |    |-- v: integer (nullable = false)
+        # |    |-- v: integer (nullable = false)
+        # |-- a: array (nullable = false)
+        # |    |-- element: struct (containsNull = false)
+        # |    |    |-- id: long (nullable = false)
+        # |    |    |-- v: integer (nullable = false)
+
+        self.assertTrue(verify_col_name("id", cdf.schema))
+        self.assertTrue(verify_col_name("`id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("v", cdf.schema))
+        self.assertTrue(verify_col_name("`v`", cdf.schema))
+
+        self.assertFalse(verify_col_name("x", cdf.schema))
+        self.assertFalse(verify_col_name("`x`", cdf.schema))
+
+        self.assertTrue(verify_col_name("s", cdf.schema))
+        self.assertTrue(verify_col_name("`s`", cdf.schema))
+        self.assertTrue(verify_col_name("s.id", cdf.schema))
+        self.assertTrue(verify_col_name("s.`id`", cdf.schema))
+        self.assertTrue(verify_col_name("`s`.id", cdf.schema))
+        self.assertTrue(verify_col_name("`s`.`id`", cdf.schema))
+        self.assertFalse(verify_col_name("`s.id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("m", cdf.schema))
+        self.assertTrue(verify_col_name("`m`", cdf.schema))
+        self.assertTrue(verify_col_name("m.s.id", cdf.schema))
+        self.assertTrue(verify_col_name("m.s.`id`", cdf.schema))
+        self.assertTrue(verify_col_name("m.`s`.id", cdf.schema))
+        self.assertTrue(verify_col_name("`m`.`s`.`id`", cdf.schema))
+        self.assertFalse(verify_col_name("m.`s.id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("a", cdf.schema))
+        self.assertTrue(verify_col_name("`a`", cdf.schema))
+        self.assertTrue(verify_col_name("a.`v`", cdf.schema))
+        self.assertTrue(verify_col_name("a.`v`", cdf.schema))
+        self.assertTrue(verify_col_name("`a`.v", cdf.schema))
+        self.assertTrue(verify_col_name("`a`.`v`", cdf.schema))
+        self.assertFalse(verify_col_name("`a`.`x`", cdf.schema))
+
+        cdf = (
+            self.connect.range(10)
+            .withColumn("v", CF.lit(123))
+            .withColumn("s.s", CF.struct("id", "v"))
+            .withColumn("m`", CF.struct("`s.s`", "v"))
+        )
+
+        # root
+        # |-- id: long (nullable = false)
+        # |-- v: string (nullable = false)
+        # |-- s.s: struct (nullable = false)
+        # |    |-- id: long (nullable = false)
+        # |    |-- v: string (nullable = false)
+        # |-- m`: struct (nullable = false)
+        # |    |-- s.s: struct (nullable = false)
+        # |    |    |-- id: long (nullable = false)
+        # |    |    |-- v: string (nullable = false)
+        # |    |-- v: string (nullable = false)
+
+        self.assertFalse(verify_col_name("s", cdf.schema))
+        self.assertFalse(verify_col_name("`s`", cdf.schema))
+        self.assertFalse(verify_col_name("s.s", cdf.schema))
+        self.assertFalse(verify_col_name("s.`s`", cdf.schema))
+        self.assertFalse(verify_col_name("`s`.s", cdf.schema))
+        self.assertTrue(verify_col_name("`s.s`", cdf.schema))
+
+        self.assertFalse(verify_col_name("m", cdf.schema))
+        self.assertFalse(verify_col_name("`m`", cdf.schema))
+        self.assertTrue(verify_col_name("`m```", cdf.schema))
+
+        self.assertFalse(verify_col_name("`m```.s", cdf.schema))
+        self.assertFalse(verify_col_name("`m```.`s`", cdf.schema))
+        self.assertFalse(verify_col_name("`m```.s.s", cdf.schema))
+        self.assertFalse(verify_col_name("`m```.s.`s`", cdf.schema))
+        self.assertTrue(verify_col_name("`m```.`s.s`", cdf.schema))
+
+        self.assertFalse(verify_col_name("`m```.s.s.v", cdf.schema))
+        self.assertFalse(verify_col_name("`m```.s.`s`.v", cdf.schema))
+        self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
+        self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
+
+
+class SparkConnectGCTests(SparkConnectSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.origin = os.getenv("USER", None)
+        os.environ["USER"] = "SparkConnectGCTests"
+        super(SparkConnectGCTests, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super(SparkConnectGCTests, cls).tearDownClass()
+        if cls.origin is not None:
+            os.environ["USER"] = cls.origin
+        else:
+            del os.environ["USER"]
+
+    def test_garbage_collection_checkpoint(self):
+        # SPARK-48258: Make sure garbage-collecting DataFrame remove the paired state
+        # in Spark Connect server
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._plan._relation_id)
+        cached_remote_relation_id = df._plan._relation_id
+
+        jvm = self.spark._jvm
+        session_holder = getattr(
+            getattr(
+                jvm.org.apache.spark.sql.connect.service,
+                "SparkConnectService$",
+            ),
+            "MODULE$",
+        ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
+
+        # Check the state exists.
+        self.assertIsNotNone(
+            session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+        )
+
+        del df
+        gc.collect()
+
+        def condition():
+            # Check the state was removed up on garbage-collection.
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
+
+        eventually(catch_assertions=True)(condition)()
+
+    def test_garbage_collection_derived_checkpoint(self):
+        # SPARK-48258: Should keep the cached remote relation when derived DataFrames exist
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._plan._relation_id)
+        derived = df.repartition(10)
+        cached_remote_relation_id = df._plan._relation_id
+
+        jvm = self.spark._jvm
+        session_holder = getattr(
+            getattr(
+                jvm.org.apache.spark.sql.connect.service,
+                "SparkConnectService$",
+            ),
+            "MODULE$",
+        ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
+
+        # Check the state exists.
+        self.assertIsNotNone(
+            session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+        )
+
+        del df
+        gc.collect()
+
+        def condition():
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
+
+        # Should not remove the cache
+        with self.assertRaises(AssertionError):
+            eventually(catch_assertions=True, timeout=5)(condition)()
+
+        del derived
+        gc.collect()
+
+        eventually(catch_assertions=True)(condition)()
 
 
 if __name__ == "__main__":

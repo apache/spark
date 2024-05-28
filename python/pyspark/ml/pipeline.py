@@ -18,7 +18,7 @@ import os
 
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, cast, TYPE_CHECKING
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import (
@@ -40,6 +40,7 @@ from pyspark.sql.dataframe import DataFrame
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap, PipelineStage
     from py4j.java_gateway import JavaObject
+    from pyspark.core.context import SparkContext
 
 
 @inherit_doc
@@ -200,6 +201,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
@@ -353,6 +355,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
 
         :return: Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
@@ -400,7 +403,7 @@ class PipelineSharedReadWrite:
     def saveImpl(
         instance: Union[Pipeline, PipelineModel],
         stages: List["PipelineStage"],
-        sc: SparkContext,
+        sc: "SparkContext",
         path: str,
     ) -> None:
         """
@@ -419,7 +422,7 @@ class PipelineSharedReadWrite:
 
     @staticmethod
     def load(
-        metadata: Dict[str, Any], sc: SparkContext, path: str
+        metadata: Dict[str, Any], sc: "SparkContext", path: str
     ) -> Tuple[str, List["PipelineStage"]]:
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`

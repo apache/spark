@@ -16,15 +16,16 @@
 #
 import uuid
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from abc import ABC, abstractmethod
-
-from py4j.java_gateway import JavaObject
 
 from pyspark.sql import Row
 from pyspark import cloudpickle
 
 __all__ = ["StreamingQueryListener"]
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class StreamingQueryListener(ABC):
@@ -124,13 +125,13 @@ class StreamingQueryListener(ABC):
         pass
 
     @property
-    def _jlistener(self) -> JavaObject:
+    def _jlistener(self) -> "JavaObject":
         from pyspark import SparkContext
 
         if hasattr(self, "_jlistenerobj"):
             return self._jlistenerobj
 
-        self._jlistenerobj: JavaObject = (
+        self._jlistenerobj: "JavaObject" = (
             SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
                 JStreamingQueryListener(self)
             )
@@ -146,16 +147,16 @@ class JStreamingQueryListener:
     def __init__(self, pylistener: StreamingQueryListener) -> None:
         self.pylistener = pylistener
 
-    def onQueryStarted(self, jevent: JavaObject) -> None:
+    def onQueryStarted(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryStarted(QueryStartedEvent.fromJObject(jevent))
 
-    def onQueryProgress(self, jevent: JavaObject) -> None:
+    def onQueryProgress(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryProgress(QueryProgressEvent.fromJObject(jevent))
 
-    def onQueryIdle(self, jevent: JavaObject) -> None:
+    def onQueryIdle(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryIdle(QueryIdleEvent.fromJObject(jevent))
 
-    def onQueryTerminated(self, jevent: JavaObject) -> None:
+    def onQueryTerminated(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryTerminated(QueryTerminatedEvent.fromJObject(jevent))
 
     class Java:
@@ -182,7 +183,7 @@ class QueryStartedEvent:
         self._timestamp: str = timestamp
 
     @classmethod
-    def fromJObject(cls, jevent: JavaObject) -> "QueryStartedEvent":
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryStartedEvent":
         return cls(
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
@@ -245,7 +246,7 @@ class QueryProgressEvent:
         self._progress: StreamingQueryProgress = progress
 
     @classmethod
-    def fromJObject(cls, jevent: JavaObject) -> "QueryProgressEvent":
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryProgressEvent":
         return cls(progress=StreamingQueryProgress.fromJObject(jevent.progress()))
 
     @classmethod
@@ -277,7 +278,7 @@ class QueryIdleEvent:
         self._timestamp: str = timestamp
 
     @classmethod
-    def fromJObject(cls, jevent: JavaObject) -> "QueryIdleEvent":
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryIdleEvent":
         return cls(
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
@@ -336,7 +337,7 @@ class QueryTerminatedEvent:
         self._errorClassOnException: Optional[str] = errorClassOnException
 
     @classmethod
-    def fromJObject(cls, jevent: JavaObject) -> "QueryTerminatedEvent":
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryTerminatedEvent":
         jexception = jevent.exception()
         jerrorclass = jevent.errorClassOnException()
         return cls(
@@ -419,10 +420,10 @@ class StreamingQueryProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         observedMetrics: Dict[str, Row],
-        jprogress: Optional[JavaObject] = None,
+        jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ):
-        self._jprogress: Optional[JavaObject] = jprogress
+        self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
         self._id: uuid.UUID = id
         self._runId: uuid.UUID = runId
@@ -441,7 +442,7 @@ class StreamingQueryProgress:
         self._observedMetrics: Dict[str, Row] = observedMetrics
 
     @classmethod
-    def fromJObject(cls, jprogress: JavaObject) -> "StreamingQueryProgress":
+    def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
         from pyspark import SparkContext
 
         return cls(
@@ -664,10 +665,10 @@ class StateOperatorProgress:
         numShufflePartitions: int,
         numStateStoreInstances: int,
         customMetrics: Dict[str, int],
-        jprogress: Optional[JavaObject] = None,
+        jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ):
-        self._jprogress: Optional[JavaObject] = jprogress
+        self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
         self._operatorName: str = operatorName
         self._numRowsTotal: int = numRowsTotal
@@ -683,7 +684,7 @@ class StateOperatorProgress:
         self._customMetrics: Dict[str, int] = customMetrics
 
     @classmethod
-    def fromJObject(cls, jprogress: JavaObject) -> "StateOperatorProgress":
+    def fromJObject(cls, jprogress: "JavaObject") -> "StateOperatorProgress":
         return cls(
             jprogress=jprogress,
             operatorName=jprogress.operatorName(),
@@ -811,10 +812,10 @@ class SourceProgress:
         inputRowsPerSecond: float,
         processedRowsPerSecond: float,
         metrics: Dict[str, str],
-        jprogress: Optional[JavaObject] = None,
+        jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._jprogress: Optional[JavaObject] = jprogress
+        self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
         self._description: str = description
         self._startOffset: str = startOffset
@@ -826,7 +827,7 @@ class SourceProgress:
         self._metrics: Dict[str, str] = metrics
 
     @classmethod
-    def fromJObject(cls, jprogress: JavaObject) -> "SourceProgress":
+    def fromJObject(cls, jprogress: "JavaObject") -> "SourceProgress":
         return cls(
             jprogress=jprogress,
             description=jprogress.description(),
@@ -946,17 +947,17 @@ class SinkProgress:
         description: str,
         numOutputRows: int,
         metrics: Dict[str, str],
-        jprogress: Optional[JavaObject] = None,
+        jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self._jprogress: Optional[JavaObject] = jprogress
+        self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
         self._description: str = description
         self._numOutputRows: int = numOutputRows
         self._metrics: Dict[str, str] = metrics
 
     @classmethod
-    def fromJObject(cls, jprogress: JavaObject) -> "SinkProgress":
+    def fromJObject(cls, jprogress: "JavaObject") -> "SinkProgress":
         return cls(
             jprogress=jprogress,
             description=jprogress.description(),

@@ -2928,6 +2928,67 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Check HasPartitionStatistics from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array(), "tbl"))
+        .asInstanceOf[InMemoryPartitionTable]
+
+      var partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      var partRowCounts = table.data.map(_.numRows().getAsLong)
+      var partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partSizes.length == 0)
+      assert(partRowCounts.length == 0)
+      assert(partFiles.length == 0)
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 2)
+      assert(partSizes.toSet == Set(100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 2)
+      assert(partRowCounts.toSet == Set(1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 2)
+      assert(partFiles.toSet == Set(100, 100))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 0))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 5)
+      assert(partSizes.toSet == Set(100, 100, 100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 5)
+      assert(partRowCounts.toSet == Set(1, 1, 0, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 5)
+      assert(partFiles.toSet == Set(100, 100, 100, 100, 100))
+    }
+  }
+
   test("time travel") {
     sql("use testcat")
     // The testing in-memory table simply append the version/timestamp to the table name when

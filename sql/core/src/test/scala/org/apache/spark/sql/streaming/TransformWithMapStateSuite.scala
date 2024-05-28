@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputMapRow(key: String, action: String, value: (String, String))
@@ -32,7 +32,7 @@ class TestMapStateProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
   }
 
@@ -82,7 +82,8 @@ class TestMapStateProcessor
  * Class that adds integration tests for MapState types used in arbitrary stateful
  * operators such as transformWithState.
  */
-class TransformWithMapStateSuite extends StreamTest {
+class TransformWithMapStateSuite extends StreamTest
+  with AlsoTestWithChangelogCheckpointingEnabled {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -93,7 +94,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
 
@@ -119,7 +120,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -143,7 +144,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -166,7 +167,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.NoTimeouts(),
+          TimeMode.None(),
           OutputMode.Append())
       testStream(result, OutputMode.Append())(
         // Test exists()
@@ -208,7 +209,10 @@ class TransformWithMapStateSuite extends StreamTest {
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
-        CheckNewAnswer(("k2", "exists", "false"))
+        CheckNewAnswer(("k2", "exists", "false")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+        }
       )
     }
   }
@@ -220,7 +224,7 @@ class TransformWithMapStateSuite extends StreamTest {
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new TestMapStateProcessor(),
-        TimeoutMode.NoTimeouts(),
+        TimeMode.None(),
         OutputMode.Append())
 
     val df = result.toDF()

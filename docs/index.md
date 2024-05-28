@@ -38,8 +38,6 @@ Spark runs on Java 17/21, Scala 2.13, Python 3.8+, and R 3.5+.
 When using the Scala API, it is necessary for applications to use the same version of Scala that Spark was compiled for.
 For example, when using Scala 2.13, use Spark compiled for 2.13, and compile code/applications for Scala 2.13 as well.
 
-Setting `-Dio.netty.tryReflectionSetAccessible=true` is required for the Apache Arrow library. This prevents the `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` error when Apache Arrow uses Netty internally.
-
 # Running the Examples and Shell
 
 Spark comes with several sample programs. Python, Scala, Java, and R examples are in the

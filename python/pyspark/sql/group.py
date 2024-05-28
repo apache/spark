@@ -19,14 +19,13 @@ import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
-from py4j.java_gateway import JavaObject
-
-from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.column import Column
 from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType
 
 __all__ = ["GroupedData"]
@@ -45,6 +44,8 @@ def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
 
 def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
     def _api(self: "GroupedData", *cols: str) -> DataFrame:
+        from pyspark.sql.classic.column import _to_seq
+
         name = f.__name__
         jdf = getattr(self._jgd, name)(_to_seq(self.session._sc, cols))
         return DataFrame(jdf, self.session)
@@ -65,7 +66,7 @@ class GroupedData(PandasGroupedOpsMixin):
         Supports Spark Connect.
     """
 
-    def __init__(self, jgd: JavaObject, df: DataFrame):
+    def __init__(self, jgd: "JavaObject", df: DataFrame):
         self._jgd = jgd
         self._df = df
         self.session: SparkSession = df.sparkSession
@@ -176,6 +177,8 @@ class GroupedData(PandasGroupedOpsMixin):
         |  Bob|           5|
         +-----+------------+
         """
+        from pyspark.sql.classic.column import _to_seq
+
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             jdf = self._jgd.agg(exprs[0])

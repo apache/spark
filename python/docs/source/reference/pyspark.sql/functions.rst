@@ -143,6 +143,7 @@ Mathematical Functions
     try_add
     try_divide
     try_multiply
+    try_remainder
     try_subtract
     unhex
     width_bucket
@@ -280,6 +281,8 @@ Date and Timestamp Functions
     quarter
     second
     session_window
+    timestamp_add
+    timestamp_diff
     timestamp_micros
     timestamp_millis
     timestamp_seconds
@@ -534,6 +537,20 @@ JSON Functions
     json_tuple
     schema_of_json
     to_json
+
+
+VARIANT Functions
+-----------------
+.. autosummary::
+    :toctree: api/
+
+    is_variant_null
+    parse_json
+    schema_of_variant
+    schema_of_variant_agg
+    try_variant_get
+    variant_get
+    try_parse_json
 
 
 XML Functions

@@ -706,7 +706,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           val ex = intercept[SparkException] {
             sql(s"select A from $tableName where A < 0").collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))

@@ -32,10 +32,11 @@ case class Origin(
     sqlText: Option[String] = None,
     objectType: Option[String] = None,
     objectName: Option[String] = None,
-    stackTrace: Option[Array[StackTraceElement]] = None) {
+    stackTrace: Option[Array[StackTraceElement]] = None,
+    pysparkErrorContext: Option[(String, String)] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq)
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
@@ -83,4 +84,21 @@ object CurrentOrigin {
     val ret = try f finally { set(previous) }
     ret
   }
+}
+
+/**
+ * Provides detailed error context information on PySpark.
+ */
+object PySparkCurrentOrigin {
+  private val pysparkErrorContext = new ThreadLocal[Option[(String, String)]]() {
+    override def initialValue(): Option[(String, String)] = None
+  }
+
+  def set(fragment: String, callSite: String): Unit = {
+    pysparkErrorContext.set(Some((fragment, callSite)))
+  }
+
+  def get(): Option[(String, String)] = pysparkErrorContext.get()
+
+  def clear(): Unit = pysparkErrorContext.remove()
 }

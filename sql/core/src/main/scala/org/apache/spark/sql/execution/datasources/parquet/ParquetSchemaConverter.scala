@@ -179,10 +179,7 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        ParquetColumn(VariantType, groupColumn, Seq(
-          convertField(groupColumn.getChild(0), Some(BinaryType)),
-          convertField(groupColumn.getChild(1), Some(BinaryType))
-        ))
+        convertVariantField(groupColumn)
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -402,6 +399,35 @@ class ParquetToSparkSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
+  }
+
+  private def convertVariantField(groupColumn: GroupColumnIO): ParquetColumn = {
+    if (groupColumn.getChildrenCount != 2) {
+      // We may allow more than two children in the future, so consider this unsupported.
+      throw QueryCompilationErrors.
+        parquetTypeUnsupportedYetError("variant with more than two fields")
+    }
+    // Find the binary columns, and validate that they have the correct type.
+    val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val idx = (0 until groupColumn.getChildrenCount)
+          .find(groupColumn.getChild(_).getName == colName)
+      if (idx.isEmpty) {
+        throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+      }
+      val child = groupColumn.getChild(idx.get)
+      // The value and metadata cannot be individually null, only the full struct can.
+      if (child.getType.getRepetition != REQUIRED ||
+          !child.isInstanceOf[PrimitiveColumnIO] ||
+          child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
+        throw QueryCompilationErrors.illegalParquetTypeError(
+          s"variant $colName must be a non-nullable binary")
+      }
+      child
+    }
+    ParquetColumn(VariantType, groupColumn, Seq(
+      convertField(valueAndMetadata(0), Some(BinaryType)),
+      convertField(valueAndMetadata(1), Some(BinaryType))
+    ))
   }
 
   // scalastyle:off

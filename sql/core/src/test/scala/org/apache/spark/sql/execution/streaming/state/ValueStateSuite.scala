@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.time.Duration
 import java.util.UUID
 
 import scala.util.Random
@@ -27,9 +28,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -48,7 +49,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val stateName = "testState"
       val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
@@ -78,7 +79,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         testState.update(123)
       }
       checkError(
-        ex.asInstanceOf[SparkException],
+        ex1.asInstanceOf[SparkException],
         errorClass = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
@@ -92,7 +93,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
@@ -118,7 +119,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState1: ValueState[Long] = handle.getValueState[Long](
         "testState1", Encoders.scalaLong)
@@ -163,8 +164,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TimeoutMode.NoTimeouts())
+        UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val cfName = "_testState"
       val ex = intercept[SparkUnsupportedOperationException] {
@@ -204,7 +204,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ValueState[Double] = handle.getValueState[Double]("testState",
         Encoders.scalaDouble)
@@ -230,7 +230,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState",
         Encoders.scalaLong)
@@ -256,7 +256,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
         Encoders.product[TestClass])
@@ -282,7 +282,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeoutMode.NoTimeouts())
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
 
       val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
         Encoders.bean(classOf[POJOTestClass]))
@@ -301,6 +301,90 @@ class ValueStateSuite extends StateVariableSuiteBase {
       testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
+    }
+  }
+
+
+  test(s"test Value state TTL") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
+        Encoders.STRING, ttlConfig).asInstanceOf[ValueStateImplWithTTL[String]]
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update("v1")
+      assert(testState.get() === "v1")
+      assert(testState.getWithoutEnforcingTTL().get === "v1")
+
+      val ttlExpirationMs = timestampMs + 60000
+      var ttlValue = testState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      var ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+
+      // increment batchProcessingTime, or watermark and ensure expired value is not returned
+      val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
+
+      val nextBatchTestState: ValueStateImplWithTTL[String] =
+        nextBatchHandle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
+          .asInstanceOf[ValueStateImplWithTTL[String]]
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+
+      // ensure get does not return the expired value
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.get() === null)
+
+      // ttl value should still exist in state
+      ttlValue = nextBatchTestState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+      assert(ttlStateValueIterator.next() === ttlExpirationMs)
+      assert(ttlStateValueIterator.isEmpty)
+
+      // getWithoutTTL should still return the expired value
+      assert(nextBatchTestState.getWithoutEnforcingTTL().get === "v1")
+
+      nextBatchTestState.clear()
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.get() === null)
+    }
+  }
+
+  test("test negative or zero TTL duration throws error") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val batchTimestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
+
+      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+        val ttlConfig = TTLConfig(ttlDuration)
+        val ex = intercept[SparkUnsupportedOperationException] {
+          handle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
+        }
+
+        checkError(
+          ex,
+          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          parameters = Map(
+            "operationType" -> "update",
+            "stateName" -> "testState"
+          ),
+          matchPVals = true
+        )
+      }
     }
   }
 }

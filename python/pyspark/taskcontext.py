@@ -14,12 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, Dict, List, Optional, Union, cast
+from typing import ClassVar, Type, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
-from pyspark.java_gateway import local_connect_and_auth
-from pyspark.resource import ResourceInformation
+from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
+
+if TYPE_CHECKING:
+    from pyspark.resource import ResourceInformation
 
 
 class TaskContext:
@@ -127,7 +129,7 @@ class TaskContext:
     _taskAttemptId: Optional[int] = None
     _localProperties: Optional[Dict[str, str]] = None
     _cpus: Optional[int] = None
-    _resources: Optional[Dict[str, ResourceInformation]] = None
+    _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
     def __new__(cls: Type["TaskContext"]) -> "TaskContext":
         """
@@ -240,7 +242,7 @@ class TaskContext:
         """
         return cast(int, self._cpus)
 
-    def resources(self) -> Dict[str, ResourceInformation]:
+    def resources(self) -> Dict[str, "ResourceInformation"]:
         """
         Resources allocated to the task. The key is the resource name and the value is information
         about the resource.
@@ -250,7 +252,9 @@ class TaskContext:
         dict
             a dictionary of a string resource name, and :class:`ResourceInformation`.
         """
-        return cast(Dict[str, ResourceInformation], self._resources)
+        from pyspark.resource import ResourceInformation
+
+        return cast(Dict[str, "ResourceInformation"], self._resources)
 
 
 BARRIER_FUNCTION = 1

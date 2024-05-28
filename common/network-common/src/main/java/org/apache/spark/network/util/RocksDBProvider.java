@@ -24,9 +24,11 @@ import java.util.Objects;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import org.rocksdb.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
 /**
@@ -38,7 +40,7 @@ public class RocksDBProvider {
       org.rocksdb.RocksDB.loadLibrary();
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(RocksDBProvider.class);
+    private static final SparkLogger logger = SparkLoggerFactory.getLogger(RocksDBProvider.class);
 
     public static RocksDB initRockDB(File dbFile, StoreVersion version, ObjectMapper mapper) throws
         IOException {
@@ -65,7 +67,7 @@ public class RocksDBProvider {
           tmpDb = RocksDB.open(dbOptions, dbFile.toString());
         } catch (RocksDBException e) {
           if (e.getStatus().getCode() == Status.Code.NotFound) {
-            logger.info("Creating state database at " + dbFile);
+            logger.info("Creating state database at {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile));
             dbOptions.setCreateIfMissing(true);
             try {
               tmpDb = RocksDB.open(dbOptions, dbFile.toString());
@@ -76,16 +78,16 @@ public class RocksDBProvider {
             // the RocksDB file seems to be corrupt somehow.  Let's just blow it away and create
             // a new one, so we can keep processing new apps
             logger.error("error opening rocksdb file {}. Creating new file, will not be able to " +
-              "recover state for existing applications", dbFile, e);
+              "recover state for existing applications", e, MDC.of(LogKeys.PATH$.MODULE$, dbFile));
             if (dbFile.isDirectory()) {
               for (File f : Objects.requireNonNull(dbFile.listFiles())) {
                 if (!f.delete()) {
-                  logger.warn("error deleting {}", f.getPath());
+                  logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, f.getPath()));
                 }
               }
             }
             if (!dbFile.delete()) {
-              logger.warn("error deleting {}", dbFile.getPath());
+              logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile.getPath()));
             }
             dbOptions.setCreateIfMissing(true);
             try {
@@ -133,10 +135,10 @@ public class RocksDBProvider {
     }
 
     private static class RocksDBLogger extends org.rocksdb.Logger {
-        private static final Logger LOG = LoggerFactory.getLogger(RocksDBLogger.class);
+        private static final SparkLogger LOG = SparkLoggerFactory.getLogger(RocksDBLogger.class);
 
         RocksDBLogger(Options options) {
-          super(options);
+          super(options.infoLogLevel());
         }
 
         @Override

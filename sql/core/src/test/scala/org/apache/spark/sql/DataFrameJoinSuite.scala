@@ -621,4 +621,14 @@ class DataFrameJoinSuite extends QueryTest
     checkAnswer(joined, Row("x", null, null))
     checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
   }
+
+  test("SPARK-47810: replace equivalent expression to <=> in join condition") {
+    val joinTypes = Seq("inner", "outer", "left", "right", "semi", "anti", "cross")
+    joinTypes.foreach(joinType => {
+      val df1 = testData3.as("x").join(testData3.as("y"),
+        ($"x.a" <=> $"y.b").or($"x.a".isNull.and($"y.b".isNull)), joinType)
+      val df2 = testData3.as("x").join(testData3.as("y"), $"x.a" <=> $"y.b", joinType)
+      checkAnswer(df1, df2)
+    })
+  }
 }

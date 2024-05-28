@@ -10,7 +10,7 @@ CreateViewCommand `tbl_x`, VALUES
   (1, NAMED_STRUCT('C', 'gamma', 'D', 'delta')),
   (2, NAMED_STRUCT('C', 'epsilon', 'D', 'eta')),
   (3, NAMED_STRUCT('C', 'theta', 'D', 'iota'))
-  AS T(ID, ST), false, false, LocalTempView, true
+  AS T(ID, ST), false, false, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [ID#x, ST#x]
 

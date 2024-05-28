@@ -61,13 +61,12 @@ abstract class ParquetFileFormatSuite
     }
 
     testReadFooters(true)
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[SparkException] {
         testReadFooters(false)
       }.getCause.asInstanceOf[SparkException],
-      errorClass = "CANNOT_READ_FILE_FOOTER",
-      parameters = Map("file" -> "file:.*"),
-      matchPVals = true
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
     )
   }
 

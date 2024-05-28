@@ -20,7 +20,6 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -28,7 +27,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSourceWriter, WriterCommitMessage
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     pickleSer,
@@ -118,4 +117,6 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    write_int(os.getpid(), sock_file)
+    sock_file.flush()
     main(sock_file, sock_file)

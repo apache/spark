@@ -75,6 +75,9 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   test("When an executor reaches error states immediately, remove from the scheduler backend.") {
     val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     val msg = exitReasonMessage(1, failedPod, 1)
@@ -85,6 +88,9 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
 
   test("Don't remove executors twice from Spark but remove from K8s repeatedly.") {
     val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
     snapshotsStore.updatePod(failedPod)
     snapshotsStore.notifySubscribers()
     snapshotsStore.updatePod(failedPod)
@@ -93,6 +99,26 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
+  }
+
+  test("Don't remove executors twice from Spark and K8s.") {
+    val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
+
+    // Now remove the pod from K8s
+    when(mockPodResource.get()).thenReturn(null)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
   }
 
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +

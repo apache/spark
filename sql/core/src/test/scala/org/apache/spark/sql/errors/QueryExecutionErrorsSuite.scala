@@ -311,7 +311,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -333,7 +333,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",

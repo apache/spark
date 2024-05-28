@@ -26,7 +26,8 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.kafka010.KafkaConfigUpdater
 
 private[kafka010] sealed trait KafkaDataConsumer[K, V] {
@@ -131,7 +132,8 @@ private[kafka010] class InternalKafkaConsumer[K, V](
   def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffset requested $offset")
     if (offset != nextOffset) {
-      logInfo(s"Initial fetch for $groupId $topicPartition $offset")
+      logInfo(log"Initial fetch for ${MDC(GROUP_ID, groupId)} " +
+        log"${MDC(TOPIC_PARTITION, topicPartition)} ${MDC(OFFSET, offset)}")
       seek(offset)
       poll(timeout)
     }
@@ -144,7 +146,8 @@ private[kafka010] class InternalKafkaConsumer[K, V](
     var record = buffer.next()
 
     if (record.offset != offset) {
-      logInfo(s"Buffer miss for $groupId $topicPartition $offset")
+      logInfo(log"Buffer miss for ${MDC(GROUP_ID, groupId)} " +
+        log"${MDC(TOPIC_PARTITION, topicPartition)} ${MDC(OFFSET, offset)}")
       seek(offset)
       poll(timeout)
       require(buffer.hasNext(),
@@ -168,7 +171,8 @@ private[kafka010] class InternalKafkaConsumer[K, V](
     logDebug(s"compacted start $groupId $topicPartition starting $offset")
     // This seek may not be necessary, but it's hard to tell due to gaps in compacted topics
     if (offset != nextOffset) {
-      logInfo(s"Initial fetch for compacted $groupId $topicPartition $offset")
+      logInfo(log"Initial fetch for compacted ${MDC(GROUP_ID, groupId)} " +
+        log"${MDC(TOPIC_PARTITION, topicPartition)} ${MDC(OFFSET, offset)}")
       seek(offset)
       poll(pollTimeoutMs)
     }
@@ -239,7 +243,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       maxCapacity: Int,
       loadFactor: Float): Unit = synchronized {
     if (null == cache) {
-      logInfo(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
+      logInfo(log"Initializing cache ${MDC(INITIAL_CAPACITY, initialCapacity)} " +
+        log"${MDC(MAX_CAPACITY, maxCapacity)} ${MDC(LOAD_FACTOR, loadFactor)}")
       cache = new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer[_, _]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
@@ -256,8 +261,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
           if (entry.getValue.inUse == false && this.size > maxCapacity) {
             logWarning(
-                s"KafkaConsumer cache hitting max capacity of $maxCapacity, " +
-                s"removing consumer for ${entry.getKey}")
+              log"KafkaConsumer cache hitting max capacity of ${MDC(MAX_CAPACITY, maxCapacity)}, " +
+                log"removing consumer for ${MDC(KEY, entry.getKey)}")
                try {
               entry.getValue.close()
             } catch {
@@ -355,8 +360,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       // at all. This may happen if the cache was invalidate while this consumer was being used.
       // Just close this consumer.
       internalConsumer.close()
-      logInfo(s"Released a supposedly cached consumer that was not found in the cache " +
-        s"$internalConsumer")
+      logInfo(log"Released a supposedly cached consumer that was not found in the cache " +
+        log"${MDC(CONSUMER, internalConsumer)}")
     }
   }
 }

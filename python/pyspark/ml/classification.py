@@ -37,7 +37,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import (
     HasRawPredictionCol,
@@ -97,6 +97,7 @@ from pyspark.storagelevel import StorageLevel
 if TYPE_CHECKING:
     from pyspark.ml._typing import P, ParamMap
     from py4j.java_gateway import JavaObject
+    from pyspark.core.context import SparkContext
 
 
 T = TypeVar("T")
@@ -3677,7 +3678,7 @@ class _OneVsRestSharedReadWrite:
     @staticmethod
     def saveImpl(
         instance: Union[OneVsRest, "OneVsRestModel"],
-        sc: SparkContext,
+        sc: "SparkContext",
         path: str,
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -3690,7 +3691,7 @@ class _OneVsRestSharedReadWrite:
         cast(MLWritable, instance.getClassifier()).save(classifierPath)
 
     @staticmethod
-    def loadClassifier(path: str, sc: SparkContext) -> Union[OneVsRest, "OneVsRestModel"]:
+    def loadClassifier(path: str, sc: "SparkContext") -> Union[OneVsRest, "OneVsRestModel"]:
         classifierPath = os.path.join(path, "classifier")
         return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
 
@@ -3771,6 +3772,8 @@ class OneVsRestModel(
 
     def __init__(self, models: List[ClassificationModel]):
         super(OneVsRestModel, self).__init__()
+        from pyspark.core.context import SparkContext
+
         self.models = models
         if not isinstance(models[0], JavaMLWritable):
             return
@@ -3913,6 +3916,8 @@ class OneVsRestModel(
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
 

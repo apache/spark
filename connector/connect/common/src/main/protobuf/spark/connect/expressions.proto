@@ -147,6 +147,16 @@ message Expression {
       // If this is set, Server will use Catalyst parser to parse this string to DataType.
       string type_str = 3;
     }
+
+    // (Optional) The expression evaluation mode.
+    EvalMode eval_mode = 4;
+
+    enum EvalMode {
+      EVAL_MODE_UNSPECIFIED = 0;
+      EVAL_MODE_LEGACY = 1;
+      EVAL_MODE_ANSI = 2;
+      EVAL_MODE_TRY = 3;
+    }
   }
 
   message Literal {

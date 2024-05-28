@@ -107,7 +107,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
+              "rocksdbNumInternalColumnFamilies"))
           }
         } finally {
           query.stop()

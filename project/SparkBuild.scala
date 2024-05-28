@@ -255,16 +255,18 @@ object SparkBuild extends PomBuild {
     }
   )
 
+  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
+      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
+      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.18",
+    unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -294,13 +296,8 @@ object SparkBuild extends PomBuild {
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      val major = versionParts(0).toInt
-      if (major >= 21) {
-        Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
-      }
+      // for `dev.ludovic.netlib.blas` which implements such hardware-accelerated BLAS operations
+      Seq("--add-modules=jdk.incubator.vector")
     },
 
     (Compile / doc / javacOptions) ++= {
@@ -311,18 +308,18 @@ object SparkBuild extends PomBuild {
 
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
-      "-source", javaVersion.value
+      "-g",
+      "--release", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
     // for additional discussion and explanation.
     (Compile / compile / javacOptions) ++= Seq(
-      "-target", javaVersion.value,
       "-Xlint:unchecked"
     ),
 
     (Compile / scalacOptions) ++= Seq(
-      s"-target:${javaVersion.value}",
+      "-release", javaVersion.value,
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -519,7 +516,6 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
@@ -953,7 +949,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "33.0.0-jre"
+    dependencyOverrides += "com.google.guava" % "guava" % "33.1.0-jre"
   )
 }
 
@@ -1563,7 +1559,6 @@ object TestSettings {
     (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
-    (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",
     (Test / javaOptions) ++= {
       if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
         Seq("-Djava.net.preferIPv6Addresses=true")
@@ -1592,7 +1587,8 @@ object TestSettings {
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-        "-Djdk.reflect.useDirectMethodHandle=false").mkString(" ")
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

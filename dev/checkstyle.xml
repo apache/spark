@@ -71,6 +71,12 @@
 
     <module name="NewlineAtEndOfFile"/>
 
+    <module name="Header">
+        <property name="charset" value="UTF-8" />
+        <property name="headerFile" value="dev/java-file-header" />
+        <property name="fileExtensions" value="java" />
+    </module>
+
     <module name="TreeWalker">
         <!--
         If you wish to turn off checking for a section of code, you can put a comment in the source
@@ -199,6 +205,11 @@
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
+        </module>
+        <!-- support structured logging -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />
+            <property name="message" value="Please use org.apache.spark.internal.(SparkLogger|SparkLoggerFactory) instead." />
         </module>
     </module>
 </module>

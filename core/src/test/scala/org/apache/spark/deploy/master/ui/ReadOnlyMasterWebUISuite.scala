@@ -17,7 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import jakarta.servlet.http.HttpServletResponse.SC_METHOD_NOT_ALLOWED
+import scala.io.Source
+
+import jakarta.servlet.http.HttpServletResponse.{SC_METHOD_NOT_ALLOWED, SC_OK}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -73,5 +75,15 @@ class ReadOnlyMasterWebUISuite extends SparkFunSuite {
     val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/workers/kill/"
     val body = convPostDataToString(hostnames.map(("host", _)))
     assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_METHOD_NOT_ALLOWED)
+  }
+
+  test("SPARK-47894: /environment") {
+    val url = s"http://${Utils.localHostNameForURI()}:${masterWebUI.boundPort}/environment"
+    val conn = sendHttpRequest(url, "GET", "")
+    assert(conn.getResponseCode === SC_OK)
+    val result = Source.fromInputStream(conn.getInputStream).mkString
+    assert(result.contains("Runtime Information"))
+    assert(result.contains("Spark Properties"))
+    assert(result.contains("Hadoop Properties"))
   }
 }

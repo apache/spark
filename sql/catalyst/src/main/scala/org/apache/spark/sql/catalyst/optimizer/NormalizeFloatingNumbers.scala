@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
@@ -98,9 +98,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
-    // Currently MapType is not comparable and analyzer should fail earlier if this case happens.
-    case _: MapType =>
-      throw SparkException.internalError("grouping/join/window partition keys cannot be map type.")
+    case MapType(_, vt, _) => needNormalize(vt)
     case _ => false
   }
 
@@ -143,6 +141,14 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val lv = NamedLambdaVariable("arg", et, containsNull)
       val function = normalize(lv)
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
+
+    case _ if expr.dataType.isInstanceOf[MapType] =>
+      val MapType(kt, vt, containsNull) = expr.dataType
+      val keys = NamedLambdaVariable("arg", kt, containsNull)
+      val values = NamedLambdaVariable("arg", vt, containsNull)
+      val function = normalize(values)
+      KnownFloatingPointNormalized(TransformValues(expr,
+        LambdaFunction(function, Seq(keys, values))))
 
     case _ => throw SparkException.internalError(s"fail to normalize $expr")
   }

@@ -44,8 +44,15 @@ object GenerateMIMAIgnore {
   private def isPackagePrivate(sym: unv.Symbol) =
     !sym.privateWithin.fullName.startsWith("<none>")
 
-  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
+  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) = try {
     !moduleSymbol.privateWithin.fullName.startsWith("<none>")
+  } catch {
+    case e: Throwable =>
+      // scalastyle:off println
+      println("[WARN] Unable to check module:" + moduleSymbol)
+      // scalastyle:on println
+      false
+  }
 
   /**
    * For every class checks via scala reflection if the class itself or contained members

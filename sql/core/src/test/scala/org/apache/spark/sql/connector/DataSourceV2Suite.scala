@@ -966,6 +966,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       )
     }
   }
+
+  test("SPARK-47463: Pushed down v2 filter with if expression") {
+    withTempView("t1") {
+      spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+        .createTempView("t1")
+      val df = sql("SELECT * FROM  t1 WHERE if(i = 1, i, 0) > 0")
+      val result = df.collect()
+      assert(result.length == 1)
+    }
+  }
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition

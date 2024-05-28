@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.types
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * Rule that defines which upcasts are allow in Spark.
  */
@@ -39,6 +37,7 @@ private[sql] object UpCastRule {
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
+    case (VariantType, _) => false
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true

@@ -1617,14 +1617,23 @@ class PlanParserSuite extends AnalysisTest {
           parameters = Map(
             "error" -> "'order'",
             "hint" -> ""))
-        val sql8 = s"select * from my_tvf(arg1 => table(select col1, col2, col3 from v2) " +
-          s"$partition by col1, col2 order by col2 asc, col3 desc)"
+        val sql8tableArg = "table(select col1, col2, col3 from v2)"
+        val sql8partition = s"$partition by col1, col2 order by col2 asc, col3 desc"
+        val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          errorClass = "_LEGACY_ERROR_TEMP_0064",
           parameters = Map(
-            "error" -> "'order'",
-            "hint" -> ": extra input 'order'"))
+            "msg" ->
+              ("The table function call includes a table argument with an invalid " +
+              "partitioning/ordering specification: the PARTITION BY clause included multiple " +
+              "expressions without parentheses surrounding them; please add parentheses around " +
+              "these expressions and then retry the query again")),
+          context = ExpectedContext(
+            fragment = s"$sql8tableArg $sql8partition",
+            start = 29,
+            stop = 110 + partition.length)
+        )
       }
     }
   }

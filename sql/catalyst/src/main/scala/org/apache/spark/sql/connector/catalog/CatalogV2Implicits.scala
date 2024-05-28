@@ -164,6 +164,26 @@ private[sql] object CatalogV2Implicits {
       case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
+    /**
+     * Tries to convert catalog identifier to the table identifier. Table identifier does not
+     * support multiple namespaces (nested namespaces), so if identifier contains nested namespace,
+     * conversion cannot be done
+     * @param catalogName Catalog name. Identifier represents just one object in catalog, so it has
+     *                    no catalog name needed for table identifier creation
+     * @return Table identifier if conversion can be done, None otherwise
+     */
+    def asTableIdentifierOpt(catalogName: Option[String]): Option[TableIdentifier] = {
+      ident.namespace().toImmutableArraySeq match {
+        case Seq(singleNamespace) =>
+          Some(TableIdentifier(ident.name(), Some(singleNamespace), catalogName))
+        case Seq() =>
+          // If namespace is not given, catalog will not be used
+          Some(TableIdentifier(ident.name()))
+        case _ =>
+          None
+      }
+    }
+
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))

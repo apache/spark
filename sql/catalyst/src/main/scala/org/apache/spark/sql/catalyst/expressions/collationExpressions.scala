@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.contains.tab
@@ -56,14 +57,14 @@ object CollateExpressionBuilder extends ExpressionBuilder {
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
-          case (StringType, true) =>
+          case (_: StringType, true) =>
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
               Collate(e, evalCollation.toString)
             }
-          case (StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
+          case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
           case (_, _) => throw QueryCompilationErrors.unexpectedInputDataTypeError(
             funcName, 1, StringType, collationExpr)
@@ -112,12 +113,13 @@ case class Collate(child: Expression, collationName: String)
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
-case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
-  override def dataType: DataType = StringType
+case class Collation(child: Expression)
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override def replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
-    Literal.create(collationName, StringType)
+    Literal.create(collationName, SQLConf.get.defaultStringType)
   }
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 }

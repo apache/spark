@@ -19,7 +19,7 @@
 from itertools import chain
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
-from pyspark.sql.types import StructType, StructField, LongType
+from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -42,7 +42,7 @@ class ColumnTestsMixin:
 
     def test_validate_column_types(self):
         from pyspark.sql.functions import udf, to_json
-        from pyspark.sql.column import _to_java_column
+        from pyspark.sql.classic.column import _to_java_column
 
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
@@ -228,6 +228,17 @@ class ColumnTestsMixin:
             message_parameters={"arg_name": "metadata"},
         )
 
+    def test_cast_str_representation(self):
+        self.assertEqual(str(sf.col("a").cast("int")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast("INT")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(IntegerType())), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(LongType())), "Column<'CAST(a AS BIGINT)'>")
+
+        self.assertEqual(str(sf.col("a").try_cast("int")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast("INT")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(IntegerType())), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(LongType())), "Column<'TRY_CAST(a AS BIGINT)'>")
+
     def test_cast_negative(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.range(1).id.cast(123)
@@ -247,6 +258,18 @@ class ColumnTestsMixin:
             error_class="NOT_WINDOWSPEC",
             message_parameters={"arg_name": "window", "arg_type": "int"},
         )
+
+    def test_eqnullsafe_classmethod_usage(self):
+        df = self.spark.range(1)
+        self.assertEqual(df.select(Column.eqNullSafe(df.id, df.id)).first()[0], True)
+
+    def test_isinstance_dataframe(self):
+        self.assertIsInstance(self.spark.range(1).id, Column)
+
+    def test_expr_str_representation(self):
+        expression = sf.expr("foo")
+        when_cond = sf.when(expression, sf.lit(None))
+        self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

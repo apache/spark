@@ -1666,8 +1666,14 @@ class DataFrameAggregateSuite extends QueryTest
     assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count() == 1)
   }
 
-  test("SPARK-38221: group by stream of complex expressions should not fail") {
+  test("SPARK-45685: group by `LazyList` of complex expressions should not fail") {
     val df = Seq(1).toDF("id").groupBy(LazyList($"id" + 1, $"id" + 2): _*).sum("id")
+    checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-38221: group by `Stream` of complex expressions should not fail") {
+    @scala.annotation.nowarn("cat=deprecation")
+    val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
   }
 
@@ -2155,8 +2161,8 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
-    val numRows = 50
+  private def assertAggregateOnDataframe(df: DataFrame,
+    expected: Int, aggregateColumn: String): Unit = {
     val configurations = Seq(
       Seq.empty[(String, String)], // hash aggregate is used by default
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -2168,22 +2174,46 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
+    for (conf <- configurations) {
+      withSQLConf(conf: _*) {
+        assert(createAggregate(df).count() == expected)
+      }
+    }
+
+    def createAggregate(df: DataFrame): DataFrame = df.groupBy(aggregateColumn).agg(count("*"))
+  }
+
+  test("SPARK-47430 Support GROUP BY MapType") {
+    val numRows = 50
+
+    val dfSameInt = (0 until numRows)
+      .map(_ => Tuple1(Map(1 -> 1)))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfSameInt, 1, "m0")
+
+    val dfSameFloat = (0 until numRows)
+      .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfSameFloat, 1, "m0")
+
+    val dfDifferent = (0 until numRows)
+      .map(i => Tuple1(Map(i -> i)))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfDifferent, numRows, "m0")
+  }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    val numRows = 50
+
     val dfSame = (0 until numRows)
       .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
       .toDF("c0")
+    assertAggregateOnDataframe(dfSame, 1, "c0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(new CalendarInterval(i, i, i)))
       .toDF("c0")
-
-    for (conf <- configurations) {
-      withSQLConf(conf: _*) {
-        assert(createAggregate(dfSame).count() == 1)
-        assert(createAggregate(dfDifferent).count() == numRows)
-      }
-    }
-
-    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
+    assertAggregateOnDataframe(dfDifferent, numRows, "c0")
   }
 
   test("SPARK-46779: Group by subquery with a cached relation") {

@@ -61,14 +61,9 @@ case class UnaryMinus(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case ByteType | ShortType | IntegerType | LongType if failOnError =>
-      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
-      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
+      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        s"""
-           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
-           |  $refDataType, $failOnError).negate($eval);
-         """.stripMargin
+        s"${ev.value} = $mathUtils.negateExact($eval);"
       })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
@@ -174,15 +169,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
       defineCodeGen(ctx, ev, c => s"$c.abs()")
 
     case ByteType | ShortType | IntegerType | LongType if failOnError =>
-      val typeUtils = TypeUtils.getClass.getCanonicalName.stripSuffix("$")
-      val refDataType = ctx.addReferenceObj("refDataType", dataType, dataType.getClass.getName)
-      nullSafeCodeGen(ctx, ev, eval => {
-        val javaBoxedType = CodeGenerator.boxedType(dataType)
-        s"""
-           |${ev.value} = ($javaBoxedType)$typeUtils.getNumeric(
-           |  $refDataType, $failOnError).abs($eval);
-         """.stripMargin
-      })
+      val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, c => s"$c < 0 ? $mathUtils.negateExact($c) : $c")
 
     case _: AnsiIntervalType =>
       val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
@@ -464,9 +452,8 @@ case class Add(
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Add`s with different `evalMode`
     val reorderResult = buildCanonicalizedPlan(
-      { case Add(l, r, _) => Seq(l, r) },
+      { case Add(l, r, em) if em == evalMode => Seq(l, r) },
       { case (l: Expression, r: Expression) => Add(l, r, evalMode)},
       Some(evalMode)
     )
@@ -620,10 +607,9 @@ case class Multiply(
     newLeft: Expression, newRight: Expression): Multiply = copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    // TODO: do not reorder consecutive `Multiply`s with different `evalMode`
     buildCanonicalizedPlan(
-      { case Multiply(l, r, _) => Seq(l, r) },
-      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode)},
+      { case Multiply(l, r, em) if em == evalMode => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Multiply(l, r, evalMode) },
       Some(evalMode)
     )
   }
@@ -919,6 +905,10 @@ case class Remainder(
     this(left, right, EvalMode.fromSQLConf(SQLConf.get))
 
   override def inputType: AbstractDataType = NumericType
+
+  // `try_remainder` has exactly the same behavior as the legacy divide, so here it only executes
+  // the error code path when `evalMode` is `ANSI`.
+  protected override def failOnError: Boolean = evalMode == EvalMode.ANSI
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"

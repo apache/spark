@@ -10,7 +10,7 @@ CreateViewCommand `nested`, values
   (1, array(32, 97), array(array(12, 99), array(123, 42), array(1))),
   (2, array(77, -76), array(array(6, 96, 65), array(-1, -2))),
   (3, array(12), array(array(17)))
-  as t(x, ys, zs), false, true, LocalTempView, true
+  as t(x, ys, zs), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x, zs#x]
 
@@ -31,6 +31,26 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 8,
     "stopIndex" : 20,
     "fragment" : "upper(x -> x)"
+  } ]
+}
+
+
+-- !query
+select ceil(x -> x) as v
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+  "sqlState" : "42K0D",
+  "messageParameters" : {
+    "class" : "org.apache.spark.sql.catalyst.expressions.CeilExpressionBuilder$"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "ceil(x -> x)"
   } ]
 }
 
@@ -258,7 +278,7 @@ create or replace temporary view nested as values
 CreateViewCommand `nested`, values
   (1, map(1, 1, 2, 2, 3, 3)),
   (2, map(4, 4, 5, 5, 6, 6))
-  as t(x, ys), false, true, LocalTempView, true
+  as t(x, ys), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t
       +- LocalRelation [x#x, ys#x]
 

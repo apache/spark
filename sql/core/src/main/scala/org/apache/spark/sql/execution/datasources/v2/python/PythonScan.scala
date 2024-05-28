@@ -41,6 +41,9 @@ class PythonScan(
 
   override def supportedCustomMetrics(): Array[CustomMetric] =
     ds.source.createPythonMetrics()
+
+  override def columnarSupportMode(): Scan.ColumnarSupportMode =
+    Scan.ColumnarSupportMode.UNSUPPORTED
 }
 
 class PythonBatch(
@@ -53,7 +56,8 @@ class PythonBatch(
   private lazy val infoInPython: PythonDataSourceReadInfo = {
     ds.source.createReadInfoInPython(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema)
+      outputSchema,
+      isStreaming = false)
   }
 
   override def planInputPartitions(): Array[InputPartition] =

@@ -91,6 +91,29 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     }
   }
 
+  test("Async cleanup callback gets called after the execution is closed") {
+    withClient(UUID.randomUUID().toString, defaultUserId) { client =>
+      val query1 = client.execute(buildPlan(BIG_ENOUGH_QUERY))
+      // just creating the iterator is lazy, trigger query1 and query2 to be sent.
+      query1.hasNext
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 1)
+      }
+      val executeHolder1 = SparkConnectService.executionManager.listExecuteHolders.head
+      // Close session
+      client.releaseSession()
+      // Check that queries get cancelled
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(SparkConnectService.executionManager.listExecuteHolders.length == 0)
+        // SparkConnectService.sessionManager.
+      }
+      // Check the async execute cleanup get called
+      Eventually.eventually(timeout(eventuallyTimeout)) {
+        assert(executeHolder1.completionCallbackCalled)
+      }
+    }
+  }
+
   private def testReleaseSessionTwoSessions(
       sessionIdA: String,
       userIdA: String,

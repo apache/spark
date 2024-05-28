@@ -26,8 +26,6 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
-
 
 if have_pyarrow:
     import pyarrow as pa
@@ -128,7 +126,7 @@ class CogroupedMapInArrowTestsMixin:
         def func(key, left, right):
             return key
 
-        with self.quiet_test():
+        with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
                 "Return type of the user-defined function should be pyarrow.Table, but is tuple",
@@ -147,7 +145,7 @@ class CogroupedMapInArrowTestsMixin:
             ("id long, v string", "column 'v' \\(expected string, actual int64\\)"),
         ]:
             with self.subTest(schema=schema):
-                with self.quiet_test():
+                with self.quiet():
                     with self.assertRaisesRegex(
                         PythonException,
                         f"Columns do not match in their data type: {expected}",
@@ -171,7 +169,7 @@ class CogroupedMapInArrowTestsMixin:
                 with self.sql_conf(
                     {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
                 ):
-                    with self.quiet_test():
+                    with self.quiet():
                         with self.assertRaisesRegex(
                             PythonException,
                             f"Columns do not match in their data type: {expected}",
@@ -191,7 +189,7 @@ class CogroupedMapInArrowTestsMixin:
                 }
             )
 
-        with self.quiet_test():
+        with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -227,7 +225,7 @@ class CogroupedMapInArrowTestsMixin:
                     {"id": [key[0].as_py()], "m": [pc.mean(left.column("v")).as_py()]}
                 )
 
-        with self.quiet_test():
+        with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
                 "Column names of the returned pyarrow.Table do not match specified schema. "
@@ -323,9 +321,6 @@ class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase)
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
-
-    def quiet_test(self):
-        return QuietTest(self.sc)
 
 
 if __name__ == "__main__":

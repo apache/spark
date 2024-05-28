@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
@@ -29,7 +28,7 @@ import org.apache.spark.sql.streaming.ValueState
  * variables used in the streaming transformWithState operator.
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
- * @param keyEnc - Spark SQL encoder for key
+ * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @tparam S - data type of object that will be stored
  */
@@ -37,18 +36,22 @@ class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S]) extends ValueState[S] with Logging {
+    valEncoder: Encoder[S])
+  extends ValueState[S] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()
-
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
 
-  store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-    NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+  initialize()
+
+  private def initialize(): Unit = {
+    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+  }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
-    getImpl() != null
+    get() != null
   }
 
   /** Function to return Option of value if exists and None otherwise */
@@ -58,7 +61,9 @@ class ValueStateImpl[S](
 
   /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
-    val retRow = getImpl()
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
+
     if (retRow != null) {
       stateTypesEncoder.decodeValue(retRow)
     } else {
@@ -66,14 +71,12 @@ class ValueStateImpl[S](
     }
   }
 
-  private def getImpl(): UnsafeRow = {
-    store.get(stateTypesEncoder.encodeGroupingKey(), stateName)
-  }
-
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
-    store.put(stateTypesEncoder.encodeGroupingKey(),
-      stateTypesEncoder.encodeValue(newState), stateName)
+    val encodedValue = stateTypesEncoder.encodeValue(newState)
+    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+      encodedValue, stateName)
   }
 
   /** Function to remove state for given key */

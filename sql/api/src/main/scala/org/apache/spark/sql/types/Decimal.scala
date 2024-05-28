@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, Roundin
 
 import scala.util.Try
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkArithmeticException}
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
@@ -120,8 +120,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     DecimalType.checkNegativeScale(scale)
     this.decimalVal = decimal.setScale(scale, ROUND_HALF_UP)
     if (decimalVal.precision > precision) {
-      throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
-        decimalVal.precision, precision)
+      throw new SparkArithmeticException(
+        errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "roundedValue" -> decimalVal.toString,
+          "originalValue" -> decimal.toString,
+          "precision" -> precision.toString,
+          "scale" -> scale.toString), Array.empty)
     }
     this.longVal = 0L
     this._precision = precision

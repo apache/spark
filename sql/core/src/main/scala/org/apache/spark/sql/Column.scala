@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -287,8 +288,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} = $right'. " +
-            "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} = ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("=", other)
   }
@@ -493,8 +495,9 @@ class Column(val expr: Expression) extends Logging {
     val right = lit(other).expr
     if (this.expr == right) {
       logWarning(
-        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
-          "Perhaps you need to use aliases.")
+        log"Constructing trivially true equals predicate, " +
+          log"'${MDC(LEFT_EXPR, this.expr)} <=> ${MDC(RIGHT_EXPR, right)}'. " +
+          log"Perhaps you need to use aliases.")
     }
     fn("<=>", other)
   }
@@ -1221,6 +1224,43 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").try_cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: DataType): Column = withExpr {
+    val cast = Cast(
+      child = expr,
+      dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(to),
+      evalMode = EvalMode.TRY)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast
+  }
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: String): Column = {
+    try_cast(CatalystSqlParser.parseDataType(to))
+  }
 
   /**
    * Returns a sort expression based on the descending order of the column.

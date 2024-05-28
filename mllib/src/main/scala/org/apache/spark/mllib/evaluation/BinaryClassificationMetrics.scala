@@ -18,7 +18,8 @@
 package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{COUNT, NUM_BIN}
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
@@ -201,7 +202,8 @@ class BinaryClassificationMetrics @Since("3.0.0") (
         val grouping = countsSize / numBins
         if (grouping < 2) {
           // numBins was more than half of the size; no real point in down-sampling to bins
-          logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
+          logInfo(log"Curve is too small (${MDC(COUNT, countsSize)}) " +
+            log"for ${MDC(NUM_BIN, numBins)} bins to be useful")
           counts
         } else {
           counts.mapPartitions { iter =>
@@ -243,7 +245,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     val partitionwiseCumulativeCounts =
       agg.scanLeft(new BinaryLabelCounter())((agg, c) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
-    logInfo(s"Total counts: $totalCount")
+    logInfo(log"Total counts: ${MDC(COUNT, totalCount)}")
     val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(
       (index: Int, iter: Iterator[(Double, BinaryLabelCounter)]) => {
         val cumCount = partitionwiseCumulativeCounts(index)

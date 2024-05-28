@@ -915,7 +915,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
-    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
     assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
     assert(db2Dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
     // test db2 dialect mappings on read
@@ -930,12 +930,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("MySQLDialect catalyst type mapping") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql")
     val metadata = new MetadataBuilder().putBoolean("isSigned", value = true)
-    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
-      Some(LongType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ===
+      Some(BinaryType))
     assert(metadata.build().contains("binarylong"))
+    withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> "true") {
+      metadata.remove("binarylong")
+      assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ===
+        Some(LongType))
+      assert(metadata.build().contains("binarylong"))
+    }
     assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
-    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
-      Some(BooleanType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
       Some(ByteType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.REAL, "FLOAT", 1, metadata) ===
@@ -949,6 +953,29 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(DoubleType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===
       Some(DoubleType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.CHAR, "JSON", Int.MaxValue, metadata) ===
+      Some(StringType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "DATETIME", 1,
+      metadata.putBoolean("isTimestampNTZ", false)) === Some(TimestampType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "DATETIME", 1,
+      metadata.putBoolean("isTimestampNTZ", true)) === Some(TimestampNTZType))
+    withSQLConf(SQLConf.LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED.key -> "true") {
+      // in legacy mode, fallback to common mapping
+      assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 1,
+        metadata.putBoolean("isTimestampNTZ", true)) === None)
+      mySqlDialect.getJDBCType(TimestampNTZType).foreach { jdbcType =>
+        assert(jdbcType.databaseTypeDefinition === "TIMESTAMP")
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED.key -> "false") {
+      Seq(true, false).foreach(isTimestampNTZ => {
+        assert(mySqlDialect.getCatalystType(java.sql.Types.TIMESTAMP, "TIMESTAMP", 1,
+          metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)) === Some(TimestampType))
+      })
+      mySqlDialect.getJDBCType(TimestampNTZType).foreach { jdbcType =>
+        assert(jdbcType.databaseTypeDefinition === "DATETIME")
+      }
+    }
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
@@ -1327,9 +1354,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
     assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, VarcharType(100)) == "VARCHAR2(100)")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
-    assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP WITH LOCAL TIME ZONE")
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED.key -> "true") {
+      assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    }
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
@@ -1362,9 +1393,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(
+      JdbcDialects.get("jdbc:mysql://localhost:3306/temp"),
       df.schema,
-      df.sparkSession.sessionState.conf.caseSensitiveAnalysis,
-      "jdbc:mysql://localhost:3306/temp")
+      df.sparkSession.sessionState.conf.caseSensitiveAnalysis)
     assert(schema.contains("`order` LONGTEXT"))
   }
 
@@ -1446,16 +1477,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-15648: teradataDialect StringType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
-    assert(teradataDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "VARCHAR(255)")
-  }
-
-  test("SPARK-15648: teradataDialect BooleanType data mapping") {
-    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
-    assert(teradataDialect.getJDBCType(BooleanType).
-      map(_.databaseTypeDefinition).get == "CHAR(1)")
+  test("SPARK-48399: TeradataDialect jdbc data mapping") {
+    val dialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "VARCHAR(255)")
+    assert(dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "BYTEINT")
   }
 
   test("SPARK-38846: TeradataDialect catalyst type mapping") {
@@ -2006,6 +2032,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockRsmd.isSigned(anyInt())).thenReturn(false)
     when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
 
+    val mockConn = mock(classOf[java.sql.Connection])
     val mockRs = mock(classOf[java.sql.ResultSet])
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
@@ -2013,7 +2040,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
@@ -2170,5 +2197,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     JdbcDialects.unregisterDialect(dialect)
     dialect = JdbcDialects.get("jdbc:dummy:dummy_host:dummy_port/dummy_db")
     assert(dialect === NoopDialect)
+  }
+
+  test("SPARK-47882: createTableColumnTypes need to be mapped to database types") {
+    val dialect = JdbcDialects.get("jdbc:oracle:dummy_host:dummy_port/dummy_db")
+    val schema = new StructType().add("b", "boolean")
+    val schemaStr =
+      JdbcUtils.schemaString(dialect, schema, caseSensitive = false, Some("b boolean"))
+    assert(schemaStr === """"b" NUMBER(1) """)
   }
 }

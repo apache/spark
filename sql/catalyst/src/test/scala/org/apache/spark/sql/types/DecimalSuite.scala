@@ -65,7 +65,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
@@ -73,7 +73,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "config" -> "\"spark.sql.ansi.enabled\""))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "2",
@@ -81,15 +81,23 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
         "config" -> "\"spark.sql.ansi.enabled\""))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("10.030"), 2, 1)),
-      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      parameters = Map("precision" -> "3", "maxPrecision" -> "2"))
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "roundedValue" -> "10.0",
+        "originalValue" -> "10.030",
+        "precision" -> "2",
+        "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(BigDecimal("-9.95"), 2, 1)),
-      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      parameters = Map("precision" -> "3", "maxPrecision" -> "2"))
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "roundedValue" -> "-10.0",
+        "originalValue" -> "-9.95",
+        "precision" -> "2",
+        "scale" -> "1"))
     checkError(
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
         "value" -> "0",
         "precision" -> "17",

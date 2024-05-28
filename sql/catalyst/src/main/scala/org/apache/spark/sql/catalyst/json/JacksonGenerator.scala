@@ -317,7 +317,7 @@ class JacksonGenerator(
   }
 
   def write(v: VariantVal): Unit = {
-    gen.writeRawValue(v.toString)
+    gen.writeRawValue(v.toJson(options.zoneId))
   }
 
   def writeLineEnding(): Unit = {
