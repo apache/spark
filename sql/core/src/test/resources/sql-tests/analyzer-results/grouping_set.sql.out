@@ -72,7 +72,7 @@ Aggregate [c1#x, spark_grouping_id#xL], [c1#x, sum(c2#x) AS sum(c2)#xL]
 -- !query
 SELECT c1, sum(c2), grouping(c1) FROM (VALUES ('x', 10, 0), ('y', 20, 0)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1)
 -- !query analysis
-Aggregate [c1#x, spark_grouping_id#xL], [c1#x, sum(c2#x) AS sum(c2)#xL, cast(((spark_grouping_id#xL >> 0) & 1) as tinyint) AS grouping(c1)#x]
+Aggregate [c1#x, spark_grouping_id#xL], [c1#x, sum(c2#x) AS sum(c2)#xL, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(c1)#x]
 +- Expand [[c1#x, c2#x, c3#x, c1#x, 0]], [c1#x, c2#x, c3#x, c1#x, spark_grouping_id#xL]
    +- Project [c1#x, c2#x, c3#x, c1#x AS c1#x]
       +- SubqueryAlias t
@@ -98,7 +98,7 @@ Filter (grouping__id#xL > cast(1 as bigint))
 -- !query
 SELECT grouping(c1) FROM (VALUES ('x', 'a', 10), ('y', 'b', 20)) AS t (c1, c2, c3) GROUP BY GROUPING SETS (c1,c2)
 -- !query analysis
-Aggregate [c1#x, c2#x, spark_grouping_id#xL], [cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(c1)#x]
+Aggregate [c1#x, c2#x, spark_grouping_id#xL], [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(c1)#x]
 +- Expand [[c1#x, c2#x, c3#x, c1#x, null, 1], [c1#x, c2#x, c3#x, null, c2#x, 2]], [c1#x, c2#x, c3#x, c1#x, c2#x, spark_grouping_id#xL]
    +- Project [c1#x, c2#x, c3#x, c1#x AS c1#x, c2#x AS c2#x]
       +- SubqueryAlias t
@@ -223,7 +223,7 @@ Aggregate [k1#x, k2#x, spark_grouping_id#xL, _gen_grouping_pos#x], [spark_groupi
 -- !query
 SELECT grouping(k1), k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1))
 -- !query analysis
-Aggregate [k1#x, k2#x, spark_grouping_id#xL, _gen_grouping_pos#x], [cast(((spark_grouping_id#xL >> 1) & 1) as tinyint) AS grouping(k1)#x, k1#x, k2#x, avg(v#x) AS avg(v)#x]
+Aggregate [k1#x, k2#x, spark_grouping_id#xL, _gen_grouping_pos#x], [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(k1)#x, k1#x, k2#x, avg(v#x) AS avg(v)#x]
 +- Expand [[k1#x, k2#x, v#x, k1#x, null, 1, 0], [k1#x, k2#x, v#x, k1#x, k2#x, 0, 1], [k1#x, k2#x, v#x, k1#x, k2#x, 0, 2]], [k1#x, k2#x, v#x, k1#x, k2#x, spark_grouping_id#xL, _gen_grouping_pos#x]
    +- Project [k1#x, k2#x, v#x, k1#x AS k1#x, k2#x AS k2#x]
       +- SubqueryAlias t

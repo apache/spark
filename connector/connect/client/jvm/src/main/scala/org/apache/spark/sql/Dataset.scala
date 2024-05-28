@@ -3492,7 +3492,7 @@ class Dataset[T] private[sql] (
           .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
 
         val cachedRemoteRelation = response.getCheckpointCommandResult.getRelation
-        sparkSession.cleaner.registerCachedRemoteRelationForCleanup(cachedRemoteRelation)
+        sparkSession.cleaner.register(cachedRemoteRelation)
 
         // Update the builder with the values from the result.
         builder.setCachedRemoteRelation(cachedRemoteRelation)
