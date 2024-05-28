@@ -274,7 +274,7 @@ jobs:
     - name: Install Python packages (Python 3.9)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.64.0' 'grpcio-status==1.64.0' 'protobuf==4.25.1'
+        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.64.0' 'grpcio-status==1.64.0' 'protobuf==5.26.1'
         python3.9 -m pip list
     # Run the tests.
     - name: Run tests
@@ -623,7 +623,7 @@ jobs:
         python-version: '3.9'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip install 'black==23.9.1' 'protobuf==5.26.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.9 -m pip list
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
@@ -746,7 +746,7 @@ jobs:
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         rm buf-Linux-x86_64.tar.gz
-        python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip install 'protobuf==5.26.1' 'mypy-protobuf==3.3.0'
     # Should delete this section after SPARK 3.5 EOL.
     - name: Python code generation check for branch-3.5
       if: inputs.branch == 'branch-3.5'
