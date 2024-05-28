@@ -1027,7 +1027,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that hash join is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
-            case _: BroadcastHashJoinExec => ()
+            case _: HashJoin => ()
           }.nonEmpty
         )
         assert(
@@ -1039,7 +1039,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // if collation doesn't support binary equality, collation key should be injected
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
-            case b: BroadcastHashJoinExec => b.leftKeys.head
+            case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
         }
       }
@@ -1067,7 +1067,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that shuffle join is used instead of hash join
         assert(
           collectFirst(queryPlan) {
-            case _: BroadcastHashJoinExec => ()
+            case _: HashJoin => ()
           }.isEmpty
         )
         assert(
@@ -1116,7 +1116,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that hash join is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
-            case _: BroadcastHashJoinExec => ()
+            case _: HashJoin => ()
           }.nonEmpty
         )
         assert(
