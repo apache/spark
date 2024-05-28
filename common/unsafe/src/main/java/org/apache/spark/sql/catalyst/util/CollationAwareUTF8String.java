@@ -72,7 +72,7 @@ public class CollationAwareUTF8String {
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
-   * @return length of the target substring that ends with the specified prefix in lowercase
+   * @return length of the target substring that starts with the specified prefix in lowercase
    */
   private static int lowercaseMatchLengthFrom(
       final UTF8String target,
@@ -310,6 +310,23 @@ public class CollationAwareUTF8String {
     }
     // If no match is found, return 0.
     return 0;
+  }
+
+  /**
+   * Returns the position of the first occurrence of the pattern string in the target string,
+   * starting from the specified position (0-based index referring to character position in
+   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. If the pattern is not found,
+   * MATCH_NOT_FOUND is returned.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @param start the start position for searching (in the target string)
+   * @return the position of the first occurrence of pattern in target
+   */
+  public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
+      final int start) {
+    if (pattern.numChars() == 0) return 0;
+    return lowercaseFind(target, pattern.toLowerCase(), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
@@ -596,4 +613,7 @@ public class CollationAwareUTF8String {
     }
     return srcString.copyUTF8String(0, trimByteIdx);
   }
+
+  // TODO: Add more collation-aware UTF8String operations here.
+
 }
