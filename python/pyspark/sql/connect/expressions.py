@@ -61,7 +61,7 @@ from pyspark.sql.types import (
 )
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.types import (
+from pyspark.util import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,
@@ -70,6 +70,8 @@ from pyspark.sql.connect.types import (
     JVM_INT_MAX,
     JVM_LONG_MIN,
     JVM_LONG_MAX,
+)
+from pyspark.sql.connect.types import (
     UnparsedDataType,
     pyspark_types_to_proto_types,
     proto_schema_to_pyspark_data_type,

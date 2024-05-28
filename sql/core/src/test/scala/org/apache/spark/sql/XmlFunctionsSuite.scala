@@ -40,6 +40,16 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
+  test("SPARK-48300: from_xml - Codegen Support") {
+    withTempView("XmlToStructsTable") {
+      val dataDF = Seq("""<ROW><a>1</a></ROW>""").toDF("value")
+      dataDF.createOrReplaceTempView("XmlToStructsTable")
+      val df = sql("SELECT from_xml(value, 'a INT') FROM XmlToStructsTable")
+      assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Row(Row(1)) :: Nil)
+    }
+  }
+
   test("from_xml with option (timestampFormat)") {
     val df = Seq("""<ROW><time>26/08/2015 18:00</time></ROW>""").toDS()
     val schema = new StructType().add("time", TimestampType)
@@ -109,6 +119,36 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_xml($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
       Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("SPARK-48363: from_xml with non struct schema") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
+      },
+      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"ARRAY<int>\"",
+        "dataType" -> "\"ARRAY<INT>\""
+      ),
+      context = ExpectedContext(
+        fragment = "from_xml(xml, 'ARRAY<int>')",
+        start = 0,
+        stop = 26
+      )
+    )
   }
 
   test("to_xml - struct") {

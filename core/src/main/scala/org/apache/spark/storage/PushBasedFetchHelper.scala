@@ -342,7 +342,8 @@ private class PushBasedFetchHelper(
             // Fallback for all the pending fetch requests
             val pendingShuffleChunks = iterator.removePendingChunks(shuffleChunkId, address)
             pendingShuffleChunks.foreach { pendingBlockId =>
-              logInfo(s"Falling back immediately for shuffle chunk $pendingBlockId")
+              logInfo(
+                log"Falling back immediately for shuffle chunk ${MDC(BLOCK_ID, pendingBlockId)}")
               shuffleMetrics.incMergedFetchFallbackCount(1)
               val bitmapOfPendingChunk: RoaringBitmap = chunksMetaMap.remove(pendingBlockId).get
               chunkBitmap.or(bitmapOfPendingChunk)
