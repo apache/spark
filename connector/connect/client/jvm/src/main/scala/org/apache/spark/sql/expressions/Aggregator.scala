@@ -43,9 +43,12 @@ import org.apache.spark.sql.{Encoder, TypedColumn}
  *
  * Based loosely on Aggregator from Algebird: https://github.com/twitter/algebird
  *
- * @tparam IN  The input type for the aggregation.
- * @tparam BUF The type of the intermediate value of the reduction.
- * @tparam OUT The type of the final output result.
+ * @tparam IN
+ *   The input type for the aggregation.
+ * @tparam BUF
+ *   The type of the intermediate value of the reduction.
+ * @tparam OUT
+ *   The type of the final output result.
  * @since 4.0.0
  */
 @SerialVersionUID(2093413866369130093L)
@@ -58,7 +61,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def zero: BUF
 
   /**
-   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * Combine two values to produce a new value. For performance, the function may modify `b` and
    * return it instead of constructing new object for b.
    * @since 4.0.0
    */
@@ -89,8 +92,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
-   * operations.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`. operations.
    */
   def toColumn: TypedColumn[IN, OUT] = {
     throw new UnsupportedOperationException("toColumn is not implemented.")

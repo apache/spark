@@ -1666,8 +1666,7 @@ class SparkConnectPlanner(
    * @return
    *   ScalaUDF.
    */
-  private def transformScalaUDF(
-      fun: proto.CommonInlineUserDefinedFunction): Expression = {
+  private def transformScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
     if (udf.getAggregate) {

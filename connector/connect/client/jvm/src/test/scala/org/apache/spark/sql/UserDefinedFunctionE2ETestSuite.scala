@@ -379,8 +379,13 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
       override def outputEncoder: Encoder[Long] = Encoders.scalaLong
     }
     spark.udf.register("agg", udaf(agg))
-    val result = spark.range(10).withColumn("extra", col("id") * 2)
-      .as[UdafTestInput].selectExpr("agg(id, extra)").as[Long].head()
+    val result = spark
+      .range(10)
+      .withColumn("extra", col("id") * 2)
+      .as[UdafTestInput]
+      .selectExpr("agg(id, extra)")
+      .as[Long]
+      .head()
     assert(result == 135) // 45 + 90
   }
 }

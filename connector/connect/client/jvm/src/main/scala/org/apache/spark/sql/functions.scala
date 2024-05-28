@@ -8115,8 +8115,8 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
-   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
-   * so that it may be used with untyped Data Frames.
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
    * {{{
    *   val agg = // Aggregator[IN, BUF, OUT]
    *
@@ -8128,16 +8128,22 @@ object functions {
    *   spark.udf.register("myAggName", udaf(agg))
    * }}}
    *
-   * @tparam IN the aggregator input type
-   * @tparam BUF the aggregating buffer type
-   * @tparam OUT the finalized output type
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
    *
-   * @param agg the typed Aggregator
+   * @param agg
+   *   the typed Aggregator
    *
-   * @return a UserDefinedFunction that can be used as an aggregating expression.
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression.
    *
    * @group udf_funcs
-   * @note The input encoder is inferred from the input type IN.
+   * @note
+   *   The input encoder is inferred from the input type IN.
    * @since 4.0.0
    */
   def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
@@ -8145,8 +8151,8 @@ object functions {
   }
 
   /**
-   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator`
-   * so that it may be used with untyped Data Frames.
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
    * {{{
    *   Aggregator<IN, BUF, OUT> agg = // custom Aggregator
    *   Encoder<IN> enc = // input encoder
@@ -8159,18 +8165,24 @@ object functions {
    *   spark.udf.register("myAggName", udaf(agg, enc))
    * }}}
    *
-   * @tparam IN the aggregator input type
-   * @tparam BUF the aggregating buffer type
-   * @tparam OUT the finalized output type
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
    *
-   * @param agg the typed Aggregator
-   * @param inputEncoder a specific input encoder to use
+   * @param agg
+   *   the typed Aggregator
+   * @param inputEncoder
+   *   a specific input encoder to use
    *
-   * @return a UserDefinedFunction that can be used as an aggregating expression
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression
    *
    * @group udf_funcs
-   * @note This overloading takes an explicit input encoder, to support UDAF
-   * declarations in Java.
+   * @note
+   *   This overloading takes an explicit input encoder, to support UDAF declarations in Java.
    * @since 4.0.0
    */
   def udaf[IN, BUF, OUT](
