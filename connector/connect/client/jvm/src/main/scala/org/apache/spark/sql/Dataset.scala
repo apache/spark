@@ -43,7 +43,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
-
 /**
  * A Dataset is a strongly typed collection of domain-specific objects that can be transformed in
  * parallel using functional or relational operations. Each Dataset also has an untyped view
