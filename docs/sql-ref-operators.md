@@ -29,7 +29,7 @@ The order of execution can significantly affect the resulting value.
 
 Operators have the precedence levels shown in the following table.
 An operator on higher precedence is evaluated before an operator on a lower level.
-In the following table, the operators in descending order of precedence, a.k.a. 0 is the highest level and 11 is the lowest.
+In the following table, the operators in descending order of precedence, a.k.a. 1 is the highest level.
 Operators listed on the same table cell have the same precedence and are evaluated from left to right or right to left based on the associativity.
 
 <table>
@@ -44,84 +44,78 @@ Operators listed on the same table cell have the same precedence and are evaluat
   <tbody>
     <tr>
       <td>1</td>
-      <td>.<br/>[]</td>
-      <td>member access</td>
+      <td>.<br/>[]<br/>::</td>
+      <td>member access<br/>element access<br/>cast</td>
       <td>Left to right</td>
     </tr>
     <tr>
       <td>2</td>
-      <td>::</td>
-      <td>cast</td>
-      <td>Left to right</td>
-    </tr>
-    <tr>
-      <td>3</td>
       <td>+<br/>-<br/>~</td>
       <td>unary plus<br/>unary minus<br/>bitwise NOT</td>
       <td>Right to left</td>
     </tr>
     <tr>
-      <td>4</td>
+      <td>3</td>
       <td>*<br/>/<br/>%<br/>DIV</td>
       <td>multiplication<br/>division, modulo<br/>integral division</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>5</td>
+      <td>4</td>
       <td>+<br/>-<br/>||</td>
       <td>addition<br/>subtraction<br/>concatenation</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>6</td>
+      <td>5</td>
       <td>&lt;&lt;<br/>&gt;&gt;<br/>&gt;&gt;&gt;</td>
       <td>bitwise shift left<br/>bitwise shift right<br/>bitwise shift right unsigned</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>7</td>
+      <td>6</td>
       <td>&</td>
       <td>bitwise AND</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>8</td>
+      <td>7</td>
       <td>^</td>
       <td>bitwise XOR(exclusive or)</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>9</td>
+      <td>8</td>
       <td>|</td>
       <td>bitwise OR(inclusive or)</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>10</td>
+      <td>9</td>
       <td>=, ==<br/>&lt;&gt;, !=<br/>&lt;, &lt;=<br/>&gt;, &gt;=</td>
       <td>comparison operators</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>11</td>
+      <td>10</td>
       <td>NOT, !<br/>EXISTS</td>
       <td>logical NOT<br/>existence</td>
       <td>Right to left</td>
     </tr>
     <tr>
-      <td>12</td>
+      <td>11</td>
       <td>BETWEEN<br/>IN<br/>RLIKE, REGEXP<br/>ILIKE<br/>LIKE<br/>IS [NULL, TRUE, FALSE]<br/>IS DISTINCT FROM</td>
       <td>other predicates</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>13</td>
+      <td>12</td>
       <td>AND</td>
       <td>conjunction</td>
       <td>Left to right</td>
     </tr>
     <tr>
-      <td>14</td>
+      <td>13</td>
       <td>OR</td>
       <td>disjunction</td>
       <td>Left to right</td>
