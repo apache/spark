@@ -1027,12 +1027,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that hash join is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
-            case _: HashJoin => ()
+            case _: BroadcastHashJoinExec => ()
           }.nonEmpty
         )
         assert(
           collectFirst(queryPlan) {
-            case _: ShuffledJoin => ()
+            case _: SortMergeJoinExec => ()
           }.isEmpty
         )
 
@@ -1067,12 +1067,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that shuffle join is used instead of hash join
         assert(
           collectFirst(queryPlan) {
-            case _: HashJoin => ()
+            case _: BroadcastHashJoinExec => ()
           }.isEmpty
         )
         assert(
           collectFirst(queryPlan) {
-            case _: ShuffledJoin => ()
+            case _: SortMergeJoinExec => ()
           }.nonEmpty
         )
       }
@@ -1116,12 +1116,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // confirm that hash join is used instead of sort merge join
         assert(
           collectFirst(queryPlan) {
-            case _: HashJoin => ()
+            case _: BroadcastHashJoinExec => ()
           }.nonEmpty
         )
         assert(
           collectFirst(queryPlan) {
-            case _: ShuffledJoin => ()
+            case _: SortMergeJoinExec => ()
           }.isEmpty
         )
       }
