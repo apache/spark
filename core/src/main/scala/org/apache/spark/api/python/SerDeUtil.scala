@@ -95,7 +95,8 @@ private[spark] object SerDeUtil extends Logging {
       // Pickle the buffer (or a part of it)
       var bytes: Array[Byte] = null
       var elementsToDump: Int = buffer.length
-      while (true) {
+      var done = false
+      while (!done) {
         // Try pickling; if it fails, adjust the batch size and retry
         try {
           bytes = pickle.dumps(
@@ -103,6 +104,7 @@ private[spark] object SerDeUtil extends Logging {
             buffer.toArray
             else buffer.take(elementsToDump).toArray
           )
+          done = true
         } catch {
           // Example: java.lang.IllegalArgumentException: Cannot grow BufferHolder by size 578595584 because the size after growing exceeds size limitation 2147483632
           case e: java.lang.IllegalArgumentException => {
@@ -112,25 +114,26 @@ private[spark] object SerDeUtil extends Logging {
             } else {
               // retry with fewer elements
               elementsToDump /= 2
-              continue;
             }
           }
         }
-        // Pickling succeeded
-        val size = bytes.length
-        // Adjust batch so that 1M < size < 10M by expectation
-        if (size < 1024 * 1024 && elementsToDump == buffer.length) {
-          batch *= 2
-        } else if ((size > 1024 * 1024 * 10 || elementsToDump < buffer.length) && batch > 1) {
-          batch /= 2
-        }
-        if (elementsToDump == buffer.length) {
-          // clear the buffer
-          buffer.clear()
-        } else {
-          // remove the first elementsToDump elements
-          buffer.remove(0, elementsToDump)
-        }
+      }
+
+      // Pickling succeeded
+      val size = bytes.length
+      // Adjust batch so that 1M < size < 10M by expectation
+      if (size < 1024 * 1024 && elementsToDump == buffer.length) {
+        batch *= 2
+      } else if ((size > 1024 * 1024 * 10 || elementsToDump < buffer.length) && batch > 1) {
+        batch /= 2
+      }
+
+      if (elementsToDump == buffer.length) {
+        // clear the buffer
+        buffer.clear()
+      } else {
+        // remove the first elementsToDump elements
+        buffer.remove(0, elementsToDump)
       }
       bytes
     }
