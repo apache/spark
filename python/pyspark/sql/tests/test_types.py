@@ -81,6 +81,139 @@ from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
+    def test_class_method_type_name(self):
+        for dataType, expected in [
+            (StringType, "string"),
+            (CharType, "char"),
+            (VarcharType, "varchar"),
+            (BinaryType, "binary"),
+            (BooleanType, "boolean"),
+            (DecimalType, "decimal"),
+            (FloatType, "float"),
+            (DoubleType, "double"),
+            (ByteType, "byte"),
+            (ShortType, "short"),
+            (IntegerType, "integer"),
+            (LongType, "long"),
+            (DateType, "date"),
+            (TimestampType, "timestamp"),
+            (TimestampNTZType, "timestamp_ntz"),
+            (NullType, "void"),
+            (VariantType, "variant"),
+            (YearMonthIntervalType, "yearmonthinterval"),
+            (DayTimeIntervalType, "daytimeinterval"),
+            (CalendarIntervalType, "interval"),
+        ]:
+            self.assertEqual(dataType.typeName(), expected)
+
+    def test_instance_method_type_name(self):
+        for dataType, expected in [
+            (StringType(), "string"),
+            (CharType(5), "char(5)"),
+            (VarcharType(10), "varchar(10)"),
+            (BinaryType(), "binary"),
+            (BooleanType(), "boolean"),
+            (DecimalType(), "decimal(10,0)"),
+            (DecimalType(10, 2), "decimal(10,2)"),
+            (FloatType(), "float"),
+            (DoubleType(), "double"),
+            (ByteType(), "byte"),
+            (ShortType(), "short"),
+            (IntegerType(), "integer"),
+            (LongType(), "long"),
+            (DateType(), "date"),
+            (TimestampType(), "timestamp"),
+            (TimestampNTZType(), "timestamp_ntz"),
+            (NullType(), "void"),
+            (VariantType(), "variant"),
+            (YearMonthIntervalType(), "interval year to month"),
+            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
+            (
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+                "interval year to month",
+            ),
+            (DayTimeIntervalType(), "interval day to second"),
+            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
+            (
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+                "interval hour to second",
+            ),
+            (CalendarIntervalType(), "interval"),
+        ]:
+            self.assertEqual(dataType.typeName(), expected)
+
+    def test_simple_string(self):
+        for dataType, expected in [
+            (StringType(), "string"),
+            (CharType(5), "char(5)"),
+            (VarcharType(10), "varchar(10)"),
+            (BinaryType(), "binary"),
+            (BooleanType(), "boolean"),
+            (DecimalType(), "decimal(10,0)"),
+            (DecimalType(10, 2), "decimal(10,2)"),
+            (FloatType(), "float"),
+            (DoubleType(), "double"),
+            (ByteType(), "tinyint"),
+            (ShortType(), "smallint"),
+            (IntegerType(), "int"),
+            (LongType(), "bigint"),
+            (DateType(), "date"),
+            (TimestampType(), "timestamp"),
+            (TimestampNTZType(), "timestamp_ntz"),
+            (NullType(), "void"),
+            (VariantType(), "variant"),
+            (YearMonthIntervalType(), "interval year to month"),
+            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
+            (
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+                "interval year to month",
+            ),
+            (DayTimeIntervalType(), "interval day to second"),
+            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
+            (
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+                "interval hour to second",
+            ),
+            (CalendarIntervalType(), "interval"),
+        ]:
+            self.assertEqual(dataType.simpleString(), expected)
+
+    def test_json_value(self):
+        for dataType, expected in [
+            (StringType(), "string"),
+            (CharType(5), "char(5)"),
+            (VarcharType(10), "varchar(10)"),
+            (BinaryType(), "binary"),
+            (BooleanType(), "boolean"),
+            (DecimalType(), "decimal(10,0)"),
+            (DecimalType(10, 2), "decimal(10,2)"),
+            (FloatType(), "float"),
+            (DoubleType(), "double"),
+            (ByteType(), "byte"),
+            (ShortType(), "short"),
+            (IntegerType(), "integer"),
+            (LongType(), "long"),
+            (DateType(), "date"),
+            (TimestampType(), "timestamp"),
+            (TimestampNTZType(), "timestamp_ntz"),
+            (NullType(), "void"),
+            (VariantType(), "variant"),
+            (YearMonthIntervalType(), "interval year to month"),
+            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
+            (
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+                "interval year to month",
+            ),
+            (DayTimeIntervalType(), "interval day to second"),
+            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
+            (
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+                "interval hour to second",
+            ),
+            (CalendarIntervalType(), "interval"),
+        ]:
+            self.assertEqual(dataType.jsonValue(), expected)
+
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
         df2 = self.spark.createDataFrame(df.rdd.map(lambda x: x), df.schema)
@@ -192,6 +325,7 @@ class TypesTestsMixin:
             Row(a=1),
             Row("a")(1),
             A(),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
 
         df = self.spark.createDataFrame([data])
@@ -214,6 +348,7 @@ class TypesTestsMixin:
             "struct<a:bigint>",
             "struct<a:bigint>",
             "struct<a:bigint>",
+            "struct<b:struct<c:timestamp>>",
         ]
         self.assertEqual(actual, expected)
 
@@ -236,14 +371,25 @@ class TypesTestsMixin:
             Row(a=1),
             Row(a=1),
             Row(a=1),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
         self.assertEqual(actual, expected)
 
         with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
             with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
-                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                data = [
+                    (
+                        datetime.datetime(1970, 1, 1, 0, 0),
+                        Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
+                    )
+                ]
+                df = self.spark.createDataFrame(data)
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+                self.assertEqual(
+                    list(df.schema)[1].dataType.simpleString(), "struct<a:struct<a:timestamp_ntz>>"
+                )
+                self.assertEqual(df.first()[1], Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))))
 
             df = self.spark.createDataFrame(
                 [
