@@ -125,7 +125,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
-    // Use common defaults file, if not specified by user
     // Honor --conf before the defaults file
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
@@ -134,13 +133,18 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
 
     // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
-    Option(Utils.getDefaultPropertiesFile(env)).foreach { filename =>
+    val defaultSparkConf = Utils.getDefaultPropertiesFile(env)
+    Option(defaultSparkConf).foreach { filename =>
       val properties = Utils.getPropertiesFromFile(filename)
       properties.foreach { case (k, v) =>
         if (!sparkProperties.contains(k)) {
           sparkProperties(k) = v
         }
       }
+    }
+
+    if (propertiesFile == null) {
+      propertiesFile = defaultSparkConf
     }
   }
 
