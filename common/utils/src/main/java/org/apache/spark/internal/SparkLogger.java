@@ -24,13 +24,59 @@ import java.util.function.Consumer;
 import org.apache.logging.log4j.CloseableThreadContext;
 import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.ParameterizedMessageFactory;
+// checkstyle.off: RegexpSinglelineJava
+import org.slf4j.Logger;
+// checkstyle.on: RegexpSinglelineJava
 
-public class Logger {
+// checkstyle.off: RegexpSinglelineJava
+/**
+ * Guidelines for the Structured Logging Framework - Java Logging
+ * <p>
+ *
+ * Use the `org.apache.spark.internal.SparkLoggerFactory` to get the logger instance in Java code:
+ * Getting Logger Instance:
+ *   Instead of using `org.slf4j.LoggerFactory`, use `org.apache.spark.internal.SparkLoggerFactory`
+ *   to ensure structured logging.
+ * <p>
+ *
+ * import org.apache.spark.internal.SparkLogger;
+ * import org.apache.spark.internal.SparkLoggerFactory;
+ * private static final SparkLogger logger = SparkLoggerFactory.getLogger(JavaUtils.class);
+ * <p>
+ *
+ * Logging Messages with Variables:
+ *   When logging messages with variables, wrap all the variables with `MDC`s and they will be
+ *   automatically added to the Mapped Diagnostic Context (MDC).
+ * <p>
+ *
+ * import org.apache.spark.internal.LogKeys;
+ * import org.apache.spark.internal.MDC;
+ * logger.error("Unable to delete file for partition {}", MDC.of(LogKeys.PARTITION_ID$.MODULE$, i));
+ * <p>
+ *
+ * Constant String Messages:
+ *   For logging constant string messages, use the standard logging methods.
+ * <p>
+ *
+ * logger.error("Failed to abort the writer after failing to write map output.", e);
+ * <p>
+ *
+ * If you want to output logs in `java code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `java` code as follows:
+ * <p>
+ *
+ * // To add a `custom LogKey`, implement `LogKey`
+ * public static class CUSTOM_LOG_KEY implements LogKey { }
+ * import org.apache.spark.internal.MDC;
+ * logger.error("Unable to delete key {} for cache", MDC.of(CUSTOM_LOG_KEY, "key"));
+ */
+// checkstyle.on: RegexpSinglelineJava
+public class SparkLogger {
 
   private static final MessageFactory MESSAGE_FACTORY = ParameterizedMessageFactory.INSTANCE;
-  private final org.slf4j.Logger slf4jLogger;
+  private final Logger slf4jLogger;
 
-  Logger(org.slf4j.Logger slf4jLogger) {
+  SparkLogger(Logger slf4jLogger) {
     this.slf4jLogger = slf4jLogger;
   }
 
@@ -194,7 +240,7 @@ public class Logger {
     }
   }
 
-  public org.slf4j.Logger getSlf4jLogger() {
+  public Logger getSlf4jLogger() {
     return slf4jLogger;
   }
 }

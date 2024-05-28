@@ -63,8 +63,7 @@ class UnivocityParser(
   private type ValueConverter = String => Any
 
   // This index is used to reorder parsed tokens
-  private val tokenIndexArr =
-    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+  private val tokenIndexArr = requiredSchema.map(f => dataSchema.indexOf(f)).toArray
 
   // True if we should inform the Univocity CSV parser to select which fields to read by their
   // positions. Generally assigned by input configuration options, except when input column(s) have
@@ -81,7 +80,8 @@ class UnivocityParser(
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
     // parser select a sequence of fields for reading by their positions.
     if (parsedSchema.length < dataSchema.length) {
-      parserSetting.selectIndexes(tokenIndexArr: _*)
+      // Box into Integer here to avoid unboxing where `tokenIndexArr` is used during parsing
+      parserSetting.selectIndexes(tokenIndexArr.map(java.lang.Integer.valueOf(_)): _*)
     }
     new CsvParser(parserSetting)
   }

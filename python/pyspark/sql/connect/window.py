@@ -27,7 +27,7 @@ from pyspark.sql.connect.expressions import (
     Expression,
     SortOrder,
 )
-from pyspark.sql.connect.types import (
+from pyspark.util import (
     JVM_LONG_MIN,
     JVM_LONG_MAX,
 )
