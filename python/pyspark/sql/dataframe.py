@@ -659,7 +659,12 @@ class DataFrame:
 
     @dispatch_df_method
     def sizeInBytesApproximation(self) -> int:
-        """Returns the approximate size in bytes of a DataFrame. The estimate is based on the total size of the input files and the transformations in the logical plan. The size returned is based on the worst-case scenario, e.g. a full cross-join is assumed for join operations. For in-memory only DataFrames, such as those created with spark.createDataFrame, it will return a very large value.
+        """Returns the approximate size in bytes of a DataFrame.
+
+        The estimate is based on the total size of the input files and the transformations
+        in the logical plan. The size returned is based on the worst-case scenario,
+        e.g. a full cross-join is assumed for join operations. For in-memory only DataFrames,
+        such as those created with spark.createDataFrame, it will return a very large value.
 
         .. versionadded:: 4.0.0
 
