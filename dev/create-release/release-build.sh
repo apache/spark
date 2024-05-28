@@ -383,8 +383,8 @@ if [[ "$1" == "package" ]]; then
 
     echo "Copying release tarballs"
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp pyspark* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
