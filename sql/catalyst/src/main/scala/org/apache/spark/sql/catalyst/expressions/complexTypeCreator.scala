@@ -242,6 +242,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
+  override def stateful: Boolean = true
+
   override def eval(input: InternalRow): Any = {
     var i = 0
     while (i < keys.length) {
@@ -316,6 +318,8 @@ case class MapFromArrays(left: Expression, right: Expression)
       valueType = right.dataType.asInstanceOf[ArrayType].elementType,
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
+
+  override def stateful: Boolean = true
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
@@ -562,6 +566,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   def this(child: Expression) = {
     this(child, Literal(","), Literal(":"))
   }
+
+  override def stateful: Boolean = true
 
   override def first: Expression = text
   override def second: Expression = pairDelim
