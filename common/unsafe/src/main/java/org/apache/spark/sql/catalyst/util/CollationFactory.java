@@ -245,12 +245,12 @@ public final class CollationFactory {
       PROVIDER_ICU,
       Collator.getInstance(ULocale.ROOT),
       "153.120.0.0",
-      true,
+      false,
       false,
       false
     );
 
-    collationTable[2].collator.setStrength(Collator.TERTIARY);
+    collationTable[2].collator.setStrength(Collator.IDENTICAL);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).

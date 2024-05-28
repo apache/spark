@@ -34,6 +34,13 @@ import java.util.Map;
  * Utility class for collation-aware UTF8String operations.
  */
 public class CollationAwareUTF8String {
+
+  /**
+   * The constant value to indicate that the match is not found when searching for a pattern
+   * string in a target string.
+   */
+  private static final int MATCH_NOT_FOUND = -1;
+
   public static UTF8String replace(final UTF8String src, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
@@ -185,9 +192,8 @@ public class CollationAwareUTF8String {
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
-    if (pattern.numBytes() == 0) {
-      return 0;
-    }
+    if (pattern.numBytes() == 0) return 0;
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     stringSearch.setIndex(start);

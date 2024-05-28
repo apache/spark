@@ -64,18 +64,23 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "aaa", true),
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", false),
+      CollationTestCase("UTF8_BINARY", "å", "a\u030A", false),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aaa", true),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AAA", true),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", true),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", true),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aa", false),
       CollationTestCase("UTF8_BINARY_LCASE", "aaa", "bbb", false),
+      CollationTestCase("UTF8_BINARY_LCASE", "å", "a\u030A", false),
       CollationTestCase("UNICODE", "aaa", "aaa", true),
       CollationTestCase("UNICODE", "aaa", "AAA", false),
       CollationTestCase("UNICODE", "aaa", "bbb", false),
+      CollationTestCase("UNICODE", "å", "a\u030A", true),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
-      CollationTestCase("UNICODE_CI", "aaa", "bbb", false))
+      CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
+      CollationTestCase("UNICODE_CI", "å", "a\u030A", true)
+    )
 
     checks.foreach(testCase => {
       val collation = fetchCollation(testCase.collationName)
