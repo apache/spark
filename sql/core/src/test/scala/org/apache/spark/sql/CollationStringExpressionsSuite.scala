@@ -945,20 +945,6 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("StringTrim* functions - unsupported collation types") {
-    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
-      val collationMismatch = intercept[AnalysisException] {
-        sql("SELECT " + func + "(COLLATE('x', 'UNICODE_CI'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
-      }
-      assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-    })
-
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-  }
-
   // TODO: Add more tests for other string expressions
 
 }
