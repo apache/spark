@@ -35,6 +35,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Last}
@@ -2200,11 +2201,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.shiftOperator().getChild(0).asInstanceOf[TerminalNode]
-    operator.getSymbol.getType match {
+    val shift = operator.getSymbol.getType match {
       case SqlBaseParser.SHIFT_LEFT => ShiftLeft(left, right)
       case SqlBaseParser.SHIFT_RIGHT => ShiftRight(left, right)
       case SqlBaseParser.SHIFT_RIGHT_UNSIGNED => ShiftRightUnsigned(left, right)
     }
+    shift.setTagValue(FUNC_ALIAS, operator.getText)
+    shift
   }
 
   /**
