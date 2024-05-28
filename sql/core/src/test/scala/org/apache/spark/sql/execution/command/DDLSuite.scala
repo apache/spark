@@ -2508,6 +2508,29 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY_LCASE"))
     }
   }
+
+  test("Invalid collation change on partition and bucket columns") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(col STRING, i INTEGER) USING parquet PARTITIONED BY (col)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_BINARY_LCASE")
+        },
+        errorClass = "CANNOT_ALTER_PARTITION_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t1`", "columnName" -> "`col`")
+      )
+      sql("CREATE TABLE t2(col STRING) USING parquet CLUSTERED BY (col) INTO 1 BUCKETS")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t2 ALTER COLUMN col TYPE STRING COLLATE UTF8_BINARY_LCASE")
+        },
+        errorClass = "CANNOT_ALTER_COLLATION_BUCKET_COLUMN",
+        sqlState = "428FR",
+        parameters = Map("tableName" -> "`spark_catalog`.`default`.`t2`", "columnName" -> "`col`")
+      )
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {

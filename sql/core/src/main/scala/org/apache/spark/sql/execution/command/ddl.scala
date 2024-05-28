@@ -387,9 +387,21 @@ case class AlterTableChangeColumnCommand(
     }
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
+    val validType = canEvolveType(originColumn, newColumn)
+    // Throw an AnalysisException on attempt to change collation of bucket column.
+    if (validType && originColumn.dataType != newColumn.dataType) {
+      val isBucketColumn = table.bucketSpec match {
+        case Some(bucketSpec) => bucketSpec.bucketColumnNames.exists(resolver(columnName, _))
+        case _ => false
+      }
+      if (isBucketColumn) {
+        throw QueryCompilationErrors.cannotAlterCollationBucketColumn(
+          table.qualifiedName, columnName)
+      }
+    }
     // Throw an AnalysisException if the column name is changed or we cannot evolve the data type.
     // Only changes in collation of column data type or its nested types (recursively) are allowed.
-    if (!namesEqual(originColumn, newColumn, resolver) || !canEvolveType(originColumn, newColumn)) {
+    if (!validType || !namesEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
         toSQLId(table.identifier.nameParts), originColumn, newColumn, this.origin)
     }
@@ -398,7 +410,7 @@ case class AlterTableChangeColumnCommand(
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new type and new comment.
         val withNewTypeAndComment: StructField =
-          addComment(field.withNewType(newColumn.dataType), newColumn.getComment())
+          addComment(withNewType(field, newColumn.dataType), newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
@@ -432,6 +444,10 @@ case class AlterTableChangeColumnCommand(
       case field if resolver(field.name, name) => field
     }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
+
+  // Change the dataType of the column.
+  private def withNewType(column: StructField, dataType: DataType): StructField =
+    column.copy(dataType = dataType)
 
   // Add the comment to a column, if comment is empty, return the original column.
   private def addComment(column: StructField, comment: Option[String]): StructField =
