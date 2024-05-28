@@ -201,7 +201,7 @@ Condition : (((((((isnotnull(ss_item_sk#1) AND isnotnull(ss_ticket_number#8)) AN
 
 (4) BroadcastExchange
 Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_ticket_number#8, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, false] as bigint) << 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [plan_id=1]
 
 (5) Scan parquet spark_catalog.default.store_returns
 Output [3]: [sr_item_sk#14, sr_ticket_number#15, sr_returned_date_sk#16]
@@ -714,7 +714,7 @@ Condition : (((((((isnotnull(ss_item_sk#106) AND isnotnull(ss_ticket_number#113)
 
 (115) BroadcastExchange
 Input [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, false] as bigint) << 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [plan_id=16]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [plan_id=16]
 
 (116) Scan parquet spark_catalog.default.store_returns
 Output [3]: [sr_item_sk#119, sr_ticket_number#120, sr_returned_date_sk#121]

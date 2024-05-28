@@ -66,7 +66,7 @@ Condition : ((((isnotnull(ws_item_sk#1) AND isnotnull(ws_order_number#3)) AND is
 
 (4) BroadcastExchange
 Input [7]: [ws_item_sk#1, ws_web_page_sk#2, ws_order_number#3, ws_quantity#4, ws_sales_price#5, ws_net_profit#6, ws_sold_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[0, int, false] as bigint) << 32) | (cast(input[2, int, false] as bigint) & 4294967295))),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[2, int, false] as bigint) & 4294967295))),false), [plan_id=1]
 
 (5) Scan parquet spark_catalog.default.web_returns
 Output [9]: [wr_item_sk#9, wr_refunded_cdemo_sk#10, wr_refunded_addr_sk#11, wr_returning_cdemo_sk#12, wr_reason_sk#13, wr_order_number#14, wr_fee#15, wr_refunded_cash#16, wr_returned_date_sk#17]

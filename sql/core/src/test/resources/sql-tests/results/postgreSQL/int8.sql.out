@@ -883,7 +883,7 @@ struct<id:bigint>
 -- !query
 SELECT string(shiftleft(bigint(-1), 63))
 -- !query schema
-struct<(-1 << 63):string>
+struct<shiftleft(-1, 63):string>
 -- !query output
 -9223372036854775808
 

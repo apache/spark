@@ -289,12 +289,12 @@
 | org.apache.spark.sql.catalyst.expressions.Sha1 | sha | SELECT sha('Spark') | struct<sha(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.Sha1 | sha1 | SELECT sha1('Spark') | struct<sha1(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.Sha2 | sha2 | SELECT sha2('Spark', 256) | struct<sha2(Spark, 256):string> |
-| org.apache.spark.sql.catalyst.expressions.ShiftLeft | << | SELECT shiftleft(2, 1) | struct<(2 << 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftLeft | shiftleft | SELECT shiftleft(2, 1) | struct<(2 << 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRight | >> | SELECT shiftright(4, 1) | struct<(4 >> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<(4 >> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | >>> | SELECT shiftrightunsigned(4, 1) | struct<(4 >>> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<(4 >>> 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftLeft | << | SELECT shiftleft(2, 1) | struct<shiftleft(2, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftLeft | shiftleft | SELECT shiftleft(2, 1) | struct<shiftleft(2, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRight | >> | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | >>> | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.Shuffle | shuffle | SELECT shuffle(array(1, 20, 3, 5)) | struct<shuffle(array(1, 20, 3, 5)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.Signum | sign | SELECT sign(40) | struct<sign(40):double> |
 | org.apache.spark.sql.catalyst.expressions.Signum | signum | SELECT signum(40) | struct<SIGNUM(40):double> |
