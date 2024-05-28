@@ -2589,7 +2589,8 @@ object SQLConf {
 
   val AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR =
     buildConf("spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr")
-      .doc("Whether to avoid collapsing projects that would duplicate expensive expressions in UDFs.")
+      .doc("Whether to avoid collapsing projections that would duplicate expensive expressions " +
+        "in UDFs.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
