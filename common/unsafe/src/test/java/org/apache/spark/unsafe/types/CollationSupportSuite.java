@@ -573,19 +573,6 @@ public class CollationSupportSuite {
     assertStringInstr("abi̇o12", "İo", "UNICODE_CI", 3);
   }
 
-  private void assertStringTranslate(final String source, final Map<String, String> dict,
-      final String collationName, final String result) throws SparkException {
-    int collationId = CollationFactory.collationNameToId(collationName);
-    UTF8String str = UTF8String.fromString(source);
-    UTF8String res = UTF8String.fromString(result);
-    assertEquals(res, CollationSupport.StringTranslate.exec(str, dict, collationId));
-  }
-
-  @Test
-  public void testStringTranslate() throws SparkException {
-    assertStringTranslate("abc", Map.of("a", "A", "b", "B", "c", "C"), "UTF8_BINARY", "ABC");
-  }
-
   private void assertFindInSet(String word, String set, String collationName,
         Integer expected) throws SparkException {
     UTF8String w = UTF8String.fromString(word);

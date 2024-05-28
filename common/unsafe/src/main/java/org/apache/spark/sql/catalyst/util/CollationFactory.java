@@ -372,10 +372,22 @@ public final class CollationFactory {
     if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
-      return input.toLowerCase();
+      return CollationAwareUTF8String.toLowerCase(input);
     } else {
       CollationKey collationKey = collation.collator.getCollationKey(input.toString());
       return UTF8String.fromBytes(collationKey.toByteArray());
+    }
+  }
+
+  public static String getCollationKey(String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input;
+    } else if (collation.supportsLowercaseEquality) {
+      return CollationAwareUTF8String.toLowerCase(input);
+    } else {
+      CollationKey collationKey = collation.collator.getCollationKey(input);
+      return Arrays.toString(collationKey.toByteArray());
     }
   }
 

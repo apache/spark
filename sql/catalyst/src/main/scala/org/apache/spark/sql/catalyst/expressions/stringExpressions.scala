@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
@@ -859,13 +859,9 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Int)
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String)
     : JMap[String, String] = {
-    val matching = if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      matchingString.toString().toLowerCase()
-    } else {
-      matchingString.toString()
-    }
+    val matching = matchingString.toString()
 
     val replace = replaceString.toString()
     val dict = new HashMap[String, String]()
@@ -923,7 +919,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
       lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
-      dict = StringTranslate.buildDict(lastMatching, lastReplace, collationId)
+      dict = StringTranslate.buildDict(lastMatching, lastReplace)
     }
 
     CollationSupport.StringTranslate.exec(srcEval.asInstanceOf[UTF8String], dict, collationId)
@@ -947,7 +943,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termLastMatching = $matching.clone();
         $termLastReplace = $replace.clone();
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict($termLastMatching, $termLastReplace, $collationId);
+          .buildDict($termLastMatching, $termLastReplace);
       }
       ${ev.value} = CollationSupport.StringTranslate.
       exec($src, $termDict, $collationId);
