@@ -1811,7 +1811,10 @@ class DataFrame(ParentDataFrame):
         return result
 
     def printSchema(self, level: Optional[int] = None) -> None:
-        print(self._tree_string(level))
+        if level:
+            print(self.schema.treeString(level))
+        else:
+            print(self.schema.treeString())
 
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
