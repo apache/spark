@@ -34,17 +34,18 @@ class SerDeUtilSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Testing AutoBatchedPickler in supporting large rows (SPARK-48380)") {
-    val emptyString = ""
     val largeString = "1" * 1000_000_000
-    val inputIterator = Iterator(
-      emptyString,
-      emptyString,
-      emptyString,
-      largeString,
-      largeString,
-      largeString,
-    )
-    val outputIterator = AutoBatchedPickler(inputIterator)
-    outputIterator.foreach(_ => ())
+    val largeRdd = sc.parallelize(Seq[(Any, Any)](
+      ("", ""),
+      ("", ""),
+      ("", ""),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString)
+    ), 1)
+    val javaRdd = largeRdd.toJavaRDD()
+    val pythonRdd = SerDeUtil.javaToPython(javaRdd)
+    pythonRdd.count()
   }
 }
