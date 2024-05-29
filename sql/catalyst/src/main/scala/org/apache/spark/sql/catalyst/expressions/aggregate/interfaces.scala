@@ -24,10 +24,13 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{CollationFactory, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.{CollationAwareHashMap, OpenHashMap}
 
 /** The mode of an [[AggregateFunction]]. */
 sealed trait AggregateMode
@@ -643,18 +646,14 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
  * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
  * aggregation buffer.
  */
-abstract class TypedAggregateWithHashMapAsBuffer
-  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
-  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
-    // Initialize new counts map instance here.
-    new OpenHashMap[AnyRef, Long]()
-  }
+abstract class TypedAggregateWithHashMapAsBufferBase[HM <: OpenHashMap[AnyRef, Long]]
+  extends TypedImperativeAggregate[HM] {
 
   protected def child: Expression
 
   private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
 
-  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+  override def serialize(obj: HM): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
@@ -676,11 +675,16 @@ abstract class TypedAggregateWithHashMapAsBuffer
     }
   }
 
-  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
+  override def deserialize(bytes: Array[Byte]): HM = {
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(bis)
     try {
-      val counts = new OpenHashMap[AnyRef, Long]
+      val counts = createAggregationBuffer()
+      /* (64, child.dataType match {
+        case StringType if child.dataType.asInstanceOf[StringType].isUTF8BinaryLcaseCollation => 1
+        case StringType => 0
+        case _ => -1
+      }) */
       // Read unsafeRow size and content in bytes.
       var sizeOfNextRow = ins.readInt()
       while (sizeOfNextRow >= 0) {
@@ -700,5 +704,132 @@ abstract class TypedAggregateWithHashMapAsBuffer
       ins.close()
       bis.close()
     }
+  }
+}
+
+
+abstract class CollationAwareTypedAggregateWithHashMapAsBuffer
+  extends TypedAggregateWithHashMapAsBufferBase[CollationAwareHashMap[AnyRef, Long, UTF8String]] {
+  self: UnaryLike[Expression] =>
+  override def createAggregationBuffer(): CollationAwareHashMap[AnyRef, Long, UTF8String] = {
+    // Initialize new counts map instance here.
+    new CollationAwareHashMap[AnyRef, Long, UTF8String](64, bytesToFunctions(self.dataType))
+    /* 64, child.dataType match {
+      case StringType if child.dataType.asInstanceOf[StringType].isUTF8BinaryLcaseCollation => 1
+      case StringType => 0
+      case _ => -1
+    }) */
+  }
+
+//
+//  private def getSomethingForStructType(
+//      buffer: OpenHashMap[AnyRef, Long],
+//      s: StructType,
+//      something: Int
+//  ): Iterable[(AnyRef, Long)] = {
+//    val fIsNonBinaryString = s.fields.map(f => (f, f.dataType)).map {
+//      case (f, t: StringType) if !t.supportsBinaryEquality => (f.name, true)
+//      case (f, _) => (f.name, false)
+//    }.toMap
+//
+//    val fIsStructToRecurseOn = s.fields.map(f => (f, f.dataType)).map {
+//      case (f, t: StructType) => (f.name, true)
+//      case (f, _) => (f.name, false)
+//    }.toMap
+//
+//    val fCollationIDs = s.fields.collect {
+//      case f if fIsNonBinaryString(f.name) =>
+//        (f.name, f.dataType.asInstanceOf[StringType].collationId)
+//    }.toMap
+//
+//    buffer.groupMapReduce {
+//      case (key: InternalRow, _) =>
+//        foo(key.toSeq(s).zip(s.fields),
+  //        fIsNonBinaryString, fIsStructToRecurseOn, fCollationIDs, something)
+//    }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+//  }
+//
+//  private def foo(
+//      tuples: Seq[(Any, StructField)],
+//      fIsNonBinaryString: Map[String, Boolean],
+//      fIsStructToRecurseOn: Map[String, Boolean],
+//      fCollationIDs: Map[String, Int],
+//      something: Int): Seq[Any] = {
+//    val mapped = tuples.map {
+//      //      case (k: String, field) if fIsNonBinaryString(field.name) =>
+//      //        CollationFactory.
+  //      getCollationKey(UTF8String.fromString(k), fCollationIDs(field.name))
+//      case (k: UTF8String, field) if fIsNonBinaryString(field.name) =>
+//        something match {
+//          case 1 => CollationFactory.getCollationKey(k, fCollationIDs(field.name))
+//          case 2 => CollationFactory.fetchCollation(fCollationIDs(field.name))
+//            .hashFunction.applyAsLong(k)
+//          //          case 3 => b: AnyRef =>
+//          //            k.semanticEquals(b.asInstanceOf[UTF8String], fCollationIDs(field.name))
+//        }
+//        CollationFactory.getCollationKey(k, fCollationIDs(field.name))
+//      case (k, field: StructField) if fIsStructToRecurseOn(field.name) =>
+//        val food = foo(
+//          k.asInstanceOf[InternalRow].toSeq(field.dataType.asInstanceOf[StructType]).zip(
+//            field.dataType.asInstanceOf[StructType].fields),
+//          field.dataType.asInstanceOf[StructType].fields.map(f => (f.name, f.dataType)).map {
+//            case (f, t: StringType) if !t.supportsBinaryEquality => (f, true)
+//            case (f, t) => (f, false)
+//          }.toMap,
+//          field.dataType.asInstanceOf[StructType].fields.map(f => (f, f.dataType)).map {
+//            case (f, t: StructType) => (f.name, true)
+//            case (f, _) => (f.name, false)
+//          }.toMap,
+//          field.dataType.asInstanceOf[StructType].fields.collect {
+//            case f if f.dataType.isInstanceOf[StringType] &&
+//              !f.dataType.asInstanceOf[StringType].supportsBinaryEquality =>
+//              (f.name, f.dataType.asInstanceOf[StringType].collationId)
+//          }.toMap,
+//          something)
+
+//        something match {
+//          case 1 => food
+//          case 2 => food.foldLeft(0L)((a, b) => a ^ b)
+//          //          case 3 => (b: AnyRef) =>
+  //          b.asInstanceOf[InternalRow].toSeq(field.dataType.
+  //          asInstanceOf[StructType]).zip(food.asInstanceOf[Seq[AnyRef => Boolean]])
+//          //          .forall(x => x._2(x._1.asInstanceOf[AnyRef]))
+//        }
+//      }
+//      case (k, _) => something match {
+//        case 1 => k
+//        case 2 => k.hashCode().toLong
+//        //   case 3 => x => k.equals(x)
+//        //          case 3 => (a: AnyRef, b: AnyRef) =>
+//        //            a.asInstanceOf[UTF8String]
+  //        .semanticEquals(b.asInstanceOf[UTF8String], fCollationIDs(field.name))
+//      }
+//
+//
+//    }
+//    something match {
+//      case 1 => mapped
+//      case 2 => mapped
+//      //      case 3 => (a: AnyRef, b: AnyRef) => mapped.forall((x)
+//    }
+//  }
+
+   def bytesToFunctions(dataType: DataType): AnyRef => Long = {
+    dataType match {
+      case s: StringType => a => CollationFactory.fetchCollation(s.collationId)
+        .hashFunction.applyAsLong(a.asInstanceOf[UTF8String])
+      case nb: StructType if !UnsafeRowUtils.isBinaryStable(nb) => a =>
+        a.asInstanceOf[InternalRow].toSeq(nb).zip(nb.fields.toSeq).foldLeft(0L)((acc, b)
+        => acc ^ bytesToFunctions(b._2.dataType)(b._1.asInstanceOf[AnyRef]))
+      case _ => a => a.hashCode().toLong
+    }
+  }
+}
+
+abstract class TypedAggregateWithHashMapAsBuffer
+  extends TypedAggregateWithHashMapAsBufferBase[OpenHashMap[AnyRef, Long]]{
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[AnyRef, Long]()
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.CollationAwareHashMap
 
 abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchmark {
   protected val collationTypes: Seq[String] =
@@ -201,7 +201,8 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
+        x => x.hashCode())
       value.foreach(v => {
         buffer.update(v, (v.hashCode() % 1000).toLong)
       })
@@ -227,7 +228,8 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
+      val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
+        x => x.hashCode())
       value.foreach(v => {
         buffer.update(InternalRow.fromSeq(
           Seq(v, v, 3)),

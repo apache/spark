@@ -18,22 +18,22 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{CollationAwareHashMap, OpenHashMap}
 
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     reverseOpt: Option[Boolean] = None)
-  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
+  extends CollationAwareTypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
     with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
@@ -49,26 +49,11 @@ case class Mode(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
-      child.dataType.isInstanceOf[StringType]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input to the function 'mode' was a complex type with non-binary collated fields," +
-          " which are currently not supported by 'mode'."
-      )
-    }
-  }
-
   override def prettyName: String = "mode"
 
   override def update(
-      buffer: OpenHashMap[AnyRef, Long],
-      input: InternalRow): OpenHashMap[AnyRef, Long] = {
+      buffer: CollationAwareHashMap[AnyRef, Long, UTF8String],
+      input: InternalRow): CollationAwareHashMap[AnyRef, Long, UTF8String] = {
     val key = child.eval(input)
 
     if (key != null) {
@@ -78,27 +63,18 @@ case class Mode(
   }
 
   override def merge(
-      buffer: OpenHashMap[AnyRef, Long],
-      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
+      buffer: CollationAwareHashMap[AnyRef, Long, UTF8String],
+      other: CollationAwareHashMap[AnyRef, Long, UTF8String]):
+  CollationAwareHashMap[AnyRef, Long, UTF8String] = {
     other.foreach { case (key, count) =>
       buffer.changeValue(key, count, _ + count)
     }
     buffer
   }
 
-  override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
+  override def eval(buffer: CollationAwareHashMap[AnyRef, Long, UTF8String]): Any = {
     if (buffer.isEmpty) {
       return null
-    }
-    val collationAwareBuffer = child.dataType match {
-      case c: StringType if
-        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
-        val collationId = c.collationId
-        val modeMap = buffer.toSeq.groupMapReduce {
-         case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
-        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
-        modeMap
-      case _ => buffer
     }
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
@@ -107,8 +83,8 @@ case class Mode(
         PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
       }
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
-      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
-    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
+      buffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(buffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -226,7 +202,8 @@ case class PandasMode(
     child: Expression,
     ignoreNA: Boolean = true,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
+    inputAggBufferOffset: Int = 0)
+  extends TypedAggregateWithHashMapAsBuffer
   with ImplicitCastInputTypes with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, true, 0, 0)

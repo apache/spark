@@ -29,6 +29,14 @@ import scala.reflect.ClassTag
  * NOTE: when using numeric type as the value type, the user of this class should be careful to
  * distinguish between the 0/0.0/0L and non-exist value
  */
+private[spark] class CollationAwareHashMap[K: ClassTag, V: ClassTag, X](
+    initialCapacity: Int,
+    hashering: AnyRef => Long)
+  extends OpenHashMap[K, V](initialCapacity) {
+  override def getOpenHashSet: OpenHashSet[K] =
+    new CollationAwareOpenHashSet[K, X](initialCapacity, 0.7, hashering)
+}
+
 private[spark]
 class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
@@ -37,7 +45,17 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
 
   def this() = this(64)
 
-  protected var _keySet = new OpenHashSet[K](initialCapacity)
+  def getOpenHashSet: OpenHashSet[K] = new OpenHashSet[K](initialCapacity, 0.7)
+  protected var _keySet = getOpenHashSet
+
+  /*
+    specialCase match {
+      case -1 => None
+      case _ => Some(o =>
+        CollationFactory.fetchCollation(specialCase)
+          .hashFunction.applyAsLong(o.asInstanceOf[UTF8String])
+          .toInt)
+    }) */
 
   // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
   // bug that would generate two arrays (one for Object and one for specialized T).
