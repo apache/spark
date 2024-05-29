@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 object RewriteCollationJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
