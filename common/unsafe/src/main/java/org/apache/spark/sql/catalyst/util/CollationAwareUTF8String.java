@@ -345,14 +345,14 @@ public class CollationAwareUTF8String {
    */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
-    if (pattern.numChars() == 0) return 0;
+    if (pattern.numChars() == 0) return target.indexOfEmpty(start);
     return lowercaseFind(target, pattern.toLowerCase(), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) {
-      return 0;
+      return target.indexOfEmpty(start);
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
@@ -444,47 +444,27 @@ public class CollationAwareUTF8String {
       return UTF8String.EMPTY_UTF8;
     }
 
-    UTF8String lowercaseString = string.toLowerCase();
     UTF8String lowercaseDelimiter = delimiter.toLowerCase();
 
     if (count > 0) {
-      int idx = -1;
+      // Search left to right (note: the start code point is inclusive).
+      int matchLength = -1;
       while (count > 0) {
-        idx = lowercaseString.find(lowercaseDelimiter, idx + 1);
-        if (idx >= 0) {
-          count--;
-        } else {
-          // can not find enough delim
-          return string;
-        }
+        matchLength = lowercaseFind(string, lowercaseDelimiter, matchLength + 1);
+        if (matchLength > MATCH_NOT_FOUND) --count; // Found a delimiter.
+        else return string; // Cannot find enough delimiters in the string.
       }
-      if (idx == 0) {
-        return UTF8String.EMPTY_UTF8;
-      }
-      byte[] bytes = new byte[idx];
-      copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-      return UTF8String.fromBytes(bytes);
-
+      return string.substring(0, matchLength);
     } else {
-      int idx = string.numBytes() - delimiter.numBytes() + 1;
+      // Search right to left (note: the end code point is exclusive).
+      int matchLength = string.numChars() + 1;
       count = -count;
       while (count > 0) {
-        idx = lowercaseString.rfind(lowercaseDelimiter, idx - 1);
-        if (idx >= 0) {
-          count--;
-        } else {
-          // can not find enough delim
-          return string;
-        }
+        matchLength = lowercaseRFind(string, lowercaseDelimiter, matchLength - 1);
+        if (matchLength > MATCH_NOT_FOUND) --count; // Found a delimiter.
+        else return string; // Cannot find enough delimiters in the string.
       }
-      if (idx + delimiter.numBytes() == string.numBytes()) {
-        return UTF8String.EMPTY_UTF8;
-      }
-      int size = string.numBytes() - delimiter.numBytes() - idx;
-      byte[] bytes = new byte[size];
-      copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
-        bytes, BYTE_ARRAY_OFFSET, size);
-      return UTF8String.fromBytes(bytes);
+      return string.substring(matchLength, string.numChars());
     }
   }
 
