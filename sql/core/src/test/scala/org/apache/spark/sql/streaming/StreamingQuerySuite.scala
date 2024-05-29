@@ -1443,9 +1443,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       val ex = intercept[StreamingQueryException] {
         query.processAllAvailable()
       }
-      assert(ex.getMessage.contains("The streaming query failed because the given " +
-        "StateStoreProvider does not extend org.apache.spark.sql.execution.streaming.state." +
-        "StateStoreProvider"))
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
     }
   }
 
