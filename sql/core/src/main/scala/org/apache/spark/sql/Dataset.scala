@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
@@ -561,7 +561,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def schema: StructType = sparkSession.withActive {
-    queryExecution.analyzed.schema
+    removeInternalMetadata(queryExecution.analyzed.schema)
   }
 
   /**
