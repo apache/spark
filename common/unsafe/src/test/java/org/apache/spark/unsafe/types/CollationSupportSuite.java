@@ -653,6 +653,9 @@ public class CollationSupportSuite {
     assertFindInSet("def", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 5);
     assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
     assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY", 0);
+    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UTF8_BINARY", 1);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_BINARY", 6);
+    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_BINARY", 0);
     assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 0);
     assertFindInSet("c", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 4);
     assertFindInSet("AB", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 3);
@@ -661,11 +664,17 @@ public class CollationSupportSuite {
     assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 0);
     assertFindInSet("XX", UTF8String.fromString("xx"), "UTF8_BINARY_LCASE", 1);
     assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 0);
+    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UTF8_BINARY_LCASE", 1);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UTF8_BINARY_LCASE", 6);
+    assertFindInSet("", UTF8String.fromString("abc"), "UTF8_BINARY_LCASE", 0);
     assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UTF8_BINARY_LCASE", 4);
     assertFindInSet("a", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
     assertFindInSet("ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 3);
     assertFindInSet("Ab", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
     assertFindInSet("d,ef", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE", 0);
+    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UNICODE", 1);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UNICODE", 6);
+    assertFindInSet("", UTF8String.fromString("abc"), "UNICODE", 0);
     assertFindInSet("xx", UTF8String.fromString("xx"), "UNICODE", 1);
     assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 0);
     assertFindInSet("大", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE", 5);
@@ -673,6 +682,9 @@ public class CollationSupportSuite {
     assertFindInSet("C", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 4);
     assertFindInSet("DeF", UTF8String.fromString("abc,b,ab,c,dEf"), "UNICODE_CI", 5);
     assertFindInSet("DEFG", UTF8String.fromString("abc,b,ab,c,def"), "UNICODE_CI", 0);
+    assertFindInSet("", UTF8String.fromString(",abc,b,ab,c,def"), "UNICODE_CI", 1);
+    assertFindInSet("", UTF8String.fromString("abc,b,ab,c,def,"), "UNICODE_CI", 6);
+    assertFindInSet("", UTF8String.fromString("abc"), "UNICODE_CI", 0);
     assertFindInSet("XX", UTF8String.fromString("xx"), "UNICODE_CI", 1);
     assertFindInSet("界x", UTF8String.fromString("test,大千,世,界X,大,千,世界"), "UNICODE_CI", 4);
     assertFindInSet("界x", UTF8String.fromString("test,大千,界Xx,世,界X,大,千,世界"), "UNICODE_CI", 5);
