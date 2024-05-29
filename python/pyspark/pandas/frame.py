@@ -13626,14 +13626,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
-    def _to_feather_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_feather")
-        return _f(*args, **kwargs)
-
-    def _to_stata_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_stata")
-        return _f(*args, **kwargs)
-
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
