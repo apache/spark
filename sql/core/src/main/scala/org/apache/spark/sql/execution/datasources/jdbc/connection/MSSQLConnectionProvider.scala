@@ -38,18 +38,16 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     val parseURL = try {
       // The default parser method signature is the following:
       // private Properties parseAndMergeProperties(String Url, Properties suppliedProperties)
-      val m = driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties])
-      m.setAccessible(true)
-      Some(m)
+      Some(driver.getClass.getDeclaredMethod(parserMethod, classOf[String], classOf[Properties]))
     } catch {
       case _: NoSuchMethodException => None
     }
 
     parseURL match {
-      case Some(m) =>
+      case Some(_) =>
         logDebug("Property parser method found, using it")
-        m.invoke(driver, options.url, null).asInstanceOf[Properties]
-          .getProperty(configName, appEntryDefault)
+        driver.getPropertyInfo(options.url, null).
+          find(_.name.equals(configName)).map(_.value).getOrElse(appEntryDefault)
 
       case None =>
         logDebug("Property parser method not found, using custom parsing mechanism")
