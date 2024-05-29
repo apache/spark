@@ -1432,17 +1432,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("StateStoreProvider integrity check") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[StreamTest].getCanonicalName) {
+  test("SPARK-48447: check state store provider class before invoking the constructor") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
       val input = MemoryStream[Int]
       input.addData(1)
-      val query = input.toDF().limit(1).writeStream
+      val query = input.toDF().limit(2).writeStream
         .trigger(Trigger.AvailableNow())
         .format("console")
         .start()
-      failAfter(streamingTimeout) {
+      val ex = intercept[StreamingQueryException] {
         query.processAllAvailable()
       }
+      assert(ex.getMessage.contains("The streaming query failed because the given " +
+        "StateStoreProvider does not extend org.apache.spark.sql.execution.streaming.state." +
+        "StateStoreProvider"))
     }
   }
 
