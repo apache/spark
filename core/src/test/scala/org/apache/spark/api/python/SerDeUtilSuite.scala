@@ -34,14 +34,15 @@ class SerDeUtilSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Converting an large RDD to python RDD does not throw an exception (SPARK-48380)") {
+    val largeString = "1" * 1000_000_000
     val largeRdd = sc.makeRDD(Seq[(Any, Any)](
       ("", ""),
       ("", ""),
       ("", ""),
-      ("", "1" * 1000_000_000),
-      ("", "1" * 1000_000_000),
-      ("", "1" * 1000_000_000),
-      ("", "1" * 1000_000_000),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString),
+      ("", largeString),
     ))
     val javaRdd = largeRdd.toJavaRDD()
     val pythonRdd = SerDeUtil.javaToPython(javaRdd)
