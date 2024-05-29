@@ -1045,7 +1045,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       },
       errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
       parameters = Map(
-        "functionName" -> "`timestampAdd`",
+        "functionName" -> "`TIMESTAMPADD`",
         "parameter" -> "`unit`",
         "invalidValue" -> "'SECS'"))
   }
@@ -1104,7 +1104,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       },
       errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
       parameters =
-        Map("functionName" -> "`timestampDiff`",
+        Map("functionName" -> "`TIMESTAMPDIFF`",
           "parameter" -> "`unit`",
           "invalidValue" -> "'SECS'"))
   }
