@@ -96,7 +96,7 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     val ctx = parser.compoundOrSingleStatement()
     withErrorHandling(ctx, Some(sqlScriptText)) {
       astBuilder.visitCompoundOrSingleStatement(ctx) match {
-        case batch: CompoundBody => batch
+        case body: CompoundBody => body
         case _ =>
           val position = Origin(None, None)
           throw QueryParsingErrors.sqlStatementUnsupportedError(sqlScriptText, position)

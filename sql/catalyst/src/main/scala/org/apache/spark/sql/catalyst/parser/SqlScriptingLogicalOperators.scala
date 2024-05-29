@@ -39,7 +39,7 @@ case class SparkStatementWithPlan(
     sourceEnd: Int)
   extends CompoundPlanStatement {
 
-  def getText(batch: String): String = batch.substring(sourceStart, sourceEnd)
+  def getText(sqlScriptText: String): String = sqlScriptText.substring(sourceStart, sourceEnd)
 }
 
 /**
