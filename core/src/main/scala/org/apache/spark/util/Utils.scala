@@ -3057,16 +3057,8 @@ private[spark] object Utils
    */
   lazy val isG1GC: Boolean = {
     Try {
-      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-        .asInstanceOf[Class[_ <: PlatformManagedObject]]
-      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
-      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
-      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
-      val valueMethod = vmOptionClazz.getMethod("getValue")
-
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
-      "true".equals(useG1GC)
+      ManagementFactory.getGarbageCollectorMXBeans.asScala
+        .exists(_.getName.contains("G1"))
     }.getOrElse(false)
   }
 }
