@@ -384,6 +384,10 @@ class SparkConversionMixin:
 
             require_minimum_pyarrow_version()
 
+            import pyarrow as pa
+
+            assert isinstance(data, pa.Table)
+
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 schema = data.schema.names
