@@ -2970,6 +2970,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
+  def cannotAlterTempViewWithSchemaBindingError() : Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",
+      messageParameters = Map.empty)
+  }
+
   def unsupportedCreateOrReplaceViewOnTableError(
       name: TableIdentifier, replace: Boolean): Throwable = {
     if (replace) {
@@ -4060,5 +4066,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def createTableDeprecatedError(): Throwable = {
     callDeprecatedMethodError("createTable(..., StructType, ...)",
       "createTable(..., Array[Column], ...)")
+  }
+
+  def cannotAssignEventTimeColumn(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
+      messageParameters = Map()
+    )
   }
 }

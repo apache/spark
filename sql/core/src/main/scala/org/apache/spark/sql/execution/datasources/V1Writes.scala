@@ -213,9 +213,9 @@ object V1WritesUtils {
     }
   }
 
-  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExec] = {
+  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExecBase] = {
     child.collectFirst {
-      case w: WriteFilesExec => w
+      case w: WriteFilesExecBase => w
     }
   }
 }

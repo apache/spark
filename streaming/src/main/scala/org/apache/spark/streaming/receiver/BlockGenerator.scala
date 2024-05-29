@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.STATUS
+import org.apache.spark.internal.LogKeys.STATUS
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
 import org.apache.spark.streaming.util.RecurringTimer

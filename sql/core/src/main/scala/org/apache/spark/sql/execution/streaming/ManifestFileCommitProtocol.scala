@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PATH
+import org.apache.spark.internal.LogKeys.{BATCH_ID, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -75,7 +75,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     pendingCommitFiles.clear()
 
     if (fileLog.add(batchId, fileStatuses)) {
-      logInfo(s"Committed batch $batchId")
+      logInfo(log"Committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
       throw new IllegalStateException(s"Race while writing batch $batchId")
     }

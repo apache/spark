@@ -26,7 +26,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.util.Utils
@@ -221,8 +222,8 @@ class ResourceProfile(
         }
         taskResourcesToCheck -= rName
       } else {
-        logWarning(s"The executor resource config for resource: $rName was specified but " +
-          "no corresponding task resource request was specified.")
+        logWarning(log"The executor resource config for resource: ${MDC(RESOURCE_NAME, rName)} " +
+          log"was specified but no corresponding task resource request was specified.")
       }
     }
     if (taskResourcesToCheck.nonEmpty) {

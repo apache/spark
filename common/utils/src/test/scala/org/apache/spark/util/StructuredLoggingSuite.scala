@@ -25,8 +25,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
+import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -54,14 +53,14 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
-  def msgWithMDC: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
-  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(EXECUTOR_ID, null)}."
+  def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, null)}."
 
-  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
+  def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
-  def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
-    log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(LogKeys.MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(LogKeys.MAX_SIZE, "4")}. " +
     log"Please double check."
 
   // test for basic message (without any mdc)
@@ -78,6 +77,9 @@ trait LoggingSuiteBase
 
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
+
+  // test for custom LogKey
+  def expectedPatternForCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -144,6 +146,20 @@ trait LoggingSuiteBase
       }
   }
 
+  private val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
+  test("Logging with custom LogKey") {
+    Seq(
+      (Level.ERROR, () => logError(customLog)),
+      (Level.WARN, () => logWarning(customLog)),
+      (Level.INFO, () => logInfo(customLog)),
+      (Level.DEBUG, () => logDebug(customLog)),
+      (Level.TRACE, () => logTrace(customLog))).foreach {
+      case (level, logFunc) =>
+        val logOutput = captureLogOutput(logFunc)
+        assert(expectedPatternForCustomLogKey(level).r.matches(logOutput))
+    }
+  }
+
   test("Logging with concat") {
     Seq(
       (Level.ERROR, () => logError(msgWithConcat)),
@@ -159,7 +175,7 @@ trait LoggingSuiteBase
 }
 
 class StructuredLoggingSuite extends LoggingSuiteBase {
-  override def className: String = classOf[StructuredLoggingSuite].getName
+  override def className: String = classOf[StructuredLoggingSuite].getSimpleName
   override def logFilePath: String = "target/structured.log"
 
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
@@ -244,6 +260,21 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
+  override def expectedPatternForCustomLogKey(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Custom log message.",
+          "context": {
+              "custom_log_key": "Custom log message."
+          },
+          "logger": "$className"
+        }"""
+    )
+  }
+
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
     val pattern1 = compactAndToRegexPattern(
       s"""
@@ -272,4 +303,9 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
+}
+
+object CustomLogKeys {
+  // Custom `LogKey` must be `extends LogKey`
+  case object CUSTOM_LOG_KEY extends LogKey
 }

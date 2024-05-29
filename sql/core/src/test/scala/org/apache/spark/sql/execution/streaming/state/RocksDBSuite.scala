@@ -1699,6 +1699,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
+              if (boundedMemoryUsage == "true") {
+                assert(db.metricsOpt.get.totalMemUsageBytes === 0)
+              } else {
+                assert(db.metricsOpt.get.totalMemUsageBytes > 0)
+              }
               db.getWriteBufferManagerAndCache()
             }
 
@@ -1709,6 +1714,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
               db.load(0)
               db.put("a", "1")
               db.commit()
+              if (boundedMemoryUsage == "true") {
+                assert(db.metricsOpt.get.totalMemUsageBytes === 0)
+              } else {
+                assert(db.metricsOpt.get.totalMemUsageBytes > 0)
+              }
               db.getWriteBufferManagerAndCache()
             }
 
@@ -1758,6 +1768,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
             db.remove("a")
             db.put("c", "3")
             db.commit()
+            assert(db.metricsOpt.get.totalMemUsageBytes === 0)
           }
         } finally {
           RocksDBMemoryManager.resetWriteBufferManagerAndCache

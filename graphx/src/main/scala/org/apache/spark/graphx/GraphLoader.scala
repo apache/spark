@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.TOTAL_TIME
+import org.apache.spark.internal.LogKeys.TOTAL_TIME
 import org.apache.spark.storage.StorageLevel
 
 /**

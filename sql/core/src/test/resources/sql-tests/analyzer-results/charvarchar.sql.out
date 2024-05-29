@@ -348,7 +348,7 @@ CreateViewCommand `str_view`, select c, v from values
     ('NetE', 'Spar'),
     ('NetEa ', 'Spark '),
     ('NetEas ', 'Spark'),
-    ('NetEase', 'Spark-') t(c, v), false, false, LocalTempView, true
+    ('NetEase', 'Spark-') t(c, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c#x, v#x]
       +- SubqueryAlias t
          +- LocalRelation [c#x, v#x]

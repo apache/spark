@@ -30,7 +30,7 @@ import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.NODE_LOCATION
+import org.apache.spark.internal.LogKeys.NODE_LOCATION
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.

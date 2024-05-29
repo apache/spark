@@ -22,7 +22,8 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkPythonException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{PYTHON_EXEC, PYTHON_WORKER_MODULE, PYTHON_WORKER_RESPONSE, SESSION_ID}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 
@@ -58,7 +59,8 @@ private[spark] class StreamingPythonRunner(
    * to be used with the functions.
    */
   def init(): (DataOutputStream, DataInputStream) = {
-    logInfo(s"Initializing Python runner (session: $sessionId, pythonExec: $pythonExec)")
+    logInfo(log"Initializing Python runner (session: ${MDC(SESSION_ID, sessionId)}," +
+      log" pythonExec: ${MDC(PYTHON_EXEC, pythonExec)})")
     val env = SparkEnv.get
 
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -95,7 +97,8 @@ private[spark] class StreamingPythonRunner(
       val errMessage = PythonWorkerUtils.readUTF(dataIn)
       throw streamingPythonRunnerInitializationFailure(resFromPython, errMessage)
     }
-    logInfo(s"Runner initialization succeeded (returned $resFromPython).")
+    logInfo(log"Runner initialization succeeded (returned" +
+      log" ${MDC(PYTHON_WORKER_RESPONSE, resFromPython)}).")
 
     (dataOut, dataIn)
   }
@@ -116,7 +119,8 @@ private[spark] class StreamingPythonRunner(
    * Stops the Python worker.
    */
   def stop(): Unit = {
-    logInfo(s"Stopping streaming runner for sessionId: $sessionId, module: $workerModule.")
+    logInfo(log"Stopping streaming runner for sessionId: ${MDC(SESSION_ID, sessionId)}," +
+      log" module: ${MDC(PYTHON_WORKER_MODULE, workerModule)}.")
 
     try {
       pythonWorkerFactory.foreach { factory =>

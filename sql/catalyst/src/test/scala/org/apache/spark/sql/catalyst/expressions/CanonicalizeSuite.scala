@@ -454,4 +454,29 @@ class CanonicalizeSuite extends SparkFunSuite {
     // different.
     assert(common3.canonicalized != common4.canonicalized)
   }
+
+  test("SPARK-48035: Add/Multiply operator canonicalization should take into account the" +
+    "evaluation mode of the operands before operand reordering") {
+    Seq(1, 10) map { multiCommutativeOpOptThreshold =>
+        val default = SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)
+        SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+          multiCommutativeOpOptThreshold.toString)
+        try {
+          val l1 = Literal(1)
+          val l2 = Literal(2)
+          val l3 = Literal(3)
+
+          val expr1 = Add(Add(l1, l2), l3)
+          val expr2 = Add(Add(l2, l1, EvalMode.TRY), l3)
+          assert(!expr1.semanticEquals(expr2))
+
+          val expr3 = Multiply(Multiply(l1, l2), l3)
+          val expr4 = Multiply(Multiply(l2, l1, EvalMode.TRY), l3)
+          assert(!expr3.semanticEquals(expr4))
+        } finally {
+          SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
+            default.toString)
+        }
+    }
+  }
 }

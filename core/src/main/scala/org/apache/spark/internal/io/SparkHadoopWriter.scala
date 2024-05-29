@@ -33,7 +33,7 @@ import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemp
 import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{JOB_ID, TASK_ATTEMPT_ID}
+import org.apache.spark.internal.LogKeys.{JOB_ID, TASK_ATTEMPT_ID}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}

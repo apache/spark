@@ -196,9 +196,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.COL_POS_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_KEY"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Observation$"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ObservationListener$"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
@@ -337,6 +334,16 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[ReversedMissingMethodProblem](
         "org.apache.spark.sql.SQLImplicits._sqlContext" // protected
       ),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.SessionCleaner"),
+
+      // private
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.internal.CleanupTask"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupTaskWeakReference"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupCachedRemoteRelation"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.internal.CleanupCachedRemoteRelation$"),
 
       // Catalyst Refactoring
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils"),
@@ -357,6 +364,11 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters
         .exclude[MissingClassProblem](
           "org.apache.spark.sql.expressions.SparkConnectClosureCleaner$"),
+
+      // Column
+      // developer API
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Column.apply"),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.Column.expr"),
 
       // Dataset
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -440,6 +452,9 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
+      // Skip client side listener specific class
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"),
 
       // Encoders are in the wrong JAR
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),

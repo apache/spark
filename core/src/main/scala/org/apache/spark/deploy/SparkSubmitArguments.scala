@@ -28,7 +28,8 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
@@ -77,7 +78,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var principal: String = null
   var keytab: String = null
   private var dynamicAllocationEnabled: Boolean = false
-
   // Standalone cluster mode only
   var supervise: Boolean = false
   var driverCores: String = null
@@ -89,7 +89,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
     if (verbose) {
-      logInfo(s"Using properties file: $propertiesFile")
+      logInfo(log"Using properties file: ${MDC(PATH, propertiesFile)}")
     }
     Option(propertiesFile).foreach { filename =>
       val properties = Utils.getPropertiesFromFile(filename)
@@ -99,7 +99,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       // Property files may contain sensitive information, so redact before printing
       if (verbose) {
         Utils.redact(properties).foreach { case (k, v) =>
-          logInfo(s"Adding default property: $k=$v")
+          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
         }
       }
     }
@@ -125,13 +125,27 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
-    // Use common defaults file, if not specified by user
-    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
-    // Honor --conf before the defaults file
+    // Honor --conf before the specified properties file and defaults file
     defaultSparkProperties.foreach { case (k, v) =>
       if (!sparkProperties.contains(k)) {
         sparkProperties(k) = v
       }
+    }
+
+    // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
+    // and --conf list
+    val defaultSparkConf = Utils.getDefaultPropertiesFile(env)
+    Option(defaultSparkConf).foreach { filename =>
+      val properties = Utils.getPropertiesFromFile(filename)
+      properties.foreach { case (k, v) =>
+        if (!sparkProperties.contains(k)) {
+          sparkProperties(k) = v
+        }
+      }
+    }
+
+    if (propertiesFile == null) {
+      propertiesFile = defaultSparkConf
     }
   }
 
@@ -142,7 +156,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(s"Ignoring non-Spark config property: $k")
+        logWarning(log"Ignoring non-Spark config property: ${MDC(CONFIG, k)}")
       }
     }
   }
@@ -489,7 +503,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {
     if (unknownParam != null) {
-      logInfo("Unknown/unsupported param " + unknownParam)
+      logInfo(log"Unknown/unsupported param ${MDC(UNKNOWN_PARAM, unknownParam)}")
     }
     val command = sys.env.getOrElse("_SPARK_CMD_USAGE",
       """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
@@ -592,7 +606,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       logInfo(getSqlShellOptions())
     }
 
-    throw new SparkUserAppException(exitCode)
+    throw SparkUserAppException(exitCode)
   }
 
   /**

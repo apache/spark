@@ -92,7 +92,7 @@ Project [assert_true(false, custom error message) AS assert_true(false, custom e
 -- !query
 CREATE TEMPORARY VIEW tbl_misc AS SELECT * FROM (VALUES (1), (8), (2)) AS T(v)
 -- !query analysis
-CreateViewCommand `tbl_misc`, SELECT * FROM (VALUES (1), (8), (2)) AS T(v), false, false, LocalTempView, true
+CreateViewCommand `tbl_misc`, SELECT * FROM (VALUES (1), (8), (2)) AS T(v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [v#x]
       +- SubqueryAlias T
          +- Project [col1#x AS v#x]

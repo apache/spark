@@ -183,11 +183,36 @@ class DataSource(ABC):
             message_parameters={"feature": "streamWriter"},
         )
 
+    def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
+        """
+        Returns a :class:`SimpleDataSourceStreamReader` instance for reading data.
+
+        One of simpleStreamReader() and streamReader() must be implemented for readable streaming
+        data source. Spark will check whether streamReader() is implemented, if yes, create a
+        DataSourceStreamReader to read data. simpleStreamReader() will only be invoked when
+        streamReader() is not implemented.
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            The schema of the data to be read.
+
+        Returns
+        -------
+        reader : :class:`SimpleDataSourceStreamReader`
+            A reader instance for this data source.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "simpleStreamReader"},
+        )
+
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
         """
         Returns a :class:`DataSourceStreamReader` instance for reading streaming data.
 
-        The implementation is required for readable streaming data sources.
+        One of simpleStreamReader() and streamReader() must be implemented for readable streaming
+        data source.
 
         Parameters
         ----------
@@ -396,8 +421,10 @@ class DataSourceStreamReader(ABC):
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
-        Returns a list of InputPartition  given the start and end offsets. Each InputPartition
-        represents a data split that can be processed by one Spark task.
+        Returns a list of InputPartition given the start and end offsets. Each InputPartition
+        represents a data split that can be processed by one Spark task. This may be called with
+        an empty offset range when start == end, in that case the method should return
+        an empty sequence of InputPartition.
 
         Parameters
         ----------
@@ -465,6 +492,102 @@ class DataSourceStreamReader(ABC):
         """
         Stop this source and free any resources it has allocated.
         Invoked when the streaming query terminated.
+        """
+        ...
+
+
+class SimpleDataSourceStreamReader(ABC):
+    """
+    A base class for simplified streaming data source readers.
+    Compared to :class:`DataSourceStreamReader`, :class:`SimpleDataSourceStreamReader` doesn't
+    require planning data partition. Also, the read api of :class:`SimpleDataSourceStreamReader`
+    allows reading data and planning the latest offset at the same time.
+
+    Because  :class:`SimpleDataSourceStreamReader` read records in Spark driver node to determine
+    end offset of each batch without partitioning, it is only supposed to be used in
+    lightweight use cases where input rate and batch size is small.
+    Use :class:`DataSourceStreamReader` when read throughput is high and can't be handled
+    by a single process.
+
+    .. versionadded: 4.0.0
+    """
+
+    def initialOffset(self) -> dict:
+        """
+        Return the initial offset of the streaming data source.
+        A new streaming query starts reading data from the initial offset.
+        If Spark is restarting an existing query, it will restart from the check-pointed offset
+        rather than the initial one.
+
+        Returns
+        -------
+        dict
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+
+        Examples
+        --------
+        >>> def initialOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "initialOffset"},
+        )
+
+    def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
+        """
+        Read all available data from start offset and return the offset that next read attempt
+        starts from.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset to start reading from.
+
+        Returns
+        -------
+        A :class:`Tuple` of an iterator of :class:`Tuple` and a dict\\s
+            The iterator contains all the available records after start offset.
+            The dict is the end offset of this read attempt and the start of next read attempt.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "read"},
+        )
+
+    def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
+        """
+        Read all available data from specific start offset and end offset.
+        This is invoked during failure recovery to re-read a batch deterministically.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset to start reading from.
+
+        end : dict
+            The offset where the reading stop.
+
+        Returns
+        -------
+        iterator of :class:`Tuple`\\s
+            All the records between start offset and end offset.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "readBetweenOffsets"},
+        )
+
+    def commit(self, end: dict) -> None:
+        """
+        Informs the source that Spark has completed processing all data for offsets less than or
+        equal to `end` and will only request offsets greater than `end` in the future.
+
+        Parameters
+        ----------
+        end : dict
+            The latest offset that the streaming query has processed for this source.
         """
         ...
 

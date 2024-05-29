@@ -204,8 +204,13 @@ try:
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if in_spark:
+        # !!HACK ALTERT!!
+        # `setup.py` has to be located with the same directory with the package.
+        # Therefore, we copy the current file, and place it at `spark/python` directory.
+        # After that, we remove it in the end.
         copyfile("packaging/classic/setup.py", "setup.py")
         copyfile("packaging/classic/setup.cfg", "setup.cfg")
+
         # Construct the symlink farm - this is nein_sparkcessary since we can't refer to
         # the path above the package root and we need to copy the jars and scripts which
         # are up above the python root.
@@ -359,11 +364,10 @@ try:
                 "numpy>=%s" % _minimum_numpy_version,
             ],
         },
-        python_requires=">=3.8",
+        python_requires=">=3.9",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",

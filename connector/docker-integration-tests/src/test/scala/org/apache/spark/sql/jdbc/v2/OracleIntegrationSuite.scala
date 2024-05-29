@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
@@ -50,12 +48,12 @@ import org.apache.spark.tags.DockerTest
  *
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
- *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 23.2.0 -f
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
+ *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles0
+ *  $ ./buildContainerImage.sh -v 23.4.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
- * This procedure has been validated with Oracle Database Free version 23.2.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * This procedure has been validated with Oracle Database Free version 23.4.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
@@ -91,12 +89,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     .set("spark.sql.catalog.oracle.pushDownLimit", "true")
     .set("spark.sql.catalog.oracle.pushDownOffset", "true")
 
-  override val connectionTimeout = timeout(7.minutes)
-
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
       "CREATE TABLE employee (dept NUMBER(32), name VARCHAR2(32), salary NUMBER(20, 2)," +
         " bonus BINARY_DOUBLE)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {

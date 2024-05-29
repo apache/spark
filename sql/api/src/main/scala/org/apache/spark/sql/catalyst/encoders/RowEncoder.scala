@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.reflect.classTag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VariantEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, ExecutionErrors}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -59,7 +59,7 @@ import org.apache.spark.util.ArrayImplicits._
  *   StructType -> org.apache.spark.sql.Row
  * }}}
  */
-object RowEncoder {
+object RowEncoder extends DataTypeErrorsBase {
   def encoderFor(schema: StructType): AgnosticEncoder[Row] = {
     encoderFor(schema, lenient = false)
   }
@@ -124,5 +124,11 @@ object RowEncoder {
           field.nullable,
           field.metadata)
       }.toImmutableArraySeq)
+
+    case _ =>
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+        messageParameters = Map("dataType" -> toSQLType(dataType))
+    )
   }
 }

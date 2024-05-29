@@ -25,6 +25,8 @@ import java.util.function.UnaryOperator
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -83,7 +85,9 @@ class ContinuousExecution(
         v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
-          logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' $dsStr")
+          logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
+            log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
+            log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
@@ -276,7 +280,7 @@ class ContinuousExecution(
               false
             } else if (isActive) {
               execCtx.batchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch)
-              logInfo(s"New epoch ${execCtx.batchId} is starting.")
+              logInfo(log"New epoch ${MDC(BATCH_ID, execCtx.batchId)} is starting.")
               true
             } else {
               false
@@ -307,7 +311,8 @@ class ContinuousExecution(
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
           state.get() == RECONFIGURING =>
-        logInfo(s"Query $id ignoring exception from reconfiguring: $t")
+        logInfo(log"Query ${MDC(QUERY_ID, id)} ignoring exception from reconfiguring: " +
+          log"${MDC(ERROR, t)}")
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       // The above execution may finish before getting interrupted, for example, a Spark job having
@@ -476,7 +481,7 @@ class ContinuousExecution(
       // We just need to interrupt the long running job.
       interruptAndAwaitExecutionThreadTermination()
     }
-    logInfo(s"Query $prettyIdString was stopped")
+    logInfo(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} was stopped")
   }
 }
 

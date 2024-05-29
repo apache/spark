@@ -26,7 +26,7 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CONFIG
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**

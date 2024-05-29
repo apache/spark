@@ -19,8 +19,6 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -68,12 +66,16 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mssql.pushDownLimit", "true")
 
-  override val connectionTimeout = timeout(7.minutes)
-
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
       "CREATE TABLE employee (dept INT, name VARCHAR(32), salary NUMERIC(20, 2), bonus FLOAT)")
       .executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col VARCHAR(50)
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def notSupportsTableComment: Boolean = true
@@ -130,5 +132,18 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       s"$catalogName.employee " +
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
     assert(df3.collect().length == 3)
+  }
+
+  test("SPARK-47994: SQLServer does not support 1 or 0 as boolean type in CASE WHEN filter") {
+    val df = sql(
+      s"""
+        |WITH tbl AS (
+        |SELECT CASE
+        |WHEN e.dept = 1 THEN 'first' WHEN e.dept = 2 THEN 'second' ELSE 'third' END
+        |AS deptString FROM $catalogName.employee as e)
+        |SELECT * FROM tbl
+        |WHERE deptString = 'first'
+        |""".stripMargin)
+    assert(df.collect().length == 2)
   }
 }

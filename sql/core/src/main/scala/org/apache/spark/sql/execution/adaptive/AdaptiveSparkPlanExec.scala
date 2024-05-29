@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
 import org.apache.spark.internal.{MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -84,6 +84,25 @@ case class AdaptiveSparkPlanExec(
       case "ERROR" => logError(_)
       case _ => logDebug(_)
     }
+
+  @transient private var ruleContext = new AdaptiveRuleContext(
+    isSubquery = isSubquery,
+    isFinalStage = false)
+
+  private def withRuleContext[T](f: => T): T =
+    AdaptiveRuleContext.withRuleContext(ruleContext) { f }
+
+  private def applyPhysicalRulesWithRuleContext(
+      plan: => SparkPlan,
+      rules: Seq[Rule[SparkPlan]],
+      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
+    // Apply the last rules if exists before going to apply the next batch of rules,
+    // so that we can propagate the configs.
+    val newPlan = plan
+    withRuleContext {
+      applyPhysicalRules(newPlan, rules, loggerAndBatchName)
+    }
+  }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
@@ -161,7 +180,9 @@ case class AdaptiveSparkPlanExec(
     collapseCodegenStagesRule
   )
 
-  private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
+  private def optimizeQueryStage(
+      plan: SparkPlan,
+      isFinalStage: Boolean): SparkPlan = withRuleContext {
     val rules = if (isFinalStage &&
         !conf.getConf(SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS)) {
       queryStageOptimizerRules.filterNot(_.isInstanceOf[AQEShuffleReadRule])
@@ -197,7 +218,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def applyQueryPostPlannerStrategyRules(plan: SparkPlan): SparkPlan = {
-    applyPhysicalRules(
+    applyPhysicalRulesWithRuleContext(
       plan,
       context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
       Some((planChangeLogger, "AQE Query Post Planner Strategy Rules"))
@@ -205,7 +226,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient val initialPlan = context.session.withActive {
-    applyPhysicalRules(
+    applyPhysicalRulesWithRuleContext(
       applyQueryPostPlannerStrategyRules(inputPlan),
       queryStagePreparationRules,
       Some((planChangeLogger, "AQE Preparations")))
@@ -282,6 +303,7 @@ case class AdaptiveSparkPlanExec(
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
+        ruleContext.clearConfigs()
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
           stagesToReplace = result.newStages ++ stagesToReplace
@@ -373,11 +395,13 @@ case class AdaptiveSparkPlanExec(
         result = createQueryStages(currentPhysicalPlan)
       }
 
+      ruleContext = ruleContext.withFinalStage(isFinalStage = true)
       // Run the final plan when there's no more unfinished stages.
-      currentPhysicalPlan = applyPhysicalRules(
+      currentPhysicalPlan = applyPhysicalRulesWithRuleContext(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
+      ruleContext.clearConfigs()
       _isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -595,7 +619,7 @@ case class AdaptiveSparkPlanExec(
     val queryStage = plan match {
       case e: Exchange =>
         val optimized = e.withNewChildren(Seq(optimizeQueryStage(e.child, isFinalStage = false)))
-        val newPlan = applyPhysicalRules(
+        val newPlan = applyPhysicalRulesWithRuleContext(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
           Some((planChangeLogger, "AQE Post Stage Creation")))
@@ -722,9 +746,11 @@ case class AdaptiveSparkPlanExec(
   private def reOptimize(logicalPlan: LogicalPlan): Option[(SparkPlan, LogicalPlan)] = {
     try {
       logicalPlan.invalidateStatsCache()
-      val optimized = optimizer.execute(logicalPlan)
-      val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-      val newPlan = applyPhysicalRules(
+      val optimized = withRuleContext { optimizer.execute(logicalPlan) }
+      val sparkPlan = withRuleContext {
+        context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+      }
+      val newPlan = applyPhysicalRulesWithRuleContext(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
         Some((planChangeLogger, "AQE Replanning")))
@@ -745,7 +771,7 @@ case class AdaptiveSparkPlanExec(
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
-        logOnLevel(log"Re-optimize - ${MDC(EXCEPTION, e.getMessage())}:\n" +
+        logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
           log"${MDC(QUERY_PLAN, e.plan)}")
         None
     }

@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.LogKey.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
+import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
@@ -451,8 +451,8 @@ class KMeans @Since("1.5.0") (
 
   private def trainWithBlock(dataset: Dataset[_], instr: Instrumentation) = {
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input vectors will be blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input vectors will be blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val initStartTime = System.currentTimeMillis

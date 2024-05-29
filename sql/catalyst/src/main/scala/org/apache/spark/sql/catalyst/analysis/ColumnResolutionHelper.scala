@@ -136,6 +136,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
       includeLastResort: Boolean): Expression = {
+
+    val resolver = conf.resolver
+
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
       if (e.resolved) return e
       val resolved = e match {
@@ -149,7 +152,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case GetViewColumnByNameAndOrdinal(
             viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
           val attrCandidates = getAttrCandidates()
-          val matched = attrCandidates.filter(a => conf.resolver(a.name, colName))
+          val matched = attrCandidates.filter(a => resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
             throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
               viewName, colName, expectedNumCandidates, matched, viewDDL)
@@ -183,7 +186,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case u @ UnresolvedExtractValue(child, fieldName) =>
           val newChild = innerResolve(child, isTopLevel = false)
           if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, conf.resolver)
+            ExtractValue(newChild, fieldName, resolver)
           } else {
             u.copy(child = newChild)
           }

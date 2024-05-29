@@ -18,7 +18,8 @@
 package org.apache.spark.internal.plugin
 
 import org.apache.spark.api.plugin.DriverPlugin
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 
 case class PluginMessage(pluginName: String, message: AnyRef)
@@ -36,13 +37,15 @@ private class PluginEndpoint(
             val reply = plugin.receive(message)
             if (reply != null) {
               logWarning(
-                s"Plugin $pluginName returned reply for one-way message of type " +
-                s"${message.getClass().getName()}.")
+                log"Plugin ${MDC(PLUGIN_NAME, pluginName)} " +
+                  log"returned reply for one-way message of type " +
+                  log"${MDC(CLASS_NAME, message.getClass().getName())}.")
             }
           } catch {
             case e: Exception =>
-              logWarning(s"Error in plugin $pluginName when handling message of type " +
-              s"${message.getClass().getName()}.", e)
+              logWarning(log"Error in plugin ${MDC(PLUGIN_NAME, pluginName)} " +
+                log"when handling message of type " +
+                log"${MDC(CLASS_NAME, message.getClass().getName())}.", e)
           }
 
         case None =>

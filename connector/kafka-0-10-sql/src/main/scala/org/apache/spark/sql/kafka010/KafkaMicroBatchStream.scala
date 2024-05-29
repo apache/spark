@@ -26,7 +26,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, OFFSETS, TIP}
+import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
