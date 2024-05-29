@@ -595,6 +595,15 @@ object DataSourceStrategy
       translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
       nestedPredicatePushdownEnabled: Boolean)
     : Option[Filter] = {
+
+    def translateAndRecordLeafNodeFilter(filter: Expression): Option[Filter] = {
+      val filter = translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled))
+      if (filter.isDefined && translatedFilterToExpr.isDefined) {
+        translatedFilterToExpr.get(filter.get) = predicate
+      }
+      filter
+    }
+
     predicate match {
       case expressions.And(left, right) =>
         // See SPARK-12218 for detailed discussion
@@ -623,41 +632,23 @@ object DataSourceStrategy
 
       case notNull @ expressions.IsNotNull(_: AttributeReference) =>
         // Not null filters on attribute references can always be pushed, also for collated columns.
-        val filter =
-          translateLeafNodeFilter(notNull, PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
-        filter
+        translateAndRecordLeafNodeFilter(notNull)
 
       case isNull @ expressions.IsNull(_: AttributeReference) =>
         // Is null filters on attribute references can always be pushed, also for collated columns.
-        val filter =
-          translateLeafNodeFilter(isNull, PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
-        filter
+        translateAndRecordLeafNodeFilter(isNull)
 
       case p if p.references.exists(ref => SchemaUtils.hasNonUTF8BinaryCollation(ref.dataType)) =>
-        // The filter cannot be pushed and we widen it to be AlwaysTrue().
-        val filter = translateLeafNodeFilter(Literal.TrueLiteral,
-          PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
-        filter
+        // The filter cannot be pushed and we widen it to be AlwaysTrue(). This is only valid if
+        // the result of the filter is not negated by a Not expression it is wrapped in.
+        translateAndRecordLeafNodeFilter(Literal.TrueLiteral)
 
       case expressions.Not(child) =>
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
-        filter
+        translateAndRecordLeafNodeFilter(other)
     }
   }
 
