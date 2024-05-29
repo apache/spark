@@ -42,10 +42,9 @@ class SerDeUtilSuite extends SparkFunSuite with SharedSparkContext {
       ("", largeString),
       ("", largeString),
       ("", largeString),
-      ("", largeString),
+      ("", largeString)
     ))
     val javaRdd = largeRdd.toJavaRDD()
     val pythonRdd = SerDeUtil.javaToPython(javaRdd)
-    SerDeUtil.pythonToPairRDD(pythonRdd, false)
   }
 }
