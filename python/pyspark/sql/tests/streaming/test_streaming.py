@@ -59,7 +59,7 @@ class StreamingTestsMixin:
             query.stop()
 
     def test_stream_trigger(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming/text")
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
 
         # Should take at least one arg
         try:
@@ -90,7 +90,7 @@ class StreamingTestsMixin:
         schema = StructType([StructField("data", StringType(), False)])
         df = (
             self.spark.readStream.format("text")
-            .option("path", "python/test_support/sql/streaming/text")
+            .option("path", "python/test_support/sql/streaming")
             .schema(schema)
             .load()
         )
@@ -106,7 +106,7 @@ class StreamingTestsMixin:
                 self.spark.readStream.format("csv")
                 .option("path", "python/test_support/sql/fake")
                 .schema(bad_schema)
-                .load(path="python/test_support/sql/streaming/text", schema=schema, format="text")
+                .load(path="python/test_support/sql/streaming", schema=schema, format="text")
             )
             self.assertTrue(df.isStreaming)
             self.assertEqual(df.schema.simpleString(), "struct<data:string>")
@@ -114,7 +114,7 @@ class StreamingTestsMixin:
     def test_stream_save_options(self):
         df = (
             self.spark.readStream.format("text")
-            .load("python/test_support/sql/streaming/text")
+            .load("python/test_support/sql/streaming")
             .withColumn("id", lit(1))
         )
         for q in self.spark.streams.active:
@@ -147,7 +147,7 @@ class StreamingTestsMixin:
             shutil.rmtree(tmpPath)
 
     def test_stream_save_options_overwrite(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming/text")
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
@@ -184,7 +184,7 @@ class StreamingTestsMixin:
             shutil.rmtree(tmpPath)
 
     def test_stream_status_and_progress(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming/text")
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
@@ -228,7 +228,7 @@ class StreamingTestsMixin:
             shutil.rmtree(tmpPath)
 
     def test_stream_await_termination(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming/text")
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
@@ -264,9 +264,7 @@ class StreamingTestsMixin:
 
     def test_stream_exception(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled": True}):
-            sdf = self.spark.readStream.format("text").load(
-                "python/test_support/sql/streaming/text"
-            )
+            sdf = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             sq = sdf.writeStream.format("memory").queryName("query_explain").start()
             try:
                 sq.processAllAvailable()
@@ -317,7 +315,7 @@ class StreamingTestsMixin:
         self.assertIsNone(self.spark.streams.get(q.id))
 
     def test_query_manager_await_termination(self):
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming/text")
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         for q in self.spark.streams.active:
             q.stop()
         tmpPath = tempfile.mkdtemp()
