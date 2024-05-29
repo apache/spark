@@ -174,6 +174,18 @@ def null_index(col: Column) -> Column:
         return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
 
 
+def distributed_sequence_id() -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function
+
+        return _invoke_function("distributed_sequence_id")
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.distributed_sequence_id())
+
+
 def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
     if is_remote():
         from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns

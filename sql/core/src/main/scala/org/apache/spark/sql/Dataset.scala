@@ -1995,14 +1995,6 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * It adds a new long column with the name `name` that increases one by one.
-   * This is for 'distributed-sequence' default index in pandas API on Spark.
-   */
-  private[sql] def withSequenceColumn(name: String) = {
-    select(column(DistributedSequenceID()).alias(name), col("*"))
-  }
-
-  /**
    * Converts a JavaRDD to a PythonRDD.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
