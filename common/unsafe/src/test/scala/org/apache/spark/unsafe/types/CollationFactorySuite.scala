@@ -48,7 +48,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(!unicode.supportsBinaryEquality);
+    assert(!unicode.supportsBinaryEquality)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
@@ -146,7 +146,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
       CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
-      CollationTestCase("UNICODE_CI", "å", "a\u030A", true)
+      CollationTestCase("UNICODE_CI", "å", "a\u030A", true),
+      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true)
     )
 
     checks.foreach(testCase => {
