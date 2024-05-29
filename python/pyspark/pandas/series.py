@@ -70,7 +70,7 @@ from pyspark.sql.types import (
     NullType,
 )
 from pyspark.sql.window import Window
-from pyspark.sql.utils import get_column_class, get_window_class
+from pyspark.sql.utils import get_window_class
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
@@ -4171,11 +4171,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if self._internal.index_level > 1:
             raise NotImplementedError("rank do not support MultiIndex now")
 
-        Column = get_column_class()
         if ascending:
-            asc_func = Column.asc
+            asc_func = PySparkColumn.asc
         else:
-            asc_func = Column.desc
+            asc_func = PySparkColumn.desc
 
         if method == "first":
             window = (
