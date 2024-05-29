@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
+import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -34,10 +35,13 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
-    super.isEmpty(plan) || (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
+    super.isEmpty(plan) || plan.isInstanceOf[EmptyRelation] ||
+      (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
+
+  override protected def empty(plan: LogicalPlan): LogicalPlan = EmptyRelation(plan)
 
   private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
     case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true

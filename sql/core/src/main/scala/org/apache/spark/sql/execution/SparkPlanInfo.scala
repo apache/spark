@@ -58,6 +58,7 @@ private[execution] object SparkPlanInfo {
       case a: AdaptiveSparkPlanExec => a.executedPlan :: Nil
       case stage: QueryStageExec => stage.plan :: Nil
       case inMemTab: InMemoryTableScanExec => inMemTab.relation.cachedPlan :: Nil
+      case EmptyRelationExec(plan) => plan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>

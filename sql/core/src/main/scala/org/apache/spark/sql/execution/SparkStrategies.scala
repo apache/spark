@@ -54,7 +54,9 @@ abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
 }
 
-case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+abstract class PlanLaterBase extends LeafExecNode {
+
+  def plan: LogicalPlan
 
   override def output: Seq[Attribute] = plan.output
 
@@ -62,6 +64,8 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
     throw SparkUnsupportedOperationException()
   }
 }
+
+case class PlanLater(plan: LogicalPlan) extends PlanLaterBase
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>

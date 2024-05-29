@@ -21,6 +21,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.adaptive.EmptyRelationPropagationStrategy
 import org.apache.spark.sql.execution.adaptive.LogicalQueryStageStrategy
 import org.apache.spark.sql.execution.command.v2.V2CommandStrategy
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
@@ -34,6 +35,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
   override def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++
       extraPlanningStrategies ++ (
+      EmptyRelationPropagationStrategy ::
       LogicalQueryStageStrategy ::
       PythonEvals ::
       new DataSourceV2Strategy(session) ::
@@ -57,7 +59,18 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
 
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
     plan.collect {
-      case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan
+      case placeholder: PlanLaterBase => placeholder -> placeholder.plan
+    }
+  }
+
+  override protected def planPlaceHolder(
+    placeHolder: SparkPlan,
+    logical: LogicalPlan): Iterator[SparkPlan] = {
+    placeHolder match {
+      case EmptyRelationPlanLater(p) =>
+        super.plan(logical).map(EmptyRelationExec)
+      case _ =>
+        super.plan(logical)
     }
   }
 
