@@ -727,7 +727,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
 
-    withSQLConf("spark.sql.variable.substitute" -> "true") {
+    withSQLConf("tbl2" -> "src", "spark.sql.variable.substitute" -> "true") {
       checkAnswer(
         sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1"),
         sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
