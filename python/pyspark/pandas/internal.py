@@ -33,7 +33,6 @@ from pyspark.sql import (
     Window,
 )
 from pyspark.sql.types import (  # noqa: F401
-    _drop_metadata,
     BooleanType,
     DataType,
     LongType,
@@ -42,7 +41,7 @@ from pyspark.sql.types import (  # noqa: F401
     StringType,
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
-from pyspark.sql.utils import is_remote, get_column_class, get_dataframe_class
+from pyspark.sql.utils import is_remote, get_dataframe_class
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
@@ -673,12 +672,12 @@ class InternalFrame:
         self._sdf = spark_frame
 
         # index_spark_columns
-        Column = get_column_class()
+
         assert all(
-            isinstance(index_scol, Column) for index_scol in index_spark_columns
+            isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns
         ), index_spark_columns
 
-        self._index_spark_columns: List[Column] = index_spark_columns  # type: ignore[valid-type]
+        self._index_spark_columns: List[PySparkColumn] = index_spark_columns
 
         # data_spark_columns
         if data_spark_columns is None:
@@ -692,9 +691,9 @@ class InternalFrame:
                 and col not in HIDDEN_COLUMNS
             ]
         else:
-            assert all(isinstance(scol, Column) for scol in data_spark_columns)
+            assert all(isinstance(scol, PySparkColumn) for scol in data_spark_columns)
 
-        self._data_spark_columns: List[Column] = data_spark_columns  # type: ignore[valid-type]
+        self._data_spark_columns: List[PySparkColumn] = data_spark_columns
 
         # fields
         if index_fields is None:
@@ -757,20 +756,10 @@ class InternalFrame:
 
         if is_testing():
             struct_fields = spark_frame.select(index_spark_columns).schema.fields
-            if is_remote():
-                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
-                # in a few tests when using Spark Connect. However, the function works properly.
-                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
-                # until the issue is resolved.
-                assert all(
-                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
-                    for index_field, struct_field in zip(index_fields, struct_fields)
-                ), (index_fields, struct_fields)
-            else:
-                assert all(
-                    index_field.struct_field == struct_field
-                    for index_field, struct_field in zip(index_fields, struct_fields)
-                ), (index_fields, struct_fields)
+            assert all(
+                index_field.struct_field == struct_field
+                for index_field, struct_field in zip(index_fields, struct_fields)
+            ), (index_fields, struct_fields)
 
         self._index_fields: List[InternalField] = index_fields
 
@@ -785,20 +774,10 @@ class InternalFrame:
 
         if is_testing():
             struct_fields = spark_frame.select(data_spark_columns).schema.fields
-            if is_remote():
-                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
-                # in a few tests when using Spark Connect. However, the function works properly.
-                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
-                # until the issue is resolved.
-                assert all(
-                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
-                    for data_field, struct_field in zip(data_fields, struct_fields)
-                ), (data_fields, struct_fields)
-            else:
-                assert all(
-                    data_field.struct_field == struct_field
-                    for data_field, struct_field in zip(data_fields, struct_fields)
-                ), (data_fields, struct_fields)
+            assert all(
+                data_field.struct_field == struct_field
+                for data_field, struct_field in zip(data_fields, struct_fields)
+            ), (data_fields, struct_fields)
 
         self._data_fields: List[InternalField] = data_fields
 
@@ -974,27 +953,27 @@ class InternalFrame:
 
     def spark_column_name_for(self, label_or_scol: Union[Label, PySparkColumn]) -> str:
         """Return the actual Spark column name for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
-            return self.field_for(label_or_scol).name  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).name
 
     def spark_type_for(self, label_or_scol: Union[Label, PySparkColumn]) -> DataType:
         """Return DataType for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
-            return self.field_for(label_or_scol).spark_type  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).spark_type
 
     def spark_column_nullable_for(self, label_or_scol: Union[Label, PySparkColumn]) -> bool:
         """Return nullability for the given column label."""
-        Column = get_column_class()
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
-            return self.field_for(label_or_scol).nullable  # type: ignore[arg-type]
+            return self.field_for(label_or_scol).nullable
 
     def field_for(self, label: Label) -> InternalField:
         """Return InternalField for the given column label."""

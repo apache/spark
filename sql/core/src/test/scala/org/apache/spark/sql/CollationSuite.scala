@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
@@ -1032,14 +1032,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         assert(
           collectFirst(queryPlan) {
-            case _: ShuffledJoin => ()
+            case _: SortMergeJoinExec => ()
           }.isEmpty
         )
 
         // if collation doesn't support binary equality, collation key should be injected
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
-            case b: BroadcastHashJoinExec => b.leftKeys.head
+            case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
         }
       }
@@ -1251,6 +1251,39 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("rewrite with collationkey should be an excludable rule") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+    val collation = "UTF8_BINARY_LCASE"
+    val collationRewriteJoinRule = "org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin"
+    withTable(t1, t2) {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> collationRewriteJoinRule) {
+        sql(s"CREATE TABLE $t1 (x STRING COLLATE $collation, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES ('aa', 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRING COLLATE $collation, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES ('AA', 2), ('aa', 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that shuffle join is used instead of hash join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.isEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.nonEmpty
+        )
+      }
+    }
+  }
+
   test("rewrite with collationkey shouldn't disrupt multiple join conditions") {
     val t1 = "T_1"
     val t2 = "T_2"
@@ -1293,7 +1326,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
         assert(
           collectFirst(queryPlan) {
-            case _: ShuffledJoin => ()
+            case _: SortMergeJoinExec => ()
           }.isEmpty
         )
       }
