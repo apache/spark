@@ -24,6 +24,7 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1464,7 +1465,7 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofSeconds(14)) ::
       Nil)
     assert(find(sumDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val metadata = Metadata.empty
+    val metadata = new MetadataBuilder().putString(AUTO_GENERATED_ALIAS, "true").build()
     assert(sumDF2.schema == StructType(Seq(StructField("class", IntegerType, false),
       StructField("sum(year-month)", YearMonthIntervalType(), metadata = metadata),
       StructField("sum(year)", YearMonthIntervalType(YEAR), metadata = metadata),
@@ -1598,7 +1599,7 @@ class DataFrameAggregateSuite extends QueryTest
         Duration.ofMinutes(4).plusSeconds(20),
         Duration.ofSeconds(7)) :: Nil)
     assert(find(avgDF2.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
-    val metadata = Metadata.empty
+    val metadata = new MetadataBuilder().putString(AUTO_GENERATED_ALIAS, "true").build()
     assert(avgDF2.schema == StructType(Seq(
       StructField("class", IntegerType, false),
       StructField("avg(year-month)", YearMonthIntervalType(), metadata = metadata),
