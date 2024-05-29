@@ -382,7 +382,6 @@ object LogKeys {
   case object NEW_VALUE extends LogKey
   case object NEXT_RENEWAL_TIME extends LogKey
   case object NODES extends LogKey
-  case object NODE_IDS extends LogKey
   case object NODE_LOCATION extends LogKey
   case object NON_BUILT_IN_CONNECTORS extends LogKey
   case object NORM extends LogKey
