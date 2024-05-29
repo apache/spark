@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin
 import org.apache.spark.sql.catalyst.analysis.RewriteGroupByCollation
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
@@ -94,7 +95,8 @@ class SparkOptimizer(
       EliminateLimits,
       ConstantFolding) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition) :+
+    Batch("RewriteCollationJoin", Once, RewriteCollationJoin)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+

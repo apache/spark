@@ -111,12 +111,15 @@ each line consists of a key and a value separated by whitespace. For example:
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
+In addition, a property file with Spark configurations can be passed to `bin/spark-submit` via
+the `--properties-file` parameter.
+
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
-take highest precedence, then flags passed to `spark-submit` or `spark-shell`, then options
-in the `spark-defaults.conf` file. A few configuration keys have been renamed since earlier
-versions of Spark; in such cases, the older key names are still accepted, but take lower
-precedence than any instance of the newer key.
+take the highest precedence, then those through `--conf` flags or `--properties-file` passed to
+`spark-submit` or `spark-shell`, then options in the `spark-defaults.conf` file. A few
+configuration keys have been renamed since earlier versions of Spark; in such cases, the older
+key names are still accepted, but take lower precedence than any instance of the newer key.
 
 Spark properties mainly can be divided into two kinds: one is related to deploy, like
 "spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
