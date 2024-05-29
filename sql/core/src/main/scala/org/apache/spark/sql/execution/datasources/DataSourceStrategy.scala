@@ -597,11 +597,12 @@ object DataSourceStrategy
     : Option[Filter] = {
 
     def translateAndRecordLeafNodeFilter(filter: Expression): Option[Filter] = {
-      val filter = translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled))
-      if (filter.isDefined && translatedFilterToExpr.isDefined) {
-        translatedFilterToExpr.get(filter.get) = predicate
+      val translatedFilter =
+        translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled))
+      if (translatedFilter.isDefined && translatedFilterToExpr.isDefined) {
+        translatedFilterToExpr.get(translatedFilter.get) = predicate
       }
-      filter
+      translatedFilter
     }
 
     predicate match {
