@@ -422,17 +422,6 @@ def pyspark_column_op(
     return result.fillna(fillna) if fillna is not None else result
 
 
-def get_dataframe_class() -> Type["DataFrame"]:
-    from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
-
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        return ConnectDataFrame
-    else:
-        return PySparkDataFrame
-
-
 def get_window_class() -> Type["Window"]:
     from pyspark.sql.window import Window as PySparkWindow
 
