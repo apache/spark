@@ -398,7 +398,7 @@ object StateStoreProvider {
     val providerClass = Utils.classForName(providerClassName)
     if (!classOf[StateStoreProvider].isAssignableFrom(providerClass)) {
       throw new SparkException(
-        errorClass = "INVALID_STATE_STORE_PROVIDER",
+        errorClass = "STATE_STORE_INVALID_PROVIDER",
         messageParameters = Map("inputClass" -> providerClassName),
         cause = null)
     }

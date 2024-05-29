@@ -2798,10 +2798,11 @@
     ],
     "sqlState" : "42601"
   },
-  "INVALID_STATE_STORE_PROVIDER" : {
+  "STATE_STORE_INVALID_PROVIDER" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
-    ]
+    ],
+    "sqlState" : "42K06"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
