@@ -33,7 +33,7 @@ import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemp
 import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{JOB_ID, TASK_ATTEMPT_ID, TOTAL_TIME}
+import org.apache.spark.internal.LogKeys.{DURATION, JOB_ID, TASK_ATTEMPT_ID}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
@@ -102,7 +102,7 @@ object SparkHadoopWriter extends Logging {
       val (_, duration) = Utils
         .timeTakenMs { committer.commitJob(jobContext, ret.toImmutableArraySeq) }
       logInfo(log"Write Job ${MDC(JOB_ID, jobContext.getJobID)} committed." +
-        log" Elapsed time: ${MDC(TOTAL_TIME, duration)} ms.")
+        log" Elapsed time: ${MDC(DURATION, duration)} ms.")
     } catch {
       case cause: Throwable =>
         logError(log"Aborting job ${MDC(JOB_ID, jobContext.getJobID)}.", cause)

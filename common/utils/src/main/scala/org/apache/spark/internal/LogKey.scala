@@ -784,6 +784,7 @@ object LogKeys {
   case object URL extends LogKey
   case object URL2 extends LogKey
   case object URLS extends LogKey
+  case object EXECUTOR_USER_CLASS_PATH_FIRST extends LogKey
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object UUID extends LogKey

@@ -221,7 +221,7 @@ private[spark] class Executor(
         if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
           Utils.deleteRecursively(sessionBasedRoot)
         }
-        logInfo(log"Session evicted: ${LogMDC(UUID, state.sessionUUID)}")
+        logInfo(log"Session evicted: ${LogMDC(SESSION_ID, state.sessionUUID)}")
       }
     })
     .build[String, IsolatedSessionState]
@@ -1087,7 +1087,8 @@ private[spark] class Executor(
   private def createClassLoader(urls: Array[URL], useStub: Boolean): MutableURLClassLoader = {
     logInfo(
       log"Starting executor with user classpath" +
-        log" (userClassPathFirst = ${LogMDC(CLASS_PATH, userClassPathFirst)}): " +
+        log" (userClassPathFirst =" +
+        log" ${LogMDC(LogKeys.EXECUTOR_USER_CLASS_PATH_FIRST, userClassPathFirst)}): " +
         log"${LogMDC(URLS, urls.mkString("'", ",", "'"))}"
     )
 
@@ -1138,7 +1139,7 @@ private[spark] class Executor(
       parent
     }
     logInfo(log"Created or updated repl class loader ${LogMDC(CLASS_LOADER, classLoader)}" +
-      log" for ${LogMDC(UUID, sessionUUID)}.")
+      log" for ${LogMDC(SESSION_ID, sessionUUID)}.")
     classLoader
   }
 
