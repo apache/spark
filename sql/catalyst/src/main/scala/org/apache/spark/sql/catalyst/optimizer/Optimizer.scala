@@ -1238,7 +1238,12 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
-    case _: PythonUDF => true
+    case _: PythonUDF =>
+      if (conf.getConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR)) {
+        e.children.forall(isCheap)
+      } else {
+        true
+      }
     // Alias and ExtractValue are very cheap.
     case _: Alias | _: ExtractValue => e.children.forall(isCheap)
     case _ => false

@@ -55,6 +55,19 @@ public abstract class SparkLoggerSuiteBase {
     return newContent.substring(content.length());
   }
 
+  @FunctionalInterface
+  private interface ExpectedResult {
+    String apply(Level level) throws IOException;
+  }
+
+  private void checkLogOutput(Level level, Runnable func, ExpectedResult result) {
+    try {
+      assertTrue(captureLogOutput(func).matches(result.apply(level)));
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   private String basicMsg() {
     return "This is a log message";
   }
@@ -111,14 +124,8 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn),
         Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForBasicMsg(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.TRACE, traceFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForBasicMsg));
   }
 
   @Test
@@ -134,14 +141,9 @@ public abstract class SparkLoggerSuiteBase {
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn),
         Pair.of(Level.DEBUG, debugFn),
-        Pair.of(Level.TRACE, traceFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForBasicMsgWithException(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.TRACE, traceFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(),
+        this::expectedPatternForBasicMsgWithException));
   }
 
   @Test
@@ -150,16 +152,10 @@ public abstract class SparkLoggerSuiteBase {
     Runnable warnFn = () -> logger().warn(msgWithMDC, executorIDMDC);
     Runnable infoFn = () -> logger().info(msgWithMDC, executorIDMDC);
     List.of(
-        Pair.of(Level.ERROR, errorFn),
-        Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForMsgWithMDC(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+       Pair.of(Level.ERROR, errorFn),
+       Pair.of(Level.WARN, warnFn),
+       Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForMsgWithMDC));
   }
 
   @Test
@@ -170,14 +166,8 @@ public abstract class SparkLoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForMsgWithMDCs(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForMsgWithMDCs));
   }
 
   @Test
@@ -189,14 +179,10 @@ public abstract class SparkLoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForMsgWithMDCsAndException(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(),
+        this::expectedPatternForMsgWithMDCsAndException)
+    );
   }
 
   @Test
@@ -207,14 +193,9 @@ public abstract class SparkLoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForMsgWithMDCValueIsNull(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(),
+        this::expectedPatternForMsgWithMDCValueIsNull));
   }
 
   @Test
@@ -225,14 +206,8 @@ public abstract class SparkLoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForScalaCustomLogKey(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForScalaCustomLogKey));
   }
 
   @Test
@@ -243,14 +218,8 @@ public abstract class SparkLoggerSuiteBase {
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair -> {
-      try {
-        assertTrue(captureLogOutput(pair.getRight()).matches(
-          expectedPatternForJavaCustomLogKey(pair.getLeft())));
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    });
+        Pair.of(Level.INFO, infoFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForJavaCustomLogKey));
   }
 }
 

@@ -1113,6 +1113,23 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-48392: Allow both spark-defaults.conf and properties file") {
+    forConfDir(Map("spark.executor.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties", Map("spark.executor.cores" -> "16")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorMemory should be("3g")
+        appArgs.executorCores should be("16")
+      }
+    }
+  }
+
   test("support glob path") {
     withTempDir { tmpJarDir =>
       withTempDir { tmpFileDir =>
@@ -1623,6 +1640,22 @@ class SparkSubmitSuite
     }
   }
 
+  private def withPropertyFile(fileName: String, conf: Map[String, String])(f: String => Unit) = {
+    withTempDir { tmpDir =>
+      val props = new java.util.Properties()
+      val propsFile = File.createTempFile(fileName, "", tmpDir)
+      val propsOutputStream = new FileOutputStream(propsFile)
+      try {
+        conf.foreach { case (k, v) => props.put(k, v) }
+        props.store(propsOutputStream, "")
+      } finally {
+        propsOutputStream.close()
+      }
+
+      f(propsFile.getPath)
+    }
+  }
+
   private def updateConfWithFakeS3Fs(conf: Configuration): Unit = {
     conf.set("fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
     conf.set("fs.s3a.impl.disable.cache", "true")
@@ -1694,40 +1727,31 @@ class SparkSubmitSuite
     val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
     val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
 
-    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+    val testProps = Map(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
       nonDelimSpaceFromFile)
 
-    val props = new java.util.Properties()
-    val propsFile = File.createTempFile("test-spark-conf", ".properties",
-      Utils.createTempDir())
-    val propsOutputStream = new FileOutputStream(propsFile)
-    try {
-      testProps.foreach { case (k, v) => props.put(k, v) }
-      props.store(propsOutputStream, "test whitespace")
-    } finally {
-      propsOutputStream.close()
+    withPropertyFile("test-spark-conf.properties", testProps) { propsFile =>
+      val clArgs = Seq(
+        "--class", "org.SomeClass",
+        "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+        "--conf", "spark.master=yarn",
+        "--properties-file", propsFile,
+        "thejar.jar")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+      Seq(
+        lineFeedFromCommandLine,
+        leadingDelimKeyFromFile,
+        trailingDelimKeyFromFile,
+        infixDelimFromFile
+      ).foreach { case (k, v) =>
+        conf.get(k) should be (v)
+      }
+
+      conf.get(nonDelimSpaceFromFile._1) should be ("blah")
     }
-
-    val clArgs = Seq(
-      "--class", "org.SomeClass",
-      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
-      "--conf", "spark.master=yarn",
-      "--properties-file", propsFile.getPath,
-      "thejar.jar")
-
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-
-    Seq(
-      lineFeedFromCommandLine,
-      leadingDelimKeyFromFile,
-      trailingDelimKeyFromFile,
-      infixDelimFromFile
-    ).foreach { case (k, v) =>
-      conf.get(k) should be (v)
-    }
-
-    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
 
   test("get a Spark configuration from arguments") {
