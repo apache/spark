@@ -27,6 +27,7 @@ from pyspark.sql.datasource import (
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
+from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import (
     have_pyarrow,
@@ -231,6 +232,8 @@ class BasePythonStreamingDataSourceTestsMixin:
                 [Row("failed in batch 1")],
             )
             q.awaitTermination()
+        except StreamingQueryException as e:
+            self.assertIn("invalid value", str(e))
         finally:
             input_dir.cleanup()
             output_dir.cleanup()
