@@ -3641,8 +3641,9 @@ class DataFrameSuite extends QueryTest
     val v4 = to_csv(struct(v3.as("a"))) // to_csv is CodegenFallback
     df.select(v3, v3, v4, v4).collect().foreach { row =>
       assert(row.getMap(0).toString() == row.getMap(1).toString())
-      assert(row.getString(2) == s"[\"keys: [key], values: [${row.getMap(0).get("key").get}]\"]")
-      assert(row.getString(3) == s"[\"keys: [key], values: [${row.getMap(0).get("key").get}]\"]")
+      val expectedString = s"keys: [key], values: [${row.getMap(0).get("key").get}]"
+      assert(row.getString(2) == s"""\"$expectedString\"""")
+      assert(row.getString(3) == s"""\"$expectedString\"""")
     }
   }
 
