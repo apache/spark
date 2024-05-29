@@ -1432,6 +1432,20 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("StateStoreProvider integrity check") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[StreamTest].getCanonicalName) {
+      val input = MemoryStream[Int]
+      input.addData(1)
+      val query = input.toDF().limit(1).writeStream
+        .trigger(Trigger.AvailableNow())
+        .format("console")
+        .start()
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
+    }
+  }
+
   private def checkExceptionMessage(df: DataFrame): Unit = {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>
