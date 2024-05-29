@@ -119,8 +119,8 @@ VALUES(IDENTIFIER(1));
 VALUES(IDENTIFIER(SUBSTR('HELLO', 1, RAND() + 1)));
 SELECT `IDENTIFIER`('abs')(c1) FROM VALUES(-1) AS T(c1);
 
-CREATE TABLE IDENTIFIER(1)(c1 INT);
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT);
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv;
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv;
 CREATE VIEW IDENTIFIER('a.b.c')(c1) AS VALUES(1);
 DROP TABLE IDENTIFIER('a.b.c');
 DROP VIEW IDENTIFIER('a.b.c');
@@ -135,7 +135,7 @@ CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1);
 -- SPARK-48273: Aggregation operation in statements using identifier clause for table name
 create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
 cache table identifier('t1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
-create table identifier('t2') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1);
 insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1;
 drop view v1;
 drop table t1;
