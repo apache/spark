@@ -1112,7 +1112,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   test("dynamic partition value test") {
     withTable("dynparttest1", "dynparttest2") {
       withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
-        sql("set hive.exec.dynamic.partition.mode=nonstrict")
         // date
         sql("create table dynparttest1 (value int) partitioned by (pdate date)")
         sql(
