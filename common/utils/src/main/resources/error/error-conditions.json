@@ -3204,6 +3204,12 @@
     ],
     "sqlState" : "42809"
   },
+  "NOT_NULL_ASSERT_VIOLATION" : {
+    "message" : [
+      "NULL value appeared in non-nullable field: <walkedTypePath>If the schema is inferred from a Scala tuple/case class, or a Java bean, please try to use scala.Option[_] or other nullable types (such as java.lang.Integer instead of int/scala.Int)."
+    ],
+    "sqlState" : "42000"
+  },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
       "Assigning a NULL is not allowed here."
