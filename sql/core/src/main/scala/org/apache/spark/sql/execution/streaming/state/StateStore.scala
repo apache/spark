@@ -289,6 +289,10 @@ class InvalidUnsafeRowException(error: String)
     "among restart. For the first case, you can try to restart the application without " +
     s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
 
+class InvalidStateStoreProvider
+  extends RuntimeException("The streaming query failed because the given StateStoreProvider " +
+    "does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider")
+
 sealed trait KeyStateEncoderSpec
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
@@ -396,6 +400,9 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
+    if (!classOf[StateStoreProvider].isAssignableFrom(providerClass)) {
+      throw new InvalidStateStoreProvider
+    }
     providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
