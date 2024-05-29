@@ -33,7 +33,6 @@ from pyspark.sql import (
     Window,
 )
 from pyspark.sql.types import (  # noqa: F401
-    _drop_metadata,
     BooleanType,
     DataType,
     LongType,
@@ -757,20 +756,10 @@ class InternalFrame:
 
         if is_testing():
             struct_fields = spark_frame.select(index_spark_columns).schema.fields
-            if is_remote():
-                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
-                # in a few tests when using Spark Connect. However, the function works properly.
-                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
-                # until the issue is resolved.
-                assert all(
-                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
-                    for index_field, struct_field in zip(index_fields, struct_fields)
-                ), (index_fields, struct_fields)
-            else:
-                assert all(
-                    index_field.struct_field == struct_field
-                    for index_field, struct_field in zip(index_fields, struct_fields)
-                ), (index_fields, struct_fields)
+            assert all(
+                index_field.struct_field == struct_field
+                for index_field, struct_field in zip(index_fields, struct_fields)
+            ), (index_fields, struct_fields)
 
         self._index_fields: List[InternalField] = index_fields
 
@@ -785,20 +774,10 @@ class InternalFrame:
 
         if is_testing():
             struct_fields = spark_frame.select(data_spark_columns).schema.fields
-            if is_remote():
-                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
-                # in a few tests when using Spark Connect. However, the function works properly.
-                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
-                # until the issue is resolved.
-                assert all(
-                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
-                    for data_field, struct_field in zip(data_fields, struct_fields)
-                ), (data_fields, struct_fields)
-            else:
-                assert all(
-                    data_field.struct_field == struct_field
-                    for data_field, struct_field in zip(data_fields, struct_fields)
-                ), (data_fields, struct_fields)
+            assert all(
+                data_field.struct_field == struct_field
+                for data_field, struct_field in zip(data_fields, struct_fields)
+            ), (data_fields, struct_fields)
 
         self._data_fields: List[InternalField] = data_fields
 
