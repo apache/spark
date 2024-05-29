@@ -46,6 +46,7 @@ from pyspark.sql.connect.expressions import (
     WithField,
     DropField,
 )
+from pyspark.errors.utils import with_origin_to_class
 
 
 if TYPE_CHECKING:
@@ -95,6 +96,7 @@ def _unary_op(name: str, self: ParentColumn) -> ParentColumn:
     return Column(UnresolvedFunction(name, [self._expr]))  # type: ignore[list-item]
 
 
+@with_origin_to_class
 class Column(ParentColumn):
     def __new__(
         cls,

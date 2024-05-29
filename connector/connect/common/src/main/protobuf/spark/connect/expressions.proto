@@ -54,6 +54,8 @@ message Expression {
     google.protobuf.Any extension = 999;
   }
 
+   // (Optional) Keep the information of the origin for this expression such as stacktrace.
+  Origin origin = 18;
 
   // Expression for the OVER clause or WINDOW clause.
   message Window {
@@ -406,4 +408,19 @@ message NamedArgumentExpression {
 
   // (Required) The value expression of the named argument.
   Expression value = 2;
+}
+
+message Origin {
+  // (Required) Indicate the origin type.
+  oneof function {
+    PythonOrigin python_origin = 1;
+  }
+}
+
+message PythonOrigin {
+  // (Required) Name of the origin, for example, the name of the function
+  string fragment = 1;
+
+  // (Required) Callsite to show to end users, for example, stacktrace.
+  string call_site = 2;
 }

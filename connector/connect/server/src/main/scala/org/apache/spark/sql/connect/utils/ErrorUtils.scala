@@ -35,7 +35,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
+import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.{Logging, MDC}
@@ -118,15 +118,27 @@ private[connect] object ErrorUtils extends Logging {
             sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
-            sparkThrowableBuilder.addQueryContexts(
-              FetchErrorDetailsResponse.QueryContext
-                .newBuilder()
+            val builder = FetchErrorDetailsResponse.QueryContext
+              .newBuilder()
+            val context = if (queryCtx.contextType() == QueryContextType.SQL) {
+              builder
+                .setContextType(FetchErrorDetailsResponse.QueryContext.ContextType.SQL)
                 .setObjectType(queryCtx.objectType())
                 .setObjectName(queryCtx.objectName())
                 .setStartIndex(queryCtx.startIndex())
                 .setStopIndex(queryCtx.stopIndex())
                 .setFragment(queryCtx.fragment())
-                .build())
+                .setSummary(queryCtx.summary())
+                .build()
+            } else {
+              builder
+                .setContextType(FetchErrorDetailsResponse.QueryContext.ContextType.DATAFRAME)
+                .setFragment(queryCtx.fragment())
+                .setCallSite(queryCtx.callSite())
+                .setSummary(queryCtx.summary())
+                .build()
+            }
+            sparkThrowableBuilder.addQueryContexts(context)
           }
           if (sparkThrowable.getSqlState != null) {
             sparkThrowableBuilder.setSqlState(sparkThrowable.getSqlState)
