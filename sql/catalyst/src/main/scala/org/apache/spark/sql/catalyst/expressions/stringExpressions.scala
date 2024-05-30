@@ -1049,11 +1049,11 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     if (evals.length == 1) {
       val stringTrimCode: String = this match {
         case _: StringTrim =>
-          CollationSupport.StringTrim.genCode(srcString.value, collationId)
+          CollationSupport.StringTrim.genCode(srcString.value)
         case _: StringTrimLeft =>
-          CollationSupport.StringTrimLeft.genCode(srcString.value, collationId)
+          CollationSupport.StringTrimLeft.genCode(srcString.value)
         case _: StringTrimRight =>
-          CollationSupport.StringTrimRight.genCode(srcString.value, collationId)
+          CollationSupport.StringTrimRight.genCode(srcString.value)
       }
       ev.copy(code = code"""
          |${srcString.code}
@@ -1179,7 +1179,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override protected def direction: String = "BOTH"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrim.exec(srcString, collationId)
+    CollationSupport.StringTrim.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrim.exec(srcString, trimString, collationId)
@@ -1286,7 +1286,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override protected def direction: String = "LEADING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimLeft.exec(srcString, collationId)
+    CollationSupport.StringTrimLeft.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimLeft.exec(srcString, trimString, collationId)
@@ -1346,7 +1346,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override protected def direction: String = "TRAILING"
 
   override def doEval(srcString: UTF8String): UTF8String =
-    CollationSupport.StringTrimRight.exec(srcString, collationId)
+    CollationSupport.StringTrimRight.exec(srcString)
 
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     CollationSupport.StringTrimRight.exec(srcString, trimString, collationId)

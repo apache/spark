@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -267,6 +268,92 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byte[] bytes = new byte[numBytes];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
       return bytes;
+    }
+  }
+
+  /**
+   * Returns the code point starting from the byte at position `index`.
+   */
+  public int codePointFrom(int index) {
+    if (index < 0 || index >= numBytes) {
+      throw new IndexOutOfBoundsException();
+    }
+    byte b = getByte(index);
+    int numBytes = numBytesForFirstByte(b);
+    return switch (numBytes) {
+      case 1 ->
+        b & 0x7F;
+      case 2 ->
+        ((b & 0x1F) << 6) | (getByte(index + 1) & 0x3F);
+      case 3 ->
+        ((b & 0x0F) << 12) | ((getByte(index + 1) & 0x3F) << 6) |
+        (getByte(index + 2) & 0x3F);
+      case 4 ->
+        ((b & 0x07) << 18) | ((getByte(index + 1) & 0x3F) << 12) |
+        ((getByte(index + 2) & 0x3F) << 6) | (getByte(index + 3) & 0x3F);
+      default ->
+        throw new IllegalArgumentException("Invalid UTF-8 sequence");
+    };
+  }
+
+  public int getChar(int index) {
+    if (index < 0 || index >= numChars()) {
+      throw new IndexOutOfBoundsException();
+    }
+    int charCount = 0, byteCount = 0;
+    while (charCount < index) {
+      byteCount += numBytesForFirstByte(getByte(byteCount));
+      charCount += 1;
+    }
+    return codePointFrom(byteCount);
+  }
+
+  public Iterator<Integer> codePointIterator() {
+    return new CodePointIterator();
+  }
+  private class CodePointIterator implements Iterator<Integer> {
+    private int byteIndex = 0;
+
+    @Override
+    public boolean hasNext() {
+      return byteIndex < numBytes;
+    }
+
+    @Override
+    public Integer next() {
+      if (!hasNext()) {
+        throw new IndexOutOfBoundsException();
+      }
+      int codePoint = codePointFrom(byteIndex);
+      byteIndex += numBytesForFirstByte(getByte(byteIndex));
+      return codePoint;
+    }
+  }
+
+  public Iterator<Integer> reverseCodePointIterator() {
+    return new ReverseCodePointIterator();
+  }
+  private class ReverseCodePointIterator implements Iterator<Integer> {
+    private int byteIndex = numBytes - 1;
+
+    @Override
+    public boolean hasNext() {
+      return byteIndex >= 0;
+    }
+
+    @Override
+    public Integer next() {
+      if (!hasNext()) {
+        throw new IndexOutOfBoundsException();
+      }
+      while (byteIndex > 0 && isContinuationByte(getByte(byteIndex))) {
+        --byteIndex;
+      }
+      return codePointFrom(byteIndex--);
+    }
+
+    private boolean isContinuationByte(byte b) {
+      return (b & 0xC0) == 0x80;
     }
   }
 

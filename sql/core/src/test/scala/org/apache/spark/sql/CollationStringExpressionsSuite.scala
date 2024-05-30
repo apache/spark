@@ -802,7 +802,43 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
+  test("xxxx") {
+    checkEvaluation(
+      StringTrim(Literal.create(null, StringType), Literal.create(null, StringType)), null)
+  }
+
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
+    def evalStringTrim(src: Any, trim: Any, result: String): Unit = {
+      Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+        val dt: DataType = StringType(collation)
+        checkEvaluation(StringTrim(Literal.create(src, dt), Literal.create(trim, dt)), result)
+        checkEvaluation(StringTrimLeft(Literal.create(src, dt), Literal.create(trim, dt)), result)
+        checkEvaluation(StringTrimRight(Literal.create(src, dt), Literal.create(trim, dt)), result)
+      }
+    }
+    // General edge cases and basic tests.
+    evalStringTrim(null, null, null)
+    evalStringTrim(null, "", null)
+    evalStringTrim(null, "a", null)
+    evalStringTrim("", null, null)
+    evalStringTrim("a", null, null)
+    evalStringTrim("", "", "")
+    evalStringTrim("", " ", "")
+    evalStringTrim("", "a", "")
+    evalStringTrim("", "aaa", "")
+    evalStringTrim(" ", "", " ")
+    evalStringTrim("a", "", "a")
+    evalStringTrim("aaa", "", "aaa")
+    evalStringTrim(" ", " ", "")
+    evalStringTrim(" ", "   ", "")
+    evalStringTrim("   ", " ", "")
+    evalStringTrim("   ", "   ", "")
+    evalStringTrim("a", "aaa", "")
+    evalStringTrim("aaa", "a", "")
+    evalStringTrim("aaa", "aaa", "")
+    evalStringTrim("abc", "cba", "")
+    evalStringTrim("cba", "abc", "")
+
     // Without trimString param.
     checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
     checkEvaluation(

@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
+import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
@@ -803,6 +804,18 @@ public final class CollationFactory {
 
   public static String[] getICULocaleNames() {
     return Collation.CollationSpecICU.ICULocaleNames;
+  }
+
+  public static String getCollationKey(String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input;
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase();
+    } else {
+      CollationKey collationKey = collation.collator.getCollationKey(input);
+      return Arrays.toString(collationKey.toByteArray());
+    }
   }
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {

@@ -902,4 +902,111 @@ public class UTF8StringSuite {
       assertEquals(1, fromBytes(c).numChars());
     }
   }
+
+  @Test
+  public void UTF8StringCodePoints() {
+    String s = "aéह 日å!";
+    UTF8String s0 = fromString(s);
+    for (int i = 0; i < s.length(); ++i) {
+      assertEquals(s.codePointAt(i), s0.getChar(i));
+    }
+
+    UTF8String s1 = fromBytes(new byte[] {0x41, (byte) 0xC3, (byte) 0xB1, (byte) 0xE2,
+      (byte) 0x82, (byte) 0xAC, (byte) 0xF0, (byte) 0x90, (byte) 0x8D, (byte) 0x88});
+    // numBytesForFirstByte
+    assertEquals(1, UTF8String.numBytesForFirstByte(s1.getByte(0)));
+    assertEquals(2, UTF8String.numBytesForFirstByte(s1.getByte(1)));
+    assertEquals(3, UTF8String.numBytesForFirstByte(s1.getByte(3)));
+    assertEquals(4, UTF8String.numBytesForFirstByte(s1.getByte(6)));
+    // getByte
+    assertEquals((byte) 0x41, s1.getByte(0));
+    assertEquals((byte) 0xC3, s1.getByte(1));
+    assertEquals((byte) 0xE2, s1.getByte(3));
+    assertEquals((byte) 0xF0, s1.getByte(6));
+    // codePointFrom
+    assertEquals(0x41, s1.codePointFrom(0));
+    assertEquals(0xF1, s1.codePointFrom(1));
+    assertEquals(0x20AC, s1.codePointFrom(3));
+    assertEquals(0x10348, s1.codePointFrom(6));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.codePointFrom(99));
+    // getChar
+    assertEquals(0x41, s1.getChar(0));
+    assertEquals(0xF1, s1.getChar(1));
+    assertEquals(0x20AC, s1.getChar(2));
+    assertEquals(0x10348, s1.getChar(3));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s1.getChar(99));
+
+    UTF8String s2 = fromString("Añ€𐍈");
+    // numBytesForFirstByte
+    assertEquals(1, UTF8String.numBytesForFirstByte(s2.getByte(0)));
+    assertEquals(2, UTF8String.numBytesForFirstByte(s2.getByte(1)));
+    assertEquals(3, UTF8String.numBytesForFirstByte(s2.getByte(3)));
+    assertEquals(4, UTF8String.numBytesForFirstByte(s2.getByte(6)));
+    // getByte
+    assertEquals((byte) 0x41, s2.getByte(0));
+    assertEquals((byte) 0xC3, s2.getByte(1));
+    assertEquals((byte) 0xE2, s2.getByte(3));
+    assertEquals((byte) 0xF0, s2.getByte(6));
+    // codePointFrom
+    assertEquals(0x41, s2.codePointFrom(0));
+    assertEquals(0xF1, s2.codePointFrom(1));
+    assertEquals(0x20AC, s2.codePointFrom(3));
+    assertEquals(0x10348, s2.codePointFrom(6));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.codePointFrom(99));
+    // getChar
+    assertEquals(0x41, s2.getChar(0));
+    assertEquals(0xF1, s2.getChar(1));
+    assertEquals(0x20AC, s2.getChar(2));
+    assertEquals(0x10348, s2.getChar(3));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s2.getChar(99));
+
+    UTF8String s3 = EMPTY_UTF8;
+    // codePointFrom
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(0));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.codePointFrom(99));
+    // getChar
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(0));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(99));
+  }
+
+  private void testCodePointIterator(String str) {
+    UTF8String s = fromString(str);
+    Iterator<Integer> it = s.codePointIterator();
+    for (int i = 0; i < str.length(); ++i) {
+      assertTrue(it.hasNext());
+      assertEquals(str.charAt(i), (int) it.next());
+    }
+    assertFalse(it.hasNext());
+  }
+  @Test
+  public void codePointIterator() {
+    testCodePointIterator("");
+    testCodePointIterator("abc");
+    testCodePointIterator("a!2&^R");
+    testCodePointIterator("aéह 日å!");
+  }
+
+  private void testReverseCodePointIterator(String str) {
+    UTF8String s = fromString(str);
+    Iterator<Integer> it = s.reverseCodePointIterator();
+    for (int i = str.length() - 1; i >= 0 ; --i) {
+      assertTrue(it.hasNext());
+      assertEquals(str.charAt(i), (int) it.next());
+    }
+    assertFalse(it.hasNext());
+  }
+  @Test
+  public void reverseCodePointIterator() {
+    testReverseCodePointIterator("");
+    testReverseCodePointIterator("abc");
+    testReverseCodePointIterator("a!2&^R");
+    testReverseCodePointIterator("aéह 日å!");
+  }
+
 }

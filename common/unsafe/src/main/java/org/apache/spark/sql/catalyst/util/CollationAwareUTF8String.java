@@ -28,6 +28,8 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -524,13 +526,14 @@ public class CollationAwareUTF8String {
   public static UTF8String lowercaseTrim(
       final UTF8String srcString,
       final UTF8String trimString) {
-    // Matching UTF8String behavior for null `trimString`.
-    if (trimString == null) {
-      return null;
-    }
+    return lowercaseTrimRight(lowercaseTrimLeft(srcString, trimString), trimString);
+  }
 
-    UTF8String leftTrimmed = lowercaseTrimLeft(srcString, trimString);
-    return lowercaseTrimRight(leftTrimmed, trimString);
+  public static UTF8String trim(
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
+    return trimRight(trimLeft(srcString, trimString, collationId), trimString, collationId);
   }
 
   public static UTF8String lowercaseTrimLeft(
@@ -541,40 +544,46 @@ public class CollationAwareUTF8String {
       return null;
     }
 
-    // The searching byte position in the srcString.
-    int searchIdx = 0;
-    // The byte position of a first non-matching character in the srcString.
-    int trimByteIdx = 0;
-    // Number of bytes in srcString.
-    int numBytes = srcString.numBytes();
-    // Convert trimString to lowercase, so it can be searched properly.
-    UTF8String lowercaseTrimString = trimString.toLowerCase();
+    HashSet<Integer> trimChars = new HashSet<>();
+    Iterator<Integer> trimIter = trimString.codePointIterator();
+    while (trimIter.hasNext()) trimChars.add(UCharacter.toLowerCase(trimIter.next()));
 
-    while (searchIdx < numBytes) {
-      UTF8String searchChar = srcString.copyUTF8String(
-        searchIdx,
-        searchIdx + UTF8String.numBytesForFirstByte(srcString.getByte(searchIdx)) - 1);
-      int searchCharBytes = searchChar.numBytes();
-
-      // Try to find the matching for the searchChar in the trimString.
-      if (lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
-        trimByteIdx += searchCharBytes;
-        searchIdx += searchCharBytes;
-      } else {
-        // No matching, exit the search.
-        break;
-      }
+    int searchIndex = 0;
+    Iterator<Integer> srcIter = srcString.codePointIterator();
+    while (srcIter.hasNext()) {
+      if (!trimChars.contains(UCharacter.toLowerCase(srcIter.next()))) break;
+      ++searchIndex;
     }
 
-    if (searchIdx == 0) {
-      // Nothing trimmed - return original string (not converted to lowercase).
-      return srcString;
+    return srcString.substring(searchIndex, srcString.numChars());
+  }
+
+  public static UTF8String trimLeft(
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
+    // Matching UTF8String behavior for null `trimString`.
+    if (trimString == null) {
+      return null;
     }
-    if (trimByteIdx >= numBytes) {
-      // Everything trimmed.
-      return UTF8String.EMPTY_UTF8;
+
+    // Create a set of collation keys for all characters of the trim string, for fast lookup.
+    String trim = trimString.toString();
+    HashSet<String> trimChars = new HashSet<>();
+    for (int i = 0; i < trim.length(); i++) {
+      trimChars.add(CollationFactory.getCollationKey(String.valueOf(trim.charAt(i)), collationId));
     }
-    return srcString.copyUTF8String(trimByteIdx, numBytes - 1);
+
+    // Iterate over srcString from the left and find the first character that is not in trimChars.
+    String input = srcString.toString();
+    int i = 0;
+    while (i < input.length()) {
+      String key = CollationFactory.getCollationKey(String.valueOf(input.charAt(i)), collationId);
+      if (!trimChars.contains(key)) break;
+      ++i;
+    }
+    // Return the substring from that position to the end of the string.
+    return UTF8String.fromString(input.substring(i, srcString.numChars()));
   }
 
   public static UTF8String lowercaseTrimRight(
@@ -585,53 +594,48 @@ public class CollationAwareUTF8String {
       return null;
     }
 
-    // Number of bytes iterated from the srcString.
-    int byteIdx = 0;
-    // Number of characters iterated from the srcString.
-    int numChars = 0;
-    // Number of bytes in srcString.
-    int numBytes = srcString.numBytes();
-    // Array of character length for the srcString.
-    int[] stringCharLen = new int[numBytes];
-    // Array of the first byte position for each character in the srcString.
-    int[] stringCharPos = new int[numBytes];
-    // Convert trimString to lowercase, so it can be searched properly.
-    UTF8String lowercaseTrimString = trimString.toLowerCase();
+    HashSet<Integer> trimChars = new HashSet<>();
+    Iterator<Integer> trimIter = trimString.codePointIterator();
+    while (trimIter.hasNext()) trimChars.add(UCharacter.toLowerCase(trimIter.next()));
 
-    // Build the position and length array.
-    while (byteIdx < numBytes) {
-      stringCharPos[numChars] = byteIdx;
-      stringCharLen[numChars] = UTF8String.numBytesForFirstByte(srcString.getByte(byteIdx));
-      byteIdx += stringCharLen[numChars];
-      numChars++;
-    }
-
-    // Index trimEnd points to the first no matching byte position from the right side of
-    //  the source string.
-    int trimByteIdx = numBytes - 1;
-
-    while (numChars > 0) {
-      UTF8String searchChar = srcString.copyUTF8String(
-        stringCharPos[numChars - 1],
-        stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
-
-      if(lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
-        trimByteIdx -= stringCharLen[numChars - 1];
-        numChars--;
-      } else {
+    int searchIndex = srcString.numChars();
+    Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
+    while (srcIter.hasNext()) {
+      if (!trimChars.contains(UCharacter.toLowerCase(srcIter.next()))) {
         break;
       }
+      --searchIndex;
     }
 
-    if (trimByteIdx == numBytes - 1) {
-      // Nothing trimmed.
-      return srcString;
+    return srcString.substring(0, searchIndex);
+  }
+
+  public static UTF8String trimRight(
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
+    // Matching UTF8String behavior for null `trimString`.
+    if (trimString == null) {
+      return null;
     }
-    if (trimByteIdx < 0) {
-      // Everything trimmed.
-      return UTF8String.EMPTY_UTF8;
+
+    // Create a set of collation keys for all characters of the trim string, for fast lookup.
+    String trim = trimString.toString();
+    HashSet<String> trimChars = new HashSet<>();
+    for (int i = 0; i < trim.length(); i++) {
+      trimChars.add(CollationFactory.getCollationKey(String.valueOf(trim.charAt(i)), collationId));
     }
-    return srcString.copyUTF8String(0, trimByteIdx);
+
+    // Iterate over srcString from the right and find the first character that is not in trimChars.
+    String input = srcString.toString();
+    int i = input.length() - 1;
+    while (i >= 0) {
+      String key = CollationFactory.getCollationKey(String.valueOf(input.charAt(i)), collationId);
+      if (!trimChars.contains(key)) break;
+      --i;
+    }
+    // Return the substring from the start of the string until that position.
+    return UTF8String.fromString(input.substring(0, i + 1));
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
