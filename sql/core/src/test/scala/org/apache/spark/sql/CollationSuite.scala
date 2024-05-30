@@ -1101,7 +1101,6 @@ class CollationSuite extends DatasourceV2SQLBase
       }
 
     val toSkip = List(
-      "next_day", // TODO: Add support/debug these.
       "get_json_object",
       "map_zip_with",
       "printf",
