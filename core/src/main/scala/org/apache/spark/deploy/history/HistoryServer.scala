@@ -302,7 +302,6 @@ object HistoryServer extends Logging {
     val securityManager = createSecurityManager(conf)
 
     val providerName = conf.get(History.PROVIDER)
-      .getOrElse(classOf[FsHistoryProvider].getName())
     val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
