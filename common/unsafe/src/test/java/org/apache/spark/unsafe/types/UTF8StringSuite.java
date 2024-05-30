@@ -904,7 +904,7 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void UTF8StringCodePoints() {
+  public void utf8StringCodePoints() {
     String s = "aéह 日å!";
     UTF8String s0 = fromString(s);
     for (int i = 0; i < s.length(); ++i) {

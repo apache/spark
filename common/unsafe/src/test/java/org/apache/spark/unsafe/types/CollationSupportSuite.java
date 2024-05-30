@@ -946,7 +946,6 @@ public class CollationSupportSuite {
   @Test
   public void testStringTrim() throws SparkException {
     // UTF8_BINARY
-//    assertStringTrim("UTF8_BINARY", null, null, "");
     assertStringTrim("UTF8_BINARY", "", "", "");
     assertStringTrim("UTF8_BINARY", "", "xyz", "");
     assertStringTrim("UTF8_BINARY", "asd", "", "asd");
