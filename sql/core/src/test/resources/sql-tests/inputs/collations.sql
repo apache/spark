@@ -77,3 +77,16 @@ select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_
 select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
+
+-- ICU collations (all statements return true)
+select 'a' collate unicode < 'A';
+select 'a' collate unicode_ci = 'A';
+select 'a' collate unicode_ai = 'å';
+select 'a' collate unicode_ci_ai = 'Å';
+select 'a' collate en < 'A';
+select 'a' collate en_ci = 'A';
+select 'a' collate en_ai = 'å';
+select 'a' collate en_ci_ai = 'Å';
+select 'Kypper' collate sv < 'Köpfe';
+select 'Kypper' collate de > 'Köpfe';
+select 'I' collate tr_ci = 'ı';
