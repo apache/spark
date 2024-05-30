@@ -118,7 +118,7 @@ public final class CollationSupport {
       return l.contains(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.containsInLowerCase(r);
+      return CollationAwareUTF8String.lowercaseIndexOf(l, r, 0) >= 0;
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -156,7 +156,7 @@ public final class CollationSupport {
       return l.startsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.startsWithInLowerCase(r);
+      return CollationAwareUTF8String.lowercaseMatchFrom(l, r.toLowerCase(), 0);
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -193,7 +193,7 @@ public final class CollationSupport {
       return l.endsWith(r);
     }
     public static boolean execLowercase(final UTF8String l, final UTF8String r) {
-      return l.endsWithInLowerCase(r);
+      return CollationAwareUTF8String.lowercaseMatchUntil(l, r.toLowerCase(), l.numChars());
     }
     public static boolean execICU(final UTF8String l, final UTF8String r,
         final int collationId) {
@@ -354,7 +354,7 @@ public final class CollationSupport {
       return string.indexOf(substring, 0);
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring) {
-      return string.toLowerCase().indexOf(substring.toLowerCase(), 0);
+      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, 0);
     }
     public static int execICU(final UTF8String string, final UTF8String substring,
         final int collationId) {
@@ -430,7 +430,7 @@ public final class CollationSupport {
     }
     public static int execLowercase(final UTF8String string, final UTF8String substring,
         final int start) {
-      return string.toLowerCase().indexOf(substring.toLowerCase(), start);
+      return CollationAwareUTF8String.lowercaseIndexOf(string, substring, start);
     }
     public static int execICU(final UTF8String string, final UTF8String substring, final int start,
         final int collationId) {

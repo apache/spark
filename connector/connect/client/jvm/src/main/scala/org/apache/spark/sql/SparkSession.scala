@@ -73,11 +73,7 @@ class SparkSession private[sql] (
     with Logging {
 
   private[this] val allocator = new RootAllocator()
-  private var shouldStopCleaner = false
-  private[sql] lazy val cleaner = {
-    shouldStopCleaner = true
-    new SessionCleaner(this)
-  }
+  private[sql] lazy val cleaner = new SessionCleaner(this)
 
   // a unique session ID for this session from client.
   private[sql] def sessionId: String = client.sessionId
@@ -718,9 +714,6 @@ class SparkSession private[sql] (
   override def close(): Unit = {
     if (releaseSessionOnClose) {
       client.releaseSession()
-    }
-    if (shouldStopCleaner) {
-      cleaner.stop()
     }
     client.shutdown()
     allocator.close()

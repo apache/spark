@@ -339,3 +339,91 @@ select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate 
 struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
 -- !query output
 []
+
+
+-- !query
+select 'a' collate unicode < 'A'
+-- !query schema
+struct<(collate(a) < A):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate unicode_ci = 'A'
+-- !query schema
+struct<(collate(a) = A):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate unicode_ai = 'å'
+-- !query schema
+struct<(collate(a) = å):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate unicode_ci_ai = 'Å'
+-- !query schema
+struct<(collate(a) = Å):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate en < 'A'
+-- !query schema
+struct<(collate(a) < A):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate en_ci = 'A'
+-- !query schema
+struct<(collate(a) = A):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate en_ai = 'å'
+-- !query schema
+struct<(collate(a) = å):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'a' collate en_ci_ai = 'Å'
+-- !query schema
+struct<(collate(a) = Å):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'Kypper' collate sv < 'Köpfe'
+-- !query schema
+struct<(collate(Kypper) < Köpfe):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'Kypper' collate de > 'Köpfe'
+-- !query schema
+struct<(collate(Kypper) > Köpfe):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'I' collate tr_ci = 'ı'
+-- !query schema
+struct<(collate(I) = ı):boolean>
+-- !query output
+true
