@@ -207,7 +207,6 @@ object CheckConnectJvmClientCompatibility {
 
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
 
       // KeyValueGroupedDataset
       ProblemFilters.exclude[Problem](
@@ -350,12 +349,12 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.SparkCollectionUtils$"),
 
       // New public APIs added in the client
-      // ScalarUserDefinedFunction
+      // ScalaUserDefinedFunction
       ProblemFilters
         .exclude[MissingClassProblem](
-          "org.apache.spark.sql.expressions.ScalarUserDefinedFunction"),
+          "org.apache.spark.sql.expressions.ScalaUserDefinedFunction"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ScalarUserDefinedFunction$"),
+        "org.apache.spark.sql.expressions.ScalaUserDefinedFunction$"),
 
       // New private API added in the client
       ProblemFilters

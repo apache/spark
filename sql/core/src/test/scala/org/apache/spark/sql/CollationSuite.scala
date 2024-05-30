@@ -677,14 +677,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"INSERT INTO $tableName VALUES ('bbb', 'bbb')")
       sql(s"INSERT INTO $tableName VALUES ('BBB', 'BBB')")
 
-      sql(s"SET spark.sql.legacy.createHiveTableByDefault=false")
-
-      withTable(newTableName) {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
-          },
-          errorClass = "COLLATION_MISMATCH.IMPLICIT")
+      withSQLConf("spark.sql.legacy.createHiveTableByDefault" -> "false") {
+        withTable(newTableName) {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
+            },
+            errorClass = "COLLATION_MISMATCH.IMPLICIT")
+        }
       }
     }
   }
