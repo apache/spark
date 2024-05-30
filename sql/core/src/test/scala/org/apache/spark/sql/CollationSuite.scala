@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ComplexTypeMergingExpression, EmptyRow, ExpectsInputTypes, Expression, ExpressionEvalHelper, InheritAnalysisRules, Literal}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -986,7 +986,7 @@ class CollationSuite extends DatasourceV2SQLBase
   test("SPARK-48280: Expression Walker for Testing") {
     // This test does following:
     // 1) Take all expressions
-    // 2) filter out ones that have at least one argument of string type
+    // 2) Filter out ones that have at least one argument of StringType
     // 3) Use reflection to create an instance of the expression using first constructor
     //    (test other as well).
     // 4) Check if the expression is of type ExpectsInputTypes (should make this a bit broader)
@@ -998,6 +998,19 @@ class CollationSuite extends DatasourceV2SQLBase
     // 8) There is a list of allowed expressions that can differ (e.g. hex)
     //
     // We currently capture 75/449 expressions. We could do better.
+    def hasStringType(inputType: AbstractDataType): Boolean = {
+      inputType match {
+        case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
+          true
+        case ArrayType => true
+        case ArrayType(elementType, _) => hasStringType(elementType)
+        case AbstractArrayType(elementType) => hasStringType(elementType)
+        case TypeCollection(typeCollection) =>
+          typeCollection.exists(hasStringType)
+        case _ => false
+      }
+    }
+
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
     }.filter(funInfo => {
@@ -1013,32 +1026,42 @@ class CollationSuite extends DatasourceV2SQLBase
       // Take first constructor.
       val headConstructor = cl.getConstructors.head
 
-      val paramCount = headConstructor.getParameterCount
-      val allExpressions = headConstructor.getParameters.map(p => p.getType)
-        .forall(p => p.isAssignableFrom(classOf[Expression]))
+      val params = headConstructor.getParameters.map(p => p.getType)
+      val allExpressions = params.forall(p => p.isAssignableFrom(classOf[Expression]) ||
+        p.isAssignableFrom(classOf[Seq[Expression]]) ||
+        p.isAssignableFrom(classOf[Option[Expression]]))
 
       if (!allExpressions) {
         // noinspection ScalaStyle
         println("NotAll")
         false
       } else {
-        val args = Array.fill(paramCount)(Literal.create(1))
+        val args = params.map {
+          case e if e.isAssignableFrom(classOf[Expression]) => Literal.create("1")
+          case se if se.isAssignableFrom(classOf[Seq[Expression]]) =>
+            Seq(Literal.create("1"), Literal.create("2"))
+          case oe if oe.isAssignableFrom(classOf[Option[Expression]]) => None
+        }
         // Find all expressions that have string as input
         try {
           val expr = headConstructor.newInstance(args: _*)
           expr match {
             case types: ExpectsInputTypes =>
+              // noinspection ScalaStyle
+              println("AllExpects")
               val inputTypes = types.inputTypes
               // check if this is a collection...
-              inputTypes.exists {
-                case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
-                case TypeCollection(typeCollection) =>
-                  typeCollection.exists {
-                    case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase => true
-                    case _ => false
-                  }
-                case _ => false
-              }
+              inputTypes.exists(hasStringType)
+            case _: ComplexTypeMergingExpression =>
+              // Check other expressions here...
+              // noinspection ScalaStyle
+              println("TypeForMerging")
+              false
+            case _: InheritAnalysisRules =>
+              // Check other expressions here...
+              // noinspection ScalaStyle
+              println("Inherit")
+              false
             case _ =>
               // Check other expressions here...
               // noinspection ScalaStyle
@@ -1057,56 +1080,71 @@ class CollationSuite extends DatasourceV2SQLBase
 
     // noinspection ScalaStyle
     println("Found total of " + funInfos.size + " functions")
-    // 75/449
-    // We could capture more probably...
 
     // Helper methods for generating data.
     sealed trait CollationType
     case object Utf8Binary extends CollationType
     case object Utf8BinaryLcase extends CollationType
 
-    // TODO: There is probably some nicer way to do this...
-    def generateData(
-        types: Seq[AbstractDataType],
-        collationType: CollationType): Seq[Expression] = {
-      types.map {
-        case TypeCollection(typeCollection) =>
-          val strTypes =
-            typeCollection.filter(dt => dt.isInstanceOf[StringType] ||
-              dt == StringTypeAnyCollation || dt == StringTypeBinaryLcase)
-          if (strTypes.isEmpty) {
-            // Take any
-            generateData(typeCollection, collationType).head
-          } else {
-            generateData(strTypes, collationType).head
-          }
-        case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase =>
+    def generateSingleEntry(
+        inputType: AbstractDataType,
+        collationType: CollationType): Expression =
+      inputType match {
+        // Try to make this a bit more random.
+        case AnyTimestampType => Literal("2009-07-30 12:58:59")
+        case BinaryType => Literal(new Array[Byte](5))
+        case BooleanType => Literal(true)
+        case _: DatetimeType => Literal(1L)
+        case _: DecimalType => Literal(new Decimal)
+        case IntegerType | NumericType => Literal(1)
+        case LongType => Literal(1L)
+        case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
           collationType match {
             case Utf8Binary =>
               Literal.create("dummy string", StringType("UTF8_BINARY"))
             case Utf8BinaryLcase =>
               Literal.create("DuMmY sTrInG", StringType("UTF8_BINARY_LCASE"))
           }
-        // Try to make this a bit more random.
-        case IntegerType | NumericType => Literal(1)
-        case LongType => Literal(1L)
-        case _: DecimalType => Literal(new Decimal)
-        case BinaryType => Literal(new Array[Byte](5))
-        case dt if dt.isInstanceOf[DatetimeType] => Literal(1L)
-        case AbstractArrayType(elementType) =>
-          (elementType, collationType) match {
-            case (StringTypeAnyCollation, Utf8Binary) =>
-              Literal.create(Seq("dummy string"), ArrayType(StringType("UTF8_BINARY")))
-            case (StringTypeAnyCollation, Utf8BinaryLcase) =>
-              Literal.create(Seq("dUmmY sTriNg"), ArrayType(StringType("UTF8_BINARY_LCASE")))
-            case (_, _) => fail("unsupported type")
+        case TypeCollection(typeCollection) =>
+          val strTypes = typeCollection.filter(hasStringType)
+          if (strTypes.isEmpty) {
+            // Take first type
+            generateSingleEntry(typeCollection.head, collationType)
+          } else {
+            // Take first string type
+            generateSingleEntry(strTypes.head, collationType)
           }
-      }
+        case AbstractArrayType(elementType) =>
+          generateSingleEntry(elementType, collationType).map(
+            lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
+          ).head
+        case ArrayType(elementType, _) =>
+          generateSingleEntry(elementType, collationType).map(
+            lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
+          ).head
+        case ArrayType =>
+          generateSingleEntry(StringTypeAnyCollation, collationType).map(
+            lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
+          ).head
     }
+
+    def generateData(
+        inputTypes: Seq[AbstractDataType],
+        collationType: CollationType): Seq[Expression] = {
+      inputTypes.map(generateSingleEntry(_, collationType))
+      }
 
     val toSkip = List(
       "next_day", // TODO: Add support/debug these.
       "get_json_object",
+      "map_zip_with",
+      "printf",
+      "transform_keys",
+      "concat_ws",
+      "format_string",
+      "session_window",
+      "transform_values",
+      "arrays_zip",
       "hex", // this is fine
     )
 
@@ -1116,16 +1154,27 @@ class CollationSuite extends DatasourceV2SQLBase
 
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
-      val paramCount = headConstructor.getParameterCount
-      val args = Array.fill(paramCount)(Literal(1))
+      val params = headConstructor.getParameters.map(p => p.getType)
+      val paramCount = params.length
+      val args = params.map {
+        case e if e.isAssignableFrom(classOf[Expression]) => Literal.create("1")
+        case se if se.isAssignableFrom(classOf[Seq[Expression]]) =>
+          Seq(Literal.create("1"))
+        case oe if oe.isAssignableFrom(classOf[Option[Expression]]) => None
+      }
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
       val inputTypes = expr.inputTypes
 
-      val inputDataUtf8Binary = generateData(inputTypes.take(paramCount), Utf8Binary)
+      var nones = Array.fill(0)(None)
+      if (paramCount > inputTypes.length) {
+        nones = Array.fill(paramCount - inputTypes.length)(None)
+      }
+
+      val inputDataUtf8Binary = generateData(inputTypes.take(paramCount), Utf8Binary) ++ nones
       val instanceUtf8Binary =
         headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
 
-      val inputDataLcase = generateData(inputTypes.take(paramCount), Utf8BinaryLcase)
+      val inputDataLcase = generateData(inputTypes.take(paramCount), Utf8BinaryLcase) ++ nones
       val instanceLcase = headConstructor.newInstance(inputDataLcase: _*).asInstanceOf[Expression]
 
       val exceptionUtfBinary = {
@@ -1152,6 +1201,8 @@ class CollationSuite extends DatasourceV2SQLBase
 
       // no exception - check result.
       if (exceptionUtfBinary.isEmpty) {
+        // scalastyle:off println
+        println("GOODPASS")
         val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
         val resUtf8Lcase = instanceLcase.eval(EmptyRow)
 
