@@ -292,20 +292,8 @@ class StringType(AtomicType):
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
