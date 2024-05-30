@@ -393,28 +393,29 @@ class StreamingTestsMixin:
             )
 
     def test_streaming_drop_duplicate_within_watermark(self):
-        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
-            userSchema = StructType().add("time", TimestampType()).add("id", "integer")
-            df = (
-                self.spark.readStream.option("sep", ";")
-                .schema(userSchema)
-                .csv("python/test_support/sql/streaming/time")
-            )
-            q1 = (
-                df.withWatermark("time", "2 seconds")
-                .dropDuplicatesWithinWatermark(["id"])
-                .writeStream.outputMode("update")
-                .format("memory")
-                .queryName("q1")
-                .trigger(availableNow=True)
-                .start()
-            )
-            self.assertTrue(q1.isActive)
-            time.sleep(20)
-            q1.stop()
-            result = self.spark.sql("SELECT * FROM q1").collect()
-            print(result)
-            self.assertTrue(len(result) >= 6 and len(result) <= 9)
+        """
+        This verfies dropDuplicatesWithinWatermark works with a streaming dataframe.
+        """
+        user_schema = StructType().add("time", TimestampType()).add("id", "integer")
+        df = (
+            self.spark.readStream.option("sep", ";")
+            .schema(user_schema)
+            .csv("python/test_support/sql/streaming/time")
+        )
+        q1 = (
+            df.withWatermark("time", "2 seconds")
+            .dropDuplicatesWithinWatermark(["id"])
+            .writeStream.outputMode("update")
+            .format("memory")
+            .queryName("q1")
+            .trigger(availableNow=True)
+            .start()
+        )
+        self.assertTrue(q1.isActive)
+        time.sleep(20)
+        q1.stop()
+        result = self.spark.sql("SELECT * FROM q1").collect()
+        self.assertTrue(len(result) >= 6 and len(result) <= 9)
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
