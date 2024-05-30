@@ -687,7 +687,7 @@ private[spark] object Utils
         in.close()
       }
     } else {
-      lazy val fsHasPathCapability = {
+      def fsHasPathCapability: Boolean = {
         fs.hasPathCapability(path, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
       }
       val listStatuses = Try {
@@ -696,8 +696,8 @@ private[spark] object Utils
       listStatuses match {
         case Failure(e) =>
           if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
-            logInfo("Ignoring missing directory %s".format(path))
-            logDebug("Directory missing %s".format(e))
+            logInfo(log"Ignoring missing directory ${MDC(PATH, path)} ")
+            logDebug(log"Directory missing ${MDC(PATH, path)} ")
           } else throw e
         case Success(ls) =>
           ls.foreach { fileStatus =>

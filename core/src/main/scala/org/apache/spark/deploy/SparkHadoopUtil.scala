@@ -220,7 +220,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      lazy val fsHasPathCapability =
+      def fsHasPathCapability: Boolean =
         fs.hasPathCapability(status.getPath, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
       val statusResult = Try {
         fs.listStatus(status.getPath)
@@ -368,6 +368,13 @@ private[spark] object SparkHadoopUtil extends Logging {
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
+  /**
+   * Determines if this store may have inconsistencies between parent directory listings
+   * and direct list/getFileStatus calls. This issue can occur with Amazon S3 Express
+   * One Zone Storage when there are pending uploads in a directory.
+   * Applications can use this flag to decide whether to consider FileNotFoundExceptions
+   * encountered during treewalks as errors or to downgrade them.
+   */
   private[spark] val DIRECTORY_LISTING_INCONSISTENT =
     "fs.capability.directory.listing.inconsistent"
 
