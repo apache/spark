@@ -143,19 +143,23 @@ case class InsertIntoHadoopFsRelationCommand(
     if (doInsertion) {
 
       def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
-        val updateAndNewPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
+        val updateAndNewPartitions =
+          updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
         if (partitionsTrackedByCatalog) {
           val newPartitions = updateAndNewPartitions -- initialMatchingPartitions
           val updatedPartitions = updateAndNewPartitions -- newPartitions
           if (updatedPartitions.nonEmpty) {
             AlterTableDropPartitionCommand(
-              catalogTable.get.identifier, updatedPartitions.toSeq,
-              ifExists = true, purge = false,
-              retainData = true /* already deleted */).run(sparkSession)
+              catalogTable.get.identifier,
+              updatedPartitions.toSeq,
+              ifExists = true,
+              purge = false,
+              retainData = true /* already deleted */ ).run(sparkSession)
           }
           if (updateAndNewPartitions.nonEmpty) {
             AlterTableAddPartitionCommand(
-              catalogTable.get.identifier, updateAndNewPartitions.toSeq.map(p => (p, customPartitionLocations.get(p))),
+              catalogTable.get.identifier,
+              updateAndNewPartitions.toSeq.map(p => (p, customPartitionLocations.get(p))),
               ifNotExists = true).run(sparkSession)
           }
           // For dynamic partition overwrite, we never remove partitions but only update existing
