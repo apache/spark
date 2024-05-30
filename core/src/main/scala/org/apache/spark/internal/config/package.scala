@@ -1463,7 +1463,7 @@ package object config {
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
-      .doc("(Deprecated since Spark 3.5, please use 'spark.shuffle.localDisk.file.output.buffer'.)")
+      .doc("(Deprecated since Spark 4.0, please use 'spark.shuffle.localDisk.file.output.buffer'.)")
       .version("2.3.0")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
@@ -1475,7 +1475,7 @@ package object config {
     ConfigBuilder("spark.shuffle.localDisk.file.output.buffer")
       .doc("The file system for this buffer size after each partition " +
         "is written in all local disk shuffle writers. In KiB unless otherwise specified.")
-      .version("3.5.0")
+      .version("4.0.0")
       .fallbackConf(SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =

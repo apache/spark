@@ -648,7 +648,7 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
       DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
         "Please open a JIRA ticket to report it if you need to use this configuration."),
-      DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "3.5.2",
+      DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
         "Please use spark.shuffle.localDisk.file.output.buffer")
     )
 
