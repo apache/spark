@@ -884,7 +884,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
 -- !query analysis
-CreateViewCommand `v1`, (select my_col from (values (1), (2), (1) as (my_col)) group by 1), false, false, LocalTempView, UNSUPPORTED, true
+CreateViewCommand `v1`, (select my_col from (values (1), (2), (1) as (my_col)) group by 1), false, false, LocalTempView, true
    +- Aggregate [my_col#x], [my_col#x]
       +- SubqueryAlias __auto_generated_subquery_name
          +- SubqueryAlias as
