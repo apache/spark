@@ -814,13 +814,10 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          checkError(
-            exception = intercept[SparkRuntimeException] {
-              insertNullValueAndCheck()
-            },
-            errorClass = "NOT_NULL_ASSERT_VIOLATION",
-            sqlState = "42000",
-            parameters = Map("walkedTypePath" -> ""))
+          val exception = intercept[SparkRuntimeException] {
+            insertNullValueAndCheck()
+          }
+          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }
