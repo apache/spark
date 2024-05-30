@@ -311,6 +311,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUnpivot ::
+      ResolveTranspose ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
@@ -4003,9 +4004,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveTranspose extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(TRANSPOSE), ruleId) {
-      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child)
-        if t.expressions.forall(_.resolved) && child.resolved =>
-
+      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child) =>
+//      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child)
+//        if t.expressions.forall(_.resolved) && child.resolved =>
         val pivotColumnName = "__pivot_column"
 
         // Concatenate the values of columns in columnsToTranspose using an underscore
@@ -4028,7 +4029,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           pivotColumn = AttributeReference(pivotColumnName, StringType)(),
           pivotValues = Nil,
           aggregates = Seq(
-            Alias(First(AttributeReference("value", StringType)(), ignoreNulls = true), "value")()),
+            Alias(First(AttributeReference("value", StringType)(), ignoreNulls = true), "value")()
+          ),
           child = unpivot
         )
 
