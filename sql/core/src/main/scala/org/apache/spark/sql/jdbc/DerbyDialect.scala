@@ -48,9 +48,15 @@ private case class DerbyDialect() extends JdbcDialect {
     case ByteType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
-    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
-    case t: DecimalType if t.precision > 31 =>
-      Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    // 31 is the maximum precision
+    // https://db.apache.org/derby/docs/10.13/ref/rrefsqlj15260.html
+    case t: DecimalType =>
+      val (p, s) = if (t.precision > 31) {
+        (31, math.max(t.scale - (t.precision - 31), 0))
+      } else {
+        (t.precision, t.scale)
+      }
+      Option(JdbcType(s"DECIMAL($p,$s)", java.sql.Types.DECIMAL))
     case _ => None
   }
 
