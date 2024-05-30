@@ -394,7 +394,7 @@ class StreamingTestsMixin:
 
     def test_streaming_drop_duplicate_within_watermark(self):
         """
-        This verfies dropDuplicatesWithinWatermark works with a streaming dataframe.
+        This verifies dropDuplicatesWithinWatermark works with a streaming dataframe.
         """
         user_schema = StructType().add("time", TimestampType()).add("id", "integer")
         df = (
@@ -407,14 +407,13 @@ class StreamingTestsMixin:
             .dropDuplicatesWithinWatermark(["id"])
             .writeStream.outputMode("update")
             .format("memory")
-            .queryName("q1")
-            .trigger(availableNow=True)
+            .queryName("test_streaming_drop_duplicates_within_wm")
             .start()
         )
         self.assertTrue(q1.isActive)
-        time.sleep(20)
+        q1.processAllAvailable()
         q1.stop()
-        result = self.spark.sql("SELECT * FROM q1").collect()
+        result = self.spark.sql("SELECT * FROM test_streaming_drop_duplicates_within_wm").collect()
         self.assertTrue(len(result) >= 6 and len(result) <= 9)
 
 
