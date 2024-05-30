@@ -1031,7 +1031,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.unsafe.file.output.buffer</code></td>
   <td>32k</td>
   <td>
-    Deprecated since Spark 3.5, please use <code>spark.shuffle.localDisk.file.output.buffer</code>.
+    Deprecated since Spark 4.0, please use <code>spark.shuffle.localDisk.file.output.buffer</code>.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1042,7 +1042,7 @@ Apart from these, the following properties are also available, and may be useful
     The file system for this buffer size after each partition is written in all local disk shuffle writers.
     In KiB unless otherwise specified.
   </td>
-  <td>3.5.0</td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.spill.diskWriteBufferSize</code></td>
