@@ -87,12 +87,11 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
         outputCommitCoordinator =
-          spy[OutputCommitCoordinator](
-            new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
+          spy[OutputCommitCoordinator](new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
-          SparkContext.numDriverCores(master), this, Some(outputCommitCoordinator))
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -190,9 +189,12 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
-    // A new task should not be allowed to become stage failed because of potential data duplication
-    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+    // A new task should now be allowed to become the authorized committer
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
       nonAuthorizedCommitter + 2))
+    // There can only be one authorized committer
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 3))
   }
 
   test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
@@ -226,8 +228,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
 
     // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
-    // then fail the 1st attempt and since stage failed because of potential data duplication,
-    // make sure fail the 4th attempt.
+    // then fail the 1st attempt and make sure the 4th one can commit again.
     stage += 1
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
     assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
@@ -236,9 +237,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
     outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
-    // A new task should not be allowed to become the authorized committer since stage failed
-    // because of potential data duplication
-    assert(!outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
   }
 
   test("SPARK-24589: Make sure stage state is cleaned up") {
