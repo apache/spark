@@ -190,6 +190,11 @@ statement
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF errorCapturingNot EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
+    | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF errorCapturingNot EXISTS)?
+        identifierReference LEFT_PAREN parameters=colDefinitionList? RIGHT_PAREN
+        (RETURNS (dataType | TABLE LEFT_PAREN returnParams=colTypeList RIGHT_PAREN))?
+        routineCharacteristics
+        RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
     | DECLARE (OR REPLACE)? VARIABLE?
         identifierReference dataType? variableDefaultExpression?       #createVariable
@@ -1216,6 +1221,14 @@ createOrReplaceTableColType
     : colName=errorCapturingIdentifier dataType colDefinitionOption*
     ;
 
+colDefinitionList
+    : colDefinition (COMMA colDefinition)*
+    ;
+
+colDefinition
+    : colName=errorCapturingIdentifier dataType colDefinitionOption*
+    ;
+
 colDefinitionOption
     : errorCapturingNot NULL
     | defaultExpression
@@ -1234,6 +1247,46 @@ complexColTypeList
 complexColType
     : errorCapturingIdentifier COLON? dataType (errorCapturingNot NULL)? commentSpec?
     ;
+
+routineCharacteristics
+    : (routineLanguage
+    | specificName
+    | deterministic
+    | sqlDataAccess
+    | nullCall
+    | commentSpec
+    | rightsClause)*
+    ;
+
+routineLanguage
+    : LANGUAGE (SQL | IDENTIFIER)
+    ;
+
+specificName
+    : SPECIFIC specific=errorCapturingIdentifier
+    ;
+
+deterministic
+    : DETERMINISTIC
+    | errorCapturingNot DETERMINISTIC
+    ;
+
+sqlDataAccess
+    : access=NO SQL
+    | access=CONTAINS SQL
+    | access=READS SQL DATA
+    | access=MODIFIES SQL DATA
+    ;
+
+nullCall
+    : RETURNS NULL ON NULL INPUT
+    | CALLED ON NULL INPUT
+    ;
+
+rightsClause
+    : SQL SECURITY INVOKER
+    | SQL SECURITY DEFINER
+   ;
 
 whenClause
     : WHEN condition=expression THEN result=expression
@@ -1698,6 +1751,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALLED
     | CASCADE
     | CASE
     | CAST
@@ -1724,6 +1778,7 @@ nonReserved
     | COMPUTE
     | CONCATENATE
     | CONSTRAINT
+    | CONTAINS
     | COST
     | CREATE
     | CUBE
@@ -1749,10 +1804,12 @@ nonReserved
     | DECLARE
     | DEFAULT
     | DEFINED
+    | DEFINER
     | DELETE
     | DELIMITED
     | DESC
     | DESCRIBE
+    | DETERMINISTIC
     | DFS
     | DIRECTORIES
     | DIRECTORY
@@ -1808,15 +1865,18 @@ nonReserved
     | INDEX
     | INDEXES
     | INPATH
+    | INPUT
     | INPUTFORMAT
     | INSERT
     | INT
     | INTEGER
     | INTERVAL
     | INTO
+    | INVOKER
     | IS
     | ITEMS
     | KEYS
+    | LANGUAGE
     | LAST
     | LAZY
     | LEADING
@@ -1843,6 +1903,7 @@ nonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODIFIES
     | MONTH
     | MONTHS
     | MSCK
@@ -1885,6 +1946,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READS
     | REAL
     | RECORDREADER
     | RECORDWRITER
@@ -1899,6 +1961,8 @@ nonReserved
     | RESET
     | RESPECT
     | RESTRICT
+    | RETURN
+    | RETURNS
     | REVOKE
     | RLIKE
     | ROLE
@@ -1911,6 +1975,7 @@ nonReserved
     | SCHEMAS
     | SECOND
     | SECONDS
+    | SECURITY
     | SELECT
     | SEPARATED
     | SERDE
@@ -1927,6 +1992,8 @@ nonReserved
     | SORT
     | SORTED
     | SOURCE
+    | SPECIFIC
+    | SQL
     | START
     | STATISTICS
     | STORED
