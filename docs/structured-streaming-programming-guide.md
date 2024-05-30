@@ -2103,7 +2103,7 @@ streamingDf.dropDuplicates("guid")
 // With watermark using guid and eventTime columns
 streamingDf
   .withWatermark("eventTime", "10 seconds")
-  .dropDuplicates(Vector("guid", "eventTime"))
+  .dropDuplicates("guid", "eventTime")
 {% endhighlight %}
 
 </div>
@@ -2119,7 +2119,7 @@ streamingDf.dropDuplicates("guid");
 // With watermark using guid and eventTime columns
 streamingDf
   .withWatermark("eventTime", "10 seconds")
-  .dropDuplicates({"guid", "eventTime"});
+  .dropDuplicates("guid", "eventTime");
 {% endhighlight %}
 
 
