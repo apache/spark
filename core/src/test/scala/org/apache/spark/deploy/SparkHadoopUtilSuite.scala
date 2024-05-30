@@ -17,14 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, FileNotFoundException, IOException}
+import java.io.File
 import java.net.InetAddress
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.when
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
@@ -156,9 +153,7 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     assert(target2 == "wwwyyyzzz")
   }
 
-  test(
-    "SPARK-47008: fs.listStatus SHOULD NOT throw FileNotFoundException in " +
-      "listLeafStatuses if fs.hasPathCapability is TRUE") {
+  test("SPARK-47008: unit test for SparkHadoopUtil.listLeafStatuses") {
     withTempDir { dir =>
       val rootPath = s"${dir.getCanonicalPath}"
       val path = s"${dir.getCanonicalPath}/dir"
@@ -169,7 +164,13 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
       val file1Dir2 = s"${path2}/file1"
       val file2Dir2 = s"${path2}/file2"
 
-      // Function to generate files
+      val conf = new Configuration
+      val fs = {
+        val hdfsPath = new Path(path)
+        hdfsPath.getFileSystem(conf)
+      }
+
+      // Function to generate files/dirs
       def generateFile(path: String, isDirectory: Boolean): Unit = {
         val file = new File(path)
         if (isDirectory) file.mkdir()
@@ -178,7 +179,6 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
 
       // List to generate files
       val filesToGenerate = LazyList((file1Dir1), (file2Dir1), (file1Dir2), (file2Dir2))
-
       // List to generate directories
       val directoriesToGenerate = LazyList((path), (path1), (path2))
 
@@ -186,58 +186,32 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
         generateFile(path, isDirectory = true)
       }
 
+      // If there are no files at all
+      val baseDirStatus = fs.listStatus(new Path(rootPath)).partition(_.isDirectory)._1.head
+
+      val leafStatusesNoFiles = {
+        new SparkHadoopUtil().listLeafStatuses(fs, baseDirStatus)
+      }
+      assertResult(0)(leafStatusesNoFiles.size)
+
       filesToGenerate.foreach { case (path) =>
         generateFile(path, isDirectory = false)
       }
 
-      val conf = new Configuration
-      val fs = {
-        val hdfsPath = new Path(path)
-        hdfsPath.getFileSystem(conf)
-      }
-
-      val mockFileSystem: FileSystem = mock(classOf[FileSystem])
-
-      val dirStatuses = fs.listStatus(new Path(path))
-      val dir1Statuses = fs.listStatus(new Path(path1))
-      val directories = fs.listStatus(new Path(path)).filter(_.isDirectory)
-      val leavesDir1 = fs.listStatus(new Path(path1)).filter(_.isFile)
-      val leavesDir2 = fs.listStatus(new Path(path2)).filter(_.isFile)
-      val baseDirStatus = fs.listStatus(new Path(rootPath)).partition(_.isDirectory)._1.head
-
-      // Set up mock for successful operation
-      when(mockFileSystem.hasPathCapability(any(), any())).thenReturn(true)
-
-      when(mockFileSystem.listStatus(directories.head.getPath)) // ../dir/dir2
-        .thenThrow(new FileNotFoundException())
-
-      when(mockFileSystem.listStatus(directories.tail.head.getPath)) // ../dir/dir1
-        .thenReturn(dir1Statuses)
-
-      when(mockFileSystem.listStatus(baseDirStatus.getPath)).thenReturn(dirStatuses)
-
+      // Getting all files
       val leafStatuses = {
-        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
+        new SparkHadoopUtil().listLeafStatuses(fs, baseDirStatus)
       }
+      assertResult(4)(leafStatuses.size)
 
-      // Result should include files from the // ../dir/dir1 only
-      assertResult(leavesDir1)(leafStatuses)
-      assert(leavesDir2.toSeq != leafStatuses)
+      // Given path points to a file. listLeafStatuses should return a single-element
+      // collection containing [[FileStatus]] of that file.
+      val fileFileStatus = fs.listStatus(new Path(file1Dir1)).partition(_.isFile)._1.head
 
-      // Total number of the files is 4, but files in the ../dir/dir2 will be ignored
-      assertResult(2)(leafStatuses.size)
-
-      when(mockFileSystem.hasPathCapability(any(), any())).thenReturn(false)
-
-      assertThrows[FileNotFoundException] {
-        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
+      val leafStatusesOfOneFile = {
+        new SparkHadoopUtil().listLeafStatuses(fs, fileFileStatus)
       }
-
-      when(mockFileSystem.hasPathCapability(any(), any())).thenThrow(new IOException())
-
-      assertThrows[IOException] {
-        new SparkHadoopUtil().listLeafStatuses(mockFileSystem, baseDirStatus)
-      }
+      assertResult(1)(leafStatusesOfOneFile.size)
     }
   }
 
