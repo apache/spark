@@ -59,9 +59,12 @@ trait LogKey {
  */
 object LogKeys {
   case object ACCUMULATOR_ID extends LogKey
+  case object ACL_ENABLED extends LogKey
   case object ACTUAL_NUM_FILES extends LogKey
   case object ACTUAL_PARTITION_COLUMN extends LogKey
   case object ADDED_JARS extends LogKey
+  case object ADMIN_ACLS extends LogKey
+  case object ADMIN_ACL_GROUPS extends LogKey
   case object AGGREGATE_FUNCTIONS extends LogKey
   case object ALPHA extends LogKey
   case object ANALYSIS_ERROR extends LogKey
@@ -72,7 +75,9 @@ object LogKeys {
   case object APP_ID extends LogKey
   case object APP_NAME extends LogKey
   case object APP_STATE extends LogKey
+  case object ARCHIVE_NAME extends LogKey
   case object ARGS extends LogKey
+  case object ATTRIBUTE_MAP extends LogKey
   case object AUTH_ENABLED extends LogKey
   case object BACKUP_FILE extends LogKey
   case object BARRIER_EPOCH extends LogKey
@@ -226,6 +231,7 @@ object LogKeys {
   case object EXECUTOR_SHUFFLE_INFO extends LogKey
   case object EXECUTOR_STATE extends LogKey
   case object EXECUTOR_TIMEOUT extends LogKey
+  case object EXECUTOR_USER_CLASS_PATH_FIRST extends LogKey
   case object EXEC_AMOUNT extends LogKey
   case object EXISTING_FILE extends LogKey
   case object EXISTING_PATH extends LogKey
@@ -283,10 +289,12 @@ object LogKeys {
   case object HIVE_OPERATION_TYPE extends LogKey
   case object HOST extends LogKey
   case object HOST_LOCAL_BLOCKS_SIZE extends LogKey
+  case object HOST_NAME extends LogKey
   case object HOST_NAMES extends LogKey
   case object HOST_PORT extends LogKey
   case object HOST_PORT2 extends LogKey
   case object HUGE_METHOD_LIMIT extends LogKey
+  case object HYBRID_STORE_DISK_BACKEND extends LogKey
   case object IDENTIFIER extends LogKey
   case object INCOMPATIBLE_TYPES extends LogKey
   case object INDEX extends LogKey
@@ -359,6 +367,7 @@ object LogKeys {
   case object MAX_METHOD_CODE_SIZE extends LogKey
   case object MAX_NUM_BINS extends LogKey
   case object MAX_NUM_CHUNKS extends LogKey
+  case object MAX_NUM_FILES extends LogKey
   case object MAX_NUM_LOG_POLICY extends LogKey
   case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_POSSIBLE_BINS extends LogKey
@@ -481,6 +490,7 @@ object LogKeys {
   case object NUM_PRUNED extends LogKey
   case object NUM_PUSH_MERGED_LOCAL_BLOCKS extends LogKey
   case object NUM_RECORDS_READ extends LogKey
+  case object NUM_RELEASED_LOCKS extends LogKey
   case object NUM_REMAINED extends LogKey
   case object NUM_REMOTE_BLOCKS extends LogKey
   case object NUM_REMOVED_WORKERS extends LogKey
@@ -599,11 +609,13 @@ object LogKeys {
   case object RECOVERY_STATE extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
+  case object REGEX extends LogKey
   case object REGISTERED_EXECUTOR_FILE extends LogKey
   case object REGISTER_MERGE_RESULTS extends LogKey
   case object RELATION_NAME extends LogKey
   case object RELATION_OUTPUT extends LogKey
   case object RELATIVE_TOLERANCE extends LogKey
+  case object RELEASED_LOCKS extends LogKey
   case object REMAINING_PARTITIONS extends LogKey
   case object REMOTE_ADDRESS extends LogKey
   case object REMOTE_BLOCKS_SIZE extends LogKey
@@ -721,6 +733,7 @@ object LogKeys {
   case object TASK_LOCALITY extends LogKey
   case object TASK_NAME extends LogKey
   case object TASK_REQUIREMENTS extends LogKey
+  case object TASK_RESOURCES extends LogKey
   case object TASK_RESOURCE_ASSIGNMENTS extends LogKey
   case object TASK_SET_ID extends LogKey
   case object TASK_SET_MANAGER extends LogKey
@@ -777,6 +790,7 @@ object LogKeys {
   case object URIS extends LogKey
   case object URL extends LogKey
   case object URL2 extends LogKey
+  case object URLS extends LogKey
   case object USER_ID extends LogKey
   case object USER_NAME extends LogKey
   case object UUID extends LogKey
