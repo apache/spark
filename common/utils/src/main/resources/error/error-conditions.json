@@ -2798,12 +2798,6 @@
     ],
     "sqlState" : "42601"
   },
-  "STATE_STORE_INVALID_PROVIDER" : {
-    "message" : [
-      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
-    ],
-    "sqlState" : "42K06"
-  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
@@ -3712,6 +3706,12 @@
       "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_INVALID_PROVIDER" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
