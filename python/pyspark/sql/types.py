@@ -280,26 +280,13 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
     providerSpark = "spark"
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
+    def __init__(self, collation: str = "UTF8_BINARY"):
         self.typeName = self._type_name  # type: ignore[method-assign]
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -312,7 +299,7 @@ class StringType(AtomicType):
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collationIdToName(self.collationId)}"
+        return f"string collate ${self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
@@ -322,13 +309,11 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collationId == 0
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -1046,7 +1031,7 @@ class StructField(DataType):
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        collationName = StringType.collationIdToName(dt.collationId)
+        collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
 
@@ -1783,19 +1768,6 @@ _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
-
-
-def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
-    assert isinstance(d, (DataType, StructField))
-    if isinstance(d, StructField):
-        return StructField(d.name, _drop_metadata(d.dataType), d.nullable, None)
-    elif isinstance(d, StructType):
-        return StructType([cast(StructField, _drop_metadata(f)) for f in d.fields])
-    elif isinstance(d, ArrayType):
-        return ArrayType(_drop_metadata(d.elementType), d.containsNull)
-    elif isinstance(d, MapType):
-        return MapType(_drop_metadata(d.keyType), _drop_metadata(d.valueType), d.valueContainsNull)
-    return d
 
 
 def _parse_datatype_string(s: str) -> DataType:

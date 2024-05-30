@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -30,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
@@ -152,7 +152,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       exception = intercept[SparkException] { sql("select 'aaa' collate UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS"))
   }
 
   test("disable bucketing on collated string column") {
@@ -769,37 +769,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("hash based joins not allowed for non-binary collated strings") {
-    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
-
-    val schema = StructType(StructField(
-      "col_non_binary",
-      StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))) ::
-      StructField("col_binary", StringType) :: Nil)
-    val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
-
-    // Binary collations are allowed to use hash join.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
-        .queryExecution.executedPlan) {
-      case _: BroadcastHashJoinExec => ()
-    }.nonEmpty)
-
-    // Even with hint broadcast, hash join is not used for non-binary collated strings.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-        .queryExecution.executedPlan) {
-      case _: BroadcastHashJoinExec => ()
-    }.isEmpty)
-
-    // Instead they will default to sort merge join.
-    assert(collectFirst(
-      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
-        .queryExecution.executedPlan) {
-      case _: SortMergeJoinExec => ()
-    }.nonEmpty)
-  }
-
   test("Generated column expressions using collations - errors out") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -1028,6 +997,135 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
       checkAnswer(dfNonBinary, dfBinary)
     }
+  }
+
+  test("hash join should be used for collated strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY", Seq(Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UNICODE", Seq(Row("aa", 1, "aa", 2))),
+      HashJoinTestCase("UNICODE_CI", Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x STRING COLLATE ${t.collation}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES ('aa', 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRING COLLATE ${t.collation}, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES ('AA', 2), ('aa', 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.isEmpty
+        )
+
+        // if collation doesn't support binary equality, collation key should be injected
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(collectFirst(queryPlan) {
+            case b: HashJoin => b.leftKeys.head
+          }.head.isInstanceOf[CollationKey])
+        }
+      }
+    })
+  }
+
+  test("rewrite with collationkey should be an excludable rule") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+    val collation = "UTF8_BINARY_LCASE"
+    val collationRewriteJoinRule = "org.apache.spark.sql.catalyst.analysis.RewriteCollationJoin"
+    withTable(t1, t2) {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> collationRewriteJoinRule) {
+        sql(s"CREATE TABLE $t1 (x STRING COLLATE $collation, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES ('aa', 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRING COLLATE $collation, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES ('AA', 2), ('aa', 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, Seq(Row("aa", 1, "AA", 2), Row("aa", 1, "aa", 2)))
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that shuffle join is used instead of hash join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.isEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.nonEmpty
+        )
+      }
+    }
+  }
+
+  test("rewrite with collationkey shouldn't disrupt multiple join conditions") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashMultiJoinTestCase[R](
+      type1: String,
+      type2: String,
+      data1: String,
+      data2: String,
+      result: R
+    )
+    val testCases = Seq(
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "INT",
+        "'a', 0, 1", "'a', 0, 1", Row("a", 0, 1, "a", 0, 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_BINARY",
+        "'a', 'a', 1", "'a', 'a', 1", Row("a", "a", 1, "a", "a", 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_BINARY_LCASE",
+        "'a', 'a', 1", "'a', 'A', 1", Row("a", "a", 1, "a", "A", 1)),
+      HashMultiJoinTestCase("STRING COLLATE UTF8_BINARY_LCASE", "STRING COLLATE UNICODE_CI",
+        "'a', 'a', 1", "'A', 'A', 1", Row("a", "a", 1, "A", "A", 1))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x ${t.type1}, y ${t.type2}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (${t.data1})")
+        sql(s"CREATE TABLE $t2 (x ${t.type1}, y ${t.type2}, i int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (${t.data2})")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.x AND $t1.y = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: SortMergeJoinExec => ()
+          }.isEmpty
+        )
+      }
+    })
   }
 
   test("hll sketch aggregate should respect collation") {
