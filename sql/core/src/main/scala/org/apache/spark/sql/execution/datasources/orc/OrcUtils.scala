@@ -62,10 +62,10 @@ object OrcUtils extends Logging {
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
-    // TODO: Check if the paths coming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
     val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
+      .filterNot(_.isDirectory)
       .map(_.getPath)
       .filterNot(_.getName.startsWith("_"))
       .filterNot(_.getName.startsWith("."))

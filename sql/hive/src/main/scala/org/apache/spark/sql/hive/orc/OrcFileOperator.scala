@@ -24,11 +24,11 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -72,7 +72,7 @@ private[hive] object OrcFileOperator extends Logging {
       hdfsPath.getFileSystem(conf)
     }
 
-    OrcUtils.listOrcFiles(basePath, conf).iterator.map { path =>
+    listOrcFiles(basePath, conf).iterator.map { path =>
       val reader = try {
         Some(OrcFile.createReader(fs, path))
       } catch {
@@ -124,5 +124,17 @@ private[hive] object OrcFileOperator extends Logging {
   def getObjectInspector(
       path: String, conf: Option[Configuration]): Option[StructObjectInspector] = {
     getFileReader(path, conf).map(_.getObjectInspector.asInstanceOf[StructObjectInspector])
+  }
+
+  def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
+    // TODO: Check if the paths coming in are already qualified and simplify.
+    val origPath = new Path(pathStr)
+    val fs = origPath.getFileSystem(conf)
+    val paths = SparkHadoopUtil.get.listLeafStatuses(fs, origPath)
+      .filterNot(_.isDirectory)
+      .map(_.getPath)
+      .filterNot(_.getName.startsWith("_"))
+      .filterNot(_.getName.startsWith("."))
+    paths
   }
 }
