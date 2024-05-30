@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.types
 
+import scala.collection.mutable
+
+import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.util.{QuotingUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -63,7 +67,61 @@ case class StructField(
     ("name" -> name) ~
       ("type" -> dataType.jsonValue) ~
       ("nullable" -> nullable) ~
-      ("metadata" -> metadata.jsonValue)
+      ("metadata" -> metadataJson)
+  }
+
+  private def metadataJson: JValue = {
+    val metadataJsonValue = metadata.jsonValue
+    metadataJsonValue match {
+      case JObject(fields) if collationMetadata.nonEmpty =>
+        val collationFields = collationMetadata.map(kv => kv._1 -> JString(kv._2)).toList
+        JObject(fields :+ (DataType.COLLATIONS_METADATA_KEY -> JObject(collationFields)))
+
+      case _ => metadataJsonValue
+    }
+  }
+
+  /** Map of field path to collation name. */
+  private lazy val collationMetadata: Map[String, String] = {
+    val fieldToCollationMap = mutable.Map[String, String]()
+
+    def visitRecursively(dt: DataType, path: String): Unit = dt match {
+      case at: ArrayType =>
+        processDataType(at.elementType, path + ".element")
+
+      case mt: MapType =>
+        processDataType(mt.keyType, path + ".key")
+        processDataType(mt.valueType, path + ".value")
+
+      case st: StringType if isCollatedString(st) =>
+        fieldToCollationMap(path) = schemaCollationValue(st)
+
+      case _ =>
+    }
+
+    def processDataType(dt: DataType, path: String): Unit = {
+      if (isCollatedString(dt)) {
+        fieldToCollationMap(path) = schemaCollationValue(dt)
+      } else {
+        visitRecursively(dt, path)
+      }
+    }
+
+    visitRecursively(dataType, name)
+    fieldToCollationMap.toMap
+  }
+
+  private def isCollatedString(dt: DataType): Boolean = dt match {
+    case st: StringType => !st.isUTF8BinaryCollation
+    case _ => false
+  }
+
+  private def schemaCollationValue(dt: DataType): String = dt match {
+    case st: StringType =>
+      val collation = CollationFactory.fetchCollation(st.collationId)
+      collation.identifier().toStringWithoutVersion()
+    case _ =>
+      throw SparkException.internalError(s"Unexpected data type $dt")
   }
 
   /**

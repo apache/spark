@@ -1651,7 +1651,7 @@ abstract class AvroSuite
           errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
           parameters = Map(
             "columnName" -> "`testType()`",
-            "columnType" -> "\"INTERVAL\"",
+            "columnType" -> "UDT(\"INTERVAL\")",
             "format" -> "Avro")
         )
       }

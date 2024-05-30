@@ -61,7 +61,7 @@ from pyspark.sql.types import (
 )
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.types import (
+from pyspark.util import (
     JVM_BYTE_MIN,
     JVM_BYTE_MAX,
     JVM_SHORT_MIN,
@@ -70,6 +70,8 @@ from pyspark.sql.connect.types import (
     JVM_INT_MAX,
     JVM_LONG_MIN,
     JVM_LONG_MAX,
+)
+from pyspark.sql.connect.types import (
     UnparsedDataType,
     pyspark_types_to_proto_types,
     proto_schema_to_pyspark_data_type,
@@ -848,6 +850,7 @@ class CastExpression(Expression):
     ) -> None:
         super().__init__()
         self._expr = expr
+        assert isinstance(data_type, (DataType, str))
         self._data_type = data_type
         if eval_mode is not None:
             assert isinstance(eval_mode, str)
@@ -873,7 +876,18 @@ class CastExpression(Expression):
         return fun
 
     def __repr__(self) -> str:
-        return f"({self._expr} ({self._data_type}))"
+        # We cannot guarantee the string representations be exactly the same, e.g.
+        # str(sf.col("a").cast("long")):
+        #   Column<'CAST(a AS BIGINT)'>     <- Spark Classic
+        #   Column<'CAST(a AS LONG)'>       <- Spark Connect
+        if isinstance(self._data_type, DataType):
+            str_data_type = self._data_type.simpleString().upper()
+        else:
+            str_data_type = str(self._data_type).upper()
+        if self._eval_mode is not None and self._eval_mode == "try":
+            return f"TRY_CAST({self._expr} AS {str_data_type})"
+        else:
+            return f"CAST({self._expr} AS {str_data_type})"
 
 
 class UnresolvedNamedLambdaVariable(Expression):

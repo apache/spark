@@ -111,12 +111,15 @@ each line consists of a key and a value separated by whitespace. For example:
     spark.eventLog.enabled  true
     spark.serializer        org.apache.spark.serializer.KryoSerializer
 
+In addition, a property file with Spark configurations can be passed to `bin/spark-submit` via
+the `--properties-file` parameter.
+
 Any values specified as flags or in the properties file will be passed on to the application
 and merged with those specified through SparkConf. Properties set directly on the SparkConf
-take highest precedence, then flags passed to `spark-submit` or `spark-shell`, then options
-in the `spark-defaults.conf` file. A few configuration keys have been renamed since earlier
-versions of Spark; in such cases, the older key names are still accepted, but take lower
-precedence than any instance of the newer key.
+take the highest precedence, then those through `--conf` flags or `--properties-file` passed to
+`spark-submit` or `spark-shell`, then options in the `spark-defaults.conf` file. A few
+configuration keys have been renamed since earlier versions of Spark; in such cases, the older
+key names are still accepted, but take lower precedence than any instance of the newer key.
 
 Spark properties mainly can be divided into two kinds: one is related to deploy, like
 "spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
@@ -1796,6 +1799,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.checkpoint.dir</code></td>
+  <td>(none)</td>
+  <td>
+    Set the default directory for checkpointing. It can be overwritten by
+    SparkContext.setCheckpointDir.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.checkpoint.compress</code></td>
   <td>false</td>
   <td>
@@ -3387,7 +3399,7 @@ Spark subsystems.
 
 Runtime SQL configurations are per-session, mutable Spark SQL configurations. They can be set with initial values by the config file
 and command-line options with `--conf/-c` prefixed, or by setting `SparkConf` that are used to create `SparkSession`.
-Also, they can be set and queried by SET commands and rest to their initial values by RESET command,
+Also, they can be set and queried by SET commands and reset to their initial values by RESET command,
 or by `SparkSession.conf`'s setter and getter methods in runtime.
 
 {% include_api_gen generated-runtime-sql-config-table.html %}

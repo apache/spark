@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -70,8 +71,8 @@ import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -94,7 +95,7 @@ public class HiveSessionImpl implements HiveSession {
   private String ipAddress;
   private static final String FETCH_WORK_SERDE_CLASS =
       "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
-  private static final Logger LOG = LoggerFactory.getLogger(HiveSessionImpl.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveSessionImpl.class);
   private SessionManager sessionManager;
   private OperationManager operationManager;
   private final Set<OperationHandle> opHandleSet = new HashSet<OperationHandle>();
@@ -171,7 +172,7 @@ public class HiveSessionImpl implements HiveSession {
       FileInputStream initStream = null;
       BufferedReader bufferedReader = null;
       initStream = new FileInputStream(fileName);
-      bufferedReader = new BufferedReader(new InputStreamReader(initStream));
+      bufferedReader = new BufferedReader(new InputStreamReader(initStream, StandardCharsets.UTF_8));
       return bufferedReader;
     }
 

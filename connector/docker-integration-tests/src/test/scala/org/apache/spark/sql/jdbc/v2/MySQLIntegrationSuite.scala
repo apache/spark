@@ -73,6 +73,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     connection.prepareStatement(
       "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
         " bonus DOUBLE)").executeUpdate()
+    connection.prepareStatement(
+      s"""CREATE TABLE pattern_testing_table (
+         |pattern_testing_col LONGTEXT
+         |)
+                   """.stripMargin
+    ).executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {

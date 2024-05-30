@@ -32,8 +32,8 @@ import javax.security.sasl.SaslException;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
 
@@ -43,7 +43,7 @@ import static org.apache.spark.network.sasl.SparkSaslServer.*;
  * firstToken, which is then followed by a set of challenges and responses.
  */
 public class SparkSaslClient implements SaslEncryptionBackend {
-  private static final Logger logger = LoggerFactory.getLogger(SparkSaslClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SparkSaslClient.class);
 
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
