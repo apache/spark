@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, RepartitionOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionOperation, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, REPARTITION_OPERATION, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
