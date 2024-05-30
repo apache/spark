@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
