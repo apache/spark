@@ -24,8 +24,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import com.codahale.metrics.MetricSet;
+import com.google.common.base.Preconditions;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -35,8 +40,10 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.sasl.SaslTimeoutException;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -45,6 +52,10 @@ import org.apache.spark.network.util.TransportConf;
  */
 public abstract class BlockStoreClient implements Closeable {
   protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
+
+  private static final ScheduledExecutorService scheduledExecutor =
+          Executors.newScheduledThreadPool(16,
+                  NettyUtils.createThreadFactory("Block Store Client Retry"));
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -161,6 +172,22 @@ public abstract class BlockStoreClient implements Closeable {
       String[] execIds,
       CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     checkInit();
+    int maxRetries = transportConf.maxIORetries();
+    int retryWaitTime = transportConf.ioRetryWaitTimeMs();
+    boolean enableSaslRetries = transportConf.enableSaslRetries();
+    retry(0, 0, maxRetries, enableSaslRetries, retryWaitTime, () -> {
+      CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
+              new CompletableFuture<>();
+      getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
+      return tempHostLocalDirsCompletable;
+    }, hostLocalDirsCompletable);
+  }
+
+  private void getHostLocalDirsInternal(
+      String host,
+      int port,
+      String[] execIds,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -188,6 +215,52 @@ public abstract class BlockStoreClient implements Closeable {
     } catch (IOException | InterruptedException e) {
       hostLocalDirsCompletable.completeExceptionally(e);
     }
+  }
+
+  private <T> void retry(
+      final int retryCountValue,
+      final int saslRetryCountValue,
+      final int maxRetries,
+      final boolean enableSaslRetries,
+      int delayMs,
+      Supplier<CompletableFuture<T>> action,
+      CompletableFuture<T> future) {
+    action.get()
+            .thenAccept(future::complete)
+            .exceptionally(e -> {
+              int retryCount = retryCountValue;
+              int saslRetryCount = saslRetryCountValue;
+              boolean isIOException = e instanceof IOException
+                      || (e.getCause() != null && e.getCause() instanceof IOException);
+              boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+              if (!isSaslTimeout && saslRetryCount > 0) {
+                Preconditions.checkState(retryCount >= saslRetryCount,
+                        "retryCount must be greater than or equal to saslRetryCount");
+                retryCount -= saslRetryCount;
+                saslRetryCount = 0;
+              }
+              boolean hasRemainingRetries = retryCount < maxRetries;
+              boolean shouldRetry = (isSaslTimeout || isIOException) &&
+                      hasRemainingRetries;
+              if (!shouldRetry) {
+                future.completeExceptionally(e);
+              } else {
+                if (enableSaslRetries && e instanceof SaslTimeoutException) {
+                  saslRetryCount += 1;
+                }
+                retryCount += 1;
+                int finalRetryCount = retryCount;
+                int finalSaslRetryCount = saslRetryCount;
+                logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
+                        MDC.of(LogKeys.NUM_RETRY$.MODULE$, finalRetryCount),
+                        MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
+                        MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, delayMs));
+                scheduledExecutor.schedule(() ->
+                        retry(finalRetryCount, finalSaslRetryCount, maxRetries, enableSaslRetries,
+                        delayMs, action, future), delayMs, TimeUnit.MILLISECONDS);
+              }
+              return null;
+            });
   }
 
   /**
