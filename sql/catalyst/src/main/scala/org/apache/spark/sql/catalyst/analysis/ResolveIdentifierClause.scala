@@ -20,19 +20,24 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
 import org.apache.spark.sql.types.StringType
 
 /**
  * Resolves the identifier expressions and builds the original plans/expressions.
  */
-object ResolveIdentifierClause extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
+class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch])
+  extends Rule[LogicalPlan] with AliasHelper with EvalHelper {
+
+  private val executor = new RuleExecutor[LogicalPlan] {
+    override def batches: Seq[Batch] = earlyBatches.asInstanceOf[Seq[Batch]]
+  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
     case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved =>
-      p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr))
+      executor.execute(p.planBuilder.apply(evalIdentifierExpr(p.identifierExpr)))
     case other =>
       other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
         case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>

@@ -2930,7 +2930,7 @@ object SparkContext extends Logging {
           log" constructor). This may indicate an error, since only one SparkContext should be" +
           log" running in this JVM (see SPARK-2243)." +
           log" The other SparkContext was created at:\n" +
-          log"${MDC(LogKeys.CONTEXT_CREATION_SITE, otherContextCreationSite)}"
+          log"${MDC(LogKeys.CREATION_SITE, otherContextCreationSite)}"
         logWarning(warnMsg)
       }
     }

@@ -57,7 +57,6 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.column import Column
     from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
@@ -412,43 +411,15 @@ def pyspark_column_op(
     Wrapper function for column_op to get proper Column class.
     """
     from pyspark.pandas.base import column_op
-    from pyspark.sql.column import Column as PySparkColumn
+    from pyspark.sql.column import Column
     from pyspark.pandas.data_type_ops.base import _is_extension_dtypes
 
-    if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
-        Column = ConnectColumn
-    else:
-        Column = PySparkColumn  # type: ignore[assignment]
     result = column_op(getattr(Column, func_name))(left, right)
     # It works as expected on extension dtype, so we don't need to call `fillna` for this case.
     if (fillna is not None) and (_is_extension_dtypes(left) or _is_extension_dtypes(right)):
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_column_class() -> Type["Column"]:
-    from pyspark.sql.column import Column as PySparkColumn
-
-    if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
-        return ConnectColumn
-    else:
-        return PySparkColumn
-
-
-def get_dataframe_class() -> Type["DataFrame"]:
-    from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
-
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        return ConnectDataFrame
-    else:
-        return PySparkDataFrame
 
 
 def get_window_class() -> Type["Window"]:

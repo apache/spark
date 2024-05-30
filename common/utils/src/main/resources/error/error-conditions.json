@@ -469,7 +469,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
+      "The value <collationName> does not represent a correct collation name."
     ],
     "sqlState" : "42704"
   },
@@ -1921,7 +1921,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+          "Cannot resolve the given default collation."
         ]
       },
       "TIME_ZONE" : {
@@ -8212,11 +8212,6 @@
   "_LEGACY_ERROR_TEMP_3246" : {
     "message" : [
       "Failed to parse a value for data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3250" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a field."
     ]
   },
   "_LEGACY_ERROR_TEMP_3260" : {

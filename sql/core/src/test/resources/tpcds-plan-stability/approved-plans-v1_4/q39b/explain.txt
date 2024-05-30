@@ -237,7 +237,7 @@ Input [5]: [w_warehouse_sk#32, i_item_sk#31, d_moy#35, stdev#46, mean#47]
 
 (41) BroadcastExchange
 Input [5]: [w_warehouse_sk#32, i_item_sk#31, d_moy#35, mean#47, cov#48]
-Arguments: HashedRelationBroadcastMode(List(((cast(input[1, int, true] as bigint) << 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [plan_id=5]
 
 (42) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [i_item_sk#6, w_warehouse_sk#7]

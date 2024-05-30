@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
@@ -124,7 +124,7 @@ private[spark] class OutputCommitCoordinator(
     stageStates.get(stage) match {
       case Some(state) =>
         require(state.authorizedCommitters.length == maxPartitionId + 1)
-        logInfo(s"Reusing state from previous attempt of stage $stage.")
+        logInfo(log"Reusing state from previous attempt of stage ${MDC(LogKeys.STAGE_ID, stage)}")
 
       case _ =>
         stageStates(stage) = new StageState(maxPartitionId + 1)
@@ -151,8 +151,10 @@ private[spark] class OutputCommitCoordinator(
       case Success =>
       // The task output has been committed successfully
       case _: TaskCommitDenied =>
-        logInfo(s"Task was denied committing, stage: $stage.$stageAttempt, " +
-          s"partition: $partition, attempt: $attemptNumber")
+        logInfo(log"Task was denied committing, stage: ${MDC(LogKeys.STAGE_ID, stage)}." +
+          log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)}, " +
+          log"partition: ${MDC(LogKeys.PARTITION_ID, partition)}, " +
+          log"attempt: ${MDC(LogKeys.NUM_ATTEMPT, attemptNumber)}")
       case _ =>
         // Mark the attempt as failed to exclude from future commit protocol
         val taskId = TaskIdentifier(stageAttempt, attemptNumber)
@@ -182,8 +184,10 @@ private[spark] class OutputCommitCoordinator(
       attemptNumber: Int): Boolean = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
-        logInfo(s"Commit denied for stage=$stage.$stageAttempt, partition=$partition: " +
-          s"task attempt $attemptNumber already marked as failed.")
+        logInfo(log"Commit denied for stage=${MDC(LogKeys.STAGE_ID, stage)}." +
+          log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)}, partition=" +
+          log"${MDC(LogKeys.PARTITION_ID, partition)}: task attempt " +
+          log"${MDC(LogKeys.NUM_ATTEMPT, attemptNumber)} already marked as failed.")
         false
       case Some(state) =>
         val existing = state.authorizedCommitters(partition)
