@@ -17,39 +17,27 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CollationKey}
-import org.apache.spark.sql.catalyst.expressions.aggregate.First
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationKey}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 import org.apache.spark.sql.types.StringType
 
 object RewriteGroupByCollation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case a: Aggregate if a.aggregateExpressions.forall(e => isBinaryStable(e.dataType)) =>
-      val aliasMap = a.groupingExpressions.collect {
+    case a: Aggregate if canRewriteAggregateCollation(a) =>
+
+      val newGroupingExpressions = a.groupingExpressions.map {
         case attr: AttributeReference if attr.dataType.isInstanceOf[StringType] &&
           !CollationFactory.fetchCollation(
             attr.dataType.asInstanceOf[StringType].collationId).supportsBinaryEquality =>
-          attr -> CollationKey(attr)
-      }.toMap
-
-      val newGroupingExpressions = a.groupingExpressions.map {
-        case attr: AttributeReference if aliasMap.contains(attr) =>
-          aliasMap(attr)
-        case other => other
-      }
-
-      val newAggregateExpressions = a.aggregateExpressions.map {
-        case attr: AttributeReference if aliasMap.contains(attr) =>
-          Alias(First(attr, ignoreNulls = false).toAggregateExpression(), attr.name)()
+          CollationKey(attr)
         case other => other
       }
 
       val newAggregate = a.copy(
         groupingExpressions = newGroupingExpressions,
-        aggregateExpressions = newAggregateExpressions
+        aggregateExpressions = a.aggregateExpressions
       )
 
       if (!newAggregate.fastEquals(a)) {
@@ -58,4 +46,12 @@ object RewriteGroupByCollation extends Rule[LogicalPlan] {
         (a, a.output.zip(a.output))
       }
   }
+
+  private def canRewriteAggregateCollation(aggregate: Aggregate): Boolean = {
+    // This rewrite rule is used to enabled hash aggregation on collated string columns. However,
+    // hash aggregation is currently only supported for grouping aggregations - this means that no
+    // string type can be found in the aggregate expressions, so we avoid rewrite in this case.
+    !aggregate.aggregateExpressions.exists(e => e.dataType.isInstanceOf[StringType])
+  }
+
 }
