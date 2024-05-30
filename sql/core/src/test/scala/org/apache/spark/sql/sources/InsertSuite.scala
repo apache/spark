@@ -955,8 +955,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
       val msg = intercept[SparkException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getCause.getMessage
-      assert(msg.contains("Null value appeared in non-nullable field"))
+      }
+      assert(msg.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

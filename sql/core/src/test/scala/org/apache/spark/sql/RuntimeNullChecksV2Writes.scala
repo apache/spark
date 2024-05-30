@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
@@ -56,7 +56,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
     withTable("t") {
       sql(s"CREATE TABLE t (s STRING, i INT NOT NULL) USING $FORMAT")
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql("SELECT 'txt' AS s, null AS i")
           inputDF.writeTo("t").append()
@@ -64,7 +64,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
           sql("INSERT INTO t VALUES ('txt', null)")
         }
       }
-      assertNotNullException(e, Seq("i"))
+      assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
@@ -404,6 +404,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
 
   private def assertNotNullException(e: SparkException, colPath: Seq[String]): Unit = {
     e.getCause match {
+      case _ if e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION" =>
       case npe: NullPointerException =>
         assert(npe.getMessage.contains("Null value appeared in non-nullable field"))
         assert(npe.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
