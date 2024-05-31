@@ -318,7 +318,7 @@ public class CollationAwareUTF8String {
     return UCharacter.toLowerCase(locale, target);
   }
 
-  private final static int COMBINED_LOWERCASE_I_DOT = 0x69 << 16 | 0x307;
+  private static final int COMBINED_LOWERCASE_I_DOT = 0x69 << 16 | 0x307;
   private static int getLowercaseCodePoint(final int codePoint) {
     if (codePoint == 0x0130) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
