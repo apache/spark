@@ -328,16 +328,19 @@ private[spark] object TaskMetrics extends Logging {
    */
   def fromAccumulators(accums: Seq[AccumulatorV2[_, _]]): TaskMetrics = {
     val tm = new TaskMetrics
+    val externalAccums = new java.util.ArrayList[AccumulatorV2[Any, Any]]()
     for (acc <- accums) {
       val name = acc.name
+      val tmpAcc = acc.asInstanceOf[AccumulatorV2[Any, Any]]
       if (name.isDefined && tm.nameToAccums.contains(name.get)) {
         val tmAcc = tm.nameToAccums(name.get).asInstanceOf[AccumulatorV2[Any, Any]]
         tmAcc.metadata = acc.metadata
-        tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
+        tmAcc.merge(tmpAcc)
       } else {
-        tm._externalAccums.add(acc)
+        externalAccums.add(tmpAcc)
       }
     }
+    tm._externalAccums.addAll(externalAccums)
     tm
   }
 }
