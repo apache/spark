@@ -45,8 +45,8 @@ case class TextScan(
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
 
-  private def verifySchema(schema: StructType): Unit = {
-    if (schema.size != 1) {
+  private def verifyReadSchema(schema: StructType): Unit = {
+    if (schema.size > 1) {
       throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
     }
   }
@@ -65,7 +65,7 @@ case class TextScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    verifySchema(readDataSchema)
+    verifyReadSchema(readDataSchema)
     val hadoopConf = {
       val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
       // Hadoop Configurations are case sensitive.
