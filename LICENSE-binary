@@ -447,8 +447,9 @@ org.antlr:antlr4-runtime
 org.codehaus.janino:commons-compiler
 org.codehaus.janino:janino
 org.fusesource.leveldbjni:leveldbjni-all
-org.threeten:threeten-extra
 org.jline:jline
+org.jpmml:pmml-model
+org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
