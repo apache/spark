@@ -1113,9 +1113,30 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-48392: Allow both spark-defaults.conf and properties file") {
-    forConfDir(Map("spark.executor.memory" -> "3g")) { path =>
-      withPropertyFile("spark-conf.properties", Map("spark.executor.cores" -> "16")) { propsFile =>
+  test("SPARK-48392: load spark-defaults.conf when --extra-properties-files is set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+          Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          "--extra-properties-files",
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.executorMemory should be("3g")
+        appArgs.driverMemory should be("4g")
+      }
+    }
+  }
+
+  test("SPARK-48392: should skip spark-defaults.conf when --extra-properties-files is not set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+        Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
         val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
         val args = Seq(
           "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
@@ -1124,8 +1145,9 @@ class SparkSubmitSuite
           "--properties-file", propsFile,
           unusedJar.toString)
         val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
-        appArgs.executorMemory should be("3g")
         appArgs.executorCores should be("16")
+        appArgs.driverMemory should be("4g")
+        appArgs.executorMemory should be(null)
       }
     }
   }
