@@ -483,8 +483,10 @@ public final class CollationSupport {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality) {
         return execBinary(source, dict);
+      } else if (collation.supportsLowercaseEquality) {
+        return execLowercase(source, dict);
       } else {
-        return execNonBinary(source, dict, collationId);
+        return execICU(source, dict, collationId);
       }
     }
     public static String genCode(final String source, final String dict, final int collationId) {
@@ -492,14 +494,19 @@ public final class CollationSupport {
       String expr = "CollationSupport.EndsWith.exec";
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", source, dict);
-      } else {
-        return String.format(expr + "NonBinary(%s, %s, %d)", source, dict, collationId);
+      } else if (collation.supportsLowercaseEquality) {
+        return String.format(expr + "Lowercase(%s, %s)", source, dict);
+      }  else {
+        return String.format(expr + "ICU(%s, %s, %d)", source, dict, collationId);
       }
     }
     public static UTF8String execBinary(final UTF8String source, Map<String, String> dict) {
       return source.translate(dict);
     }
-    public static UTF8String execNonBinary(final UTF8String source, Map<String, String> dict,
+    public static UTF8String execLowercase(final UTF8String source, Map<String, String> dict) {
+      return CollationAwareUTF8String.lowercaseTranslate(source, dict);
+    }
+    public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
         final int collationId) {
       return CollationAwareUTF8String.translate(source, dict, collationId);
     }

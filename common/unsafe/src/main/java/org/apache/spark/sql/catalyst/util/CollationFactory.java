@@ -810,7 +810,7 @@ public final class CollationFactory {
     if (collation.supportsBinaryEquality) {
       return input;
     } else if (collation.supportsLowercaseEquality) {
-      return CollationAwareUTF8String.toLowerCase(input);
+      return input.toLowerCase();
     } else {
       CollationKey collationKey = collation.collator.getCollationKey(input);
       return Arrays.toString(collationKey.toByteArray());

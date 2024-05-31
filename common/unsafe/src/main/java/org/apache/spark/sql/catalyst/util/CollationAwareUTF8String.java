@@ -318,6 +318,22 @@ public class CollationAwareUTF8String {
     return UCharacter.toLowerCase(locale, target);
   }
 
+  private final static int COMBINED_LOWERCASE_I_DOT = 0x69 << 16 | 0x307;
+  private static int getLowercaseCodePoint(final int codePoint) {
+    if (codePoint == 0x0130) {
+      // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+      return COMBINED_LOWERCASE_I_DOT;
+    }
+    else if (codePoint == 0x03C2) {
+      // Greek final and non-final capital letter sigma should be mapped the same.
+      return 0x03C3;
+    }
+    else {
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      return UCharacter.toLowerCase(codePoint);
+    }
+  }
+
   public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
@@ -490,9 +506,18 @@ public class CollationAwareUTF8String {
     }
   }
 
+  private static Map<Integer, String> getLowercaseDict(final Map<String, String> dict) {
+    // Replace all the keys in the dict with lowercased code points.
+    Map<Integer, String> lowercaseDict = new HashMap<>();
+    for (Map.Entry<String, String> entry : dict.entrySet()) {
+      int codePoint = entry.getKey().codePointAt(0);
+      lowercaseDict.putIfAbsent(getLowercaseCodePoint(codePoint), entry.getValue());
+    }
+    return lowercaseDict;
+  }
   private static Map<String, String> getCollationAwareDict(final Map<String, String> dict,
       int collationId) {
-    // replace all the keys in the dict with collation keys
+    // Replace all the keys in the dict with collation keys.
     Map<String, String> collationAwareDict = new HashMap<>();
     for (Map.Entry<String, String> entry : dict.entrySet()) {
       String collationKey = CollationFactory.getCollationKey(entry.getKey(), collationId);
@@ -501,6 +526,21 @@ public class CollationAwareUTF8String {
     return collationAwareDict;
   }
 
+  private static String lowercaseTranslate(final String input, final Map<Integer, String> dict) {
+    StringBuilder sb = new StringBuilder();
+    int charCount = 0;
+    for (int k = 0; k < input.length(); k += charCount) {
+      int codePoint = input.codePointAt(k);
+      charCount = Character.charCount(codePoint);
+      String translated = dict.get(getLowercaseCodePoint(codePoint));
+      if (null == translated) {
+        sb.appendCodePoint(codePoint);
+      } else if (!"\0".equals(translated)) {
+        sb.append(translated);
+      }
+    }
+    return sb.toString();
+  }
   private static String translate(final String input, final Map<String, String> dict,
       final int collationId) {
     StringBuilder sb = new StringBuilder();
@@ -520,6 +560,11 @@ public class CollationAwareUTF8String {
     return sb.toString();
   }
 
+  public static UTF8String lowercaseTranslate(final UTF8String input,
+      final Map<String, String> dict) {
+    Map<Integer, String> lowercaseDict = getLowercaseDict(dict);
+    return UTF8String.fromString(lowercaseTranslate(input.toString(), lowercaseDict));
+  }
   public static UTF8String translate(final UTF8String input, final Map<String, String> dict,
     final int collationId) {
     Map<String, String> collationAwareDict = getCollationAwareDict(dict,collationId);
