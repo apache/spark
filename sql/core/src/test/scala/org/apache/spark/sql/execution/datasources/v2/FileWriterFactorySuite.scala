@@ -28,7 +28,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 class FileWriterFactorySuite extends SparkFunSuite with PrivateMethodTester {
 
-  test("SPARK-48484: V2Write use the different TaskAttemptId for different task attempts") {
+  test("SPARK-48484: V2Write uses different TaskAttemptIds for different task attempts") {
     val jobDescription = mock(classOf[WriteJobDescription])
     when(jobDescription.serializableHadoopConf).thenReturn(
       new SerializableConfiguration(new Configuration(false)))
