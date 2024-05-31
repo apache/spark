@@ -19,6 +19,7 @@ package org.apache.spark.internal
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.text.StringEscapeUtils
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -158,7 +159,7 @@ trait Logging {
         }
       }
 
-      MessageWithContext(sb.toString(), context)
+      MessageWithContext(StringEscapeUtils.unescapeJava(sb.toString()), context)
     }
   }
 

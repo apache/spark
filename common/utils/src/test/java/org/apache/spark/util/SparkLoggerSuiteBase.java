@@ -68,16 +68,17 @@ public abstract class SparkLoggerSuiteBase {
     }
   }
 
-  private String basicMsg() {
-    return "This is a log message";
-  }
+  private final String basicMsg = "This is a log message";
+
+  private final String basicMsgWithEscapeChar =
+    "This is a log message\nThis is a new line \t other msg";
 
   private final MDC executorIDMDC = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1");
   private final String msgWithMDC = "Lost executor {}.";
 
   private final MDC[] mdcs = new MDC[] {
-      MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1"),
-      MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
+    MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1"),
+    MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
   private final String msgWithMDCs = "Lost executor {}, reason: {}";
 
   private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
@@ -90,6 +91,9 @@ public abstract class SparkLoggerSuiteBase {
 
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
+
+  // test for basic message (with escape char)
+  abstract String expectedPatternForBasicMsgWithEscapeChar(Level level);
 
   // test for basic message and exception
   abstract String expectedPatternForBasicMsgWithException(Level level);
@@ -113,12 +117,12 @@ public abstract class SparkLoggerSuiteBase {
   abstract String expectedPatternForJavaCustomLogKey(Level level);
 
   @Test
-  public void testBasicMsgLogger() {
-    Runnable errorFn = () -> logger().error(basicMsg());
-    Runnable warnFn = () -> logger().warn(basicMsg());
-    Runnable infoFn = () -> logger().info(basicMsg());
-    Runnable debugFn = () -> logger().debug(basicMsg());
-    Runnable traceFn = () -> logger().trace(basicMsg());
+  public void testBasicMsg() {
+    Runnable errorFn = () -> logger().error(basicMsg);
+    Runnable warnFn = () -> logger().warn(basicMsg);
+    Runnable infoFn = () -> logger().info(basicMsg);
+    Runnable debugFn = () -> logger().debug(basicMsg);
+    Runnable traceFn = () -> logger().trace(basicMsg);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
@@ -129,13 +133,30 @@ public abstract class SparkLoggerSuiteBase {
   }
 
   @Test
+  public void testBasicMsgWithEscapeChar() {
+    Runnable errorFn = () -> logger().error(basicMsgWithEscapeChar);
+    Runnable warnFn = () -> logger().warn(basicMsgWithEscapeChar);
+    Runnable infoFn = () -> logger().info(basicMsgWithEscapeChar);
+    Runnable debugFn = () -> logger().debug(basicMsgWithEscapeChar);
+    Runnable traceFn = () -> logger().trace(basicMsgWithEscapeChar);
+    List.of(
+        Pair.of(Level.ERROR, errorFn),
+        Pair.of(Level.WARN, warnFn),
+        Pair.of(Level.INFO, infoFn),
+        Pair.of(Level.DEBUG, debugFn),
+        Pair.of(Level.TRACE, traceFn)).forEach(pair ->
+      checkLogOutput(pair.getLeft(), pair.getRight(),
+        this::expectedPatternForBasicMsgWithEscapeChar));
+  }
+
+  @Test
   public void testBasicLoggerWithException() {
     Throwable exception = new RuntimeException("OOM");
-    Runnable errorFn = () -> logger().error(basicMsg(), exception);
-    Runnable warnFn = () -> logger().warn(basicMsg(), exception);
-    Runnable infoFn = () -> logger().info(basicMsg(), exception);
-    Runnable debugFn = () -> logger().debug(basicMsg(), exception);
-    Runnable traceFn = () -> logger().trace(basicMsg(), exception);
+    Runnable errorFn = () -> logger().error(basicMsg, exception);
+    Runnable warnFn = () -> logger().warn(basicMsg, exception);
+    Runnable infoFn = () -> logger().info(basicMsg, exception);
+    Runnable debugFn = () -> logger().debug(basicMsg, exception);
+    Runnable traceFn = () -> logger().trace(basicMsg, exception);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
