@@ -50,7 +50,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
-  private var extraPropertiesFiles: Boolean = false
+  private var loadSparkDefaults: Boolean = false
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -137,8 +137,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
     // and --conf list when:
     //   - no input properties file is specified
-    //   - input properties file is specified, but `--extra-properties-files` flag is set
-    if (propertiesFile == null || extraPropertiesFiles) {
+    //   - input properties file is specified, but `--load-spark-defaults` flag is set
+    if (propertiesFile == null || loadSparkDefaults) {
       loadPropertiesFromFile(Utils.getDefaultPropertiesFile(env))
     }
   }
@@ -397,8 +397,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case PROPERTIES_FILE =>
         propertiesFile = value
 
-      case EXTRA_PROPERTIES_FILES =>
-        extraPropertiesFiles = true
+      case LOAD_SPARK_DEFAULTS =>
+        loadSparkDefaults = true
 
       case KILL_SUBMISSION =>
         submissionToKill = value
@@ -543,7 +543,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
-        |  --extra-properties-files    Whether to load properties from conf/spark-defaults.conf,
+        |  --load-spark-defaults       Whether to load properties from conf/spark-defaults.conf,
         |                              even if --properties-file is specified.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).

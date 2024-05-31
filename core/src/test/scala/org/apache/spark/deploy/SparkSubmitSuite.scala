@@ -1113,7 +1113,7 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-48392: load spark-defaults.conf when --extra-properties-files is set") {
+  test("SPARK-48392: load spark-defaults.conf when --load-spark-defaults is set") {
     forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
       withPropertyFile("spark-conf.properties",
           Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
@@ -1123,7 +1123,7 @@ class SparkSubmitSuite
           "--name", "testApp",
           "--master", "local",
           "--properties-file", propsFile,
-          "--extra-properties-files",
+          "--load-spark-defaults",
           unusedJar.toString)
         val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
         appArgs.executorCores should be("16")
@@ -1133,7 +1133,7 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-48392: should skip spark-defaults.conf when --extra-properties-files is not set") {
+  test("SPARK-48392: should skip spark-defaults.conf when --load-spark-defaults is not set") {
     forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
       withPropertyFile("spark-conf.properties",
         Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
