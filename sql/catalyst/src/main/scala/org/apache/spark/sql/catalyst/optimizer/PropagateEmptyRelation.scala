@@ -133,7 +133,9 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         p
       }
 
-    // Only replace a query stage if it would lead to a reduction of operators
+    // Only replace a query stage if it would lead to a reduction of operators. !p.isDirectStage
+    // means the physical node it contains is partial aggregate instead of QueryStageExec, which
+    // is exactly what we want to propagate empty relation.
     case p: LogicalQueryStage if isEmpty(p) && !p.isDirectStage => empty(p)
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmpty) => p match {
