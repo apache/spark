@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val testTempDir = Utils.createTempDir()
-  private val configsToRecover: Map[String, String] = HashMap()
+  private val configsToRecover: Map[String, String] = Map()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
