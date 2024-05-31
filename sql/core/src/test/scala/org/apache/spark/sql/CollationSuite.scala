@@ -1174,7 +1174,7 @@ class CollationSuite extends DatasourceV2SQLBase
         val dt = instanceLcase.dataType
 
         dt match {
-          case st: StringType =>
+          case st: StringType if st != null =>
             assert(resUtf8Binary.isInstanceOf[UTF8String])
             assert(resUtf8Lcase.isInstanceOf[UTF8String])
             // scalastyle:off caselocale
