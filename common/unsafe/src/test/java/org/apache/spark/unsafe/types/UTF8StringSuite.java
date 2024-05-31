@@ -290,7 +290,7 @@ public class UTF8StringSuite {
     assertEquals(-1, EMPTY_UTF8.indexOf(fromString("l"), 0));
     assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 0));
     assertEquals(2, fromString("hello").indexOf(EMPTY_UTF8, 2));
-    assertEquals(9, fromString("hello").indexOf(EMPTY_UTF8, 0));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 9));
     assertEquals(2, fromString("hello").indexOf(fromString("l"), 0));
     assertEquals(3, fromString("hello").indexOf(fromString("l"), 3));
     assertEquals(-1, fromString("hello").indexOf(fromString("a"), 0));
