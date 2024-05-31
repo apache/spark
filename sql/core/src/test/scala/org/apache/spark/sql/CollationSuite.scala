@@ -1036,9 +1036,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
+            case b: HashJoin => b.leftKeys.head
+          }.head.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
             case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
         }
@@ -1087,9 +1091,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.asInstanceOf[ArrayTransform].function.asInstanceOf[LambdaFunction].
+            function.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.isInstanceOf[ArrayTransform])
         }
@@ -1140,9 +1149,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.asInstanceOf[ArrayTransform].function.
+            asInstanceOf[LambdaFunction].function.asInstanceOf[ArrayTransform].function.
+            asInstanceOf[LambdaFunction].function.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
             case b: BroadcastHashJoinExec => b.leftKeys.head
           }.head.isInstanceOf[ArrayTransform])
         }
@@ -1178,7 +1193,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         val queryPlan = df.queryExecution.executedPlan
 
-        // confirm that hash join is used instead of sort merge join
+        // Confirm that hash join is used instead of sort merge join.
         assert(
           collectFirst(queryPlan) {
             case _: HashJoin => ()
@@ -1190,9 +1205,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(queryPlan.toString().contains("collationkey"))
+        } else {
+          assert(!queryPlan.toString().contains("collationkey"))
         }
       }
     })
@@ -1243,9 +1260,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(queryPlan.toString().contains("collationkey"))
+        } else {
+          assert(!queryPlan.toString().contains("collationkey"))
         }
       }
     })
@@ -1269,7 +1288,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         val queryPlan = df.queryExecution.executedPlan
 
-        // confirm that shuffle join is used instead of hash join
+        // confirm that sort merge join is used instead of hash join
         assert(
           collectFirst(queryPlan) {
             case _: HashJoin => ()
