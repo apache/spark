@@ -85,6 +85,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = false // used internally
 
+  override protected def logName: String = classOf[SparkSubmitArguments].getName
+
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
     val defaultProperties = new HashMap[String, String]()
