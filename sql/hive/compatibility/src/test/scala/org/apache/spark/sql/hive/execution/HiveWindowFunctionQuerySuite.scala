@@ -33,6 +33,7 @@ import org.apache.spark.util.Utils
  */
 class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   private val testTempDir = Utils.createTempDir()
+  private val configsToRecover: Map[String, String] = HashMap()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -86,17 +87,23 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     // The following settings are used for generating golden files with Hive.
     // We have to use kryo to correctly let Hive serialize plans with window functions.
     // This is used to generate golden files.
-    sql("set hive.plan.serialization.format=kryo")
-    // Explicitly set fs to local fs.
-    sql(s"set fs.defaultFS=file://$testTempDir/")
-    // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapreduce.jobtracker.address=local")
+    // Explicitly set fs to local fs by updating fs.defaultFS.
+    // Ask Hive to run jobs in-process as a single map and reduce task by
+    // updating mapreduce.jobtracker.address.
+    for ((config, value) <- Seq(("hive.plan.serialization.format", "kryo"),
+      ("fs.defaultFS", s"file://$testTempDir/"), ("mapreduce.jobtracker.address", "local"))) {
+      configsToRecover.put(confg, spark.conf.get(config))
+      spark.config.put(config, value)
+    }
   }
 
   override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
       TestHive.reset()
+      for ((config, value) <- configsToRecover) {
+        spark.config.put(config, value)
+      }
     } finally {
       super.afterAll()
     }
