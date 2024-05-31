@@ -100,7 +100,7 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  def message: String = StringEscapeUtils.unescapeJava(messageWithContext.message)
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
@@ -159,7 +159,7 @@ trait Logging {
         }
       }
 
-      MessageWithContext(StringEscapeUtils.unescapeJava(sb.toString()), context)
+      MessageWithContext(sb.toString(), context)
     }
   }
 
