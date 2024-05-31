@@ -1021,11 +1021,6 @@
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-jaxb-annotations</artifactId>
-        <version>${fasterxml.jackson.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.ws.xmlschema</groupId>
         <artifactId>xmlschema-core</artifactId>
         <version>${ws.xmlschema.version}</version>
