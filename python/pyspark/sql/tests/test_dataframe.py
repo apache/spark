@@ -258,7 +258,7 @@ class DataFrameTestsMixin:
         self.assertEqual(df.dropDuplicates().count(), 2)
 
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
-        # SPARK-xxxxx dropDuplicates also takes string argument
+        # SPARK-48482 dropDuplicates also takes string argument
         self.assertEqual(df.dropDuplicates("name").count(), 1)
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
