@@ -2021,6 +2021,11 @@
           "Delimiter cannot be empty string."
         ]
       },
+      "NULL_VALUE" : {
+        "message" : [
+          "Delimiter cannot be null."
+        ]
+      },
       "SINGLE_BACKSLASH" : {
         "message" : [
           "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
