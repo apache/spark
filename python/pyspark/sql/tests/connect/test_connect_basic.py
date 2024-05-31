@@ -657,6 +657,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
+        self.assert_eq(df.dropDuplicates("name").toPandas(), df2.dropDuplicates("name").toPandas())
 
     def test_drop(self):
         # SPARK-41169: test drop

@@ -1220,28 +1220,20 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
-
-        if subset is None:
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if not subset:
             jdf = self._jdf.dropDuplicates()
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            jdf = self._jdf.dropDuplicates(self._jseq(subset[0]))
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
-
-        if subset is None:
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset[0]))
         else:
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)

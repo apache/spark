@@ -408,16 +408,14 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
-
-        if subset is None:
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
+            )
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            return DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=subset[0]), session=self._session
             )
         else:
             return DataFrame(
@@ -426,16 +424,16 @@ class DataFrame(ParentDataFrame):
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
-
-        if subset is None:
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                session=self._session,
+            )
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            return DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=subset[0]),
+                within_watermark=True,
                 session=self._session,
             )
         else:
