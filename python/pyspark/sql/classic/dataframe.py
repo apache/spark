@@ -1229,6 +1229,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
+    drop_duplicates = dropDuplicates
+
     def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
         if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
@@ -1778,9 +1780,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         return self.groupBy(*cols)
-
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        return self.dropDuplicates(subset)
 
     def writeTo(self, table: str) -> DataFrameWriterV2:
         return DataFrameWriterV2(self, table)

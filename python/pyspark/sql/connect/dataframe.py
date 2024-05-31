@@ -415,7 +415,8 @@ class DataFrame(ParentDataFrame):
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset[0]), session=self._session
+                plan.Deduplicate(child=self._plan, column_names=tuple(subset[0])),
+                session=self._session,
             )
         else:
             return DataFrame(
@@ -432,8 +433,9 @@ class DataFrame(ParentDataFrame):
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset[0]),
-                within_watermark=True,
+                plan.Deduplicate(
+                    child=self._plan, column_names=tuple(subset[0]), within_watermark=True
+                ),
                 session=self._session,
             )
         else:

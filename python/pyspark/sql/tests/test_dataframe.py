@@ -258,11 +258,16 @@ class DataFrameTestsMixin:
         self.assertEqual(df.dropDuplicates().count(), 2)
 
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
+
+        self.assertEqual(df.drop_duplicates(["name"]).count(), 1)
+        self.assertEqual(df.drop_duplicates(["name", "age"]).count(), 2)
+
         # SPARK-48482 dropDuplicates also takes string argument
         self.assertEqual(df.dropDuplicates("name").count(), 1)
-
-        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
         self.assertEqual(df.dropDuplicates("name", "age").count(), 2)
+        self.assertEqual(df.drop_duplicates("name").count(), 1)
+        self.assertEqual(df.drop_duplicates("name", "age").count(), 2)
 
     def test_drop_duplicates_with_ambiguous_reference(self):
         df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
