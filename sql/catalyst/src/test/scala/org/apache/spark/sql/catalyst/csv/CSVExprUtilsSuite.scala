@@ -69,6 +69,16 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       parameters = Map.empty)
   }
 
+  test("output proper error message for null value") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
+
   val testCases = Table(
     ("input", "separatorStr", "expectedErrorMsg"),
     // normal tab
@@ -84,8 +94,6 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // tab in the middle of some other letters
     ("""ba\tr""", Some("ba\tr"), None),
     // null character, expressed in Unicode literal syntax
-    ("\u0000", Some("\u0000"), None),
-    // and specified directly
     ("\u0000", Some("\u0000"), None)
   )
 

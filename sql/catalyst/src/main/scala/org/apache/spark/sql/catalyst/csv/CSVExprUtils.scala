@@ -120,6 +120,10 @@ object CSVExprUtils {
    * @throws SparkIllegalArgumentException if any of the individual input chunks are illegal
    */
   def toDelimiterStr(str: String): String = {
+    if (str == null)  {
+      throw new SparkIllegalArgumentException("INVALID_DELIMITER_VALUE.NULL_VALUE")
+    }
+
     var idx = 0
 
     var delimiter = ""
