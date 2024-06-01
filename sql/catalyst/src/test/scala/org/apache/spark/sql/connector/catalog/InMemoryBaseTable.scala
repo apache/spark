@@ -186,7 +186,7 @@ abstract class InMemoryBaseTable(
         )
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
-        ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
+        Math.abs(valueHashCode + 31 * dataTypeHashCode) % numBuckets
       case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
