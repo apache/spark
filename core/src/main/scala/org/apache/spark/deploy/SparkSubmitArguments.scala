@@ -544,7 +544,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
         |  --load-spark-defaults       Whether to load properties from conf/spark-defaults.conf,
-        |                              even if --properties-file is specified.
+        |                              even if --properties-file is specified. Configurations
+        |                              specified in --properties-file will take precedence over
+        |                              those in conf/spark-defaults.conf.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
         |  --driver-java-options       Extra Java options to pass to the driver.
