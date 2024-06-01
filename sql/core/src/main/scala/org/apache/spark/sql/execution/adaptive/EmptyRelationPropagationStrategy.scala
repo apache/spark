@@ -21,7 +21,6 @@ import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.EmptyRelationPlanLater
-import org.apache.spark.sql.execution.PlanLater
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
