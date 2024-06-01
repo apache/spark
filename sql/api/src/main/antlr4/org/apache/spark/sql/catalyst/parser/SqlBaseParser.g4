@@ -832,7 +832,7 @@ relationPrimary
     ;
 
 optionsClause
-    : WITH options=propertyList?
+    : WITH options=propertyList
     ;
 
 inlineTable

@@ -3530,12 +3530,6 @@ class DataSourceV2SQLSuiteV1Filter
       assert (collected.size == 1)
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
-      // negative tests
-      val noArgs = intercept[AnalysisException](
-        sql(s"SELECT * FROM $t1 WITH"))
-      assert(noArgs.message.contains(
-        "Invalid options: No options specified."))
-
       val noValues = intercept[AnalysisException](
         sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
       assert(noValues.message.contains(
