@@ -562,7 +562,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.4.8</version>
+        <version>1.6.4</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
