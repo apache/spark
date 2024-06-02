@@ -409,23 +409,30 @@ class DataFrame(ParentDataFrame):
             )
 
     def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if len(subset) > 0:
+            assert all(isinstance(c, str) for c in subset)
+
         if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=tuple(subset[0])),
+                plan.Deduplicate(child=self._plan, column_names=subset[0]),
                 session=self._session,
             )
         else:
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
+                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
+                session=self._session,
             )
 
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if len(subset) > 0:
+            assert all(isinstance(c, str) for c in subset)
+
         if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
@@ -433,14 +440,16 @@ class DataFrame(ParentDataFrame):
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
             return DataFrame(
-                plan.Deduplicate(
-                    child=self._plan, column_names=tuple(subset[0]), within_watermark=True
-                ),
+                plan.Deduplicate(child=self._plan, column_names=subset[0], within_watermark=True),
                 session=self._session,
             )
         else:
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                plan.Deduplicate(
+                    child=self._plan,
+                    column_names=cast(List[str], subset),
+                    within_watermark=True,
+                ),
                 session=self._session,
             )
 

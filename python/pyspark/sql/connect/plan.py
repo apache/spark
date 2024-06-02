@@ -682,7 +682,7 @@ class Deduplicate(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         all_columns_as_keys: bool = False,
-        *column_names: tuple[Union[str, list[str]], ...],
+        column_names: Optional[Sequence[str]] = None,
         within_watermark: bool = False,
     ) -> None:
         super().__init__(child)
@@ -696,7 +696,8 @@ class Deduplicate(LogicalPlan):
         plan.deduplicate.input.CopyFrom(self._child.plan(session))
         plan.deduplicate.all_columns_as_keys = self.all_columns_as_keys
         plan.deduplicate.within_watermark = self.within_watermark
-        plan.deduplicate.column_names.extend(self.column_names)
+        if self.column_names is not None:
+            plan.deduplicate.column_names.extend(self.column_names)
         return plan
 
 
