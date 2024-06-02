@@ -943,7 +943,6 @@ class UtilsTestsMixin:
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
         import pyspark.pandas as ps
-        import pandas as pd
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])
