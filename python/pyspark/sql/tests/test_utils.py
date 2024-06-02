@@ -984,6 +984,76 @@ class UtilsTestsMixin:
             },
         )
 
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df2, df1, checkRowOrder=False)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df1),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df2, df1, checkRowOrder=True)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": f"{ps.DataFrame.__name__}, "
+                f"{pd.DataFrame.__name__}, "
+                f"{ps.Series.__name__}, "
+                f"{pd.Series.__name__}, "
+                f"{ps.Index.__name__}"
+                f"{pd.Index.__name__}, ",
+                "arg_name": "expected",
+                "actual_type": type(df1),
+            },
+        )
+
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
+    def test_assert_error_spark_and_pandas_df(self):
+        import pandas as pd
+
+        df1 = self.spark.createDataFrame([(10,), (20,), (30,)], ["Numbers"])
+        df2 = pd.DataFrame(data=[10, 11, 13], columns=["Numbers"])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df1, df2)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "DataFrame, Series, Index, ",
+                "arg_name": "left",
+                "actual_type": type(df1),
+            },
+        )
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(df2, df1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+            message_parameters={
+                "expected_type": "DataFrame, Series, Index, ",
+                "arg_name": "right",
+                "actual_type": type(df2),
+            },
+        )
+
+
     def test_assert_error_non_pyspark_df(self):
         dict1 = {"a": 1, "b": 2}
         dict2 = {"a": 1, "b": 2}
