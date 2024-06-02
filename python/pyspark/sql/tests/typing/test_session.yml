@@ -51,25 +51,6 @@
     spark.createDataFrame(["foo", "bar"], "string")
 
 
-- case: createDataFrameScalarsInvalid
-  main: |
-    from pyspark.sql import SparkSession
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
-
-    spark = SparkSession.builder.getOrCreate()
-
-    schema = StructType([
-        StructField("name", StringType(), True),
-        StructField("age", IntegerType(), True)
-    ])
-
-    # Invalid - scalars require schema
-    spark.createDataFrame(["foo", "bar"]) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "str"  [type-var]
-
-    # Invalid - data has to match schema (either product -> struct or scalar -> atomic)
-    spark.createDataFrame([1, 2, 3], schema) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "int"  [type-var]
-
-
 - case: createDataFrameStructsInvalid
   main: |
     from pyspark.sql import SparkSession
@@ -102,7 +83,9 @@
     main:18: note:     def [AtomicValue in (datetime, date, Decimal, bool, str, int, float)] createDataFrame(self, data: RDD[AtomicValue], schema: Union[AtomicType, str], verifySchema: bool = ...) -> DataFrame
     main:18: note:     def [AtomicValue in (datetime, date, Decimal, bool, str, int, float)] createDataFrame(self, data: Iterable[AtomicValue], schema: Union[AtomicType, str], verifySchema: bool = ...) -> DataFrame
     main:18: note:     def createDataFrame(self, data: DataFrame, samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def createDataFrame(self, data: Any, samplingRatio: Optional[float] = ...) -> DataFrame
     main:18: note:     def createDataFrame(self, data: DataFrame, schema: Union[StructType, str], verifySchema: bool = ...) -> DataFrame
+    main:18: note:     def createDataFrame(self, data: Any, schema: Union[StructType, str], verifySchema: bool = ...) -> DataFrame
 
 - case: createDataFrameFromEmptyRdd
   main: |
