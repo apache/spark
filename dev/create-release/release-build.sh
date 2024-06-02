@@ -98,8 +98,8 @@ init_java
 init_maven_sbt
 
 if [[ "$1" == "finalize" ]]; then
-  if [[ -z "$PYPI_PASSWORD" ]]; then
-    error 'The environment variable PYPI_PASSWORD is not set. Exiting.'
+  if [[ -z "$PYPI_API_TOKEN" ]]; then
+    error 'The environment variable PYPI_API_TOKEN is not set. Exiting.'
   fi
 
   git config --global user.name "$GIT_NAME"
@@ -124,18 +124,19 @@ if [[ "$1" == "finalize" ]]; then
   echo "Uploading PySpark to PyPi"
   svn co --depth=empty "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" svn-spark
   cd svn-spark
-  svn update "pyspark-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark-$RELEASE_VERSION.tar.gz.asc"
-  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+  PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
+  svn update "pyspark-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark-$PYSPARK_VERSION.tar.gz.asc"
+  twine upload -u __token__  -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark-$RELEASE_VERSION.tar.gz" \
-    "pyspark-$RELEASE_VERSION.tar.gz.asc"
-  svn update "pyspark_connect-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark_connect-$RELEASE_VERSION.tar.gz.asc"
-  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+    "pyspark-$PYSPARK_VERSION.tar.gz" \
+    "pyspark-$PYSPARK_VERSION.tar.gz.asc"
+  svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
+  twine upload -u __token__  -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark_connect-$RELEASE_VERSION.tar.gz" \
-    "pyspark_connect-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
+    "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
