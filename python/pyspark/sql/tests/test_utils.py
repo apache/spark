@@ -955,13 +955,8 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{ps.DataFrame.__name__}, "
-                f"{pd.DataFrame.__name__}, "
-                f"{ps.Series.__name__}, "
-                f"{pd.Series.__name__}, "
-                f"{ps.Index.__name__}"
-                f"{pd.Index.__name__}, ",
-                "arg_name": "expected",
+                "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                "arg_name": "right",
                 "actual_type": type(df2),
             },
         )
@@ -973,13 +968,8 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{ps.DataFrame.__name__}, "
-                f"{pd.DataFrame.__name__}, "
-                f"{ps.Series.__name__}, "
-                f"{pd.Series.__name__}, "
-                f"{ps.Index.__name__}"
-                f"{pd.Index.__name__}, ",
-                "arg_name": "expected",
+                "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                "arg_name": "right",
                 "actual_type": type(df2),
             },
         )
@@ -991,14 +981,9 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{ps.DataFrame.__name__}, "
-                f"{pd.DataFrame.__name__}, "
-                f"{ps.Series.__name__}, "
-                f"{pd.Series.__name__}, "
-                f"{ps.Index.__name__}"
-                f"{pd.Index.__name__}, ",
-                "arg_name": "expected",
-                "actual_type": type(df1),
+                "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                "arg_name": "left",
+                "actual_type": type(df2),
             },
         )
 
@@ -1009,14 +994,9 @@ class UtilsTestsMixin:
             exception=pe.exception,
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
-                "expected_type": f"{ps.DataFrame.__name__}, "
-                f"{pd.DataFrame.__name__}, "
-                f"{ps.Series.__name__}, "
-                f"{pd.Series.__name__}, "
-                f"{ps.Index.__name__}"
-                f"{pd.Index.__name__}, ",
-                "arg_name": "expected",
-                "actual_type": type(df1),
+                "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                "arg_name": "left",
+                "actual_type": type(df2),
             },
         )
 
@@ -1049,10 +1029,9 @@ class UtilsTestsMixin:
             message_parameters={
                 "expected_type": "DataFrame, Series, Index, ",
                 "arg_name": "right",
-                "actual_type": type(df2),
+                "actual_type": type(df1),
             },
         )
-
 
     def test_assert_error_non_pyspark_df(self):
         dict1 = {"a": 1, "b": 2}

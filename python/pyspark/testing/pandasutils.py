@@ -56,9 +56,6 @@ except ImportError:
     pass
 
 import pyspark.pandas as ps
-from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.indexes import Index
-from pyspark.pandas.series import Series
 from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.errors import PySparkAssertionError
@@ -410,64 +407,61 @@ class PandasOnSparkTestUtils:
         :param atol: The absolute tolerance, used in asserting approximate equality for
             float values in actual and expected. Set to 1e-8 by default.
         :param check_row_order: A flag indicating whether the order of rows should be considered
-            in the comparison. If set to False, row order will be ignored.
+            in the comparison (Pandas-on-Spark only). If set to False, row order will be ignored.
         """
         import pandas as pd
         from pandas.api.types import is_list_like
 
-        # for pandas-on-Spark DataFrames, allow choice to ignore row order
-        if isinstance(left, (ps.DataFrame, ps.Series, ps.Index)):
-            if left is None and right is None:
-                return True
-            elif left is None or right is None:
-                return False
+        if left is None and right is None:
+            return True
+        elif left is None or right is None:
+            return False
 
-            if not isinstance(left, (DataFrame, Series, Index)):
-                raise PySparkAssertionError(
-                    error_class="INVALID_TYPE_DF_EQUALITY_ARG",
-                    message_parameters={
-                        "expected_type": f"{DataFrame.__name__}, {Series.__name__}, "
-                        f"{Index.__name__}",
-                        "arg_name": "actual",
-                        "actual_type": type(left),
-                    },
-                )
-            elif not isinstance(
-                right, (DataFrame, pd.DataFrame, Series, pd.Series, Index, pd.Index)
+        # for pandas-on-Spark DataFrames, allow choice to ignore row order
+        ps_classes = (ps.DataFrame, ps.Series, ps.Index)
+        if isinstance(left, ps_classes) or isinstance(right, ps_classes):
+            if not isinstance(
+                left, (ps.DataFrame, pd.DataFrame, ps.Series, pd.Series, ps.Index, pd.Index)
             ):
                 raise PySparkAssertionError(
                     error_class="INVALID_TYPE_DF_EQUALITY_ARG",
                     message_parameters={
-                        "expected_type": f"{DataFrame.__name__}, "
-                        f"{pd.DataFrame.__name__}, "
-                        f"{Series.__name__}, "
-                        f"{pd.Series.__name__}, "
-                        f"{Index.__name__}"
-                        f"{pd.Index.__name__}, ",
-                        "arg_name": "expected",
+                        "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                        "arg_name": "left",
+                        "actual_type": type(left),
+                    },
+                )
+
+            if not isinstance(
+                right, (ps.DataFrame, pd.DataFrame, ps.Series, pd.Series, ps.Index, pd.Index)
+            ):
+                raise PySparkAssertionError(
+                    error_class="INVALID_TYPE_DF_EQUALITY_ARG",
+                    message_parameters={
+                        "expected_type": "Pandas or Pandas-on-Spark DataFrame, Series, or Index",
+                        "arg_name": "right",
                         "actual_type": type(right),
                     },
                 )
+
+            left = self._to_pandas(left)
+            right = self._to_pandas(right)
+
+            if not check_row_order:
+                if len(left.columns) > 0:
+                    left = left.sort_values(by=left.columns[0], ignore_index=True)
+                if len(right.columns) > 0:
+                    right = right.sort_values(by=right.columns[0], ignore_index=True)
+
+            if almost:
+                _assert_pandas_almost_equal(left, right, rtol=rtol, atol=atol)
             else:
-                if not isinstance(left, (pd.DataFrame, pd.Index, pd.Series)):
-                    left = left.to_pandas()
-                if not isinstance(right, (pd.DataFrame, pd.Index, pd.Series)):
-                    right = right.to_pandas()
-
-                if not check_row_order:
-                    if isinstance(left, pd.DataFrame) and len(left.columns) > 0:
-                        left = left.sort_values(by=left.columns[0], ignore_index=True)
-                    if isinstance(right, pd.DataFrame) and len(right.columns) > 0:
-                        right = right.sort_values(by=right.columns[0], ignore_index=True)
-
-                if almost:
-                    _assert_pandas_almost_equal(left, right, rtol=rtol, atol=atol)
-                else:
-                    _assert_pandas_equal(left, right, checkExact=check_exact)
+                _assert_pandas_equal(left, right, checkExact=check_exact)
 
         lobj = self._to_pandas(left)
         robj = self._to_pandas(right)
-        if isinstance(lobj, (pd.DataFrame, pd.Series, pd.Index)):
+        pd_classes = (pd.DataFrame, pd.Series, pd.Index)
+        if isinstance(lobj, pd_classes) or isinstance(robj, pd_classes):
             if almost:
                 _assert_pandas_almost_equal(lobj, robj, rtol=rtol, atol=atol)
             else:
@@ -486,7 +480,7 @@ class PandasOnSparkTestUtils:
 
     @staticmethod
     def _to_pandas(obj: Any):
-        if isinstance(obj, (DataFrame, Series, Index)):
+        if isinstance(obj, (ps.DataFrame, ps.Series, ps.Index)):
             return obj.to_pandas()
         else:
             return obj
