@@ -34,7 +34,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1362,6 +1362,74 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             s"definition: ${isStreamingForCteDef.get}, reference: ${isStreamingForCteRef.get}.")
       }
     )
+  }
+
+  test("Collation aware streaming") {
+    withTable("parquet_streaming_tbl") {
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key STRING COLLATE UTF8_BINARY_LCASE,
+          |  value_stream INTEGER
+          |) USING parquet""".stripMargin)
+
+      val streamDf = spark.readStream.table("parquet_streaming_tbl")
+      val filteredDf = streamDf.filter("key = 'aaa'")
+
+      val clock = new StreamManualClock()
+      testStream(filteredDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        Execute { _ =>
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
+            .toDF("key", "value_stream")
+            .write.format("parquet").mode(SaveMode.Append)
+            .saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(("aaa", 1), ("AAA", 2))
+      )
+    }
+  }
+
+  test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
+    "key must be disallowed") {
+    val tableName = "parquet_dummy_tbl"
+    val collationName = "UTF8_BINARY_LCASE"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      val df = spark.readStream.table(tableName)
+        .groupBy("c1")
+        .count()
+
+      val query = df.writeStream
+        .format("memory")
+        .queryName("output")
+        .outputMode("update")
+        .start()
+
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      checkError(
+        ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        parameters = Map(
+          "schema" -> ".+\"c1\":\"spark.UTF8_BINARY_LCASE\".+"
+        ),
+        matchPVals = true
+      )
+    }
   }
 
   private def checkExceptionMessage(df: DataFrame): Unit = {

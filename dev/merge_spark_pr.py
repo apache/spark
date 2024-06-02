@@ -283,7 +283,7 @@ def get_jira_issue(prompt, default_jira_id=""):
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
             return None
-        if bold_input("Check if the JIRA information is as expected (Y/n): ").lower() != "n":
+        if bold_input("Check if the JIRA information is as expected (y/N): ").lower() == "y":
             return issue
         else:
             return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")

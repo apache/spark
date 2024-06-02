@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.LogKeys.CONFIG
+import org.apache.spark.internal.MDC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -410,8 +412,8 @@ case class HashAggregateExec(
   private def enableTwoLevelHashMap(): Unit = {
     if (!checkIfFastHashMapSupported()) {
       if (!Utils.isTesting) {
-        logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
-          + " current version of codegened fast hashmap does not support this aggregate.")
+        logInfo(log"${MDC(CONFIG, SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key)} is set to true, but" +
+          log" current version of codegened fast hashmap does not support this aggregate.")
       }
     } else {
       isFastHashMapEnabled = true

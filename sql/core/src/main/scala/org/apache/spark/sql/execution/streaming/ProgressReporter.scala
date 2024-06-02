@@ -25,7 +25,7 @@ import java.util.{Optional, UUID}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan, WithCTE}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, Utils}
 
 /**
  * Responsible for continually reporting statistics about the amount of data processed as well
@@ -81,7 +81,8 @@ class ProgressReporter(
 
     addNewProgress(newProgress)
     postEvent(new QueryProgressEvent(newProgress))
-    logInfo(s"Streaming query made progress: $newProgress")
+    logInfo(
+      log"Streaming query made progress: ${MDC(LogKeys.STREAMING_QUERY_PROGRESS, newProgress)}")
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -103,8 +104,8 @@ class ProgressReporter(
       addNewProgress(newProgress)
       if (lastNoExecutionProgressEventTime > Long.MinValue) {
         postEvent(new QueryIdleEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
-        logInfo(s"Streaming query has been idle and waiting for new data more than " +
-          s"${noDataProgressEventInterval} ms.")
+        logInfo(log"Streaming query has been idle and waiting for new data more than " +
+          log"${MDC(LogKeys.TIME_UNITS, noDataProgressEventInterval)} ms.")
       }
 
       lastNoExecutionProgressEventTime = now
@@ -333,33 +334,43 @@ abstract class ProgressContext(
       inputTimeSec: Double,
       processingTimeSec: Double): Seq[SourceProgress] = {
     sources.distinct.map { source =>
-      val numRecords = execStats.flatMap(_.inputRows.get(source)).getOrElse(0L)
-      val sourceMetrics = source match {
-        case withMetrics: ReportsSourceMetrics =>
-          withMetrics.metrics(Optional.ofNullable(latestStreamProgress.get(source).orNull))
-        case _ => Map[String, String]().asJava
+      val (result, duration) = Utils.timeTakenMs {
+        val numRecords = execStats.flatMap(_.inputRows.get(source)).getOrElse(0L)
+        val sourceMetrics = source match {
+          case withMetrics: ReportsSourceMetrics =>
+            withMetrics.metrics(Optional.ofNullable(latestStreamProgress.get(source).orNull))
+          case _ => Map[String, String]().asJava
+        }
+        new SourceProgress(
+          description = source.toString,
+          startOffset = currentTriggerStartOffsets.get(source).orNull,
+          endOffset = currentTriggerEndOffsets.get(source).orNull,
+          latestOffset = currentTriggerLatestOffsets.get(source).orNull,
+          numInputRows = numRecords,
+          inputRowsPerSecond = numRecords / inputTimeSec,
+          processedRowsPerSecond = numRecords / processingTimeSec,
+          metrics = sourceMetrics
+        )
       }
-      new SourceProgress(
-        description = source.toString,
-        startOffset = currentTriggerStartOffsets.get(source).orNull,
-        endOffset = currentTriggerEndOffsets.get(source).orNull,
-        latestOffset = currentTriggerLatestOffsets.get(source).orNull,
-        numInputRows = numRecords,
-        inputRowsPerSecond = numRecords / inputTimeSec,
-        processedRowsPerSecond = numRecords / processingTimeSec,
-        metrics = sourceMetrics
-      )
+      logInfo(s"Extracting source progress metrics for source=${source.toString} took " +
+        s"duration_ms=$duration")
+      result
     }
   }
 
   private def extractSinkProgress(execStats: Option[ExecutionStats]): SinkProgress = {
-    val sinkOutput = execStats.flatMap(_.outputRows)
-    val sinkMetrics = sink match {
-      case withMetrics: ReportsSinkMetrics => withMetrics.metrics()
-      case _ => Map[String, String]().asJava
-    }
+    val (result, duration) = Utils.timeTakenMs {
+      val sinkOutput = execStats.flatMap(_.outputRows)
+      val sinkMetrics = sink match {
+        case withMetrics: ReportsSinkMetrics => withMetrics.metrics()
+        case _ => Map[String, String]().asJava
+      }
 
-    SinkProgress(sink.toString, sinkOutput, sinkMetrics)
+      SinkProgress(sink.toString, sinkOutput, sinkMetrics)
+    }
+    logInfo(s"Extracting sink progress metrics for sink=${sink.toString} took " +
+      s"duration_ms=$duration")
+    result
   }
 
   /**
@@ -382,9 +393,10 @@ abstract class ProgressContext(
     val finishTriggerDurationMillis = triggerClock.getTimeMillis() - triggerEndTimestamp
     val thresholdForLoggingMillis = 60 * 1000
     if (finishTriggerDurationMillis > math.max(thresholdForLoggingMillis, processingTimeMills)) {
-      logWarning("Query progress update takes longer than batch processing time. Progress " +
-        s"update takes $finishTriggerDurationMillis milliseconds. Batch processing takes " +
-        s"$processingTimeMills milliseconds")
+      logWarning(log"Query progress update takes longer than batch processing time. Progress " +
+        log"update takes ${MDC(LogKeys.FINISH_TRIGGER_DURATION, finishTriggerDurationMillis)} " +
+        log"milliseconds. Batch processing takes " +
+        log"${MDC(LogKeys.PROCESSING_TIME, processingTimeMills)} milliseconds")
     }
   }
 
@@ -485,11 +497,10 @@ abstract class ProgressContext(
         if (!metricWarningLogged) {
           def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
 
-          logWarning(
-            "Could not report metrics as number leaves in trigger logical plan did not match that" +
-              s" of the execution plan:\n" +
-              s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
-              s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
+          logWarning(log"Could not report metrics as number leaves in trigger logical plan did " +
+            log"not match that of the execution plan:\nlogical plan leaves: " +
+            log"${MDC(LogKeys.LOGICAL_PLAN_LEAVES, toString(allLogicalPlanLeaves))}\nexecution " +
+            log"plan leaves: ${MDC(LogKeys.EXECUTION_PLAN_LEAVES, toString(allExecPlanLeaves))}\n")
           metricWarningLogged = true
         }
         Map.empty

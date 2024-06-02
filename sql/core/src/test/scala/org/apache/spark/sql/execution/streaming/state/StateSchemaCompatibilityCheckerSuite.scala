@@ -63,6 +63,16 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
   private val valueSchema65535Bytes = new StructType()
     .add(StructField("v" * (65535 - 87), IntegerType, nullable = true))
 
+  private val keySchemaWithCollation = new StructType()
+    .add(StructField("key1", IntegerType, nullable = true))
+    .add(StructField("key2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("key3", structSchema, nullable = true))
+
+  private val valueSchemaWithCollation = new StructType()
+    .add(StructField("value1", IntegerType, nullable = true))
+    .add(StructField("value2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("value3", structSchema, nullable = true))
+
   // Checks on adding/removing (nested) field.
 
   test("adding field to key should fail") {
@@ -239,6 +249,20 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val typeChangedKeySchema = StructType(keySchema.map(_.copy(dataType = TimestampType)))
     verifyException(keySchema, valueSchema, typeChangedKeySchema, valueSchema,
       ignoreValueSchema = true)
+  }
+
+  test("SPARK-47776: checking for compatibility with collation change in key") {
+    verifyException(keySchema, valueSchema, keySchemaWithCollation, valueSchema,
+      ignoreValueSchema = false)
+    verifyException(keySchemaWithCollation, valueSchema, keySchema, valueSchema,
+      ignoreValueSchema = false)
+  }
+
+  test("SPARK-47776: checking for compatibility with collation change in value") {
+    verifyException(keySchema, valueSchema, keySchema, valueSchemaWithCollation,
+      ignoreValueSchema = false)
+    verifyException(keySchema, valueSchemaWithCollation, keySchema, valueSchema,
+      ignoreValueSchema = false)
   }
 
   private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {

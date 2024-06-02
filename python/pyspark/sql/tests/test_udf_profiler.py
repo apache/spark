@@ -521,6 +521,32 @@ class UDFProfiler2TestsMixin:
                 io.getvalue(), f"2.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
+    def test_perf_profiler_clear(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in self.profile_results:
+            self.spark.profile.clear(id)
+            self.assertNotIn(id, self.profile_results)
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        self.spark.profile.clear(type="memory")
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+        self.spark.profile.clear(type="perf")
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        self.spark.profile.clear()
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:

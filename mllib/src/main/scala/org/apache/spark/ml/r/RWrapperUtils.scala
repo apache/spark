@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.r
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{FEATURE_COLUMN, LABEL_COLUMN, NEW_FEATURE_COLUMN_NAME, NEW_LABEL_COLUMN_NAME}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.feature.{RFormula, RFormulaModel}
 import org.apache.spark.ml.util.Identifiable
@@ -37,15 +38,15 @@ private[r] object RWrapperUtils extends Logging {
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
       val newFeaturesName = s"${Identifiable.randomUID(rFormula.getFeaturesCol)}"
-      logInfo(s"data containing ${rFormula.getFeaturesCol} column, " +
-        s"using new name $newFeaturesName instead")
+      logInfo(log"data containing ${MDC(FEATURE_COLUMN, rFormula.getFeaturesCol)} column, " +
+        log"using new name ${MDC(NEW_FEATURE_COLUMN_NAME, newFeaturesName)} instead")
       rFormula.setFeaturesCol(newFeaturesName)
     }
 
     if (rFormula.getForceIndexLabel && data.schema.fieldNames.contains(rFormula.getLabelCol)) {
       val newLabelName = s"${Identifiable.randomUID(rFormula.getLabelCol)}"
-      logInfo(s"data containing ${rFormula.getLabelCol} column and we force to index label, " +
-        s"using new name $newLabelName instead")
+      logInfo(log"data containing ${MDC(LABEL_COLUMN, rFormula.getLabelCol)} column and we force " +
+        log"to index label, using new name ${MDC(NEW_LABEL_COLUMN_NAME, newLabelName)} instead")
       rFormula.setLabelCol(newLabelName)
     }
   }

@@ -21,7 +21,6 @@ check_dependencies(__name__)
 
 import warnings
 from typing import (
-    Any,
     Dict,
     List,
     Sequence,
@@ -32,14 +31,15 @@ from typing import (
     cast,
 )
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
+from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 from pyspark.sql.types import NumericType
 from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
@@ -62,10 +62,10 @@ class GroupedData:
         self,
         df: "DataFrame",
         group_type: str,
-        grouping_cols: Sequence["Column"],
-        pivot_col: Optional["Column"] = None,
+        grouping_cols: Sequence[Column],
+        pivot_col: Optional[Column] = None,
         pivot_values: Optional[Sequence["LiteralType"]] = None,
-        grouping_sets: Optional[Sequence[Sequence["Column"]]] = None,
+        grouping_sets: Optional[Sequence[Sequence[Column]]] = None,
     ) -> None:
         from pyspark.sql.connect.dataframe import DataFrame
 
@@ -85,12 +85,14 @@ class GroupedData:
         self._grouping_cols: List[Column] = grouping_cols
 
         self._pivot_col: Optional["Column"] = None
-        self._pivot_values: Optional[List[Any]] = None
+        self._pivot_values: Optional[List["Column"]] = None
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
-            assert pivot_values is None or isinstance(pivot_values, list)
             self._pivot_col = pivot_col
-            self._pivot_values = pivot_values
+
+            if pivot_values is not None:
+                assert isinstance(pivot_values, list)
+                self._pivot_values = [F.lit(v) for v in pivot_values]
 
         self._grouping_sets: Optional[Sequence[Sequence["Column"]]] = None
         if group_type == "grouping_sets":
@@ -292,6 +294,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -321,6 +324,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
         udf_obj = UserDefinedFunction(
             func,
             returnType=outputStructType,
@@ -359,6 +363,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -398,6 +403,7 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -423,6 +429,7 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
+        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -447,6 +454,7 @@ PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -455,7 +463,9 @@ def _test() -> None:
     globs = pyspark.sql.connect.group.__dict__.copy()
 
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.group tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

@@ -204,7 +204,7 @@ object LiteralValueProtoConverter {
   def toLiteralProto(literal: Any, dataType: DataType): proto.Expression.Literal =
     toLiteralProtoBuilder(literal, dataType).build()
 
-  private def toDataType(clz: Class[_]): DataType = clz match {
+  private[sql] def toDataType(clz: Class[_]): DataType = clz match {
     // primitive types
     case JShort.TYPE => ShortType
     case JInteger.TYPE => IntegerType

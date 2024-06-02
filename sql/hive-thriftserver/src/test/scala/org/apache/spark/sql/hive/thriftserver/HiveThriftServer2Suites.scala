@@ -1120,7 +1120,7 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2TestBase {
 
   override protected def extraConf: Seq[String] =
     s" --hiveconf ${ConfVars.HIVE_START_CLEANUP_SCRATCHDIR}=true " ::
-       s"--hiveconf ${ConfVars.SCRATCHDIR}=${tempScratchDir.getAbsolutePath}" :: Nil
+       s"--hiveconf hive.exec.scratchdir=${tempScratchDir.getAbsolutePath}" :: Nil
 
   test("Cleanup the Hive scratchdir when starting the Hive Server") {
     assert(!tempScratchDir.exists())
@@ -1239,12 +1239,12 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
 
     s"""$startScript
        |  --master local
-       |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-       |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+       |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+       |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
-       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
+       |  --hiveconf hive.exec.local.scratchdir=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j2.debug

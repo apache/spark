@@ -22,11 +22,11 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.IntegerType
 
 class InMemoryTableMetricSuite
   extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -51,7 +51,7 @@ class InMemoryTableMetricSuite
 
       testCatalog.createTable(
         Identifier.of(Array(), "table_name"),
-        new StructType().add("i", "int"),
+        Array(Column.create("i", IntegerType)),
         Array.empty[Transform], Collections.emptyMap[String, String])
 
       func("testcat.table_name")

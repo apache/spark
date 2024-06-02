@@ -188,6 +188,14 @@ def build_sql_docs
   cp_r("../sql/site/.", "api/sql")
 end
 
+def build_error_docs
+  print_header "Building error docs."
+  system("python '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+  || raise("Error doc generation failed")
+end
+
+build_error_docs
+
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')
     build_scala_and_java_docs

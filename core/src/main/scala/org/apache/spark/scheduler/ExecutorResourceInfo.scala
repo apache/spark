@@ -33,19 +33,6 @@ private[spark] class ExecutorResourceInfo(
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-
-  /**
-   * Calculate how many parts the executor can offer according to the task resource amount
-   * @param taskAmount how many resource amount the task required
-   * @return the total parts
-   */
-  def totalParts(taskAmount: Double): Int = {
-    assert(taskAmount > 0.0)
-    if (taskAmount >= 1.0) {
-      addresses.length / taskAmount.ceil.toInt
-    } else {
-      addresses.length * Math.floor(1.0 / taskAmount).toInt
-    }
-  }
+  def totalAddressesAmount: Int = this.addresses.length
 
 }

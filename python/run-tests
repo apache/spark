@@ -21,9 +21,9 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 8, 0))')
+PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 9, 0))')
 if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
-  echo "Python versions prior to 3.8 are not supported."
+  echo "Python versions prior to 3.9 are not supported."
   exit -1
 fi
 

@@ -22,7 +22,7 @@ import decimal
 import pyarrow
 from pandas.core.frame import DataFrame as PandasDataFrame
 
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.types import DataType
 from pyspark.sql.streaming.state import GroupState
 

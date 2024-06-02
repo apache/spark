@@ -86,4 +86,22 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
       testRelationWithData.groupBy(Literal(1))(Literal(100).as("a"))
     )
   }
+
+  test("SPARK-47895: group by all repeated analysis") {
+    val plan = testRelation.groupBy($"all")(Literal(100).as("a")).analyze
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("a"))
+    )
+
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
+    }
+    comparePlans(
+      copiedPlan.analyze, // repeated analysis
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a"))
+    )
+  }
 }

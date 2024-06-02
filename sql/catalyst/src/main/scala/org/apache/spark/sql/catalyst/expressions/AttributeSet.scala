@@ -104,13 +104,19 @@ class AttributeSet private (private val baseSet: mutable.LinkedHashSet[Attribute
    * in `other`.
    */
   def --(other: Iterable[NamedExpression]): AttributeSet = {
-    other match {
-      // SPARK-32755: `--` method behave differently under scala 2.12 and 2.13,
-      // use a Scala 2.12 based code to maintains the insertion order in Scala 2.13
-      case otherSet: AttributeSet =>
-        new AttributeSet(baseSet.clone() --= otherSet.baseSet)
-      case _ =>
-        new AttributeSet(baseSet.clone() --= other.map(a => new AttributeEquals(a.toAttribute)))
+    if (isEmpty) {
+      AttributeSet.empty
+    } else if (other.isEmpty) {
+      this
+    } else {
+      other match {
+        // SPARK-32755: `--` method behave differently under scala 2.12 and 2.13,
+        // use a Scala 2.12 based code to maintains the insertion order in Scala 2.13
+        case otherSet: AttributeSet =>
+          new AttributeSet(baseSet.clone() --= otherSet.baseSet)
+        case _ =>
+          new AttributeSet(baseSet.clone() --= other.map(a => new AttributeEquals(a.toAttribute)))
+      }
     }
   }
 

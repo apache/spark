@@ -41,4 +41,6 @@ This page gives an overview of all public Spark SQL API.
     observation
     udf
     udtf
+    variant_val
     protobuf
+    datasource

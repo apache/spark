@@ -28,13 +28,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
-  import IntegratedUDFTestUtils._
+abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
 
-  setupTestData()
-
-  private def dataSourceName = "SimpleDataSource"
-  private val simpleDataSourceReaderScript: String =
+  protected val simpleDataSourceReaderScript: String =
     """
       |from pyspark.sql.datasource import DataSourceReader, InputPartition
       |class SimpleDataSourceReader(DataSourceReader):
@@ -45,8 +41,8 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       |        yield (1, partition.value)
       |        yield (2, partition.value)
       |""".stripMargin
-  private val staticSourceName = "custom_source"
-  private var tempDir: File = _
+  protected val staticSourceName = "custom_source"
+  protected var tempDir: File = _
 
   override def beforeAll(): Unit = {
     // Create a Python Data Source package before starting up the Spark Session
@@ -89,6 +85,14 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       super.afterAll()
     }
   }
+
+  setupTestData()
+
+  protected def dataSourceName = "SimpleDataSource"
+}
+
+class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
+  import IntegratedUDFTestUtils._
 
   test("SPARK-45917: automatic registration of Python Data Source") {
     assume(shouldTestPandasUDFs)

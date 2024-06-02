@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
+import org.apache.spark.internal.LogKeys.NAMESPACE
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -47,7 +49,8 @@ case class CreateNamespaceExec(
         catalog.createNamespace(ns, (properties ++ ownership).asJava)
       } catch {
         case _: NamespaceAlreadyExistsException if ifNotExists =>
-          logWarning(s"Namespace ${namespace.quoted} was created concurrently. Ignoring.")
+          logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
+            log"Ignoring.")
       }
     } else if (!ifNotExists) {
       throw QueryCompilationErrors.namespaceAlreadyExistsError(ns)

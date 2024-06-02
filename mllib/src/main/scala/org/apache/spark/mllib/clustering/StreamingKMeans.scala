@@ -21,7 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLUSTER_CENTROIDS, CLUSTER_LABEL, CLUSTER_WEIGHT, LARGEST_CLUSTER_INDEX, SMALLEST_CLUSTER_INDEX}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
@@ -129,14 +130,16 @@ class StreamingKMeansModel @Since("1.2.0") (
         case _ => centroid.toArray.mkString("[", ",", "]")
       }
 
-      logInfo(s"Cluster $label updated with weight $updatedWeight and centroid: $display")
+      logInfo(log"Cluster ${MDC(CLUSTER_LABEL, label)} updated with weight " +
+        log"${MDC(CLUSTER_WEIGHT, updatedWeight)} and centroid: ${MDC(CLUSTER_CENTROIDS, display)}")
     }
 
     // Check whether the smallest cluster is dying. If so, split the largest cluster.
     val (maxWeight, largest) = clusterWeights.iterator.zipWithIndex.maxBy(_._1)
     val (minWeight, smallest) = clusterWeights.iterator.zipWithIndex.minBy(_._1)
     if (minWeight < 1e-8 * maxWeight) {
-      logInfo(s"Cluster $smallest is dying. Split the largest cluster $largest into two.")
+      logInfo(log"Cluster ${MDC(SMALLEST_CLUSTER_INDEX, smallest)} is dying. " +
+        log"Split the largest cluster ${MDC(LARGEST_CLUSTER_INDEX, largest)} into two.")
       val weight = (maxWeight + minWeight) / 2.0
       clusterWeights(largest) = weight
       clusterWeights(smallest) = weight

@@ -35,9 +35,9 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
-private[sql] object H2Dialect extends JdbcDialect {
+private[sql] case class H2Dialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
@@ -68,6 +68,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         val scale = if (null != md) md.build().getLong("scale") else 0L
         val selectedScale = (DecimalType.MAX_PRECISION * (scale.toDouble / size.toDouble)).toInt
         Option(DecimalType(DecimalType.MAX_PRECISION, selectedScale))
+      case Types.TIMESTAMP_WITH_TIMEZONE | Types.TIME_WITH_TIMEZONE => Some(TimestampType)
       case _ => None
     }
   }
@@ -258,13 +259,6 @@ private[sql] object H2Dialect extends JdbcDialect {
   }
 
   class H2SQLBuilder extends JDBCSQLBuilder {
-    override def escapeSpecialCharsForLikePattern(str: String): String = {
-      str.map {
-        case '_' => "\\_"
-        case '%' => "\\%"
-        case c => c.toString
-      }.mkString
-    }
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =

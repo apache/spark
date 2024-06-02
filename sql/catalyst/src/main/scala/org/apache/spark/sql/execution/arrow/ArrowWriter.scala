@@ -84,6 +84,11 @@ object ArrowWriter {
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
         new IntervalMonthDayNanoWriter(vector)
+      case (VariantType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new StructWriter(vector, children.toArray)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
@@ -368,6 +373,8 @@ private[arrow] class StructWriter(
     val valueVector: StructVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 
+  lazy val isVariant = valueVector.getField.getMetadata.get("variant") == "true"
+
   override def setNull(): Unit = {
     var i = 0
     while (i < children.length) {
@@ -379,12 +386,20 @@ private[arrow] class StructWriter(
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    val struct = input.getStruct(ordinal, children.length)
-    var i = 0
-    valueVector.setIndexDefined(count)
-    while (i < struct.numFields) {
-      children(i).write(struct, i)
-      i += 1
+    if (isVariant) {
+      valueVector.setIndexDefined(count)
+      val v = input.getVariant(ordinal)
+      val row = InternalRow(v.getValue, v.getMetadata)
+      children(0).write(row, 0)
+      children(1).write(row, 1)
+    } else {
+      val struct = input.getStruct(ordinal, children.length)
+      var i = 0
+      valueVector.setIndexDefined(count)
+      while (i < struct.numFields) {
+        children(i).write(struct, i)
+        i += 1
+      }
     }
   }
 

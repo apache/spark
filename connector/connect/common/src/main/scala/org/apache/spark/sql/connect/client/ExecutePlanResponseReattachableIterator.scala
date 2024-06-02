@@ -277,7 +277,7 @@ class ExecutePlanResponseReattachableIterator(
           }
         } catch {
           case NonFatal(e) =>
-            logWarning(s"ReleaseExecute failed with exception: $e.")
+            logWarning(log"ReleaseExecute failed with exception:", e)
         }
       }
     }

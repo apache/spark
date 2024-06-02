@@ -309,9 +309,32 @@ class Expression(google.protobuf.message.Message):
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class _EvalMode:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _EvalModeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.Cast._EvalMode.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            EVAL_MODE_UNSPECIFIED: Expression.Cast._EvalMode.ValueType  # 0
+            EVAL_MODE_LEGACY: Expression.Cast._EvalMode.ValueType  # 1
+            EVAL_MODE_ANSI: Expression.Cast._EvalMode.ValueType  # 2
+            EVAL_MODE_TRY: Expression.Cast._EvalMode.ValueType  # 3
+
+        class EvalMode(_EvalMode, metaclass=_EvalModeEnumTypeWrapper): ...
+        EVAL_MODE_UNSPECIFIED: Expression.Cast.EvalMode.ValueType  # 0
+        EVAL_MODE_LEGACY: Expression.Cast.EvalMode.ValueType  # 1
+        EVAL_MODE_ANSI: Expression.Cast.EvalMode.ValueType  # 2
+        EVAL_MODE_TRY: Expression.Cast.EvalMode.ValueType  # 3
+
         EXPR_FIELD_NUMBER: builtins.int
         TYPE_FIELD_NUMBER: builtins.int
         TYPE_STR_FIELD_NUMBER: builtins.int
+        EVAL_MODE_FIELD_NUMBER: builtins.int
         @property
         def expr(self) -> global___Expression:
             """(Required) the expression to be casted."""
@@ -319,12 +342,15 @@ class Expression(google.protobuf.message.Message):
         def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         type_str: builtins.str
         """If this is set, Server will use Catalyst parser to parse this string to DataType."""
+        eval_mode: global___Expression.Cast.EvalMode.ValueType
+        """(Optional) The expression evaluation mode."""
         def __init__(
             self,
             *,
             expr: global___Expression | None = ...,
             type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             type_str: builtins.str = ...,
+            eval_mode: global___Expression.Cast.EvalMode.ValueType = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -344,6 +370,8 @@ class Expression(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "cast_to_type",
                 b"cast_to_type",
+                "eval_mode",
+                b"eval_mode",
                 "expr",
                 b"expr",
                 "type",
@@ -1453,6 +1481,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     INPUTTYPES_FIELD_NUMBER: builtins.int
     OUTPUTTYPE_FIELD_NUMBER: builtins.int
     NULLABLE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
     payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
     @property
@@ -1467,6 +1496,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         """(Required) Output type of the UDF"""
     nullable: builtins.bool
     """(Required) True if the UDF can return null value"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the UDF is an aggregate function"""
     def __init__(
         self,
         *,
@@ -1475,6 +1506,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         | None = ...,
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
+        aggregate: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["outputType", b"outputType"]
@@ -1482,6 +1514,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "aggregate",
+            b"aggregate",
             "inputTypes",
             b"inputTypes",
             "nullable",

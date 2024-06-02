@@ -98,7 +98,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       new ExecutorResourceRequests().cores(4)
     val rp = rpBuilder.require(taskReq).require(execReq).build()
     val executorResourceForRp = ResourceProfile.getResourcesForClusterManager(
-      rp.id, rp.executorResources, 0.0, sparkConf, false, Map.empty)
+      rp.id, rp.executorResources, 500L, 0.0, sparkConf, false, Map.empty)
     // Standalone cluster only take cores and executor memory as built-in resources.
     assert(executorResourceForRp.cores.get === 4)
     assert(executorResourceForRp.executorMemoryMiB === 1024L)

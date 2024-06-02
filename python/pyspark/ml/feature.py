@@ -28,7 +28,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -1202,6 +1202,8 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String
@@ -4791,6 +4793,8 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String
@@ -4818,6 +4822,8 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String

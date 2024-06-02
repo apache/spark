@@ -460,7 +460,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test(s"SPARK-38194: memory overhead factor precendence") {
     // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
-    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+    val executorMem = EXECUTOR_MIN_MEMORY_OVERHEAD.defaultValue.get / defaultFactor * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)
@@ -487,7 +487,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test(s"SPARK-38194: old memory factor settings is applied if new one isn't given") {
     // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
-    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+    val executorMem = EXECUTOR_MIN_MEMORY_OVERHEAD.defaultValue.get / defaultFactor * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)
@@ -522,6 +522,45 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val podConfigured1 = step1.configurePod(baseDriverPod)
     // port-from-template should exist after step1
     assert(podConfigured1.container.getPorts.contains(ports))
+  }
+
+  test("SPARK-47208: User can override the minimum memory overhead of the executor") {
+    // main app resource, overriding the minimum oberhead to 500Mb
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    // memory = 1024M (default) + 500B (minimum overhead got overridden from the 384Mib)
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("memory")) === "1524Mi")
+  }
+
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
+    // main app resource, explicit overhead of 150MiB
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MEMORY_OVERHEAD, 150L)
+      .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    // memory = 1024M  + 150MB (overrides any other overhead calculation)
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("memory")) === "1174Mi")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

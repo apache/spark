@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -436,6 +437,17 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // INT96 timestamp doesn't have a logical type, here we check the physical type instead.
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT96 =>
+        new ParquetPrimitiveConverter(updater) {
+          // Converts nanosecond timestamps stored as INT96.
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          override def addBinary(value: Binary): Unit = {
+            val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
+            this.updater.setLong(julianMicros)
+          }
+        }
+
       case TimestampNTZType
         if canReadAsTimestampNTZ(parquetType) &&
           parquetType.getLogicalTypeAnnotation
@@ -454,9 +466,8 @@ private[parquet] class ParquetRowConverter(
         }
 
       // Allow upcasting INT32 date to timestampNTZ.
-      case TimestampNTZType if schemaConverter.isTimestampNTZEnabled() &&
-      parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
-      parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
             this.updater.set(DateTimeUtils.daysToMicros(dateRebaseFunc(value), ZoneOffset.UTC))
@@ -537,11 +548,7 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    schemaConverter.isTimestampNTZEnabled() &&
-      parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
-      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-      !parquetType.getLogicalTypeAnnotation
-        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
@@ -847,16 +854,37 @@ private[parquet] class ParquetRowConverter(
     private[this] var currentValue: Any = _
     private[this] var currentMetadata: Any = _
 
-    private[this] val converters = Array(
-      // Converter for value
-      newConverter(parquetType.getType(0), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentValue = value
-      }),
+    private[this] val converters = {
+      if (parquetType.getFieldCount() != 2) {
+        // We may allow more than two children in the future, so consider this unsupported.
+        throw QueryCompilationErrors.
+          parquetTypeUnsupportedYetError("variant column must contain exactly two fields")
+      }
+      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+        val idx = (0 until parquetType.getFieldCount())
+            .find(parquetType.getFieldName(_) == colName)
+        if (idx.isEmpty) {
+          throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+        }
+        val child = parquetType.getType(idx.get)
+        if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
+            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          throw QueryCompilationErrors.illegalParquetTypeError(
+            s"variant column must be a non-nullable binary")
+        }
+        child
+      }
+      Array(
+        // Converter for value
+        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentValue = value
+        }),
 
-      // Converter for metadata
-      newConverter(parquetType.getType(1), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentMetadata = value
+        // Converter for metadata
+        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentMetadata = value
       }))
+    }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 

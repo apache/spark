@@ -2013,6 +2013,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    conf.set(config.SPECULATION_MULTIPLIER.key, "1.5")
     // Set the number of slots per executor
     conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
     conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
@@ -2414,6 +2415,7 @@ class TaskSetManagerSuite
     // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_QUANTILE, 0.75)
       .set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()

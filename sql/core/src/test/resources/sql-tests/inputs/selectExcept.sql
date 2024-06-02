@@ -60,7 +60,10 @@ SELECT coalesce(* EXCEPT(c1, c2)) FROM v1;
 SELECT array(*) FROM v1;
 SELECT array(v1.*) FROM v1;
 SELECT concat_ws(',', *) FROM v1;
+
+-- This is just SELECT *
 SELECT (*) FROM v1;
+
 SELECT struct(*) FROM v1;
 SELECT greatest(*) FROM v1;
 SELECT 5 IN (*) FROM v1;
@@ -73,9 +76,3 @@ SELECT 1 FROM v1 WHERE 4 IN (*);
 SELECT T.* FROM v1, LATERAL (SELECT  v1.*) AS T(c1, c2, c3, c4, c5);
 SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x);
 
-
--- We used to ignore () around * in the past, but now we don't
-SET spark.sql.legacy.ignoreParenthesesAroundStar = true;
-SELECT (*) FROM v1;
-SET spark.sql.legacy.ignoreParenthesesAroundStar = false;
-DROP VIEW v1;

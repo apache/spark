@@ -574,6 +574,10 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> or <code>maxBytesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
         <br/>
+        <code>maxCachedFiles</code>: maximum number of files to cache to be processed in subsequent batches (default: 10000).  If files are available in the cache, they will be read from first before listing from the input source.
+        <br/>
+        <code>discardCachedInputRatio</code>: ratio of cached files/bytes to max files/bytes to allow for listing from input source when there is less cached input than could be available to be read (default: 0.2).  For example, if there are only 10 cached files remaining for a batch but the <code>maxFilesPerTrigger</code> is set to 100, the 10 cached files would be discarded and a new listing would be performed instead. Similarly, if there are cached files that are 10 MB remaining for a batch, but the <code>maxBytesPerTrigger</code> is set to 100MB, the cached files would be discarded.
+        <br/>
         <code>cleanSource</code>: option to clean up completed files after processing.<br/>
         Available options are "archive", "delete", "off". If the option is not provided, the default value is "off".<br/>
         When "archive" is provided, additional option <code>sourceArchiveDir</code> must be provided as well. The value of "sourceArchiveDir" must not match with source pattern in depth (the number of directories from the root directory), where the depth is minimum of depth on both paths. This will ensure archived files are never included as new source files.<br/>
@@ -2078,12 +2082,12 @@ You can deduplicate records in data streams using a unique identifier in the eve
 streamingDf = spark.readStream. ...
 
 # Without watermark using guid column
-streamingDf.dropDuplicates("guid")
+streamingDf.dropDuplicates(["guid"])
 
 # With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
-  .dropDuplicates("guid", "eventTime")
+  .dropDuplicates(["guid", "eventTime"])
 {% endhighlight %}
 
 </div>
@@ -2159,7 +2163,7 @@ streamingDf = spark.readStream. ...
 # deduplicate using guid column with watermark based on eventTime column
 streamingDf \
   .withWatermark("eventTime", "10 hours") \
-  .dropDuplicatesWithinWatermark("guid")
+  .dropDuplicatesWithinWatermark(["guid"])
 {% endhighlight %}
 
 </div>
@@ -2969,7 +2973,11 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
   batchId provided to the function as way to deduplicate the output and get an exactly-once guarantee.
 - `foreachBatch` does not work with the continuous processing mode as it fundamentally relies on the
   micro-batch execution of a streaming query. If you write data in the continuous mode, use `foreach` instead.
-
+- If `foreachBatch` is used with stateful streaming queries and multiple DataFrame actions are performed
+  on the same DataFrame (such as `df.count()` followed by `df.collect()`), the query will be evaluated multiple times leading to
+  the state being reloaded multiple times within the same batch resulting in degraded performance. In this case,
+  it's highly recommended for users to call `persist` and `unpersist` on the DataFrame,
+  within the `foreachBatch` UDF (user-defined function) to avoid recomputation.
 
 ###### Foreach
 If `foreachBatch` is not an option (for example, corresponding batch data writer does not exist, or

@@ -330,6 +330,48 @@ class PandasOnSparkTestUtils:
         """
         return lambda x: getattr(x, func)()
 
+    def sort_index_with_values(self, pobj: Any):
+        assert isinstance(pobj, (pd.Series, pd.DataFrame, ps.Series, ps.DataFrame))
+
+        if isinstance(pobj, (ps.Series, ps.DataFrame)):
+            if isinstance(pobj, ps.Series):
+                psdf = pobj._psdf[[pobj.name]]
+            else:
+                psdf = pobj
+            scols = psdf._internal.index_spark_columns + psdf._internal.data_spark_columns
+            sorted = psdf._sort(
+                by=scols,
+                ascending=True,
+                na_position="last",
+            )
+            if isinstance(pobj, ps.Series):
+                from pyspark.pandas.series import first_series
+
+                return first_series(sorted)
+            else:
+                return sorted
+        else:
+            # quick-sort values and then stable-sort index
+            if isinstance(pobj, pd.Series):
+                return pobj.sort_values(
+                    ascending=True,
+                    na_position="last",
+                ).sort_index(
+                    ascending=True,
+                    na_position="last",
+                    kind="mergesort",
+                )
+            else:
+                return pobj.sort_values(
+                    by=list(pobj.columns),
+                    ascending=True,
+                    na_position="last",
+                ).sort_index(
+                    ascending=True,
+                    na_position="last",
+                    kind="mergesort",
+                )
+
     def assertPandasEqual(self, left: Any, right: Any, check_exact: bool = True):
         _assert_pandas_equal(left, right, check_exact)
 

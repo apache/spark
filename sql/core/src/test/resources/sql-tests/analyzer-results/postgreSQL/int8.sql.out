@@ -626,7 +626,7 @@ Project [q1#xL, q2#xL, (q1#xL & q2#xL) AS and#xL, (q1#xL | q2#xL) AS or#xL, ~q1#
 SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'))
 -- !query analysis
 Project [id#xL]
-+- Range (4567890123456789, 4567890123456799, step=1, splits=None)
++- Range (4567890123456789, 4567890123456799, step=1)
 
 
 -- !query
@@ -653,7 +653,7 @@ org.apache.spark.sql.AnalysisException
 SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 2)
 -- !query analysis
 Project [id#xL]
-+- Range (4567890123456789, 4567890123456799, step=2, splits=None)
++- Range (4567890123456789, 4567890123456799, step=2)
 
 
 -- !query

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
@@ -31,6 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.unsafe.types._
 
 class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -103,10 +105,14 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
-      val msg = intercept[SparkUpgradeException] {
-        df2.collect()
-      }.getMessage
-      assert(msg.contains("Fail to parse"))
+      checkError(
+        exception = intercept[SparkUpgradeException] {
+          df2.collect()
+        },
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+        parameters = Map(
+          "datetime" -> "'2013-111-11 12:13:14'",
+          "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
     }
   }
 
@@ -335,13 +341,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 
-      val exception2 = intercept[AnalysisException] {
-        df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
-          .collect()
-      }.getMessage
-      assert(exception2.contains(
-        "from_csv() doesn't support the DROPMALFORMED mode. " +
-          "Acceptable modes are PERMISSIVE and FAILFAST."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1099",
+        parameters = Map(
+          "funcName" -> "from_csv",
+          "mode" -> "DROPMALFORMED",
+          "permissiveMode" -> "PERMISSIVE",
+          "failFastMode" -> "FAILFAST"))
     }
   }
 
@@ -474,16 +483,19 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
-        val err1 = intercept[SparkException] {
-          df.selectExpr("parsed.a").collect()
-        }
+        checkError(
+          exception = intercept[SparkException] {
+            df.selectExpr("parsed.a").collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
 
-        val err2 = intercept[SparkException] {
-          df.selectExpr("parsed.b").collect()
-        }
-
-        assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
-        assert(err2.getMessage.contains("Malformed records are detected in record parsing"))
+        checkError(
+          exception = intercept[SparkException] {
+            df.selectExpr("parsed.b").collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
       }
     }
   }
@@ -602,5 +614,196 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val actual = df.select(from_csv(
       $"csv", schema_of_csv("1,2\n2"), Map.empty[String, String].asJava))
     checkAnswer(actual, Row(Row(1, "2\n2")))
+  }
+
+  test("SPARK-47497: null value display when w or w/o options (nullValue)") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", null, "y")))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("x", StringType),
+      StructField("y", StringType)))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,,y"))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,-,y"))
+  }
+
+  test("SPARK-47497: to_csv support the data of ArrayType as pretty strings") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", ArrayType(LongType))))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"[100, 200,, 300]\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"[100, 200, -, 300]\""))
+  }
+
+  test("SPARK-47497: to_csv support the data of MapType as pretty strings") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice",
+      Map("math" -> 100L, "english" -> 200L, "science" -> null))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", MapType(StringType, LongType))))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"{math -> 100, english -> 200, science ->}\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"{math -> 100, english -> 200, science -> -}\""))
+  }
+
+  test("SPARK-47497: to_csv support the data of StructType as pretty strings") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", Row(100L, 200L, null))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", StructType(Seq(
+        StructField("id1", LongType),
+        StructField("id2", LongType),
+        StructField("id3", LongType))))))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"{100, 200,}\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"{100, 200, -}\""))
+  }
+
+  test("SPARK-47497: to_csv support the data of BinaryType as pretty strings") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", "a".getBytes(StandardCharsets.UTF_8))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("a", BinaryType)))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual = df.select(to_csv($"value"))
+    checkAnswer(actual, Row("2,Alice,[61]"))
+  }
+
+  test("SPARK-47497: to_csv can display NullType data") {
+    val df = Seq(Tuple1(Tuple1(null))).toDF("value")
+    val options = Map("nullValue" -> "-")
+    val actual = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual, Row("-"))
+  }
+
+  test("SPARK-47497: from_csv/to_csv does not support VariantType data") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("v", VariantType)))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`to_csv`",
+        "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, v: VARIANT>\"",
+        "sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"VARIANT\"")
+    )
+  }
+
+  test("SPARK-47497: the input of to_csv must be StructType") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`to_csv`",
+        "dataType" -> "\"INT\"",
+        "sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("SPARK-47497: to_csv support the data of nested structure as pretty strings") {
+    // The item of the Array is a Map
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice",
+      Array(Map("math" -> 100L, "english" -> 200L, "science" -> null),
+        Map("math" -> 300L, "english" -> 400L, "science" -> 500L)))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", ArrayType(MapType(StringType, LongType)))))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice," +
+      "\"[{math -> 100, english -> 200, science ->}, " +
+      "{math -> 300, english -> 400, science -> 500}]\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice," +
+      "\"[{math -> 100, english -> 200, science -> -}, " +
+      "{math -> 300, english -> 400, science -> 500}]\""))
   }
 }

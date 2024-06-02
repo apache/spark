@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 trait AnalysisTest extends PlanTest {
 
@@ -88,6 +88,8 @@ trait AnalysisTest extends PlanTest {
     new Analyzer(catalog) {
       catalogManager.tempVariableManager.create(
         "testVarA", "1", Literal(1), overrideIfExists = true)
+      catalogManager.tempVariableManager.create(
+        "testVarNull", null, Literal(null, StringType), overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }

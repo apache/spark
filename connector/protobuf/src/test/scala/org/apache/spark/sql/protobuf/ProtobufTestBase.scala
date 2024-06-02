@@ -28,6 +28,9 @@ import org.apache.spark.sql.types.{DataType, StructType}
 
 trait ProtobufTestBase extends SQLTestUtils {
 
+  private val descriptorDir = getWorkspaceFilePath(
+    "connector", "protobuf", "target", "generated-test-sources")
+
   /**
    * Returns path for a Protobuf descriptor file used in the tests. These files are generated
    * during the build. Maven and SBT create the descriptor files differently. Maven creates one
@@ -35,7 +38,7 @@ trait ProtobufTestBase extends SQLTestUtils {
    * all the Protobuf files. As a result actual file path returned in each case is different.
    */
   protected def protobufDescriptorFile(fileName: String): String = {
-    val dir = "target/generated-test-sources"
+    val dir = descriptorDir.toFile.getCanonicalPath
     if (new File(s"$dir/$fileName").exists) {
       s"$dir/$fileName"
     } else { // sbt test

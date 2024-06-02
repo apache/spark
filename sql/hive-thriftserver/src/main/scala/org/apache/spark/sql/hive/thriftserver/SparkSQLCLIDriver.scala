@@ -40,7 +40,8 @@ import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
@@ -164,7 +165,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // In SparkSQL CLI, we may want to use jars augmented by hiveconf
     // hive.aux.jars.path, here we add jars augmented by hiveconf to
     // Spark's SessionResourceLoader to obtain these jars.
-    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
+    val auxJars = HiveConf.getVar(conf, HiveConf.getConfVars("hive.aux.jars.path"))
     if (StringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
       StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
@@ -214,7 +215,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     } catch {
       case e: FileNotFoundException =>
-        logError(s"Could not open input file for reading. (${e.getMessage})")
+        logError(log"Could not open input file for reading. (${MDC(ERROR, e.getMessage)})")
         exit(ERROR_PATH_NOT_FOUND)
     }
 
@@ -231,14 +232,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         val historyFile = historyDirectory + File.separator + ".hivehistory"
         reader.setHistory(new FileHistory(new File(historyFile)))
       } else {
-        logWarning("WARNING: Directory for Hive history file: " + historyDirectory +
-                           " does not exist.   History will not be available during this session.")
+        logWarning(
+          log"Directory for Hive history file: ${MDC(HISTORY_DIR, historyDirectory)}" +
+            log" does not exist. History will not be available during this session.")
       }
     } catch {
       case e: Exception =>
-        logWarning("WARNING: Encountered an error while trying to initialize Hive's " +
-                           "history file.  History will not be available during this session.")
-        logWarning(e.getMessage)
+        logWarning("Encountered an error while trying to initialize Hive's " +
+                     "history file. History will not be available during this session.", e)
     }
 
     // add shutdown hook to flush the history to history file
@@ -249,7 +250,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
             h.flush()
           } catch {
             case e: IOException =>
-              logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+              logWarning(
+                log"Failed to write command history file: ${MDC(ERROR, e.getMessage)}")
           }
         case _ =>
       }
@@ -577,7 +579,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             val ret = processCmd(command)
             command = ""
             lastRet = ret
-            val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+            val ignoreErrors =
+              HiveConf.getBoolVar(conf, HiveConf.getConfVars("hive.cli.errors.ignore"))
             if (ret != 0 && !ignoreErrors) {
               CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
               return ret

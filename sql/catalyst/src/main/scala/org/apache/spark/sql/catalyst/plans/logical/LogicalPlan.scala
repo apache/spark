@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{MapType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
@@ -118,7 +119,9 @@ abstract class LogicalPlan
   def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
-        case a: AttributeReference => a
+        case a: AttributeReference =>
+          // Keep the metadata in given schema.
+          a.withMetadata(field.metadata)
         case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
         throw QueryCompilationErrors.cannotResolveAttributeError(
@@ -210,6 +213,33 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
+}
+
+/**
+ * A abstract class for LogicalQueryStage that is visible in logical rewrites.
+ */
+abstract class LogicalQueryStage extends LeafNode {
+  override protected val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_QUERY_STAGE)
+
+  /**
+   * Returns the logical plan that is included in this query stage
+   */
+  def logicalPlan: LogicalPlan
+
+  /**
+   * Returns the physical plan.
+   */
+  def physicalPlan: QueryPlan[_]
+
+  /**
+   * Return true if the physical stage is materialized
+   */
+  def isMaterialized: Boolean
+
+  /**
+   * Return true if the physical plan corresponds directly to a stage
+   */
+  def isDirectStage: Boolean
 }
 
 /**
@@ -349,23 +379,6 @@ object LogicalPlanIntegrity {
   }
 
   /**
-   * Validate that the grouping key types in Aggregate plans are valid.
-   * Returns an error message if the check fails, or None if it succeeds.
-   */
-  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
-    plan.collectFirst {
-      case a @ Aggregate(groupingExprs, _, _) =>
-        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
-        if (badExprs.nonEmpty) {
-          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
-            s"for plan:\n ${a.treeString}")
-        } else {
-          None
-        }
-    }.flatten
-  }
-
-  /**
    * Validate that the aggregation expressions in Aggregate plans are valid.
    * Returns an error message if the check fails, or None if it succeeds.
    */
@@ -417,7 +430,6 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
       .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
-      .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")

@@ -224,7 +224,7 @@ For the Scala shell, we use an Ammonite-based REPL that is currently not include
 To set up the new Scala shell, first download and install [Coursier CLI](https://get-coursier.io/docs/cli-installation).
 Then, install the REPL using the following command in a terminal window:
 {% highlight bash %}
-cs install –-contrib spark-connect-repl
+cs install --contrib spark-connect-repl
 {% endhighlight %}
 
 And now you can start the Ammonite-based Scala REPL/shell to connect to your Spark server like this:
@@ -279,7 +279,7 @@ The customizations may also be passed in through CLI arguments as shown below:
 spark-connect-repl --host myhost.com --port 443 --token ABCDEFG
 {% endhighlight %}
 
-The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/client/jvm/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
+The supported list of CLI arguments may be found [here](https://github.com/apache/spark/blob/master/connector/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClientParser.scala#L48).
 
 #### Configure programmatically with a connection string
 

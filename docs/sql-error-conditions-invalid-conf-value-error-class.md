@@ -30,6 +30,10 @@ The value '`<confValue>`' in the config "`<confName>`" is invalid.
 
 This error class has the following derived error classes:
 
+## DEFAULT_COLLATION
+
+Cannot resolve the given default collation. Did you mean '`<proposal>`'?
+
 ## TIME_ZONE
 
 Cannot resolve the given timezone.

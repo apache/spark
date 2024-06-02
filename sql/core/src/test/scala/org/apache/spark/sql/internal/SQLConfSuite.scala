@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
@@ -121,16 +121,12 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   test(s"SPARK-35168: ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} should respect" +
       s" ${SQLConf.SHUFFLE_PARTITIONS.key}") {
-    spark.sessionState.conf.clear()
-    try {
-      sql(s"SET ${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key}=true")
-      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_ENABLED.key}=true")
-      sql(s"SET ${SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key}=1")
-      sql(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=2")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       checkAnswer(sql(s"SET ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}"),
         Row(SQLConf.SHUFFLE_PARTITIONS.key, "2"))
-    } finally {
-      spark.sessionState.conf.clear()
     }
   }
 
@@ -243,9 +239,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalid conf value") {
-    spark.sessionState.conf.clear()
     val e = intercept[IllegalArgumentException] {
-      sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "10") {
+      }
     }
     assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
   }
@@ -503,6 +499,31 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |Non internal legacy SQL configs:
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
+  }
+
+  test("SPARK-47765: set collation") {
+    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+      sql(s"set collation $collation")
+      assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        sql(s"SET COLLATION unicode_c").collect()
+      },
+      errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
+      parameters = Map(
+        "confValue" -> "UNICODE_C",
+        "confName" -> "spark.sql.session.collation.default"
+      ))
+
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI")),
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+        parameters = Map.empty
+      )
+    }
   }
 
   test("SPARK-43028: config not found error") {

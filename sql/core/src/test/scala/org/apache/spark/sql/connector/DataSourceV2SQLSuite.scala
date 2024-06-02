@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
@@ -814,14 +814,10 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          // TODO assign a error-classes name
-          checkError(
-            exception = intercept[SparkException] {
-              insertNullValueAndCheck()
-            },
-            errorClass = null,
-            parameters = Map.empty
-          )
+          val exception = intercept[SparkRuntimeException] {
+            insertNullValueAndCheck()
+          }
+          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }
@@ -2928,6 +2924,67 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Check HasPartitionStatistics from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array(), "tbl"))
+        .asInstanceOf[InMemoryPartitionTable]
+
+      var partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      var partRowCounts = table.data.map(_.numRows().getAsLong)
+      var partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partSizes.length == 0)
+      assert(partRowCounts.length == 0)
+      assert(partFiles.length == 0)
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 2)
+      assert(partSizes.toSet == Set(100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 2)
+      assert(partRowCounts.toSet == Set(1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 2)
+      assert(partFiles.toSet == Set(100, 100))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 0))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partSizes = table.data.map(_.sizeInBytes().getAsLong)
+      assert(partSizes.length == 5)
+      assert(partSizes.toSet == Set(100, 100, 100, 100, 100))
+      partRowCounts = table.data.map(_.numRows().getAsLong)
+      assert(partRowCounts.length == 5)
+      assert(partRowCounts.toSet == Set(1, 1, 0, 1, 1))
+      partFiles = table.data.map(_.filesCount().getAsLong)
+      assert(partFiles.length == 5)
+      assert(partFiles.toSet == Set(100, 100, 100, 100, 100))
+    }
+  }
+
   test("time travel") {
     sql("use testcat")
     // The testing in-memory table simply append the version/timestamp to the table name when
@@ -3002,6 +3059,19 @@ class DataSourceV2SQLSuiteV1Filter
       val res10 = sql("SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT make_date(2021, 1, 29)))")
         .collect()
       assert(res10 === Array(Row(7), Row(8)))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          // `current_date()` is a valid expression for time travel timestamp, but the test uses
+          // a fake time travel implementation that only supports two hardcoded timestamp values.
+          sql("SELECT * FROM t TIMESTAMP AS OF current_date()")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`t`"),
+        context = ExpectedContext(
+          fragment = "t",
+          start = 14,
+          stop = 14))
 
       checkError(
         exception = intercept[AnalysisException] {

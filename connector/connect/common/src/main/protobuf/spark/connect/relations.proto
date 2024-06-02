@@ -73,6 +73,8 @@ message Relation {
     CachedRemoteRelation cached_remote_relation = 37;
     CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
     AsOfJoin as_of_join = 39;
+    CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
+    WithRelations with_relations = 41;
 
     // NA functions
     NAFill fill_na = 90;
@@ -129,6 +131,23 @@ message SQL {
   // (Optional) A sequence of expressions for positional parameters in the SQL query text.
   // It cannot coexist with `named_arguments`.
   repeated Expression pos_arguments = 5;
+}
+
+// Relation of type [[WithRelations]].
+//
+// This relation contains a root plan, and one or more references that are used by the root plan.
+// There are two ways of referencing a relation, by name (through a subquery alias), or by plan_id
+// (using RelationCommon.plan_id).
+//
+// This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
+message WithRelations {
+  // (Required) Plan at the root of the query tree. This plan is expected to contain one or more
+  // references. Those references get expanded later on by the engine.
+  Relation root = 1;
+
+  // (Required) Plans referenced by the root plan. Relations in this list are also allowed to
+  // contain references to other relations in this list, as long they do not form cycles.
+  repeated Relation references = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -448,7 +467,9 @@ message Sample {
   // (Optional) Whether to sample with replacement.
   optional bool with_replacement = 4;
 
-  // (Optional) The random seed.
+  // (Required) The random seed.
+  // This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
+  // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
   // (Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
@@ -668,7 +689,9 @@ message StatSampleBy {
   // If a stratum is not specified, we treat its fraction as zero.
   repeated Fraction fractions = 3;
 
-  // (Optional) The random seed.
+  // (Required) The random seed.
+  // This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
+  // however, still keep it 'optional' here for backward compatibility.
   optional int64 seed = 5;
 
   message Fraction {
@@ -892,6 +915,9 @@ message MapPartitions {
 
   // (Optional) Whether to use barrier mode execution or not.
   optional bool is_barrier = 3;
+
+  // (Optional) ResourceProfile id used for the stage level scheduling.
+  optional int32 profile_id = 4;
 }
 
 message GroupMap {
@@ -998,6 +1024,24 @@ message PythonUDTF {
 
   // (Required) Python version being used in the client.
   string python_ver = 4;
+}
+
+message CommonInlineUserDefinedDataSource {
+  // (Required) Name of the data source.
+  string name = 1;
+
+  // (Required) The data source type.
+  oneof data_source {
+    PythonDataSource python_data_source = 2;
+  }
+}
+
+message PythonDataSource {
+  // (Required) The encoded commands of the Python data source.
+  bytes command = 1;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 2;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

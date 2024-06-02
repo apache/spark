@@ -95,6 +95,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.orc</groupId>
+      <artifactId>orc-format</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
       <classifier>${orc.classifier}</classifier>
     </dependency>
@@ -104,7 +109,7 @@
       <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>

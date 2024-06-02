@@ -22,8 +22,6 @@ import numpy as np
 from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
-from pyspark.ml.feature import Bucketizer
-from pyspark.mllib.stat import KernelDensity
 from pyspark.sql import functions as F
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
@@ -147,6 +145,8 @@ class HistogramPlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_hist(psdf, bins):
+        from pyspark.ml.feature import Bucketizer
+
         # 'data' is a Spark DataFrame that selects one column.
         assert isinstance(bins, (np.ndarray, np.generic))
 
@@ -463,6 +463,8 @@ class KdePlotBase(NumericPlotBase):
 
     @staticmethod
     def compute_kde(sdf, bw_method=None, ind=None):
+        from pyspark.mllib.stat import KernelDensity
+
         # 'sdf' is a Spark DataFrame that selects one column.
 
         # Using RDD is slow so we might have to change it to Dataset based implementation

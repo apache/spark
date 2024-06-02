@@ -18,11 +18,13 @@
 __all__ = ["SparkConf"]
 
 import sys
-from typing import Dict, List, Optional, Tuple, cast, overload
+from typing import Dict, List, Optional, Tuple, cast, overload, TYPE_CHECKING
 
-from py4j.java_gateway import JVMView, JavaObject
-
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JVMView, JavaObject
 
 
 class SparkConf:
@@ -60,8 +62,7 @@ class SparkConf:
 
     Examples
     --------
-    >>> from pyspark.conf import SparkConf
-    >>> from pyspark.context import SparkContext
+    >>> from pyspark import SparkConf, SparkContext
     >>> conf = SparkConf()
     >>> conf.setMaster("local").setAppName("My app")
     <pyspark.conf.SparkConf object at ...>
@@ -109,14 +110,14 @@ class SparkConf:
     spark.home=/path
     """
 
-    _jconf: Optional[JavaObject]
+    _jconf: Optional["JavaObject"]
     _conf: Optional[Dict[str, str]]
 
     def __init__(
         self,
         loadDefaults: bool = True,
-        _jvm: Optional[JVMView] = None,
-        _jconf: Optional[JavaObject] = None,
+        _jvm: Optional["JVMView"] = None,
+        _jconf: Optional["JavaObject"] = None,
     ):
         """
         Create a new Spark configuration.
@@ -124,13 +125,15 @@ class SparkConf:
         if _jconf:
             self._jconf = _jconf
         else:
-            from pyspark.context import SparkContext
+            jvm = None
+            if not is_remote_only():
+                from pyspark.core.context import SparkContext
 
-            _jvm = _jvm or SparkContext._jvm
+                jvm = _jvm or SparkContext._jvm
 
-            if _jvm is not None:
+            if jvm is not None:
                 # JVM is created, so create self._jconf directly through JVM
-                self._jconf = _jvm.SparkConf(loadDefaults)
+                self._jconf = jvm.SparkConf(loadDefaults)
                 self._conf = None
             else:
                 # JVM is not created, so store data in self._conf first
@@ -240,6 +243,8 @@ class SparkConf:
     def getAll(self) -> List[Tuple[str, str]]:
         """Get all values as a list of key-value pairs."""
         if self._jconf is not None:
+            from py4j.java_gateway import JavaObject
+
             return [(elem._1(), elem._2()) for elem in cast(JavaObject, self._jconf).getAll()]
         else:
             assert self._conf is not None

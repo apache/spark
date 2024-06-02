@@ -21,8 +21,9 @@ echo "=================================="
 echo "Free up disk space on CI system"
 echo "=================================="
 
-echo "Listing 100 largest packages"
-dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+echo "Listing top 100 largest packages (from large to small)"
+printf "Installed-Size\tPackage\n"
+dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
 df -h
 
 echo "Removing large packages"

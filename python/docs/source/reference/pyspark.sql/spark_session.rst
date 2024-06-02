@@ -47,8 +47,10 @@ See also :class:`SparkSession`.
     SparkSession.catalog
     SparkSession.conf
     SparkSession.createDataFrame
+    SparkSession.dataSource
     SparkSession.getActiveSession
     SparkSession.newSession
+    SparkSession.profile
     SparkSession.range
     SparkSession.read
     SparkSession.readStream
@@ -76,12 +78,15 @@ Spark Connect Only
 
     SparkSession.addArtifact
     SparkSession.addArtifacts
-    SparkSession.copyFromLocalToFs
-    SparkSession.client
-    SparkSession.interruptAll
-    SparkSession.interruptTag
-    SparkSession.interruptOperation
     SparkSession.addTag
-    SparkSession.removeTag
-    SparkSession.getTags
+    SparkSession.clearProgressHandlers
     SparkSession.clearTags
+    SparkSession.client
+    SparkSession.copyFromLocalToFs
+    SparkSession.getTags
+    SparkSession.interruptAll
+    SparkSession.interruptOperation
+    SparkSession.interruptTag
+    SparkSession.registerProgressHandler
+    SparkSession.removeProgressHandler
+    SparkSession.removeTag

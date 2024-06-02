@@ -626,28 +626,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   }
 
   test("access history application defaults to the last attempt id") {
-
-    def getRedirectUrl(url: URL): (Int, String) = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod("GET")
-      connection.setUseCaches(false)
-      connection.setDefaultUseCaches(false)
-      connection.setInstanceFollowRedirects(false)
-      connection.connect()
-      val code = connection.getResponseCode()
-      val location = connection.getHeaderField("Location")
-      (code, location)
-    }
-
-    def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
-      attemptId match {
-        case Some(id) =>
-          new URL(s"http://$localhost:$port/history/$appId/$id")
-        case None =>
-          new URL(s"http://$localhost:$port/history/$appId")
-      }
-    }
-
     val oneAttemptAppId = "local-1430917381534"
     HistoryServerSuite.getUrl(buildPageAttemptUrl(oneAttemptAppId, None))
 
@@ -665,6 +643,42 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
           assert(location.stripSuffix("/") === url.toString)
       }
       HistoryServerSuite.getUrl(new URL(location))
+    }
+  }
+
+  test("Redirect URLs should end with a slash") {
+    val oneAttemptAppId = "local-1430917381534"
+    val multiAttemptAppid = "local-1430917381535"
+
+    val url = buildPageAttemptUrl(oneAttemptAppId, None)
+    val (code, location) = getRedirectUrl(url)
+    assert(code === 302, s"Unexpected status code $code for $url")
+    assert(location === url.toString + "/")
+
+    val url2 = buildPageAttemptUrl(multiAttemptAppid, None)
+    val (code2, location2) = getRedirectUrl(url2)
+    assert(code2 === 302, s"Unexpected status code $code2 for $url2")
+    assert(location2 === url2.toString + "/2/")
+  }
+
+  def getRedirectUrl(url: URL): (Int, String) = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod("GET")
+    connection.setUseCaches(false)
+    connection.setDefaultUseCaches(false)
+    connection.setInstanceFollowRedirects(false)
+    connection.connect()
+    val code = connection.getResponseCode()
+    val location = connection.getHeaderField("Location")
+    (code, location)
+  }
+
+  def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
+    attemptId match {
+      case Some(id) =>
+        new URL(s"http://$localhost:$port/history/$appId/$id")
+      case None =>
+        new URL(s"http://$localhost:$port/history/$appId")
     }
   }
 

@@ -200,13 +200,13 @@ private[hive] class TestHiveSparkSession(
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       // scratch directory used by Hive's metastore client
-      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      "hive.exec.scratchdir" -> TestHiveContext.makeScratchDir().toURI.toString,
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1") ++
       // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
       existingSharedState.map { state =>
         val connKey =
-          state.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
-        ConfVars.METASTORECONNECTURLKEY.varname -> connKey
+          state.sparkContext.hadoopConfiguration.get("javax.jdo.option.ConnectionURL")
+        "javax.jdo.option.ConnectionURL" -> connKey
       }
 
     metastoreTempConf.foreach { case (k, v) =>
@@ -552,7 +552,7 @@ private[hive] class TestHiveSparkSession(
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
       val hadoopConf = sessionState.newHadoopConf()
-      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val location = new Path(hadoopConf.get("hive.exec.scratchdir"))
       val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 

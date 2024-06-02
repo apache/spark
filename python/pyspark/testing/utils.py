@@ -38,7 +38,7 @@ from itertools import zip_longest
 have_scipy = False
 have_numpy = False
 try:
-    import scipy.sparse  # noqa: F401
+    import scipy  # noqa: F401
 
     have_scipy = True
 except ImportError:
@@ -52,8 +52,10 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
+from pyspark.errors.exceptions.captured import CapturedException
+from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
@@ -154,6 +156,8 @@ class QuietTest:
 
 class PySparkTestCase(unittest.TestCase):
     def setUp(self):
+        from pyspark import SparkContext
+
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         self.sc = SparkContext("local[4]", class_name)
@@ -173,6 +177,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
 
     @classmethod
@@ -183,6 +189,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
         from pyspark.sql import is_remote
 
         self.assertFalse(is_remote())
+
+    def quiet(self):
+        from pyspark.testing.utils import QuietTest
+
+        return QuietTest(self.sc)
 
 
 class ByteArrayOutput:
@@ -275,7 +286,14 @@ class PySparkErrorTestUtils:
         exception: PySparkException,
         error_class: str,
         message_parameters: Optional[Dict[str, str]] = None,
+        query_context_type: Optional[QueryContextType] = None,
+        pyspark_fragment: Optional[str] = None,
     ):
+        query_context = exception.getQueryContext()
+        assert bool(query_context) == (query_context_type is not None), (
+            "`query_context_type` is required when QueryContext exists. "
+            f"QueryContext: {query_context}."
+        )
         # Test if given error is an instance of PySparkException.
         self.assertIsInstance(
             exception,
@@ -296,6 +314,27 @@ class PySparkErrorTestUtils:
         self.assertEqual(
             expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
         )
+
+        # Test query context
+        if query_context:
+            expected = query_context_type
+            actual_contexts = exception.getQueryContext()
+            for actual_context in actual_contexts:
+                actual = actual_context.contextType()
+                self.assertEqual(
+                    expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
+                )
+                if actual == QueryContextType.DataFrame:
+                    assert (
+                        pyspark_fragment is not None
+                    ), "`pyspark_fragment` is required when QueryContextType is DataFrame."
+                    expected = pyspark_fragment
+                    actual = actual_context.pysparkFragment()
+                    self.assertEqual(
+                        expected,
+                        actual,
+                        f"Expected PySpark fragment was '{expected}', got '{actual}'",
+                    )
 
 
 def assertSchemaEqual(
@@ -790,12 +829,7 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-    from pyspark.sql.utils import get_dataframe_class
-
-    # if is_remote(), allow Connect DataFrame
-    SparkDataFrame = get_dataframe_class()
-
-    if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
+    if not isinstance(actual, (DataFrame, list)):
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
@@ -804,7 +838,7 @@ def assertDataFrameEqual(
                 "actual_type": type(actual),
             },
         )
-    elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
+    elif not isinstance(expected, (DataFrame, list)):
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={

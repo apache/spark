@@ -566,15 +566,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
       sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        transform(
-          connectTestRelation.withColumnsRenamed(
-            Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
-      },
-      errorClass = "COLUMN_ALREADY_EXISTS",
-      parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
   test("Writes fails without path or table") {
@@ -1045,10 +1036,10 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("SPARK-47144: Collated string") {
-    Seq("UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
+    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
       Seq(
-        s"select 'abc' collate '$collationName'",
-        s"select collation('abc' collate '$collationName')").map(query =>
+        s"select 'abc' collate $collationName",
+        s"select collation('abc' collate $collationName)").map(query =>
         comparePlans(connect.sql(query), spark.sql(query))))
   }
 

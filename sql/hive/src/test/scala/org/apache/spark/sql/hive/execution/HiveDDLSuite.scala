@@ -216,7 +216,7 @@ class HiveDDLSuite
 
   test("SPARK-22431: alter table tests with nested types") {
     withTable("t1", "t2", "t3") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING HIVE")
       spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`col1`:STRING, col2:Int>)")
       val newcol = spark.sql("SELECT * FROM t1").schema.fields(2).name
       assert("newcol1".equals(newcol))
@@ -2614,7 +2614,7 @@ class HiveDDLSuite
           "msg" -> "java.lang.UnsupportedOperationException: Unknown field type: void")
       )
 
-      sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
+      sql("CREATE TABLE t3 USING HIVE AS SELECT NULL AS null_col")
       checkAnswer(sql("SELECT * FROM t3"), Row(null))
     }
 
@@ -2642,9 +2642,6 @@ class HiveDDLSuite
 
       sql("CREATE TABLE t3 (v VOID) USING hive")
       checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
-
-      sql("CREATE TABLE t4 (v VOID)")
-      checkAnswer(sql("SELECT * FROM t4"), Seq.empty)
     }
 
     // Create table with void type using spark.catalog.createTable
@@ -3324,7 +3321,7 @@ class HiveDDLSuite
            |  INTERVAL '1-1' YEAR TO MONTH AS YM,
            |  INTERVAL '1 02:03:04.123456' DAY TO SECOND AS DT
            |""".stripMargin,
-        s"CREATE TABLE $tbl (dt INTERVAL HOUR TO MINUTE)"
+        s"CREATE TABLE $tbl (dt INTERVAL HOUR TO MINUTE) USING HIVE"
       ).foreach { sqlCmd =>
         checkError(
           exception = intercept[SparkUnsupportedOperationException] {

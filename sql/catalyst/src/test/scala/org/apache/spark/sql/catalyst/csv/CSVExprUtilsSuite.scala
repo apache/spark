@@ -33,12 +33,21 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
+  test("Does not accept null delimiter") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
   test("Does not accept delimiter larger than one character") {
     checkError(
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("ab")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3237",
+      errorClass = "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
       parameters = Map("str" -> "ab"))
   }
 
@@ -47,7 +56,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\1""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3236",
+      errorClass = "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
       parameters = Map("str" -> """\1"""))
   }
 
@@ -56,7 +65,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3248",
+      errorClass = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
       parameters = Map.empty)
   }
 
@@ -65,7 +74,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3247",
+      errorClass = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
       parameters = Map.empty)
   }
 
@@ -76,7 +85,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // backslash, then tab
     ("""\\t""", Some("""\t"""), None),
     // invalid special character (dot)
-    ("""\.""", None, Some("_LEGACY_ERROR_TEMP_3236")),
+    ("""\.""", None, Some("INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER")),
     // backslash, then dot
     ("""\\.""", Some("""\."""), None),
     // nothing special, just straight conversion

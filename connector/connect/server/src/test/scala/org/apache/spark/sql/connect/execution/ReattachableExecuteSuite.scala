@@ -300,7 +300,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("SPARK-46186 interrupt directly after query start") {
     // register a sleep udf in the session
     val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
     serverSession.udf.register(
       "sleep",
       ((ms: Int) => {
@@ -384,7 +386,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("long sleeping query") {
     // register udf directly on the server, we're not testing client UDFs here...
     val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
     serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
     // query will be sleeping and not returning results, while having multiple reattach
     withSparkEnvConfs(

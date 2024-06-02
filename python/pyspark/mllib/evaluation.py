@@ -19,7 +19,7 @@ from typing import Generic, List, Optional, Tuple, TypeVar, Union
 import sys
 
 from pyspark import since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.linalg import Matrix
 from pyspark.sql import SQLContext

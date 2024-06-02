@@ -84,24 +84,29 @@ class ArithmeticChainTestingFuncMixin:
 
         # MultiIndex Series
         self.assert_eq(
-            (psser1 + psser2 - psser3).sort_index(), (pser1 + pser2 - pser3).sort_index()
+            self.sort_index_with_values(psser1 + psser2 - psser3),
+            self.sort_index_with_values(pser1 + pser2 - pser3),
         )
 
         self.assert_eq(
-            (psser1 * psser2 * psser3).sort_index(), (pser1 * pser2 * pser3).sort_index()
+            self.sort_index_with_values(psser1 * psser2 * psser3),
+            self.sort_index_with_values(pser1 * pser2 * pser3),
         )
 
         if check_extension and not extension_float_dtypes_available:
             self.assert_eq(
-                (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
+                self.sort_index_with_values(psser1 - psser2 / psser3),
+                self.sort_index_with_values(pser1 - pser2 / pser3),
             )
         else:
             self.assert_eq(
-                (psser1 - psser2 / psser3).sort_index(), (pser1 - pser2 / pser3).sort_index()
+                self.sort_index_with_values(psser1 - psser2 / psser3),
+                self.sort_index_with_values(pser1 - pser2 / pser3),
             )
 
         self.assert_eq(
-            (psser1 + psser2 * psser3).sort_index(), (pser1 + pser2 * pser3).sort_index()
+            self.sort_index_with_values(psser1 + psser2 * psser3),
+            self.sort_index_with_values(pser1 + pser2 * pser3),
         )
 
 

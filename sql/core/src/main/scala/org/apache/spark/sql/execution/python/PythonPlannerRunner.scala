@@ -44,7 +44,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
 
   protected def receiveFromPython(dataIn: DataInputStream): T
 
-  def runInPython(): T = {
+  def runInPython(useDaemon: Boolean = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)): T = {
     val env = SparkEnv.get
     val bufferSize: Int = env.conf.get(BUFFER_SIZE)
     val authSocketTimeout = env.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
@@ -82,7 +82,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) {
       /* valueCompare = */ false)
 
     val (worker: PythonWorker, _) =
-      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap)
+      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, useDaemon)
     var releasedOrClosed = false
     val bufferStream = new DirectByteBufferOutputStream()
     try {

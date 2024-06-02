@@ -762,6 +762,29 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SET VAR sql_string = null
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`sql_string`"
+  }
+}
+
+
+-- !query
 DROP TABLE x
 -- !query schema
 struct<>

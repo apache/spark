@@ -18,6 +18,7 @@
 import os
 import unittest
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -25,6 +26,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import eventually
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     @classmethod
     def setUpClass(cls):

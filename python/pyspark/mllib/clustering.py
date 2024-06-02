@@ -25,7 +25,7 @@ import numpy as np
 from numpy import array, random, tile
 
 from pyspark import SparkContext, since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector  # noqa: F401
 from pyspark.mllib.stat.distribution import MultivariateGaussian

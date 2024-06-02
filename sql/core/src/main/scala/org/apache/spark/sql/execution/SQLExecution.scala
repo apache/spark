@@ -20,14 +20,16 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -115,6 +117,7 @@ object SQLExecution extends Logging {
 
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
+        var isExecutedPlanAvailable = false
         val startTime = System.nanoTime()
         val startEvent = SparkListenerSQLExecutionStart(
           executionId = executionId,
@@ -147,6 +150,7 @@ object SQLExecution extends Logging {
               }
               sc.listenerBus.post(
                 startEvent.copy(physicalPlanDescription = planDesc, sparkPlanInfo = planInfo))
+              isExecutedPlanAvailable = true
               f()
           }
         } catch {
@@ -160,6 +164,24 @@ object SQLExecution extends Logging {
               SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
             case e =>
               Utils.exceptionString(e)
+          }
+          if (queryExecution.shuffleCleanupMode != DoNotCleanup
+            && isExecutedPlanAvailable) {
+            val shuffleIds = queryExecution.executedPlan match {
+              case ae: AdaptiveSparkPlanExec =>
+                ae.context.shuffleIds.asScala.keys
+              case _ =>
+                Iterable.empty
+            }
+            shuffleIds.foreach { shuffleId =>
+              queryExecution.shuffleCleanupMode match {
+                case RemoveShuffleFiles =>
+                  SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+                case SkipMigration =>
+                  SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
+                case _ => // this should not happen
+              }
+            }
           }
           val event = SparkListenerSQLExecutionEnd(
             executionId,

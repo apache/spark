@@ -23,7 +23,7 @@ import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -771,12 +771,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(b int) using parquet")
 
         val outOfRangeValue1 = (Int.MaxValue + 1L).toString
-        val e1 = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue1)")
-        }
-        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into t values($outOfRangeValue1)")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
@@ -784,12 +782,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "columnName" -> "`b`"))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
-        val e2 = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue2)")
-        }
-        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into t values($outOfRangeValue2)")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
@@ -806,12 +802,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(b long) using parquet")
 
         val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
-        val e1 = intercept[SparkException] {
-          sql(s"insert into t values(${outOfRangeValue1}D)")
-        }
-        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into t values(${outOfRangeValue1}D)")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -819,12 +813,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             "columnName" -> "`b`"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
-        val e2 = intercept[SparkException] {
-          sql(s"insert into t values(${outOfRangeValue2}D)")
-        }
-        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into t values(${outOfRangeValue2}D)")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -840,12 +832,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b decimal(3,2)) using parquet")
         val outOfRangeValue = "123.45"
-        val ex = intercept[SparkException] {
-          sql(s"insert into t values($outOfRangeValue)")
-        }
-        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = ex.getCause.asInstanceOf[SparkArithmeticException],
+          exception = intercept[SparkArithmeticException] {
+            sql(s"insert into t values($outOfRangeValue)")
+          },
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DECIMAL(5,2)\"",
@@ -963,10 +953,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      val msg = intercept[SparkException] {
+      val msg = intercept[SparkRuntimeException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getCause.getMessage
-      assert(msg.contains("Null value appeared in non-nullable field"))
+      }
+      assert(msg.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

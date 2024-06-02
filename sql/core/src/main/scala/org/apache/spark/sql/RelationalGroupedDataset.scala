@@ -58,10 +58,12 @@ class RelationalGroupedDataset protected[sql](
   import RelationalGroupedDataset._
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
+    @scala.annotation.nowarn("cat=deprecation")
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
-        // call `toList` because `LazyList` can't serialize in scala 2.13
+        // call `toList` because `Stream` and `LazyList` can't serialize in scala 2.13
         case s: LazyList[Expression] => s.toList ++ aggExprs
+        case s: Stream[Expression] => s.toList ++ aggExprs
         case other => other ++ aggExprs
       }
     } else {
@@ -421,28 +423,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column): RelationalGroupedDataset = {
-    if (df.isStreaming) {
-      throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3063",
-        messageParameters = Map.empty)
-    }
-    // This is to prevent unintended OOM errors when the number of distinct values is large
-    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
-    // Get the distinct values of the column and sort them so its consistent
-    val values = df.select(pivotColumn)
-      .distinct()
-      .limit(maxValues + 1)
-      .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .collect()
-      .map(_.get(0))
-      .toImmutableArraySeq
-
-    if (values.length > maxValues) {
-      throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
-        pivotColumn.toString, maxValues)
-    }
-
-    pivot(pivotColumn, values)
+    pivot(pivotColumn, collectPivotValues(df, pivotColumn))
   }
 
   /**
@@ -794,6 +775,30 @@ private[sql] object RelationalGroupedDataset {
     case a: AggregateExpression => UnresolvedAlias(a, Some(Column.generateAlias))
     case _ if !expr.resolved => UnresolvedAlias(expr, None)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
+  }
+
+  private[sql] def collectPivotValues(df: DataFrame, pivotColumn: Column): Seq[Any] = {
+    if (df.isStreaming) {
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3063",
+        messageParameters = Map.empty)
+    }
+    // This is to prevent unintended OOM errors when the number of distinct values is large
+    val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
+    // Get the distinct values of the column and sort them so its consistent
+    val values = df.select(pivotColumn)
+      .distinct()
+      .limit(maxValues + 1)
+      .sort(pivotColumn) // ensure that the output columns are in a consistent logical order
+      .collect()
+      .map(_.get(0))
+      .toImmutableArraySeq
+
+    if (values.length > maxValues) {
+      throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
+        pivotColumn.toString, maxValues)
+    }
+    values
   }
 
   /**

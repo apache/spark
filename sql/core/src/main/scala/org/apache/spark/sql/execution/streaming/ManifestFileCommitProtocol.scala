@@ -25,7 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{BATCH_ID, PATH}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -74,7 +75,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     pendingCommitFiles.clear()
 
     if (fileLog.add(batchId, fileStatuses)) {
-      logInfo(s"Committed batch $batchId")
+      logInfo(log"Committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
       throw new IllegalStateException(s"Race while writing batch $batchId")
     }
@@ -95,7 +96,8 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
           }
         } catch {
           case e: IOException =>
-            logWarning(s"Fail to remove temporary file $path, continue removing next.", e)
+            logWarning(log"Fail to remove temporary file ${MDC(PATH, path)}, " +
+              log"continue removing next.", e)
         }
       }
       pendingCommitFiles.clear()

@@ -800,4 +800,84 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         start = 0,
         stop = 63))
   }
+
+  test("verify whitespace handling - standard whitespace") {
+    parser.parsePlan("SELECT 1") // ASCII space
+    parser.parsePlan("SELECT\r1") // ASCII carriage return
+    parser.parsePlan("SELECT\n1") // ASCII line feed
+    parser.parsePlan("SELECT\t1") // ASCII tab
+    parser.parsePlan("SELECT\u000B1") // ASCII vertical tab
+    parser.parsePlan("SELECT\f1") // ASCII form feed
+  }
+
+  // Need to switch off scala style for Unicode characters
+  // scalastyle:off
+  test("verify whitespace handling - Unicode no-break space") {
+    parser.parsePlan("SELECT\u00A01") // Unicode no-break space
+  }
+
+  test("verify whitespace handling - Unicode ogham space mark") {
+    parser.parsePlan("SELECT\u16801") // Unicode ogham space mark
+  }
+
+  test("verify whitespace handling - Unicode en quad") {
+    parser.parsePlan("SELECT\u20001") // Unicode en quad
+  }
+
+  test("verify whitespace handling - Unicode em quad") {
+    parser.parsePlan("SELECT\u20011") // Unicode em quad
+  }
+
+  test("verify whitespace handling - Unicode en space") {
+    parser.parsePlan("SELECT\u20021") // Unicode en space
+  }
+
+  test("verify whitespace handling - Unicode em space") {
+    parser.parsePlan("SELECT\u20031") // Unicode em space
+  }
+
+  test("verify whitespace handling - Unicode three-per-em space") {
+    parser.parsePlan("SELECT\u20041") // Unicode three-per-em space
+  }
+
+  test("verify whitespace handling - Unicode four-per-em space") {
+    parser.parsePlan("SELECT\u20051") // Unicode four-per-em space
+  }
+
+  test("verify whitespace handling - Unicode six-per-em space") {
+    parser.parsePlan("SELECT\u20061") // Unicode six-per-em space
+  }
+
+  test("verify whitespace handling - Unicode figure space") {
+    parser.parsePlan("SELECT\u20071") // Unicode figure space
+  }
+
+  test("verify whitespace handling - Unicode punctuation space") {
+    parser.parsePlan("SELECT\u20081") // Unicode punctuation space
+  }
+
+  test("verify whitespace handling - Unicode thin space") {
+    parser.parsePlan("SELECT\u20091") // Unicode thin space
+  }
+
+  test("verify whitespace handling - Unicode hair space") {
+    parser.parsePlan("SELECT\u200A1") // Unicode hair space
+  }
+
+  test("verify whitespace handling - Unicode line separator") {
+    parser.parsePlan("SELECT\u20281") // Unicode line separator
+  }
+
+  test("verify whitespace handling - Unicode narrow no-break space") {
+    parser.parsePlan("SELECT\u202F1") // Unicode narrow no-break space
+  }
+
+  test("verify whitespace handling - Unicode medium mathematical space") {
+    parser.parsePlan("SELECT\u205F1") // Unicode medium mathematical space
+  }
+
+  test("verify whitespace handling - Unicode ideographic space") {
+    parser.parsePlan("SELECT\u30001") // Unicode ideographic space
+  }
+  // scalastyle:on
 }

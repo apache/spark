@@ -22,7 +22,7 @@ CreateViewCommand `testData`, SELECT * FROM VALUES
 (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
 (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
-AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, true
+AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
       +- SubqueryAlias testData
          +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
@@ -67,7 +67,7 @@ CreateViewCommand `basic_pays`, SELECT * FROM VALUES
 ('Pamela Castillo','SCM',11303),
 ('Larry Bott','SCM',11798),
 ('Barry Jones','SCM',10586)
-AS basic_pays(employee_name, department, salary), false, true, LocalTempView, true
+AS basic_pays(employee_name, department, salary), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [employee_name#x, department#x, salary#x]
       +- SubqueryAlias basic_pays
          +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -96,7 +96,7 @@ CreateViewCommand `test_ignore_null`, SELECT * FROM VALUES
 ('a', 6, 'z'),
 ('a', 7, 'v'),
 ('a', 8, null)
-AS test_ignore_null(content, id, v), false, true, LocalTempView, true
+AS test_ignore_null(content, id, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [content#x, id#x, v#x]
       +- SubqueryAlias test_ignore_null
          +- LocalRelation [content#x, id#x, v#x]
@@ -1284,7 +1284,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2)
 -- !query analysis
-CreateViewCommand `t1`, [(p,None), (o,None)], values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2), false, true, LocalTempView, true
+CreateViewCommand `t1`, [(p,None), (o,None)], values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 

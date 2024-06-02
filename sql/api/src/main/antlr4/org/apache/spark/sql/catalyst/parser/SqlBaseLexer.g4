@@ -69,6 +69,35 @@ lexer grammar SqlBaseLexer;
   public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
+
+  /**
+   * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
+   */
+  public int complex_type_level_counter = 0;
+
+  /**
+   * Increase the counter by one when hits KEYWORD 'ARRAY', 'MAP', 'STRUCT'.
+   */
+  public void incComplexTypeLevelCounter() {
+    complex_type_level_counter++;
+  }
+
+  /**
+   * Decrease the counter by one when hits close tag '>' && the counter greater than zero
+   * which means we are in the middle of complex type parsing. Otherwise, it's a dangling
+   * GT token and we do nothing.
+   */
+  public void decComplexTypeLevelCounter() {
+    if (complex_type_level_counter > 0) complex_type_level_counter--;
+  }
+
+  /**
+   * If the counter is zero, it's a shift right operator. It can be closing tags of an complex
+   * type definition, such as MAP<INT, ARRAY<INT>>.
+   */
+  public boolean isShiftRightOperator() {
+    return complex_type_level_counter == 0 ? true : false;
+  }
 }
 
 SEMICOLON: ';';
@@ -79,6 +108,7 @@ COMMA: ',';
 DOT: '.';
 LEFT_BRACKET: '[';
 RIGHT_BRACKET: ']';
+BANG: '!';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
 // and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
@@ -99,7 +129,7 @@ ANTI: 'ANTI';
 ANY: 'ANY';
 ANY_VALUE: 'ANY_VALUE';
 ARCHIVE: 'ARCHIVE';
-ARRAY: 'ARRAY';
+ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
 ASC: 'ASC';
 AT: 'AT';
@@ -107,6 +137,7 @@ AUTHORIZATION: 'AUTHORIZATION';
 BETWEEN: 'BETWEEN';
 BIGINT: 'BIGINT';
 BINARY: 'BINARY';
+BINDING: 'BINDING';
 BOOLEAN: 'BOOLEAN';
 BOTH: 'BOTH';
 BUCKET: 'BUCKET';
@@ -128,6 +159,7 @@ CLUSTER: 'CLUSTER';
 CLUSTERED: 'CLUSTERED';
 CODEGEN: 'CODEGEN';
 COLLATE: 'COLLATE';
+COLLATION: 'COLLATION';
 COLLECTION: 'COLLECTION';
 COLUMN: 'COLUMN';
 COLUMNS: 'COLUMNS';
@@ -135,6 +167,7 @@ COMMENT: 'COMMENT';
 COMMIT: 'COMMIT';
 COMPACT: 'COMPACT';
 COMPACTIONS: 'COMPACTIONS';
+COMPENSATION: 'COMPENSATION';
 COMPUTE: 'COMPUTE';
 CONCATENATE: 'CONCATENATE';
 CONSTRAINT: 'CONSTRAINT';
@@ -180,6 +213,7 @@ ELSE: 'ELSE';
 END: 'END';
 ESCAPE: 'ESCAPE';
 ESCAPED: 'ESCAPED';
+EVOLUTION: 'EVOLUTION';
 EXCEPT: 'EXCEPT';
 EXCHANGE: 'EXCHANGE';
 EXCLUDE: 'EXCLUDE';
@@ -254,7 +288,7 @@ LOCKS: 'LOCKS';
 LOGICAL: 'LOGICAL';
 LONG: 'LONG';
 MACRO: 'MACRO';
-MAP: 'MAP';
+MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
 MICROSECOND: 'MICROSECOND';
@@ -273,7 +307,7 @@ NANOSECOND: 'NANOSECOND';
 NANOSECONDS: 'NANOSECONDS';
 NATURAL: 'NATURAL';
 NO: 'NO';
-NOT: 'NOT' | '!';
+NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
 NUMERIC: 'NUMERIC';
@@ -295,8 +329,6 @@ OVERWRITE: 'OVERWRITE';
 PARTITION: 'PARTITION';
 PARTITIONED: 'PARTITIONED';
 PARTITIONS: 'PARTITIONS';
-PERCENTILE_CONT: 'PERCENTILE_CONT';
-PERCENTILE_DISC: 'PERCENTILE_DISC';
 PERCENTLIT: 'PERCENT';
 PIVOT: 'PIVOT';
 PLACING: 'PLACING';
@@ -359,7 +391,7 @@ STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
 STRING: 'STRING';
-STRUCT: 'STRUCT';
+STRUCT: 'STRUCT' {incComplexTypeLevelCounter();};
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
 SYNC: 'SYNC';
@@ -436,8 +468,11 @@ NEQ : '<>';
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';
-GT  : '>';
+GT  : '>' {decComplexTypeLevelCounter();};
 GTE : '>=' | '!<';
+SHIFT_LEFT: '<<';
+SHIFT_RIGHT: '>>' {isShiftRightOperator()}?;
+SHIFT_RIGHT_UNSIGNED: '>>>' {isShiftRightOperator()}?;
 
 PLUS: '+';
 MINUS: '-';
@@ -510,8 +545,13 @@ BIGDECIMAL_LITERAL
     | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
+// Generalize the identifier to give a sensible INVALID_IDENTIFIER error message:
+// * Unicode letters rather than a-z and A-Z only
+// * URI paths for table references using paths
+// We then narrow down to ANSI rules in exitUnquotedIdentifier() in the parser.
 IDENTIFIER
-    : (LETTER | DIGIT | '_')+
+    : (UNICODE_LETTER | DIGIT | '_')+
+    | UNICODE_LETTER+ '://' (UNICODE_LETTER | DIGIT | '_' | '/' | '-' | '.' | '?' | '=' | '&' | '#' | '%')+
     ;
 
 BACKQUOTED_IDENTIFIER
@@ -535,6 +575,10 @@ fragment LETTER
     : [A-Z]
     ;
 
+fragment UNICODE_LETTER
+    : [\p{L}]
+    ;
+
 SIMPLE_COMMENT
     : '--' ('\\\n' | ~[\r\n])* '\r'? '\n'? -> channel(HIDDEN)
     ;
@@ -544,7 +588,7 @@ BRACKETED_COMMENT
     ;
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \t\n\f\r\u000B\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u202F\u205F\u3000]+ -> channel(HIDDEN)
     ;
 
 // Catch-all for anything we can't recognize.

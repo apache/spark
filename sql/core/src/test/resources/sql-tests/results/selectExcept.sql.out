@@ -419,9 +419,9 @@ struct<concat_ws(,, c1, c2, c3, c4, c5):string>
 -- !query
 SELECT (*) FROM v1
 -- !query schema
-struct<named_struct(c1, c1, c2, c2, c3, c3, c4, c4, c5, c5):struct<c1:int,c2:int,c3:void,c4:int,c5:int>>
+struct<c1:int,c2:int,c3:void,c4:int,c5:int>
 -- !query output
-{"c1":1,"c2":2,"c3":null,"c4":4,"c5":5}
+1	2	NULL	4	5
 
 
 -- !query
@@ -494,35 +494,3 @@ SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x)
 struct<x:int>
 -- !query output
 1
-
-
--- !query
-SET spark.sql.legacy.ignoreParenthesesAroundStar = true
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.legacy.ignoreParenthesesAroundStar	true
-
-
--- !query
-SELECT (*) FROM v1
--- !query schema
-struct<c1:int,c2:int,c3:void,c4:int,c5:int>
--- !query output
-1	2	NULL	4	5
-
-
--- !query
-SET spark.sql.legacy.ignoreParenthesesAroundStar = false
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.legacy.ignoreParenthesesAroundStar	false
-
-
--- !query
-DROP VIEW v1
--- !query schema
-struct<>
--- !query output
-

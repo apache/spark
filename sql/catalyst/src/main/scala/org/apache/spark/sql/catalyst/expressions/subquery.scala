@@ -83,6 +83,7 @@ abstract class SubqueryExpression(
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
+  def withNewOuterAttrs(outerAttrs: Seq[Expression]): SubqueryExpression
   def isCorrelated: Boolean = outerAttrs.nonEmpty
   def hint: Option[HintInfo]
   def withNewHint(hint: Option[HintInfo]): SubqueryExpression
@@ -279,6 +280,8 @@ case class ScalarSubquery(
   }
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ScalarSubquery = copy(
+    outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ScalarSubquery = copy(hint = hint)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -323,6 +326,8 @@ case class LateralSubquery(
   override def dataType: DataType = plan.output.toStructType
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): LateralSubquery = copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): LateralSubquery = copy(
+    outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): LateralSubquery = copy(hint = hint)
   override def toString: String = s"lateral-subquery#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -381,6 +386,8 @@ case class ListQuery(
     false
   }
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): ListQuery = copy(
+    outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
   override def toString: String = s"list#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {
@@ -437,6 +444,8 @@ case class Exists(
   with Unevaluable {
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): Exists = copy(
+    outerAttrs = outerAttrs)
   override def withNewHint(hint: Option[HintInfo]): Exists = copy(hint = hint)
   override def toString: String = s"exists#${exprId.id} $conditionString"
   override lazy val canonicalized: Expression = {

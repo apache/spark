@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -246,16 +246,12 @@ class FileBasedDataSourceSuite extends QueryTest
           if (ignore.toBoolean) {
             testIgnoreMissingFiles(options)
           } else {
-            val errorClass = sources match {
-              case "" => "_LEGACY_ERROR_TEMP_2062"
-              case _ => "_LEGACY_ERROR_TEMP_2055"
-            }
             checkErrorMatchPVals(
-              exception = intercept[SparkFileNotFoundException] {
+              exception = intercept[SparkException] {
                 testIgnoreMissingFiles(options)
               },
-              errorClass = errorClass,
-              parameters = Map("message" -> ".*does not exist")
+              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              parameters = Map("path" -> ".*")
             )
           }
         }
@@ -478,7 +474,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`vectors`",
-          "columnType" -> "\"ARRAY<DOUBLE>\"",
+          "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
           "format" -> "CSV")
       )
 
@@ -491,7 +487,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
-          "columnType" -> "\"ARRAY<DOUBLE>\"",
+          "columnType" -> "UDT(\"ARRAY<DOUBLE>\")",
           "format" -> "CSV")
       )
     }
@@ -549,7 +545,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
-                "columnType" -> "\"INTERVAL\"",
+                "columnType" -> "UDT(\"INTERVAL\")",
                 "format" -> formatParameter
               )
             )
@@ -599,7 +595,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`testType()`",
-                "columnType" -> "\"VOID\"",
+                "columnType" -> "UDT(\"VOID\")",
                 "format" -> formatParameter
               )
             )
@@ -628,7 +624,7 @@ class FileBasedDataSourceSuite extends QueryTest
               errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
               parameters = Map(
                 "columnName" -> "`a`",
-                "columnType" -> "\"VOID\"",
+                "columnType" -> "UDT(\"VOID\")",
                 "format" -> formatParameter
               )
             )
@@ -1249,45 +1245,52 @@ class FileBasedDataSourceSuite extends QueryTest
 
   test("disable filter pushdown for collated strings") {
     Seq("parquet").foreach { format =>
-      withTempPath { path =>
-        val collation = "'UCS_BASIC_LCASE'"
-        val df = sql(
-          s"""SELECT
-             |  COLLATE(c, $collation) as c1,
-             |  struct(COLLATE(c, $collation)) as str,
-             |  named_struct('f1', named_struct('f2', COLLATE(c, $collation), 'f3', 1)) as namedstr,
-             |  array(COLLATE(c, $collation)) as arr,
-             |  map(COLLATE(c, $collation), 1) as map1,
-             |  map(1, COLLATE(c, $collation)) as map2
-             |FROM VALUES ('aaa'), ('AAA'), ('bbb')
-             |as data(c)
-             |""".stripMargin)
+      Seq(format, "").foreach { conf =>
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> conf) {
+          withTempPath { path =>
+            val collation = "'UTF8_BINARY_LCASE'"
+            val df = sql(
+              s"""SELECT
+                 |  COLLATE(c, $collation) as c1,
+                 |  struct(COLLATE(c, $collation)) as str,
+                 |  named_struct('f1', named_struct('f2',
+                 |    COLLATE(c, $collation), 'f3', 1)) as namedstr,
+                 |  array(COLLATE(c, $collation)) as arr,
+                 |  map(COLLATE(c, $collation), 1) as map1,
+                 |  map(1, COLLATE(c, $collation)) as map2
+                 |FROM VALUES ('aaa'), ('AAA'), ('bbb')
+                 |as data(c)
+                 |""".stripMargin)
 
-        df.write.format(format).save(path.getAbsolutePath)
+            df.write.format(format).save(path.getAbsolutePath)
 
-        // filter and expected result
-        val filters = Seq(
-          ("==", Seq(Row("aaa"), Row("AAA"))),
-          ("!=", Seq(Row("bbb"))),
-          ("<", Seq()),
-          ("<=", Seq(Row("aaa"), Row("AAA"))),
-          (">", Seq(Row("bbb"))),
-          (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
+            // filter and expected result
+            val filters = Seq(
+              ("==", Seq(Row("aaa"), Row("AAA"))),
+              ("!=", Seq(Row("bbb"))),
+              ("<", Seq()),
+              ("<=", Seq(Row("aaa"), Row("AAA"))),
+              (">", Seq(Row("bbb"))),
+              (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
 
-        filters.foreach { filter =>
-          val readback = spark.read
-            .parquet(path.getAbsolutePath)
-            .where(s"c1 ${filter._1} collate('aaa', $collation)")
-            .where(s"str ${filter._1} struct(collate('aaa', $collation))")
-            .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
-            .where(s"arr ${filter._1} array(collate('aaa', $collation))")
-            .where(s"map_keys(map1) ${filter._1} array(collate('aaa', $collation))")
-            .where(s"map_values(map2) ${filter._1} array(collate('aaa', $collation))")
-            .select("c1")
+            filters.foreach { filter =>
+              val readback = spark.read
+                .format(format)
+                .load(path.getAbsolutePath)
+                .where(s"c1 ${filter._1} collate('aaa', $collation)")
+                .where(s"str ${filter._1} struct(collate('aaa', $collation))")
+                .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
+                .where(s"arr ${filter._1} array(collate('aaa', $collation))")
+                .where(s"map_keys(map1) ${filter._1} array(collate('aaa', $collation))")
+                .where(s"map_values(map2) ${filter._1} array(collate('aaa', $collation))")
+                .select("c1")
 
-          val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
-          assert(explain.contains("PushedFilters: []"))
-          checkAnswer(readback, filter._2)
+              val explain = readback.queryExecution.explainString(
+                ExplainMode.fromString("extended"))
+              assert(explain.contains("PushedFilters: []"))
+              checkAnswer(readback, filter._2)
+            }
+          }
         }
       }
     }
