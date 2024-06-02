@@ -107,14 +107,18 @@ if [[ "$1" == "finalize" ]]; then
 
   # Create the git tag for the new release
   echo "Creating the git tag for the new release"
-  rm -rf spark
-  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
-  cd spark
-  git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
-  git push origin "v$RELEASE_VERSION"
-  cd ..
-  rm -rf spark
-  echo "git tag v$RELEASE_VERSION created"
+  if check_for_tag "v$RELEASE_VERSION"; then
+    echo "v$RELEASE_VERSION already exists. Skip creating it."
+  else
+    rm -rf spark
+    git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
+    cd spark
+    git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
+    git push origin "v$RELEASE_VERSION"
+    cd ..
+    rm -rf spark
+    echo "git tag v$RELEASE_VERSION created"
+  fi
 
   # download PySpark binary from the dev directory and upload to PyPi.
   echo "Uploading PySpark to PyPi"
