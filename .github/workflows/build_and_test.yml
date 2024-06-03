@@ -114,7 +114,6 @@ jobs:
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
-              \"sparkr-window\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -1172,8 +1171,6 @@ jobs:
           node --experimental-vm-modules node_modules/.bin/jest
 
   sparkr-window:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).sparkr-window == 'true'
     name: "Build Sparkr Window"
     runs-on: windows-2019
     timeout-minutes: 300
