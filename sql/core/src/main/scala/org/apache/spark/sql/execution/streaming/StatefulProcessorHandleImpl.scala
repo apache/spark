@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util
 import java.util.UUID
 
-import scala.collection.mutable
-
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
