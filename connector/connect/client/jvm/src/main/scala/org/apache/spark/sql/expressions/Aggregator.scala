@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.{Encoder, TypedColumn}
+import scala.reflect.runtime.universe.TypeTag
+
+import org.apache.spark.connect.proto
+import org.apache.spark.sql.{encoderFor, Encoder, TypedColumn}
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
@@ -52,7 +56,7 @@ import org.apache.spark.sql.{Encoder, TypedColumn}
  * @since 4.0.0
  */
 @SerialVersionUID(2093413866369130093L)
-abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
+abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
 
   /**
    * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
@@ -92,9 +96,17 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`. operations.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset` operations.
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    throw new UnsupportedOperationException("toColumn is not implemented.")
+    val inputEncoder = ScalaReflection.encoderFor[IN]
+    val udaf =
+      ScalaUserDefinedFunction(this, Seq(inputEncoder), encoderFor(outputEncoder), aggregate = true)
+
+    val builder = proto.TypedAggregateExpression.newBuilder()
+    builder.setScalarScalaUdf(udaf.udf)
+    val expr = proto.Expression.newBuilder().setTypedAggregateExpression(builder).build()
+
+    new TypedColumn(expr, encoderFor(outputEncoder))
   }
 }

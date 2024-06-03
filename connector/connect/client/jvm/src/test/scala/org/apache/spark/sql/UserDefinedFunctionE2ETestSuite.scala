@@ -367,7 +367,35 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
   test("UDAF custom Aggregator - case class as input types") {
     val session: SparkSession = spark
     import session.implicits._
-    val agg = new Aggregator[UdafTestInput, (Long, Long), Long] {
+    val agg = newUdafTestInputAggregator
+    spark.udf.register("agg", udaf(agg))
+    val result = spark
+      .range(10)
+      .withColumn("extra", col("id") * 2)
+      .as[UdafTestInput]
+      .selectExpr("agg(id, extra)")
+      .as[Long]
+      .head()
+    assert(result == 135) // 45 + 90
+  }
+
+  test("UDAF custom Aggregator - toColumn") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val agg = newUdafTestInputAggregator
+    val aggCol = agg.toColumn
+    val result = spark
+      .range(10)
+      .withColumn("extra", col("id") * 2)
+      .as[UdafTestInput]
+      .select(aggCol)
+      .as[Long]
+      .head()
+    assert(result == 135) // 45 + 90
+  }
+
+  private def newUdafTestInputAggregator: Aggregator[UdafTestInput, (Long, Long), Long] = {
+    new Aggregator[UdafTestInput, (Long, Long), Long] {
       override def zero: (Long, Long) = (0L, 0L)
       override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
         (b._1 + a.id, b._2 + a.extra)
@@ -378,15 +406,6 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
         Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
       override def outputEncoder: Encoder[Long] = Encoders.scalaLong
     }
-    spark.udf.register("agg", udaf(agg))
-    val result = spark
-      .range(10)
-      .withColumn("extra", col("id") * 2)
-      .as[UdafTestInput]
-      .selectExpr("agg(id, extra)")
-      .as[Long]
-      .head()
-    assert(result == 135) // 45 + 90
   }
 }
 
