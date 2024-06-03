@@ -1389,7 +1389,7 @@
   },
   "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED" : {
     "message" : [
-      "The existence default value must be a simple SQL string that is resolved and foldable, but column <colName> has default value: (<defaultValue>)"
+      "The default value must be a simple SQL string that is resolved and foldable, but column <colName> has default value: (<defaultValue>)"
     ],
     "sqlState" : "42624"
   },
