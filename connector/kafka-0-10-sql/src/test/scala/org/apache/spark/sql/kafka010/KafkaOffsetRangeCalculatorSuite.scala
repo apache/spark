@@ -263,6 +263,26 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp3, 0, 1, Some("exec3"))))
   }
 
+  testWithMinPartitions("SPARK-46798: locations set when minPartition less than topic partition",
+    1) { calc =>
+    val execs = Array("exec1", "exec2", "exec3")
+    val locPrefs =
+      Map(tp1 -> Array(execs(0)), tp2 -> Array(execs(1)), tp3 -> Array(execs(2)))
+    assert(
+      calc.getRanges(
+        Seq(
+          KafkaOffsetRange(tp1, 0, 1),
+          KafkaOffsetRange(tp2, 0, 1),
+          KafkaOffsetRange(tp3, 0, 1)),
+        execs,
+        locPrefs
+      ) ===
+        Seq(
+          KafkaOffsetRange(tp1, 0, 1, Some("exec1")),
+          KafkaOffsetRange(tp2, 0, 1, Some("exec2")),
+          KafkaOffsetRange(tp3, 0, 1, Some("exec3"))))
+  }
+
   testWithMinPartitions("SPARK-46798: locations not set when ranges split", 4) { calc =>
     val execs = Array("exec1", "exec2", "exec3")
     val locPrefs =
