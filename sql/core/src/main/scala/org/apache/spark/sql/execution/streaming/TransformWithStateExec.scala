@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.jdk.CollectionConverters.CollectionHasAsScala
+
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JArray, JString}
 import org.json4s.JsonAST.JValue
@@ -352,7 +354,8 @@ case class TransformWithStateExec(
         }
       }
       operatorProperties.add(Map
-        ("stateVariables" -> JArray(processorHandle.stateVariables.map(_.jsonValue).toList)))
+        ("stateVariables" -> JArray(processorHandle.stateVariables.
+          asScala.map(_.jsonValue).toList)))
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
