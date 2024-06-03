@@ -116,6 +116,28 @@ private[deploy] class Master(
 
   private val spreadOutDrivers = conf.get(SPREAD_OUT_DRIVERS)
 
+  object MasterRestAuthMode extends Enumeration {
+    val NoneOption    = "None"
+    val SecureGatewayOption = "SecureGateway"
+
+    def serverSecuredByAlternativeMethod(mode: MasterRestAuthMode): Boolean = {
+      mode match {
+        case SecureGatewayOption => true,
+        case _ => false
+      }
+    }
+
+    def fromStringOrNone(mode: String): MasterRestAuthMode = {
+      mode.toLowerCase match {
+        case MasterRestAuthMode.toLowerCase => SecureGatewayOption
+        case NoneOption.toLowerCase => NoneOption
+        case _ =>
+          logWarning(log"Specified master rest auth mode $mode was unrecognised. Defaulting to None.")
+          None
+      }
+    }
+  }
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -132,11 +154,17 @@ private[deploy] class Master(
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
   private var restServer: Option[StandaloneRestServer] = None
+  private MasterRestAuthMode restServerAuthMode = MasterRestAuthMode
+          .fromStringOrNone(conf.get(MASTER_REST_SERVER_AUTH_MODE))
   private var restServerBoundPort: Option[Int] = None
 
   {
+    // Validate that a user has provided their own gateway to the rest submission
+    // server unless auth mode for the rest submission server is set to NoneOption or unset
+    val canUseAuthKeyWithServerConf = !restServerEnabled || 
+      MasterRestAuthMode.serverSecuredByAlternativeMethod(restServerAuthMode)
     val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
-    require(conf.getOption(authKey).isEmpty || !restServerEnabled,
+    require(conf.getOption(authKey).isEmpty || canUseAuthKeyWithServerConf,
       s"The RestSubmissionServer does not support authentication via ${authKey}.  Either turn " +
         "off the RestSubmissionServer with spark.master.rest.enabled=false, or do not use " +
         "authentication.")
