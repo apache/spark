@@ -2600,9 +2600,10 @@ class SparkConnectPlanner(
       TypedAggregateExpression(aggregator)(aggregator.bufferEncoder, aggregator.outputEncoder)
     val taeWithInput = baseRelationOpt match {
       case Some(baseRelation) =>
-        import TypedScalaUdf.encoderFor
-        val inputEncoder =
-          encoderFor(udfPacket.inputEncoders.head, "input", Some(baseRelation.output))
+        val inputEncoder = TypedScalaUdf.encoderFor(
+          udfPacket.inputEncoders.head,
+          "input",
+          Some(baseRelation.output))
         TypedAggUtils
           .withInputType(tae, inputEncoder, baseRelation.output)
           .asInstanceOf[TypedAggregateExpression]
