@@ -97,6 +97,7 @@ abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
 
   /**
    * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset` operations.
+   * @since 4.0.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
     val inputEncoder = ScalaReflection.encoderFor[IN]
