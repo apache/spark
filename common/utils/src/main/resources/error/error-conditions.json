@@ -119,6 +119,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_COLLATION_BUCKET_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN cannot change collation of type/subtypes of bucket columns, but found the bucket column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
       "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
