@@ -52,6 +52,7 @@ from pyspark.sql.types import (
     _create_row,
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.loose_version import LooseVersion
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -242,6 +243,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = StringType()
     elif types.is_binary(at):
         spark_type = BinaryType()
+    elif types.is_fixed_size_binary(at):
+        spark_type = BinaryType()
     elif types.is_large_binary(at):
         spark_type = BinaryType()
     elif types.is_date32(at):
@@ -253,6 +256,18 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+    elif types.is_fixed_size_list(at):
+        import pyarrow as pa
+
+        if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
+            # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(at)},
+            )
+        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+    elif types.is_large_list(at):
         spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
     elif types.is_map(at):
         spark_type = MapType(
