@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  */
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
-  var createdAsNonCollated: Boolean = false
-
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
