@@ -263,7 +263,7 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop_duplicates(["name"]).count(), 1)
         self.assertEqual(df.drop_duplicates(["name", "age"]).count(), 2)
 
-        # SPARK-48482 dropDuplicates also takes string argument
+        # SPARK-48482 dropDuplicates should take varargs
         self.assertEqual(df.dropDuplicates("name").count(), 1)
         self.assertEqual(df.dropDuplicates("name", "age").count(), 2)
         self.assertEqual(df.drop_duplicates("name").count(), 1)
