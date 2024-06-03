@@ -772,12 +772,17 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.isValidCollation,
+      .checkValue(
+        collationName => {
+          try {
+            CollationFactory.fetchCollation(collationName)
+            true
+          } catch {
+            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+          }
+        },
         "DEFAULT_COLLATION",
-        name =>
-          Map(
-            "proposal" -> CollationFactory.getClosestCollation(name)
-          ))
+        _ => Map())
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
@@ -2329,6 +2334,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
+    buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")
+      .internal()
+      .doc("When true, enable OptimizeOneRowPlan rule for the case where the child is a " +
+        "streaming Dataset. This is a fallback flag to revert the 'incorrect' behavior, hence " +
+        "this configuration must not be used without understanding in depth. Use this only to " +
+        "quickly recover failure in existing query!")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -2581,6 +2597,14 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR =
+    buildConf("spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr")
+      .doc("Whether to avoid collapsing projections that would duplicate expensive expressions " +
+        "in UDFs.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()

@@ -115,7 +115,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.6</maven.version>
+    <maven.version>3.9.7</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7</asm.version>
@@ -1018,11 +1018,6 @@
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-        <version>${fasterxml.jackson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-jaxb-annotations</artifactId>
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
@@ -2606,7 +2601,7 @@
       <dependency>
         <groupId>io.airlift</groupId>
         <artifactId>aircompressor</artifactId>
-        <version>0.26</version>
+        <version>0.27</version>
       </dependency>
       <dependency>
         <groupId>org.apache.orc</groupId>
@@ -3485,7 +3480,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.15.0</version>
+            <version>10.17.0</version>
           </dependency>
         </dependencies>
         <executions>

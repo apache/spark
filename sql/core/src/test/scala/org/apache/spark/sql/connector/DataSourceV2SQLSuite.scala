@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
@@ -814,14 +814,10 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          // TODO assign a error-classes name
-          checkError(
-            exception = intercept[SparkException] {
-              insertNullValueAndCheck()
-            },
-            errorClass = null,
-            parameters = Map.empty
-          )
+          val exception = intercept[SparkRuntimeException] {
+            insertNullValueAndCheck()
+          }
+          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }

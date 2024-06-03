@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("validate default collation") {
@@ -62,7 +63,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkException] { Collate(Literal("abc"), "UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS"))
   }
 
   test("collation on non-explicit default collation") {
@@ -71,7 +72,8 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("collation on explicitly collated string") {
     checkEvaluation(
-      Collation(Literal.create("abc", StringType(1))).replacement,
+      Collation(Literal.create("abc",
+        StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID))).replacement,
       "UTF8_BINARY_LCASE")
     checkEvaluation(
       Collation(Collate(Literal("abc"), "UTF8_BINARY_LCASE")).replacement,
@@ -159,6 +161,59 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
       checkEvaluation(ArrayExcept(left, right), out)
+    }
+  }
+
+  test("CollationKey generates correct collation key for collated string") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY", UTF8String.fromString("AA").getBytes),
+      ("aA", "UTF8_BINARY", UTF8String.fromString("aA").getBytes),
+      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("", "UNICODE", UTF8String.fromString("").getBytes),
+      ("aa", "UNICODE", UTF8String.fromString("aa").getBytes),
+      ("AA", "UNICODE", UTF8String.fromString("AA").getBytes),
+      ("aA", "UNICODE", UTF8String.fromString("aA").getBytes),
+      ("", "UNICODE_CI", Array[Byte](1, 0)),
+      ("aa", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("AA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("aA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0))
+    )
+    for ((input, collation, expected) <- testCases) {
+      val str = Literal.create(input, StringType(collation))
+      checkEvaluation(CollationKey(str), expected)
+    }
+  }
+
+  test("collation name normalization in collation expression") {
+    Seq(
+      ("en_USA", "en_USA"),
+      ("en_CS", "en"),
+      ("en_AS", "en"),
+      ("en_CS_AS", "en"),
+      ("en_AS_CS", "en"),
+      ("en_CI", "en_CI"),
+      ("en_AI", "en_AI"),
+      ("en_AI_CI", "en_CI_AI"),
+      ("en_CI_AI", "en_CI_AI"),
+      ("en_CS_AI", "en_AI"),
+      ("en_AI_CS", "en_AI"),
+      ("en_CI_AS", "en_CI"),
+      ("en_AS_CI", "en_CI"),
+      ("en_USA_AI_CI", "en_USA_CI_AI"),
+      // randomized case
+      ("EN_USA", "en_USA"),
+      ("SR_CYRL", "sr_Cyrl"),
+      ("sr_cyrl_srb", "sr_Cyrl_SRB"),
+      ("sR_cYRl_sRb", "sr_Cyrl_SRB")
+    ).foreach {
+      case (collation, normalized) =>
+        checkEvaluation(Collation(Literal.create("abc", StringType(collation))).replacement,
+          normalized)
     }
   }
 }

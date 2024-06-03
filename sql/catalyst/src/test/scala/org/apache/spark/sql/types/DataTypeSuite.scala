@@ -312,8 +312,8 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      parameters = Map("other" -> """{"a":123}"""))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> """{"a":123}"""))
 
     // Malformed JSON string
     val message = intercept[JsonParseException] {

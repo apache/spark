@@ -115,11 +115,7 @@ class DataType:
         return hash(str(self))
 
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, self.__class__):
-            self_dict = {k: v for k, v in self.__dict__.items() if k != "typeName"}
-            other_dict = {k: v for k, v in other.__dict__.items() if k != "typeName"}
-            return self_dict == other_dict
-        return False
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -127,12 +123,6 @@ class DataType:
     @classmethod
     def typeName(cls) -> str:
         return cls.__name__[:-4].lower()
-
-    # The classmethod 'typeName' is not always consistent with the Scala side, e.g.
-    # DecimalType(10, 2): 'decimal' vs 'decimal(10, 2)'
-    # This method is used in subclass initializer to replace 'typeName' if they are different.
-    def _type_name(self) -> str:
-        return self.__class__.__name__.removesuffix("Type").removesuffix("UDT").lower()
 
     def simpleString(self) -> str:
         return self.typeName()
@@ -225,6 +215,24 @@ class DataType:
         if isinstance(dataType, (ArrayType, StructType, MapType)):
             dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
 
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
+    @classmethod
+    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
+        if isinstance(
+            dataType,
+            (
+                DecimalType,
+                CharType,
+                VarcharType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            return dataType.simpleString()
+        else:
+            return dataType.typeName()
+
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -280,26 +288,12 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
     providerSpark = "spark"
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.typeName = self._type_name  # type: ignore[method-assign]
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -308,11 +302,11 @@ class StringType(AtomicType):
             return StringType.providerSpark
         return StringType.providerICU
 
-    def _type_name(self) -> str:
+    def simpleString(self) -> str:
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collationIdToName(self.collationId)}"
+        return f"string collate ${self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
@@ -322,13 +316,11 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collationId == 0
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -341,10 +333,12 @@ class CharType(AtomicType):
     """
 
     def __init__(self, length: int):
-        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def _type_name(self) -> str:
+    def simpleString(self) -> str:
+        return "char(%d)" % (self.length)
+
+    def jsonValue(self) -> str:
         return "char(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -361,10 +355,12 @@ class VarcharType(AtomicType):
     """
 
     def __init__(self, length: int):
-        self.typeName = self._type_name  # type: ignore[method-assign]
         self.length = length
 
-    def _type_name(self) -> str:
+    def simpleString(self) -> str:
+        return "varchar(%d)" % (self.length)
+
+    def jsonValue(self) -> str:
         return "varchar(%d)" % (self.length)
 
     def __repr__(self) -> str:
@@ -463,12 +459,14 @@ class DecimalType(FractionalType):
     """
 
     def __init__(self, precision: int = 10, scale: int = 0):
-        self.typeName = self._type_name  # type: ignore[method-assign]
         self.precision = precision
         self.scale = scale
         self.hasPrecisionInfo = True  # this is a public API
 
-    def _type_name(self) -> str:
+    def simpleString(self) -> str:
+        return "decimal(%d,%d)" % (self.precision, self.scale)
+
+    def jsonValue(self) -> str:
         return "decimal(%d,%d)" % (self.precision, self.scale)
 
     def __repr__(self) -> str:
@@ -543,7 +541,6 @@ class DayTimeIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
-        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = DayTimeIntervalType.DAY
@@ -560,7 +557,7 @@ class DayTimeIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _type_name(self) -> str:
+    def _str_repr(self) -> str:
         fields = DayTimeIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -568,6 +565,10 @@ class DayTimeIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
+
+    simpleString = _str_repr
+
+    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -598,7 +599,6 @@ class YearMonthIntervalType(AnsiIntervalType):
     _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
 
     def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
-        self.typeName = self._type_name  # type: ignore[method-assign]
         if startField is None and endField is None:
             # Default matched to scala side.
             startField = YearMonthIntervalType.YEAR
@@ -615,7 +615,7 @@ class YearMonthIntervalType(AnsiIntervalType):
         self.startField = startField
         self.endField = endField
 
-    def _type_name(self) -> str:
+    def _str_repr(self) -> str:
         fields = YearMonthIntervalType._fields
         start_field_name = fields[self.startField]
         end_field_name = fields[self.endField]
@@ -623,6 +623,10 @@ class YearMonthIntervalType(AnsiIntervalType):
             return "interval %s" % start_field_name
         else:
             return "interval %s to %s" % (start_field_name, end_field_name)
+
+    simpleString = _str_repr
+
+    jsonValue = _str_repr
 
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
@@ -757,7 +761,7 @@ class ArrayType(DataType):
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- element: {self.elementType.typeName()} "
+                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
                 + f"(containsNull = {str(self.containsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -905,12 +909,12 @@ class MapType(DataType):
         maxDepth: int = JVM_INT_MAX,
     ) -> None:
         if maxDepth > 0:
-            stringConcat.append(f"{prefix}-- key: {self.keyType.typeName()}\n")
+            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
             DataType._data_type_build_formatted_string(
                 self.keyType, f"{prefix}    |", stringConcat, maxDepth
             )
             stringConcat.append(
-                f"{prefix}-- value: {self.valueType.typeName()} "
+                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
                 + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
@@ -1046,7 +1050,7 @@ class StructField(DataType):
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        collationName = StringType.collationIdToName(dt.collationId)
+        collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
 
@@ -1073,7 +1077,8 @@ class StructField(DataType):
     ) -> None:
         if maxDepth > 0:
             stringConcat.append(
-                f"{prefix}-- {escape_meta_characters(self.name)}: {self.dataType.typeName()} "
+                f"{prefix}-- {escape_meta_characters(self.name)}: "
+                + f"{DataType._get_jvm_type_name(self.dataType)} "
                 + f"(nullable = {str(self.nullable).lower()})\n"
             )
             DataType._data_type_build_formatted_string(
