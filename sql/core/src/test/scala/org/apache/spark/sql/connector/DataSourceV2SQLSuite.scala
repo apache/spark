@@ -3488,6 +3488,23 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-48286: Add new column with default value which is not foldable") {
+    withSQLConf(
+      SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+        val exception = intercept[AnalysisException] {
+          // Rand function is not foldable
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
+        }
+        assert(exception.getSqlState == "42624")
+        assert(exception.errorClass.get == "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED")
+        assert(exception.messageParameters("colName") == "col2")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,

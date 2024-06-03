@@ -525,10 +525,21 @@ private[sql] object CatalogV2Util {
     }
 
     if (isDefaultColumn) {
-      val e = analyze(f, statementType = "", metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
-      assert(e.resolved && e.foldable,
-        "The existence default value must be a simple SQL string that is resolved and foldable, " +
-          "but got: " + f.getExistenceDefaultValue().get)
+      val e = analyze(
+        f,
+        statementType = "",
+        metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+
+      if (!e.resolved || !e.foldable) {
+        throw new AnalysisException(
+          errorClass = "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED",
+          messageParameters = Map(
+            "colName" -> f.name,
+            "defaultValue" -> f.getExistenceDefaultValue().get,
+          )
+        )
+      }
+
       val defaultValue = new ColumnDefaultValue(
         f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
       val cleanedMetadata = metadataWithKeysRemoved(
