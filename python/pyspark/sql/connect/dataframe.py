@@ -409,7 +409,7 @@ class DataFrame(ParentDataFrame):
             )
 
     def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        if len(subset) > 0:
+        if len(subset) > 1:
             assert all(isinstance(c, str) for c in subset)
 
         if not subset:
@@ -430,7 +430,7 @@ class DataFrame(ParentDataFrame):
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
-        if len(subset) > 0:
+        if len(subset) > 1:
             assert all(isinstance(c, str) for c in subset)
 
         if not subset:

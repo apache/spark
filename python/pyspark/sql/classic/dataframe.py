@@ -1221,6 +1221,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
     def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
+
         if not subset:
             jdf = self._jdf.dropDuplicates()
         elif len(subset) == 1 and isinstance(subset[0], list):
@@ -1232,6 +1235,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
+
         if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
         elif len(subset) == 1 and isinstance(subset[0], list):
