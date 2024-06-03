@@ -1936,10 +1936,12 @@ package object config {
     .createWithDefault(false)
 
   private[spark] val MASTER_REST_SERVER_AUTH_MODE = ConfigBuilder("spark.master.rest.auth.mode")
-    .doc("Specifies the authentication mechanism of the master REST services. The default value is \"None\". " + 
-      "The value \"SecureGateway\" can be used to signify that you have provided an external mechanism of " + 
-      "providing authentication for all REST APIs of the spark master servers(s). This setting relates to " + 
-      "spark.authenticate.*, but influences only the REST interfaces of the spark master.")
+    .doc("Specifies the authentication mechanism of the master REST services. " +
+      "The default value is \"None\". The value \"SecureGateway\" can be used " +
+      "to signify that you have provided an external mechanism of providing " +
+      "authentication for all REST APIs of the spark master servers(s). " +
+      "This setting relates to spark.authenticate.*, but influences only " +
+      "the REST interfaces of the spark master.")
     .version("4.0.0")
     .stringConf
     .createWithDefaultString("None")

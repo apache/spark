@@ -17,22 +17,19 @@
 
 package org.apache.spark.deploy.master
 
-import java.util.{Locale}
+class MasterRestAuthModeSuite extends MasterSuiteBase {
+  test("SPARK-38862: defaults to NoneOption when set differently rejects alt auth method") {
+      var mode = MasterRestAuthMode.fromStringOrNone("Unknown")
+      assert(mode === MasterRestAuthMode.NoneOption)
+      assert(mode.toString === "None")
+      assert(MasterRestAuthMode.serverSecuredByAlternativeMethod(mode) === false)
+  }
 
-private[master] object MasterRestAuthMode extends Enumeration {
-  type MasterRestAuthMode = String
-
-  val NoneOption = Value("None")
-  val SecureGatewayOption = Value("SecureGateway")
-
-  def fromStringOrNone(mode: String): Value = values
-      .find(_.toString.toLowerCase(Locale.ROOT) == mode.toLowerCase(Locale.ROOT))
-      .getOrElse(NoneOption)
-
-  def serverSecuredByAlternativeMethod(mode: Value): Boolean = {
-    mode match {
-      case SecureGatewayOption => true
-      case _ => false
-    }
+  test("SPARK-38862: SecureGatewayOption resolved via SecureGateway allows alt auth method") {
+      var mode = MasterRestAuthMode.
+        fromStringOrNone(MasterRestAuthMode.SecureGatewayOption.toString)
+      assert(mode === MasterRestAuthMode.SecureGatewayOption)
+      assert(mode.toString === "SecureGateway")
+      assert(MasterRestAuthMode.serverSecuredByAlternativeMethod(mode) === true)
   }
 }
