@@ -4914,7 +4914,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
       .internal()
       .doc("When set to true, use incorrect legacy behavior for checking whether a scalar " +
-        "subquery with a group-by on correlated columns is allowed. See SPARK-TODO")
+        "subquery with a group-by on correlated columns is allowed. See SPARK-48503")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
