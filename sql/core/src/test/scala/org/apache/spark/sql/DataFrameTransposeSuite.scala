@@ -31,7 +31,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 
     // Manually construct Transpose logical plan
     val transposePlan = Transpose(
-      columnsToTranspose = Seq(col("year").expr, col("sales").expr),
+      columnsToTranspose = Seq(col("course").expr),
       columnAlias = "variable",
       orderExpression = Literal(1),
       child = logicalPlan
