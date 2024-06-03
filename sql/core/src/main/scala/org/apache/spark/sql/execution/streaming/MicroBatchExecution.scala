@@ -386,7 +386,12 @@ class MicroBatchExecution(
       execCtx.carryOverExecStatsOnLatestExecutedBatch()
       // Must be outside reportTimeTaken so it is recorded
       if (execCtx.isCurrentBatchConstructed) {
-        execCtx.finishTrigger(currentBatchHasNewData, execCtx.executionPlan, execCtx.batchId)
+        execCtx.finishTrigger(
+          currentBatchHasNewData,
+          execCtx.executionPlan,
+          execCtx.batchId,
+          Some(execCtx.previousContext)
+        )
       } else {
         execCtx.finishNoExecutionTrigger(execCtx.batchId)
       }

@@ -264,13 +264,18 @@ abstract class ProgressContext(
       hasNewData: Boolean,
       sourceToNumInputRowsMap: Map[SparkDataStream, Long],
       lastExecution: IncrementalExecution,
-      lastEpochId: Long): Unit = {
+      lastEpochId: Long,
+      previousExecution: Option[StreamExecutionContext]): Unit = {
     assert(
       currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
         currentTriggerLatestOffsets != null
     )
-    if (lastExecution.isFirstBatch) {
-      lastExecution.executedPlan.writeOperatorStateMetadata()
+
+    previousExecution match {
+      case Some(prevContext) => if (!prevContext.runId.equals(lastExecution.runId)) {
+        lastExecution.executedPlan.writeOperatorStateMetadata()
+      }
+      case None => lastExecution.executedPlan.writeOperatorStateMetadata()
     }
 
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
@@ -383,10 +388,11 @@ abstract class ProgressContext(
   def finishTrigger(
       hasNewData: Boolean,
       lastExecution: IncrementalExecution,
-      lastEpoch: Long): Unit = {
+      lastEpoch: Long,
+      previousContext: Option[StreamExecutionContext] = None): Unit = {
     val map: Map[SparkDataStream, Long] =
       if (hasNewData) extractSourceToNumInputRows(lastExecution) else Map.empty
-    finishTrigger(hasNewData, map, lastExecution, lastEpoch)
+    finishTrigger(hasNewData, map, lastExecution, lastEpoch, previousContext)
   }
 
   private def warnIfFinishTriggerTakesTooLong(
