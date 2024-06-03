@@ -4007,13 +4007,27 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child) =>
 //      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child)
 //        if t.expressions.forall(_.resolved) && child.resolved =>
+
+        // scalastyle:off println
         val pivotColumnName = "__pivot_column"
 
-        // Concatenate the values of columns in columnsToTranspose using an underscore
         val concatExpr = ConcatWs(Literal("_") +: columnsToTranspose)
         val aliasExpr = Alias(concatExpr, pivotColumnName)()
         val tempChild = Project(child.output :+ aliasExpr, child)
+
         val columnsToKeep = child.output.filterNot(columnsToTranspose.contains)
+
+        val pivotValues = columnsToTranspose.map(_.asInstanceOf[NamedExpression])
+
+
+        println("Unpivot ids: " + Some(Seq(AttributeReference(pivotColumnName, StringType)())))
+        println(
+          "Unpivot values: " + Some(
+            columnsToKeep.map(col => Seq(col.asInstanceOf[NamedExpression])))
+        )
+        println("Unpivot variableColumnName: " + columnAlias)
+        println("Unpivot valueColumnNames: " + Seq("value"))
+        println("Unpivot child: " + tempChild.schema.treeString)
 
         val unpivot = Unpivot(
           ids = Some(Seq(AttributeReference(pivotColumnName, StringType)())),
@@ -4023,18 +4037,25 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           valueColumnNames = Seq("value"),
           child = tempChild
         )
+        println("Unpivot logical node: " + unpivot)
+        println("Unpivot schema: " + unpivot.schema.treeString)
+
+        val valueType = unpivot.schema.find(_.name == "value").map(_.dataType).getOrElse(DoubleType)
+        val firstAgg = Alias(
+          First(AttributeReference("value", valueType)(), ignoreNulls = true),
+          "temp_value"
+        )()
 
         val pivot = Pivot(
           groupByExprsOpt = Some(Seq(AttributeReference(columnAlias, StringType)())),
           pivotColumn = AttributeReference(pivotColumnName, StringType)(),
-          pivotValues = Nil,
-          aggregates = Seq(
-            Alias(First(AttributeReference("value", StringType)(), ignoreNulls = true), "value")()
-          ),
+          pivotValues = pivotValues.map(expr => Literal(expr.name)),
+          aggregates = Seq(firstAgg),
           child = unpivot
         )
 
         pivot
+      // scalastyle:on println
     }
   }
 }

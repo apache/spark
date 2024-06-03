@@ -37,14 +37,16 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       child = logicalPlan
     )
 
-//    println(s"Logical plan before analysis:\n$transposePlan")
+    // scalastyle:off println
+    println(s"Logical plan before analysis:\n$transposePlan")
 
     // Apply the ResolveTranspose rule
     val testAnalyzer = new Analyzer(
       new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
     val analyzedPlan = testAnalyzer.execute(transposePlan)
 
-//    println(s"Logical plan after analysis:\n$analyzedPlan")
+    println(s"Logical plan after analysis:\n$analyzedPlan")
+    // scalastyle:on println
 
     // Verify the transformed plan
     assert(analyzedPlan.isInstanceOf[Pivot])
