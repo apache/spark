@@ -39,8 +39,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -1099,17 +1098,31 @@ object SparkSubmit extends CommandLineUtils with Logging {
         new SparkSubmitArguments(args.toImmutableArraySeq) {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
+          override protected def logInfo(entry: LogEntry): Unit = self.logInfo(entry)
+
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
 
+          override protected def logWarning(entry: LogEntry): Unit = self.logWarning(entry)
+
           override protected def logError(msg: => String): Unit = self.logError(msg)
+
+          override protected def logError(entry: LogEntry): Unit = self.logError(entry)
         }
       }
 
       override protected def logInfo(msg: => String): Unit = printMessage(msg)
 
+      override protected def logInfo(entry: LogEntry): Unit = printMessage(entry.message)
+
       override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
 
+      override protected def logWarning(entry: LogEntry): Unit =
+        printMessage(s"Warning: ${entry.message}")
+
       override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
+
+      override protected def logError(entry: LogEntry): Unit =
+        printMessage(s"Error: ${entry.message}")
 
       override def doSubmit(args: Array[String]): Unit = {
         try {
