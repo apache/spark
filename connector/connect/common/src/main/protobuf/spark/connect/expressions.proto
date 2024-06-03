@@ -377,6 +377,8 @@ message ScalarScalaUDF {
   DataType outputType = 3;
   // (Required) True if the UDF can return null value
   bool nullable = 4;
+  // (Required) Indicate if the UDF is an aggregate function
+  bool aggregate = 5;
 }
 
 message JavaUDF {

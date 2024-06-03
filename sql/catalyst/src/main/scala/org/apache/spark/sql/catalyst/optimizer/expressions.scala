@@ -1023,7 +1023,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       plan
     } else {
       plan transformExpressions {
-        case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+        case a: AttributeReference if foldableMap.contains(a) => foldableMap(a).withName(a.name)
       }
     }
   }

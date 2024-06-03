@@ -1635,6 +1635,29 @@ class CollationSQLExpressionsSuite
     }
   }
 
+  test("SPARK-48430: Map value extraction with collations") {
+    for {
+      collateKey <- Seq(true, false)
+      collateVal <- Seq(true, false)
+      defaultCollation <- Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE")
+    } {
+      val mapKey = if (collateKey) "'a' collate utf8_binary_lcase" else "'a'"
+      val mapVal = if (collateVal) "'b' collate utf8_binary_lcase" else "'b'"
+      val collation = if (collateVal) "UTF8_BINARY_LCASE" else "UTF8_BINARY"
+      val queryExtractor = s"select collation(map($mapKey, $mapVal)[$mapKey])"
+      val queryElementAt = s"select collation(element_at(map($mapKey, $mapVal), $mapKey))"
+
+      checkAnswer(sql(queryExtractor), Row(collation))
+      checkAnswer(sql(queryElementAt), Row(collation))
+
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> defaultCollation) {
+        val res = if (collateVal) "UTF8_BINARY_LCASE" else defaultCollation
+        checkAnswer(sql(queryExtractor), Row(res))
+        checkAnswer(sql(queryElementAt), Row(res))
+      }
+    }
+  }
+
   test("CurrentTimeZone expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {

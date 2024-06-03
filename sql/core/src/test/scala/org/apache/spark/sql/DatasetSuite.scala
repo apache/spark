@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1251,11 +1251,10 @@ class DatasetSuite extends QueryTest
     // Shouldn't throw runtime exception when parent object (`ClassData`) is null
     assert(buildDataset(Row(null)).collect() === Array(NestedStruct(null)))
 
-    val message = intercept[RuntimeException] {
+    // Just check the error class here to avoid flakiness due to different parameters.
+    assert(intercept[SparkRuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getCause.getMessage
-
-    assert(message.contains("Null value appeared in non-nullable field"))
+    }.getErrorClass == "EXPRESSION_DECODING_FAILED")
   }
 
   test("SPARK-12478: top level null field") {
@@ -1593,9 +1592,8 @@ class DatasetSuite extends QueryTest
   }
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
-    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getCause.getMessage.contains("top level Product or row object"))
+    val e = intercept[SparkRuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getErrorClass == "EXPRESSION_ENCODING_FAILED")
   }
 
   test("dropDuplicates") {
@@ -2038,19 +2036,33 @@ class DatasetSuite extends QueryTest
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
-    val e1 = intercept[RuntimeException](ds.collect())
-    assert(e1.getCause.isInstanceOf[NullPointerException])
-    val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-    assert(e2.getCause.isInstanceOf[NullPointerException])
+    val errorClass = "EXPRESSION_DECODING_FAILED"
+    val sqlState = "42846"
+    checkError(
+      exception = intercept[SparkRuntimeException](ds.collect()),
+      errorClass = "EXPRESSION_DECODING_FAILED",
+      sqlState = "42846",
+      parameters = Map("expressions" -> "assertnotnull(input[0, int, true])"))
+    checkError(
+      exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
+      errorClass = "NOT_NULL_ASSERT_VIOLATION",
+      sqlState = "42000",
+      parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n"))
 
     withTempPath { path =>
       Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
-      val e1 = intercept[RuntimeException](ds.collect())
-      assert(e1.getCause.isInstanceOf[NullPointerException])
-      val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-      assert(e2.getCause.isInstanceOf[NullPointerException])
+      checkError(
+        exception = intercept[SparkRuntimeException](ds.collect()),
+        errorClass = "EXPRESSION_DECODING_FAILED",
+        sqlState = "42846",
+        parameters = Map("expressions" -> "assertnotnull(input[0, int, true])"))
+      checkError(
+        exception = intercept[SparkRuntimeException](ds.map(_ * 2).collect()),
+        errorClass = "NOT_NULL_ASSERT_VIOLATION",
+        sqlState = "42000",
+        parameters = Map("walkedTypePath" -> "\n- root class: \"int\"\n"))
     }
   }
 
@@ -2068,8 +2080,11 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
-    val e = intercept[RuntimeException](ds.as[(Int, Int)].collect())
-    assert(e.getCause.isInstanceOf[NullPointerException])
+    checkError(
+      exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect()),
+      errorClass = "EXPRESSION_DECODING_FAILED",
+      sqlState = "42846",
+      parameters = Map("expressions" -> "newInstance(class scala.Tuple2)"))
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
