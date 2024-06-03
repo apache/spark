@@ -902,4 +902,54 @@ public class UTF8StringSuite {
       assertEquals(1, fromBytes(c).numChars());
     }
   }
+
+  @Test
+  public void isValidUTF8() {
+    assertTrue(EMPTY_UTF8.isValidUTF8());
+    assertTrue(fromString("").isValidUTF8());
+    assertTrue(fromString("abc").isValidUTF8());
+    assertTrue(fromString("hello").isValidUTF8());
+    assertTrue(fromString("\u0061").isValidUTF8());
+    assertTrue(fromString("大千世界").isValidUTF8());
+    assertTrue(fromString("数据砖头").isValidUTF8());
+    assertTrue(fromBytes(new byte[] {}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {0x61}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {0x7F}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xFF}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xC0, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xC1, (byte) 0xBF}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xC0}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xFF}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).isValidUTF8());
+    assertTrue(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xE0, (byte) 0x9F, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xC0, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xC0}).isValidUTF8());
+    assertFalse(fromBytes(new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertTrue(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertTrue(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x8F, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x7F}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xC0}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF8, (byte) 0x8F, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF8, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xFB, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF, (byte) 0xBF}).isValidUTF8());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xFB, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValidUTF8());
+  }
+
 }

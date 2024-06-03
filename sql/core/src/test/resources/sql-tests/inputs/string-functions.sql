@@ -276,3 +276,6 @@ select luhn_check(6011111111111117);
 select luhn_check(6011111111111118);
 select luhn_check(123.456);
 
+--utf8 string validation
+select is_valid_utf8('');
+select is_valid_utf8('abc');

@@ -1436,6 +1436,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
+  /**
+   * Checks if this UTF8String is valid.
+   *
+   * @return If string represents a valid UTF8 byte sequence.
+   */
+  public boolean isValidUTF8() {
+    return fromString(toString()).equals(this);
+  }
+
   @Override
   public String toString() {
     return new String(getBytes(), StandardCharsets.UTF_8);

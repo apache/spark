@@ -1593,3 +1593,17 @@ select luhn_check(123.456)
 -- !query analysis
 Project [luhn_check(cast(123.456 as string)) AS luhn_check(123.456)#x]
 +- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('')
+-- !query analysis
+Project [is_valid_utf8() AS is_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query analysis
+Project [is_valid_utf8(abc) AS is_valid_utf8(abc)#x]
++- OneRowRelation

@@ -2066,3 +2066,19 @@ select luhn_check(123.456)
 struct<luhn_check(123.456):boolean>
 -- !query output
 false
+
+
+-- !query
+select is_valid_utf8('')
+-- !query schema
+struct<is_valid_utf8():boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query schema
+struct<is_valid_utf8(abc):boolean>
+-- !query output
+true

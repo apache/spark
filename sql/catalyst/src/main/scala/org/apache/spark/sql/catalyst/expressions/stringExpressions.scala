@@ -687,6 +687,49 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 }
 
 /**
+ * A function that validates a UTF8 string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns true if `str` is a valid UTF-8 sequence, otherwise returns false.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(decode(unhex('61'), 'UTF-8'));
+       true
+      > SELECT _FUNC_(decode(unhex('80'), 'UTF-8'));
+       false
+      > SELECT _FUNC_(decode(unhex('61C262'), 'UTF-8'));
+       false
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def child: Expression = srcExpr
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(srcEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].isValidUTF8
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.isValidUTF8();")
+  }
+
+  override def prettyName: String = "is_valid_utf8"
+
+  override protected def withNewChildInternal(newChild: Expression): IsValidUTF8 = {
+    copy(srcExpr = newChild)
+  }
+
+}
+
+/**
  * Replace all occurrences with string.
  */
 // scalastyle:off line.size.limit

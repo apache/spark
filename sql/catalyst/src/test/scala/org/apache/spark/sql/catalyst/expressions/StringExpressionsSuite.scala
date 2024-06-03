@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -2050,4 +2051,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     )
   }
+
+  test("UTF8String validation") {
+    def isValidUTF8(str: Any, expected: Any): Unit = {
+      checkEvaluation(IsValidUTF8(Literal.create(str, StringType)), expected)
+    }
+    isValidUTF8(null, null)
+    isValidUTF8("", true)
+    isValidUTF8("aa", true)
+    isValidUTF8("\u0061", true)
+    isValidUTF8(UTF8String.EMPTY_UTF8, true)
+    isValidUTF8(UTF8String.fromString(""), true)
+    isValidUTF8(UTF8String.fromString("abc"), true)
+    isValidUTF8(UTF8String.fromString("hello"), true)
+    isValidUTF8(UTF8String.fromBytes(Array.empty[Byte]), true)
+    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x41)), true)
+    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x61)), true)
+    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), false)
+    isValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), false)
+  }
+
 }
