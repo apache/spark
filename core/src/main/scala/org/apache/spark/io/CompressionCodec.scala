@@ -100,8 +100,9 @@ private[spark] object CompressionCodec {
    * If it is already a short name, just return it.
    */
   def getShortName(codecName: String): String = {
-    if (shortCompressionCodecNames.contains(codecName)) {
-      codecName
+    val lowercasedCodec = codecName.toLowerCase(Locale.ROOT)
+    if (shortCompressionCodecNames.contains(lowercasedCodec)) {
+      lowercasedCodec
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
