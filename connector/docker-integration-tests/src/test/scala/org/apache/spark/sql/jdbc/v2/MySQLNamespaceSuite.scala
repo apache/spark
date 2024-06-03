@@ -40,7 +40,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
 
   val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
-      "driver" -> "com.mysql.jdbc.Driver").asJava)
+      "driver" -> "com.mysql.cj.jdbc.Driver").asJava)
 
   catalog.initialize("mysql", map)
 
