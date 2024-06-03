@@ -22,10 +22,10 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Elt, Expression, Greatest, If, In, InSubquery, Least, Literal, Overlay, StringLPad, StringRPad}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -45,6 +45,15 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case stringLocate: StringLocate =>
+      stringLocate.withNewChildren(collateToSingleType(
+        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
@@ -52,14 +61,27 @@ object CollationTypeCasts extends TypeCoercionRule {
       overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
         ++ Seq(overlayExpr.pos, overlayExpr.len))
 
+    case regExpReplace: RegExpReplace =>
+      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
+      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
+      regExpReplace.withNewChildren(newChildren)
+
     case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
       val Seq(str, len, pad) = stringPadExpr.children
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
+    case raiseError: RaiseError =>
+      val newErrorParams = raiseError.errorParms.dataType match {
+        case MapType(StringType, StringType, _) => raiseError.errorParms
+        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
+      }
+      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

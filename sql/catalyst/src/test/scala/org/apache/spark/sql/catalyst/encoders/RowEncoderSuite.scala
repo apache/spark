@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
@@ -275,9 +276,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   test("RowEncoder should throw RuntimeException if input row object is null") {
     val schema = new StructType().add("int", IntegerType)
     val encoder = ExpressionEncoder(schema)
-    val e = intercept[RuntimeException](toRow(encoder, null))
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getCause.getMessage.contains("top level Product or row object"))
+    // Check the error class only since the parameters may change depending on how we are running
+    // this test case.
+    val exception = intercept[SparkRuntimeException](toRow(encoder, null))
+    assert(exception.getErrorClass == "EXPRESSION_ENCODING_FAILED")
   }
 
   test("RowEncoder should validate external type") {

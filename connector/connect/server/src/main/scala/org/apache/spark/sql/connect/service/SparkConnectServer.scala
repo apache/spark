@@ -22,7 +22,7 @@ import java.net.InetSocketAddress
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{HOST, PORT}
+import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.sql.SparkSession
 
 /**

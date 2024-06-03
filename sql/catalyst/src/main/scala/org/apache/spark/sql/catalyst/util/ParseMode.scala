@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.util.Locale
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.PARSE_MODE
+import org.apache.spark.internal.LogKeys.PARSE_MODE
 
 sealed trait ParseMode {
   /**

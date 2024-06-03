@@ -193,6 +193,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl	                    
 View Original Text  	select * from char_tbl	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 
@@ -222,6 +223,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.char_view (
   c,
   v)
+WITH SCHEMA COMPENSATION
 AS select * from char_tbl
 
 
@@ -362,6 +364,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 
@@ -422,6 +425,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
 Table Properties    	[yes=no]
@@ -482,6 +486,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 

@@ -385,8 +385,9 @@ case class KeyGroupedPartitioning(
             val attributes = expressions.flatMap(_.collectLeaves())
 
             if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-              // check that all join keys (required clustering keys) contained in partitioning
-              requiredClustering.forall(x => attributes.exists(_.semanticEquals(x))) &&
+              // check that join keys (required clustering keys)
+              // overlap with partition keys (KeyGroupedPartitioning attributes)
+              requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
                   expressions.forall(_.collectLeaves().size == 1)
             } else {
               attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))

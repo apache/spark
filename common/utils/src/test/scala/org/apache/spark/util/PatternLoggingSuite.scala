@@ -34,6 +34,14 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
     s""".*$level $className: This is a log message\n"""
   }
 
+  override def expectedPatternForBasicMsgWithEscapeChar(level: Level): String = {
+    s""".*$level $className: This is a log message\nThis is a new line \t other msg\n"""
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String = {
+    s""".*$level $className: This is a log message\nThis is a new line \t other msg\n"""
+  }
+
   override def expectedPatternForBasicMsgWithException(level: Level): String = {
     s""".*$level $className: This is a log message\n[\\s\\S]*"""
   }
@@ -46,6 +54,10 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
   override def expectedPatternForMsgWithMDCAndException(level: Level): String =
     s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
+
+  override def expectedPatternForCustomLogKey(level: Level): String = {
+    s""".*$level $className: Custom log message.\n"""
+  }
 
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
     val pattern =

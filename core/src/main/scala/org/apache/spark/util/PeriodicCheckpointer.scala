@@ -23,7 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 
 
 /**
@@ -184,9 +185,9 @@ private[spark] object PeriodicCheckpointer extends Logging {
       val fs = path.getFileSystem(conf)
       fs.delete(path, true)
     } catch {
-      case e: Exception =>
-        logWarning("PeriodicCheckpointer could not remove old checkpoint file: " +
-          checkpointFile)
+      case _: Exception =>
+        logWarning(log"PeriodicCheckpointer could not remove old checkpoint file: " +
+          log"${MDC(FILE_NAME, checkpointFile)}")
     }
   }
 }

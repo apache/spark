@@ -33,6 +33,15 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
+  test("Does not accept null delimiter") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
   test("Does not accept delimiter larger than one character") {
     checkError(
       exception = intercept[SparkIllegalArgumentException]{

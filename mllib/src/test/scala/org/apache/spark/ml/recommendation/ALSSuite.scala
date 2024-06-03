@@ -29,7 +29,7 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 
 import org.apache.spark._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{RMSE, TEST_SIZE, TRAINING_SIZE}
+import org.apache.spark.internal.LogKeys.{RMSE, TEST_SIZE, TRAINING_SIZE}
 import org.apache.spark.ml.linalg.{BLAS, Vectors}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}

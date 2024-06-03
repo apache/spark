@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.internal.LogKey.{SQL_TEXT, UNSUPPORTED_EXPR}
+import org.apache.spark.internal.LogKeys.{SQL_TEXT, UNSUPPORTED_EXPR}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}

@@ -762,7 +762,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase with CTEInChildren {
+  extends DescribeCommandBase with SupervisingCommand with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -778,6 +778,9 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     copy(plan = WithCTE(plan, cteDefs))
   }
+
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
+    copy(plan = transformer(plan))
 }
 
 /**
@@ -1112,6 +1115,7 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
     showViewDataColumns(metadata, builder)
     showTableComment(metadata, builder)
     showViewProperties(metadata, builder)
+    showViewSchemaBinding(metadata, builder)
     showViewText(metadata, builder)
   }
 
@@ -1138,6 +1142,12 @@ trait ShowCreateTableCommandBase extends SQLConfHelper {
       }
 
       builder ++= s"TBLPROPERTIES ${concatByMultiLines(props)}"
+    }
+  }
+
+  private def showViewSchemaBinding(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (SQLConf.get.viewSchemaBindingEnabled) {
+      builder ++= s"WITH SCHEMA ${metadata.viewSchemaMode.toString}\n"
     }
   }
 

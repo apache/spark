@@ -97,6 +97,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Original Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: $catalog.$namespace
              |View Query Output Columns: [id]
              |Table Properties: <table properties>

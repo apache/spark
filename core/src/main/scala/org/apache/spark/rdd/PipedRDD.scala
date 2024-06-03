@@ -34,7 +34,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.LogKey.{COMMAND, ERROR, PATH}
+import org.apache.spark.internal.LogKeys.{COMMAND, ERROR, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.util.Utils
 

@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{DELTA, DIFF_DELTA, NORM, NUM_ITERATIONS}
+import org.apache.spark.internal.LogKeys.{DELTA, DIFF_DELTA, NORM, NUM_ITERATIONS}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD

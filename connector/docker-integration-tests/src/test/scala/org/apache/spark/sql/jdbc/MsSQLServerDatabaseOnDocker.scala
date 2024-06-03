@@ -28,5 +28,6 @@ class MsSQLServerDatabaseOnDocker extends DatabaseOnDocker {
   override val jdbcPort: Int = 1433
 
   override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;"
+    s"jdbc:sqlserver://$ip:$port;user=sa;password=Sapass123;" +
+      "encrypt=true;trustServerCertificate=true"
 }

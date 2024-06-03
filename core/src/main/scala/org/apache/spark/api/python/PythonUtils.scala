@@ -28,7 +28,8 @@ import scala.sys.process.Process
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{PATH, PYTHON_PACKAGES, PYTHON_VERSION}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils
 
@@ -122,11 +123,11 @@ private[spark] object PythonUtils extends Logging {
         PythonUtils.sparkPythonPath,
         sys.env.getOrElse("PYTHONPATH", ""))
       val environment = Map("PYTHONPATH" -> pythonPath)
-      logInfo(s"Python path $pythonPath")
+      logInfo(log"Python path ${MDC(PATH, pythonPath)}")
 
       val processPythonVer = Process(pythonVersionCMD, None, environment.toSeq: _*)
       val output = runCommand(processPythonVer)
-      logInfo(s"Python version: ${output.getOrElse("Unable to determine")}")
+      logInfo(log"Python version: ${MDC(PYTHON_VERSION, output.getOrElse("Unable to determine"))}")
 
       val pythonCode =
         """
@@ -146,7 +147,8 @@ private[spark] object PythonUtils extends Logging {
       def formatOutput(output: String): String = {
         output.replaceAll("\\s+", ", ")
       }
-      listOfPackages.foreach(x => logInfo(s"List of Python packages :- ${formatOutput(x)}"))
+      listOfPackages.foreach(x => logInfo(log"List of Python packages :-" +
+        log" ${MDC(PYTHON_PACKAGES, formatOutput(x))}"))
     }
   }
 

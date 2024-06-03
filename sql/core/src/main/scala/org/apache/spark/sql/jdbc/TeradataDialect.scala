@@ -42,6 +42,7 @@ private case class TeradataDialect() extends JdbcDialect {
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case ByteType => Option(JdbcType("BYTEINT", java.sql.Types.TINYINT))
     case _ => None
   }
 

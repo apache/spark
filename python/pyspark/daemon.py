@@ -28,7 +28,7 @@ from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
-from pyspark.serializers import read_long, write_int, write_with_length, UTF8Deserializer
+from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 if len(sys.argv) > 1:
     import importlib
@@ -139,7 +139,7 @@ def manager():
 
             if 0 in ready_fds:
                 try:
-                    worker_pid = read_long(stdin_bin)
+                    worker_pid = read_int(stdin_bin)
                 except EOFError:
                     # Spark told us to exit by closing stdin
                     shutdown(0)
