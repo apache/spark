@@ -32,7 +32,7 @@ T = TypeVar("T")
 
 class ErrorClassesReader:
     """
-    A reader to load error information from error_classes.py.
+    A reader to load error information from error-conditions.json.
     """
 
     def __init__(self) -> None:
@@ -60,11 +60,11 @@ class ErrorClassesReader:
 
     def get_message_template(self, error_class: str) -> str:
         """
-        Returns the message template for corresponding error class from error_classes.py.
+        Returns the message template for corresponding error class from error-conditions.json.
 
         For example,
         when given `error_class` is "EXAMPLE_ERROR_CLASS",
-        and corresponding error class in error_classes.py looks like the below:
+        and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
 
@@ -78,7 +78,7 @@ class ErrorClassesReader:
         "Problem <A> because of <B>."
 
         For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
-        and corresponding error class in error_classes.py looks like the below:
+        and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
 

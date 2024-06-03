@@ -183,7 +183,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def scheduleRenewal(delay: Long): Unit = {
     val _delay = math.max(0, delay)
-    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(_delay)}.")
+    logInfo(log"Scheduling renewal in ${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(_delay))}.")
 
     val renewalTask = new Runnable() {
       override def run(): Unit = {
@@ -236,8 +236,10 @@ private[spark] class HadoopDelegationTokenManager(
         val now = System.currentTimeMillis
         val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
         val delay = (ratio * (nextRenewal - now)).toLong
-        logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
-          s"and the ratio $ratio, and current time $now")
+        logInfo(log"Calculated delay on renewal is ${MDC(LogKeys.DELAY, delay)}," +
+          log" based on next renewal ${MDC(LogKeys.NEXT_RENEWAL_TIME, nextRenewal)}" +
+          log" and the ratio ${MDC(LogKeys.CREDENTIALS_RENEWAL_INTERVAL_RATIO, ratio)}," +
+          log" and current time ${MDC(LogKeys.CURRENT_TIME, now)}")
         scheduleRenewal(delay)
         creds
       }
@@ -246,13 +248,13 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def doLogin(): UserGroupInformation = {
     if (principal != null) {
-      logInfo(s"Attempting to login to KDC using principal: $principal")
+      logInfo(log"Attempting to login to KDC using principal: ${MDC(LogKeys.PRINCIPAL, principal)}")
       require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
       logInfo("Successfully logged into KDC.")
       ugi
     } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
-      logInfo(s"Attempting to load user's ticket cache.")
+      logInfo("Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
       val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())

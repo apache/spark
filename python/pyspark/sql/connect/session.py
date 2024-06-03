@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -73,7 +74,9 @@ from pyspark.sql.pandas.types import (
     to_arrow_schema,
     to_arrow_type,
     _deduplicate_field_names,
+    from_arrow_schema,
     from_arrow_type,
+    _check_arrow_table_timestamps_localize,
 )
 from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -237,9 +240,9 @@ class SparkSession:
         def getOrCreate(self) -> "SparkSession":
             with SparkSession._lock:
                 session = SparkSession.getActiveSession()
-                if session is None or session.is_stopped:
-                    session = SparkSession._default_session
-                    if session is None or session.is_stopped:
+                if session is None:
+                    session = SparkSession._get_default_session()
+                    if session is None:
                         session = self.create()
                 self._apply_options(session)
                 return session
@@ -286,8 +289,18 @@ class SparkSession:
             cls._active_session.session = session
 
     @classmethod
+    def _get_default_session(cls) -> Optional["SparkSession"]:
+        s = cls._default_session
+        if s is not None and not s.is_stopped:
+            return s
+        return None
+
+    @classmethod
     def getActiveSession(cls) -> Optional["SparkSession"]:
-        return getattr(cls._active_session, "session", None)
+        s = getattr(cls._active_session, "session", None)
+        if s is not None and not s.is_stopped:
+            return s
+        return None
 
     @classmethod
     def _getActiveSessionIfMatches(cls, session_id: str) -> "SparkSession":
@@ -315,7 +328,7 @@ class SparkSession:
     def active(cls) -> "SparkSession":
         session = cls.getActiveSession()
         if session is None:
-            session = cls._default_session
+            session = cls._get_default_session()
             if session is None:
                 raise PySparkRuntimeError(
                     error_class="NO_ACTIVE_OR_DEFAULT_SESSION",
@@ -378,10 +391,12 @@ class SparkSession:
         (
             infer_dict_as_struct,
             infer_array_from_first_element,
+            infer_map_from_first_pair,
             prefer_timestamp_ntz,
         ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
         return reduce(
@@ -392,6 +407,7 @@ class SparkSession:
                     names,
                     infer_dict_as_struct=(infer_dict_as_struct == "true"),
                     infer_array_from_first_element=(infer_array_from_first_element == "true"),
+                    infer_map_from_first_pair=(infer_map_from_first_pair == "true"),
                     prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
                 )
                 for row in data
@@ -400,7 +416,7 @@ class SparkSession:
 
     def createDataFrame(
         self,
-        data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
+        data: Union["pd.DataFrame", "np.ndarray", "pa.Table", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: Optional[bool] = None,
@@ -463,6 +479,7 @@ class SparkSession:
                 )
 
         _table: Optional[pa.Table] = None
+        timezone: Optional[str] = None
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
@@ -547,6 +564,28 @@ class SparkSession:
                 _table = _table.rename_columns(
                     cast(StructType, _deduplicate_field_names(schema)).names
                 ).cast(arrow_schema)
+
+        elif isinstance(data, pa.Table):
+            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+
+            (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
+
+            # If no schema supplied by user then get the names of columns only
+            if schema is None:
+                _cols = data.column_names
+            if isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
+                assert isinstance(_cols, list)
+                _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
+                _num_cols = len(_cols)
+
+            if not isinstance(schema, StructType):
+                schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
+
+            _table = (
+                _check_arrow_table_timestamps_localize(data, schema, True, timezone)
+                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
+                .rename_columns(schema.names)
+            )
 
         elif isinstance(data, np.ndarray):
             if _cols is None:
@@ -913,7 +952,7 @@ class SparkSession:
         This is used in ForeachBatch() runner, where the remote DataFrame refers to the
         output of a micro batch.
         """
-        return DataFrame(CachedRemoteRelation(remote_id), self)
+        return DataFrame(CachedRemoteRelation(remote_id, spark_session=self), self)
 
     @staticmethod
     def _start_connect_server(master: str, opts: Dict[str, Any]) -> None:

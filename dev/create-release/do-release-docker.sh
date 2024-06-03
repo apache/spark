@@ -84,8 +84,8 @@ if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
     error "Exiting."
   fi
 
-  if [ -z "$PYPI_PASSWORD" ]; then
-    stty -echo && printf "PyPi password: " && read PYPI_PASSWORD && printf '\n' && stty echo
+  if [ -z "$PYPI_API_TOKEN" ]; then
+    stty -echo && printf "PyPi API token: " && read PYPI_API_TOKEN && printf '\n' && stty echo
   fi
 fi
 
@@ -142,7 +142,7 @@ GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
-PYPI_PASSWORD=$PYPI_PASSWORD
+PYPI_API_TOKEN=$PYPI_API_TOKEN
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER

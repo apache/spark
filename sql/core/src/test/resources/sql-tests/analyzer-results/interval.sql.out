@@ -1605,7 +1605,7 @@ Project [cast(cast(4 12:12:12 as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE a
 -- !query
 create temporary view interval_view as select '1' str
 -- !query analysis
-CreateViewCommand `interval_view`, select '1' str, false, false, LocalTempView, true
+CreateViewCommand `interval_view`, select '1' str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS str#x]
       +- OneRowRelation
 

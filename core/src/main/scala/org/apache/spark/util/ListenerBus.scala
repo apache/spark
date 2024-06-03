@@ -27,7 +27,7 @@ import com.codahale.metrics.Timer
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.LISTENER
+import org.apache.spark.internal.LogKeys.{EVENT, LISTENER, TOTAL_TIME}
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate
 
@@ -132,8 +132,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
         if (maybeTimerContext != null) {
           val elapsed = maybeTimerContext.stop()
           if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
-            logInfo(s"Process of event ${redactEvent(event)} by listener ${listenerName} took " +
-              s"${elapsed / 1000000000d}s.")
+            logInfo(log"Process of event ${MDC(EVENT, redactEvent(event))} by" +
+              log"listener ${MDC(LISTENER, listenerName)} took " +
+              log"${MDC(TOTAL_TIME, elapsed / 1000000d)}ms.")
           }
         }
       }

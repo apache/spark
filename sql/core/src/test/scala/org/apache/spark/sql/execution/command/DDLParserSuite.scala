@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -522,7 +522,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
       false,
-      false)
+      false,
+      SchemaCompensation)
     comparePlans(parsed1, expected1)
 
     val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
@@ -569,7 +570,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
       false,
-      true)
+      true,
+      SchemaCompensation)
     comparePlans(parsed1, expected1)
 
     val v2 =

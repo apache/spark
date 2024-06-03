@@ -101,7 +101,7 @@ message DataType {
 
   message String {
     uint32 type_variation_reference = 1;
-    uint32 collation_id = 2;
+    string collation = 2;
   }
 
   message Binary {

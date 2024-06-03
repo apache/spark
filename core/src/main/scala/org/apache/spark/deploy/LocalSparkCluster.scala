@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -51,7 +51,8 @@ class LocalSparkCluster private (
   private val workerDirs = ArrayBuffer[String]()
 
   def start(): Array[String] = {
-    logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
+    logInfo(log"Starting a local Spark cluster with " +
+      log"${MDC(LogKeys.NUM_WORKERS, numWorkers)} workers.")
 
     // Disable REST server on Master in this mode unless otherwise specified
     val _conf = conf.clone()

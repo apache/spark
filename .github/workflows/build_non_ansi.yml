@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / NON-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / Non-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
@@ -41,6 +41,7 @@ jobs:
       jobs: >-
         {
           "build": "true",
+          "docs": "true",
           "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",

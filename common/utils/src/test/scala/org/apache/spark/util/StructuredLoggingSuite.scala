@@ -53,6 +53,11 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
+  def basicMsgWithEscapeChar: String = "This is a log message\nThis is a new line \t other msg"
+
+  def basicMsgWithEscapeCharMDC: LogEntry =
+    log"This is a log message\nThis is a new line \t other msg"
+
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
   def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, null)}."
@@ -66,6 +71,12 @@ trait LoggingSuiteBase
   // test for basic message (without any mdc)
   def expectedPatternForBasicMsg(level: Level): String
 
+  // test for basic message (with escape char)
+  def expectedPatternForBasicMsgWithEscapeChar(level: Level): String
+
+  // test for basic message (with escape char mdc)
+  def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String
+
   // test for basic message and exception
   def expectedPatternForBasicMsgWithException(level: Level): String
 
@@ -78,8 +89,8 @@ trait LoggingSuiteBase
   // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
-  // test for external system custom LogKey
-  def expectedPatternForExternalSystemCustomLogKey(level: Level): String
+  // test for custom LogKey
+  def expectedPatternForCustomLogKey(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
@@ -92,6 +103,30 @@ trait LoggingSuiteBase
       (Level.TRACE, () => logTrace(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeChar)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeChar)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeChar)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeChar)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeChar))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeChar(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char MDC") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeCharMDC)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeCharMDC)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeCharMDC)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeCharMDC)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeCharMDC))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeCharMDC(level).r.matches(logOutput))
     }
   }
 
@@ -146,18 +181,17 @@ trait LoggingSuiteBase
       }
   }
 
-  private val externalSystemCustomLog =
-    log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "External system custom log message.")}"
-  test("Logging with external system custom LogKey") {
+  private val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
+  test("Logging with custom LogKey") {
     Seq(
-      (Level.ERROR, () => logError(externalSystemCustomLog)),
-      (Level.WARN, () => logWarning(externalSystemCustomLog)),
-      (Level.INFO, () => logInfo(externalSystemCustomLog)),
-      (Level.DEBUG, () => logDebug(externalSystemCustomLog)),
-      (Level.TRACE, () => logTrace(externalSystemCustomLog))).foreach {
+      (Level.ERROR, () => logError(customLog)),
+      (Level.WARN, () => logWarning(customLog)),
+      (Level.INFO, () => logInfo(customLog)),
+      (Level.DEBUG, () => logDebug(customLog)),
+      (Level.TRACE, () => logTrace(customLog))).foreach {
       case (level, logFunc) =>
         val logOutput = captureLogOutput(logFunc)
-        assert(expectedPatternForExternalSystemCustomLogKey(level).r.matches(logOutput))
+        assert(expectedPatternForCustomLogKey(level).r.matches(logOutput))
     }
   }
 
@@ -194,6 +228,28 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "ts": "<timestamp>",
           "level": "$level",
           "msg": "This is a log message",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeChar(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
           "logger": "$className"
         }""")
   }
@@ -261,15 +317,15 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
-  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
+  override def expectedPatternForCustomLogKey(level: Level): String = {
     compactAndToRegexPattern(
       s"""
         {
           "ts": "<timestamp>",
           "level": "$level",
-          "msg": "External system custom log message.",
+          "msg": "Custom log message.",
           "context": {
-              "custom_log_key": "External system custom log message."
+              "custom_log_key": "Custom log message."
           },
           "logger": "$className"
         }"""
@@ -307,6 +363,6 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
 }
 
 object CustomLogKeys {
-  // External system custom LogKey must be `extends LogKey`
+  // Custom `LogKey` must be `extends LogKey`
   case object CUSTOM_LOG_KEY extends LogKey
 }
