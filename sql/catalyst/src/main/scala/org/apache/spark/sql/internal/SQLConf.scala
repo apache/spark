@@ -3196,7 +3196,7 @@ object SQLConf {
         "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
