@@ -703,9 +703,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   test("Test logic for determining whether a query is semantically sorted") {
-    withTable("t1", "t2") {
-      spark.sql("CREATE TABLE t1(a int, b int) USING parquet")
-      spark.sql("CREATE TABLE t2(a int, b int) USING parquet")
+    withTempView("t1", "t2") {
+      spark.sql("CREATE TEMP VIEW t1 AS SELECT * FROM VALUES (1, 1) AS t1(a, b)")
+      spark.sql("CREATE TEMP VIEW t2 AS SELECT * FROM VALUES (1, 2) AS t2(a, b)")
 
       val unsortedSelectQuery = "select * from t1"
       val sortedSelectQuery = "select * from t1 order by a, b"

@@ -289,8 +289,8 @@ object DataType {
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
     case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      messageParameters = Map("other" -> compact(render(other))))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def assertValidTypeForCollations(

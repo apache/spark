@@ -28,16 +28,19 @@ private[spark] object History {
 
   val HISTORY_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
     .version("1.1.0")
+    .doc("Directory where app logs are stored")
     .stringConf
     .createWithDefault(DEFAULT_LOG_DIR)
 
   val SAFEMODE_CHECK_INTERVAL_S = ConfigBuilder("spark.history.fs.safemodeCheck.interval")
     .version("1.6.0")
+    .doc("Interval between HDFS safemode checks for the event log directory")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("5s")
 
   val UPDATE_INTERVAL_S = ConfigBuilder("spark.history.fs.update.interval")
     .version("1.4.0")
+    .doc("How often(in seconds) to reload log data from storage")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("10s")
 
@@ -53,16 +56,21 @@ private[spark] object History {
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
+    .doc("Whether the History Server should periodically clean up event logs from storage")
     .booleanConf
     .createWithDefault(false)
 
   val CLEANER_INTERVAL_S = ConfigBuilder("spark.history.fs.cleaner.interval")
     .version("1.4.0")
+    .doc("When spark.history.fs.cleaner.enabled=true, specifies how often the filesystem " +
+      "job history cleaner checks for files to delete.")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1d")
 
   val MAX_LOG_AGE_S = ConfigBuilder("spark.history.fs.cleaner.maxAge")
     .version("1.4.0")
+    .doc("When spark.history.fs.cleaner.enabled=true, history files older than this will be " +
+      "deleted when the filesystem history cleaner runs.")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("7d")
 
@@ -96,6 +104,8 @@ private[spark] object History {
 
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
+    .doc("Maximum disk usage for the local directory where the cache application history " +
+      "information are stored.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10g")
 
@@ -145,60 +155,90 @@ private[spark] object History {
 
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
+    .doc("Specifies whether the History Server should periodically clean up driver logs from " +
+      "storage.")
     .fallbackConf(CLEANER_ENABLED)
-
-  val DRIVER_LOG_CLEANER_INTERVAL = ConfigBuilder("spark.history.fs.driverlog.cleaner.interval")
-    .version("3.0.0")
-    .fallbackConf(CLEANER_INTERVAL_S)
 
   val MAX_DRIVER_LOG_AGE_S = ConfigBuilder("spark.history.fs.driverlog.cleaner.maxAge")
     .version("3.0.0")
+    .doc(s"When ${DRIVER_LOG_CLEANER_ENABLED.key}=true, driver log files older than this will be " +
+      s"deleted when the driver log cleaner runs.")
     .fallbackConf(MAX_LOG_AGE_S)
+
+  val DRIVER_LOG_CLEANER_INTERVAL = ConfigBuilder("spark.history.fs.driverlog.cleaner.interval")
+    .version("3.0.0")
+    .doc(s" When ${DRIVER_LOG_CLEANER_ENABLED.key}=true, specifies how often the filesystem " +
+      s"driver log cleaner checks for files to delete. Files are only deleted if they are older " +
+      s"than ${MAX_DRIVER_LOG_AGE_S.key}.")
+    .fallbackConf(CLEANER_INTERVAL_S)
 
   val HISTORY_SERVER_UI_ACLS_ENABLE = ConfigBuilder("spark.history.ui.acls.enable")
     .version("1.0.1")
+    .doc("Specifies whether ACLs should be checked to authorize users viewing the applications " +
+      "in the history server. If enabled, access control checks are performed regardless of " +
+      "what the individual applications had set for spark.ui.acls.enable. The application owner " +
+      "will always have authorization to view their own application and any users specified via " +
+      "spark.ui.view.acls and groups specified via spark.ui.view.acls.groups when the " +
+      "application was run will also have authorization to view that application. If disabled, " +
+      "no access control checks are made for any application UIs available through the history " +
+      "server.")
     .booleanConf
     .createWithDefault(false)
 
   val HISTORY_SERVER_UI_ADMIN_ACLS = ConfigBuilder("spark.history.ui.admin.acls")
     .version("2.1.1")
+    .doc("Comma separated list of users that have view access to all the Spark applications in " +
+      "history server.")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS = ConfigBuilder("spark.history.ui.admin.acls.groups")
     .version("2.1.1")
+    .doc("Comma separated list of groups that have view access to all the Spark applications " +
+      "in history server.")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .version("2.0.0")
+    .doc("Number of threads that will be used by history server to process event logs.")
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
   val RETAINED_APPLICATIONS = ConfigBuilder("spark.history.retainedApplications")
     .version("1.0.0")
+    .doc("The number of applications to retain UI data for in the cache. If this cap is " +
+      "exceeded, then the oldest applications will be removed from the cache. If an application " +
+      "is not in the cache, it will have to be loaded from disk if it is accessed from the UI.")
     .intConf
     .createWithDefault(50)
 
   val PROVIDER = ConfigBuilder("spark.history.provider")
     .version("1.1.0")
+    .doc("Name of the class implementing the application history backend.")
     .stringConf
-    .createOptional
+    .createWithDefault("org.apache.spark.deploy.history.FsHistoryProvider")
 
   val KERBEROS_ENABLED = ConfigBuilder("spark.history.kerberos.enabled")
     .version("1.0.1")
+    .doc("Indicates whether the history server should use kerberos to login. This is required " +
+      "if the history server is accessing HDFS files on a secure Hadoop cluster.")
     .booleanConf
     .createWithDefault(false)
 
   val KERBEROS_PRINCIPAL = ConfigBuilder("spark.history.kerberos.principal")
     .version("1.0.1")
+    .doc(s"When ${KERBEROS_ENABLED.key}=true, specifies kerberos principal name for " +
+      s" the History Server.")
     .stringConf
     .createOptional
 
   val KERBEROS_KEYTAB = ConfigBuilder("spark.history.kerberos.keytab")
     .version("1.0.1")
+    .doc(s"When ${KERBEROS_ENABLED.key}=true, specifies location of the kerberos keytab file " +
+      s"for the History Server.")
     .stringConf
     .createOptional
 

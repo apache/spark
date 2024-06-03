@@ -1089,10 +1089,10 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Whether the data type contains StringType.
    */
+  @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
     case _: StringType => true
     case ArrayType(et, _) => hasStringType(et)
-    case MapType(kt, vt, _) => hasStringType(kt) || hasStringType(vt)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
   }

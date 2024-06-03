@@ -127,7 +127,7 @@ class RPackageUtilsSuite
       RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream,
         verbose = true)
       val output = lineBuffer.mkString("\n")
-      assert(output.contains(RPackageUtils.RJarDoc))
+      assert(output.contains(RPackageUtils.RJarDoc.message))
     }
   }
 

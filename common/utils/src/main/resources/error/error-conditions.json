@@ -2021,6 +2021,11 @@
           "Delimiter cannot be empty string."
         ]
       },
+      "NULL_VALUE" : {
+        "message" : [
+          "Delimiter cannot be null."
+        ]
+      },
       "SINGLE_BACKSLASH" : {
         "message" : [
           "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
@@ -3204,6 +3209,12 @@
     ],
     "sqlState" : "42809"
   },
+  "NOT_NULL_ASSERT_VIOLATION" : {
+    "message" : [
+      "NULL value appeared in non-nullable field: <walkedTypePath>If the schema is inferred from a Scala tuple/case class, or a Java bean, please try to use scala.Option[_] or other nullable types (such as java.lang.Integer instead of int/scala.Int)."
+    ],
+    "sqlState" : "42000"
+  },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
       "Assigning a NULL is not allowed here."
@@ -3706,6 +3717,12 @@
       "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_INVALID_PROVIDER" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
@@ -8212,11 +8229,6 @@
   "_LEGACY_ERROR_TEMP_3246" : {
     "message" : [
       "Failed to parse a value for data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3250" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a field."
     ]
   },
   "_LEGACY_ERROR_TEMP_3260" : {
