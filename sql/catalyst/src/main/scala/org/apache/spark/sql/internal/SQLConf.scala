@@ -4921,6 +4921,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
+    buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
+      .internal()
+      .doc("When set to true, use incorrect legacy behavior for checking whether a scalar " +
+        "subquery with a group-by on correlated columns is allowed. See SPARK-48503")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()

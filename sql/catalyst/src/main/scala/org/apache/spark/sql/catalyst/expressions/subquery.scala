@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, LogicalPlan}
+import org.apache.spark.sql.catalyst.optimizer.DecorrelateInnerQuery
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -247,6 +248,73 @@ object SubExprUtils extends PredicateHelper {
         case Nil => None
         case xs => xs
       }
+    }
+  }
+
+  /**
+   * Returns the inner query attributes that are guaranteed to have a single value for each
+   * outer row. Therefore, a scalar subquery is allowed to group-by on these attributes.
+   * We can derive these from correlated equality predicates, though we need to take care about
+   * propagating this through operators like OUTER JOIN or UNION.
+   *
+   * Positive examples: x = outer(a) AND y = outer(b)
+   * Negative examples:
+   * - x <= outer(a)
+   * - x + y = outer(a)
+   * - x = outer(a) OR y = outer(b)
+   * - y = outer(b) + 1 (this and similar expressions could be supported, but very carefully)
+   * - An equality under the right side of a LEFT OUTER JOIN, e.g.
+   *   select *, (select count(*) from y left join
+   *     (select * from z where z1 = x1) sub on y2 = z2 group by z1) from x;
+   * - An equality under UNION e.g.
+   *   select *, (select count(*) from
+   *     (select * from y where y1 = x1 union all select * from y) group by y1) from x;
+   */
+  def getCorrelatedEquivalentInnerColumns(plan: LogicalPlan): AttributeSet = {
+    plan match {
+      case Filter(cond, child) =>
+        val correlated = AttributeSet(splitConjunctivePredicates(cond)
+          .filter(containsOuter) // TODO: can remove this line to allow e.g. where x = 1 group by x
+          .filter(DecorrelateInnerQuery.canPullUpOverAgg)
+          .flatMap(_.references))
+        correlated ++ getCorrelatedEquivalentInnerColumns(child)
+
+      case Join(left, right, joinType, _, _) =>
+         joinType match {
+          case _: InnerLike =>
+            AttributeSet(plan.children.flatMap(child => getCorrelatedEquivalentInnerColumns(child)))
+          case LeftOuter => getCorrelatedEquivalentInnerColumns(left)
+          case RightOuter => getCorrelatedEquivalentInnerColumns(right)
+          case FullOuter => AttributeSet.empty
+          case LeftSemi => getCorrelatedEquivalentInnerColumns(left)
+          case LeftAnti => getCorrelatedEquivalentInnerColumns(left)
+          case _ => AttributeSet.empty
+        }
+
+      case _: Union => AttributeSet.empty
+      case Except(left, right, _) => getCorrelatedEquivalentInnerColumns(left)
+
+      case
+        _: Aggregate |
+        _: Distinct |
+        _: Intersect |
+        _: GlobalLimit |
+        _: LocalLimit |
+        _: Offset |
+        _: Project |
+        _: Repartition |
+        _: RepartitionByExpression |
+        _: RebalancePartitions |
+        _: Sample |
+        _: Sort |
+        _: Window |
+        _: Tail |
+        _: WithCTE |
+        _: Range |
+        _: SubqueryAlias =>
+        AttributeSet(plan.children.flatMap(child => getCorrelatedEquivalentInnerColumns(child)))
+
+      case _ => AttributeSet.empty
     }
   }
 }
