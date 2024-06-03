@@ -26,7 +26,8 @@ import py4j
 from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import StructType, StringType, StructField
-from pyspark.testing.utils import ReusedSQLTestCase, ReusedPySparkTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase, ReusedSQLTestCase):
