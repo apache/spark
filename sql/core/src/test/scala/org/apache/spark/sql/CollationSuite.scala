@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
-import org.apache.spark.sql.types.{BinaryType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -1006,13 +1006,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val data = Seq(Row("AA"), Row("aa"), Row("BB"))
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
     df.createOrReplaceTempView("tempTable")
-    // test RewriteGroupByCollation idempotence
+
+    // verify RewriteGroupByCollation rule idempotence
     val dfGroupBy1 = spark.sql("SELECT COUNT(*) FROM tempTable GROUP BY name")
     val logicalPlan1 = dfGroupBy1.queryExecution.analyzed
     val newPlan1 = RewriteGroupByCollation(logicalPlan1)
     val newNewPlan1 = RewriteGroupByCollation(newPlan1)
     assert(newPlan1 == newNewPlan1)
-    // get the query execution result
+
     checkAnswer(dfGroupBy1, Seq(Row(2), Row(1)))
   }
 
@@ -1068,9 +1069,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           assert(collectFirst(queryPlan2) { case _: SortAggregateExec => () }.nonEmpty)
           // check that CollationKey is injected into the Aggregate logical plan in any case
           assert(collectFirst(queryPlan1) { case s: HashAggregateExec =>
-            s.groupingExpressions.head.dataType.isInstanceOf[BinaryType] }.nonEmpty)
+            s.groupingExpressions.head.isInstanceOf[CollationKey] }.nonEmpty)
           assert(collectFirst(queryPlan2) { case s: SortAggregateExec =>
-            s.groupingExpressions.head.dataType.isInstanceOf[BinaryType] }.nonEmpty)
+            s.groupingExpressions.head.isInstanceOf[CollationKey] }.nonEmpty)
         }
       }
     })
@@ -1103,7 +1104,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       assert(collectFirst(queryPlan2) { case _: SortAggregateExec => () }.isEmpty)
       // check that CollationKey is injected into the Aggregate logical plan
       assert(collectFirst(queryPlan1) { case s: HashAggregateExec =>
-        s.groupingExpressions.head.dataType.isInstanceOf[BinaryType]}.nonEmpty)
+        s.groupingExpressions.head.isInstanceOf[CollationKey]}.nonEmpty)
     }
   }
 

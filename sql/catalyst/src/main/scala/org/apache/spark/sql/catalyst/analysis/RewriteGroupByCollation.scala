@@ -23,6 +23,13 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.StringType
 
+/**
+ * This rule rewrites Aggregates to ensure that all aggregations containing non-binary collated
+ * strings are performed with respect to collation keys. This is necessary because hash aggregation
+ * is generally evaluated using binary equality, which does not work correctly for non-binary
+ * collated strings. However, by injecting CollationKey expressions into the corresponding grouping
+ * expressions, we allow HashAggregate to work properly on this type of data.
+ */
 object RewriteGroupByCollation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case a: Aggregate if canRewriteAggregateCollation(a) =>
