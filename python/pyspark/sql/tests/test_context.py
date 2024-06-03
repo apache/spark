@@ -100,23 +100,19 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         self.spark.sql("DROP TABLE savedJsonTable")
         self.spark.sql("DROP TABLE externalJsonTable")
 
-        defaultDataSourceName = self.spark.conf.get(
-            "spark.sql.sources.default", "org.apache.spark.sql.parquet"
-        )
-        self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
-        df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
-        actual = self.spark.catalog.createTable("externalJsonTable", path=tmpPath)
-        self.assertEqual(
-            sorted(df.collect()), sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect())
-        )
-        self.assertEqual(
-            sorted(df.collect()),
-            sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()),
-        )
-        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
-        self.spark.sql("DROP TABLE savedJsonTable")
-        self.spark.sql("DROP TABLE externalJsonTable")
-        self.spark.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+        with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
+            df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
+            actual = self.spark.catalog.createTable("externalJsonTable", path=tmpPath)
+            self.assertEqual(
+                sorted(df.collect()), sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect())
+            )
+            self.assertEqual(
+                sorted(df.collect()),
+                sorted(self.spark.sql("SELECT * FROM externalJsonTable").collect()),
+            )
+            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            self.spark.sql("DROP TABLE savedJsonTable")
+            self.spark.sql("DROP TABLE externalJsonTable")
 
         shutil.rmtree(tmpPath)
 
