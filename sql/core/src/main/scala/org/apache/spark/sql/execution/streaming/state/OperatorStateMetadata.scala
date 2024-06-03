@@ -57,6 +57,10 @@ case class OperatorInfoV1(operatorId: Long, operatorName: String) extends Operat
 
 trait OperatorStateMetadata {
   def version: Int
+
+  def operatorInfo: OperatorInfo
+
+  def stateStoreInfo: Array[StateStoreMetadataV1]
 }
 
 object OperatorStateMetadata {
