@@ -491,9 +491,7 @@ class TypesTestsMixin:
         self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
-        with self.sql_conf(
-                {"spark.sql.legacy.allowNegativeScaleOfDecimal": True}
-        ):
+        with self.sql_conf({"spark.sql.legacy.allowNegativeScaleOfDecimal": True}):
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
             ret = df.select(F.col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
