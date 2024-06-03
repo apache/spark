@@ -1169,3 +1169,9 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  sparkr-window:
+    name: "Run Sparkr Window"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/build_sparkr_window.yml
