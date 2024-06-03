@@ -102,7 +102,11 @@ abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
   def toColumn: TypedColumn[IN, OUT] = {
     val inputEncoder = ScalaReflection.encoderFor[IN]
     val udaf =
-      ScalaUserDefinedFunction(this, Seq(inputEncoder), encoderFor(outputEncoder), aggregate = true)
+      ScalaUserDefinedFunction(
+        this,
+        Seq(inputEncoder),
+        encoderFor(outputEncoder),
+        aggregate = true)
 
     val builder = proto.TypedAggregateExpression.newBuilder()
     builder.setScalarScalaUdf(udaf.udf)

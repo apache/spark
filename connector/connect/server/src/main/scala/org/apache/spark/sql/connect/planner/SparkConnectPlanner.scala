@@ -1460,7 +1460,7 @@ class SparkConnectPlanner(
 
     logical.Project(projectList = projection, child = baseRel)
   }
-  
+
   /**
    * Transforms an input protobuf expression into the Catalyst expression. This is usually not
    * called directly. Typically the planner will traverse the expressions automatically, only
