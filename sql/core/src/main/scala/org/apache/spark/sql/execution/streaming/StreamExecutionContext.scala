@@ -118,7 +118,7 @@ class ContinuousExecutionContext(
  */
 class MicroBatchExecutionContext(
     id: UUID,
-    runId: UUID,
+    val runId: UUID,
     name: String,
     triggerClock: Clock,
     sources: Seq[SparkDataStream],

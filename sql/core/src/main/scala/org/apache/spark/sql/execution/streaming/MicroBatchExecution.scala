@@ -390,7 +390,7 @@ class MicroBatchExecution(
           currentBatchHasNewData,
           execCtx.executionPlan,
           execCtx.batchId,
-          Some(execCtx.previousContext)
+          execCtx.previousContext
         )
       } else {
         execCtx.finishNoExecutionTrigger(execCtx.batchId)

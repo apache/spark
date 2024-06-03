@@ -265,7 +265,7 @@ abstract class ProgressContext(
       sourceToNumInputRowsMap: Map[SparkDataStream, Long],
       lastExecution: IncrementalExecution,
       lastEpochId: Long,
-      previousExecution: Option[StreamExecutionContext]): Unit = {
+      previousExecution: Option[MicroBatchExecutionContext]): Unit = {
     assert(
       currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
         currentTriggerLatestOffsets != null
@@ -389,7 +389,7 @@ abstract class ProgressContext(
       hasNewData: Boolean,
       lastExecution: IncrementalExecution,
       lastEpoch: Long,
-      previousContext: Option[StreamExecutionContext] = None): Unit = {
+      previousContext: Option[MicroBatchExecutionContext] = None): Unit = {
     val map: Map[SparkDataStream, Long] =
       if (hasNewData) extractSourceToNumInputRows(lastExecution) else Map.empty
     finishTrigger(hasNewData, map, lastExecution, lastEpoch, previousContext)
