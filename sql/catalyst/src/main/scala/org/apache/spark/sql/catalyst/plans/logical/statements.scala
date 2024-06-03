@@ -148,7 +148,7 @@ case class QualifiedColType(
           errorClass = "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED",
           messageParameters = Map(
             "colName" -> colName,
-            "defaultValue" -> sql,
+            "defaultValue" -> sql
           )
         )
       }

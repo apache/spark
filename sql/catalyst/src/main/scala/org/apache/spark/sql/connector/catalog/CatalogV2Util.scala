@@ -527,7 +527,7 @@ private[sql] object CatalogV2Util {
     if (isDefaultColumn) {
       val e = analyze(
         f,
-        statementType = "",
+        statementType = "Column analysis",
         metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
       if (!e.resolved || !e.foldable) {
@@ -535,7 +535,7 @@ private[sql] object CatalogV2Util {
           errorClass = "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED",
           messageParameters = Map(
             "colName" -> f.name,
-            "defaultValue" -> f.getExistenceDefaultValue().get,
+            "defaultValue" -> f.getExistenceDefaultValue().get
           )
         )
       }
