@@ -3707,6 +3707,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided key schema does not match existing state key schema. Please check number and type of fields. Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
@@ -3730,6 +3736,12 @@
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided value schema does not match existing state value schema. Please check number and type of fields. Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [

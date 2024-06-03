@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -313,22 +314,13 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
       ignoreValueSchema = ignoreValueSchema)
 
-    val e = intercept[StateSchemaNotCompatible] {
+    val e = intercept[SparkUnsupportedOperationException] {
       runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
         ignoreValueSchema = ignoreValueSchema)
     }
-
-    assert(e.getMessage.contains("Provided schema doesn't match to the schema for existing state!"))
-    assert(e.getMessage.contains(newKeySchema.toString()))
-    assert(e.getMessage.contains(oldKeySchema.toString()))
-
-    if (ignoreValueSchema) {
-      assert(!e.getMessage.contains(newValueSchema.toString()))
-      assert(!e.getMessage.contains(oldValueSchema.toString()))
-    } else {
-      assert(e.getMessage.contains(newValueSchema.toString()))
-      assert(e.getMessage.contains(oldValueSchema.toString()))
-    }
+    assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+      e.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+    assert(e.getMessage.contains("does not match existing"))
   }
 
   private def verifySuccess(

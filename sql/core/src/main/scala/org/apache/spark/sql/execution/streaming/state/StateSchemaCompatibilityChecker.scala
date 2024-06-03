@@ -26,8 +26,6 @@ import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
-case class StateSchemaNotCompatible(message: String) extends Exception(message)
-
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration) extends Logging {
@@ -44,6 +42,18 @@ class StateSchemaCompatibilityChecker(
     check(keySchema, valueSchema, ignoreValueSchema = false)
   }
 
+  private def logSchemaIncompatibleError(schemaErrorMsg: String): Unit = {
+    val errorMsg = "Provided schema doesn't match the schema for existing state! " +
+      "Please note that Spark allow difference of field name: check count of fields " +
+      "and data type of each field.\n" +
+      schemaErrorMsg +
+      s"If you want to force running query without schema validation, please set " +
+      s"${SQLConf.STATE_SCHEMA_CHECK_ENABLED.key} to false.\n" +
+      "Please note that running query with incompatible schema could cause indeterministic " +
+      "behavior."
+    logError(errorMsg)
+  }
+
   def check(keySchema: StructType, valueSchema: StructType, ignoreValueSchema: Boolean): Unit = {
     if (fm.exists(schemaFileLocation)) {
       logDebug(s"Schema file for provider $providerId exists. Comparing with provided schema.")
@@ -51,30 +61,18 @@ class StateSchemaCompatibilityChecker(
       if (storedKeySchema.equals(keySchema) &&
         (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
         // schema is exactly same
-      } else if (!schemasCompatible(storedKeySchema, keySchema) ||
-        (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema))) {
+      } else if (!schemasCompatible(storedKeySchema, keySchema)) {
         val errorMsgForKeySchema = s"- Provided key schema: $keySchema\n" +
           s"- Existing key schema: $storedKeySchema\n"
-
-        // If it is requested to skip checking the value schema, we also don't expose the value
-        // schema information to the error message.
-        val errorMsgForValueSchema = if (!ignoreValueSchema) {
-          s"- Provided value schema: $valueSchema\n" +
-            s"- Existing value schema: $storedValueSchema\n"
-        } else {
-          ""
-        }
-        val errorMsg = "Provided schema doesn't match to the schema for existing state! " +
-          "Please note that Spark allow difference of field name: check count of fields " +
-          "and data type of each field.\n" +
-          errorMsgForKeySchema +
-          errorMsgForValueSchema +
-          s"If you want to force running query without schema validation, please set " +
-          s"${SQLConf.STATE_SCHEMA_CHECK_ENABLED.key} to false.\n" +
-          "Please note running query with incompatible schema could cause indeterministic" +
-          " behavior."
-        logError(errorMsg)
-        throw StateSchemaNotCompatible(errorMsg)
+        logSchemaIncompatibleError(errorMsgForKeySchema)
+        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+          keySchema.toString)
+      } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+        val errorMsgForValueSchema = s"- Provided value schema: $valueSchema\n" +
+          s"- Existing value schema: $storedValueSchema\n"
+        logSchemaIncompatibleError(errorMsgForValueSchema)
+        throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+          valueSchema.toString)
       } else {
         logInfo("Detected schema change which is compatible. Allowing to put rows.")
       }
