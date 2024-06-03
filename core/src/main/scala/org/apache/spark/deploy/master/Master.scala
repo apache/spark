@@ -166,8 +166,8 @@ private[deploy] class Master(
     val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
     require(conf.getOption(authKey).isEmpty || canUseAuthKeyWithServerConf,
       s"The RestSubmissionServer does not support authentication via ${authKey}.  Either turn " +
-        "off the RestSubmissionServer with spark.master.rest.enabled=false, or do not use " +
-        "authentication.")
+        "off the RestSubmissionServer with spark.master.rest.enabled=false, or explicitly specify a setting " +
+        "to use fot the RestSubmissionServer, such as mode \"SecureGateway\"".")
   }
 
   override def onStart(): Unit = {
