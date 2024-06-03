@@ -1941,8 +1941,8 @@ package object config {
       "providing authentication for all REST API's of the spark master servers(s). This setting relates to " + 
       "spark.authenticate.*, but influences only the REST interfaces of the spark master.")
     .version("3.6.0")
-    .booleanConf
-    .createWithDefault("None")
+    .stringConf
+    .createWithDefaultString("None")
 
   private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
     .doc("Specifies the host of the Master REST API endpoint")
