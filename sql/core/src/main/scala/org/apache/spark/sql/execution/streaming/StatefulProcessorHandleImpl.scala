@@ -85,7 +85,7 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty,
-    existingColFamilies: Map[String, ColumnFamilyAccumulator] = Map.empty)
+    existingColFamilies: Map[String, ColumnFamilySchemaV1] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 

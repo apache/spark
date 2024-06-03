@@ -93,10 +93,10 @@ case class TransformWithStateExec(
       "operatorPropsFromExecutor"
     )
 
-  private lazy val colFamilyAccumulators: Map[String, ColumnFamilyAccumulator] =
+  private lazy val colFamilySchemas: Map[String, ColumnFamilySchemaV1] =
     initializeColFamilyAccumulators()
 
-  private def initializeColFamilyAccumulators(): Map[String, ColumnFamilyAccumulator] = {
+  private def initializeColFamilyAccumulators(): Map[String, ColumnFamilySchemaV1] = {
     val stateCheckpointPath = new Path(stateInfo.get.checkpointLocation,
       getStateInfo.operatorId.toString)
     val hadoopConf = session.sqlContext.sessionState.newHadoopConf()
@@ -104,8 +104,8 @@ case class TransformWithStateExec(
     val reader = new SchemaV3Reader(stateCheckpointPath, hadoopConf)
 
     reader.read.map { colFamilyMetadata =>
-      val acc = ColumnFamilyAccumulator.create(colFamilyMetadata, sparkContext)
-      colFamilyMetadata.asInstanceOf[ColumnFamilySchemaV1].columnFamilyName -> acc
+      val schemaV1 = colFamilyMetadata.asInstanceOf[ColumnFamilySchemaV1]
+      schemaV1.columnFamilyName -> schemaV1
     }.toMap
   }
 
@@ -430,7 +430,7 @@ case class TransformWithStateExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
-    colFamilyAccumulators
+    colFamilySchemas
 
     validateTimeMode()
 
@@ -549,7 +549,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics, colFamilyAccumulators)
+      isStreaming, batchTimestampMs, metrics, colFamilySchemas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)

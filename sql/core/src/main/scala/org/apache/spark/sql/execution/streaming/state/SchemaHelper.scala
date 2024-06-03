@@ -26,10 +26,9 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.util.Utils
 
 sealed trait ColumnFamilySchema extends Serializable {
   def jsonValue: JsonAST.JObject
@@ -54,63 +53,6 @@ case class ColumnFamilySchemaV1(
     def json: String = {
       compact(render(jsonValue))
     }
-}
-
-class ColumnFamilyAccumulator(
-    columnFamilyMetadata: ColumnFamilySchema) extends
-  AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema] {
-
-  private var _value: ColumnFamilySchema = columnFamilyMetadata
-  /**
-   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
-   * value; for a list accumulator, Nil is zero value.
-   */
-  override def isZero: Boolean = _value == null
-
-  /**
-   * Creates a new copy of this accumulator.
-   */
-  override def copy(): AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema] = {
-    new ColumnFamilyAccumulator(_value)
-  }
-
-  /**
-   * Resets this accumulator, which is zero value. i.e. call `isZero` must
-   * return true.
-   */
-  override def reset(): Unit = {
-    _value = null
-  }
-
-  /**
-   * Takes the inputs and accumulates.
-   */
-  override def add(v: ColumnFamilySchema): Unit = {
-    _value = v
-  }
-
-  /**
-   * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place.
-   */
-  override def merge(other: AccumulatorV2[ColumnFamilySchema, ColumnFamilySchema]): Unit = {
-    _value = other.value
-  }
-
-  /**
-   * Defines the current value of this accumulator
-   */
-  override def value: ColumnFamilySchema = _value
-}
-
-object ColumnFamilyAccumulator {
-  def create(
-              columnFamilyMetadata: ColumnFamilySchema,
-              sparkContext: SparkContext): ColumnFamilyAccumulator = {
-    val acc = new ColumnFamilyAccumulator(columnFamilyMetadata)
-    acc.register(sparkContext)
-    acc
-  }
 }
 
 object ColumnFamilySchemaV1 {
