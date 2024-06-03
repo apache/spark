@@ -1180,6 +1180,7 @@ class Expression(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
     CALL_FUNCTION_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
+    TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1218,6 +1219,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def named_argument_expression(self) -> global___NamedArgumentExpression: ...
     @property
+    def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1243,6 +1246,7 @@ class Expression(google.protobuf.message.Message):
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
+        typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1270,6 +1274,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "typed_aggregate_expression",
+            b"typed_aggregate_expression",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_extract_value",
@@ -1313,6 +1319,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "typed_aggregate_expression",
+            b"typed_aggregate_expression",
             "unresolved_attribute",
             b"unresolved_attribute",
             "unresolved_extract_value",
@@ -1352,6 +1360,7 @@ class Expression(google.protobuf.message.Message):
             "common_inline_user_defined_function",
             "call_function",
             "named_argument_expression",
+            "typed_aggregate_expression",
             "extension",
         ]
         | None
@@ -1573,6 +1582,27 @@ class JavaUDF(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["output_type"] | None: ...
 
 global___JavaUDF = JavaUDF
+
+class TypedAggregateExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
+    @property
+    def scalar_scala_udf(self) -> global___ScalarScalaUDF:
+        """(Required) The aggregate function object packed into bytes."""
+    def __init__(
+        self,
+        *,
+        scalar_scala_udf: global___ScalarScalaUDF | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["scalar_scala_udf", b"scalar_scala_udf"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["scalar_scala_udf", b"scalar_scala_udf"]
+    ) -> None: ...
+
+global___TypedAggregateExpression = TypedAggregateExpression
 
 class CallFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
