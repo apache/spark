@@ -149,7 +149,6 @@ from pyspark.pandas.typedef.typehints import (
     create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -529,7 +528,6 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -537,7 +535,7 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = data
-        elif isinstance(data, SparkDataFrame):
+        elif isinstance(data, PySparkDataFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -5629,10 +5627,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.indexes import MultiIndex
         from pyspark.pandas.series import IndexOpsMixin
 
-        Column = get_column_class()
         for k, v in kwargs.items():
             is_invalid_assignee = (
-                not (isinstance(v, (IndexOpsMixin, Column)) or callable(v) or is_scalar(v))
+                not (isinstance(v, (IndexOpsMixin, PySparkColumn)) or callable(v) or is_scalar(v))
             ) or isinstance(v, MultiIndex)
             if is_invalid_assignee:
                 raise TypeError(
@@ -5646,7 +5643,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
-                if isinstance(v, Column)
+                if isinstance(v, PySparkColumn)
                 else (F.lit(v), None)
             )
             for k, v in kwargs.items()
@@ -7689,21 +7686,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        Column = get_column_class()
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
-            (True, "first"): Column.asc_nulls_first,
-            (True, "last"): Column.asc_nulls_last,
-            (False, "first"): Column.desc_nulls_first,
-            (False, "last"): Column.desc_nulls_last,
+            (True, "first"): PySparkColumn.asc_nulls_first,
+            (True, "last"): PySparkColumn.asc_nulls_last,
+            (False, "first"): PySparkColumn.desc_nulls_first,
+            (False, "last"): PySparkColumn.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)
+            natural_order_scol = PySparkColumn.desc(natural_order_scol)
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -13628,14 +13624,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
-    def _to_feather_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_feather")
-        return _f(*args, **kwargs)
-
-    def _to_stata_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_stata")
-        return _f(*args, **kwargs)
-
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
@@ -13740,8 +13728,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    SparkDataFrame = get_dataframe_class()
-    assert isinstance(sdf, SparkDataFrame)
+    assert isinstance(sdf, PySparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)

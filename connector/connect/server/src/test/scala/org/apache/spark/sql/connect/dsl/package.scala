@@ -332,6 +332,21 @@ package object dsl {
       def sql(sqlText: String): Relation = {
         Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
+
+      def table(name: String): Relation = {
+        proto.Relation
+          .newBuilder()
+          .setRead(
+            proto.Read
+              .newBuilder()
+              .setNamedTable(
+                proto.Read.NamedTable
+                  .newBuilder()
+                  .setUnparsedIdentifier(name)
+                  .build())
+              .build())
+          .build()
+      }
     }
 
     implicit class DslNAFunctions(val logicalPlan: Relation) {
@@ -690,7 +705,7 @@ package object dsl {
 
       def as(alias: String): Relation = {
         Relation
-          .newBuilder(logicalPlan)
+          .newBuilder()
           .setSubqueryAlias(SubqueryAlias.newBuilder().setAlias(alias).setInput(logicalPlan))
           .build()
       }
@@ -720,9 +735,10 @@ package object dsl {
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
           .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
           .setChild(
-            Expression.newBuilder
+            Expression
+              .newBuilder()
               .setUnresolvedAttribute(
-                Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+                Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(col).build())
               .build())
           .build()
       }

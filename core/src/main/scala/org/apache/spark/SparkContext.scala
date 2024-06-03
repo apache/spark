@@ -287,12 +287,7 @@ class SparkContext(config: SparkConf) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(
-      conf,
-      isLocal,
-      listenerBus,
-      SparkContext.numDriverCores(master, conf),
-      this)
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -2930,7 +2925,7 @@ object SparkContext extends Logging {
           log" constructor). This may indicate an error, since only one SparkContext should be" +
           log" running in this JVM (see SPARK-2243)." +
           log" The other SparkContext was created at:\n" +
-          log"${MDC(LogKeys.CONTEXT_CREATION_SITE, otherContextCreationSite)}"
+          log"${MDC(LogKeys.CREATION_SITE, otherContextCreationSite)}"
         logWarning(warnMsg)
       }
     }

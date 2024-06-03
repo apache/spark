@@ -1481,6 +1481,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     INPUTTYPES_FIELD_NUMBER: builtins.int
     OUTPUTTYPE_FIELD_NUMBER: builtins.int
     NULLABLE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
     payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
     @property
@@ -1495,6 +1496,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         """(Required) Output type of the UDF"""
     nullable: builtins.bool
     """(Required) True if the UDF can return null value"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the UDF is an aggregate function"""
     def __init__(
         self,
         *,
@@ -1503,6 +1506,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         | None = ...,
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
+        aggregate: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["outputType", b"outputType"]
@@ -1510,6 +1514,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "aggregate",
+            b"aggregate",
             "inputTypes",
             b"inputTypes",
             "nullable",

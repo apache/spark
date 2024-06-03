@@ -45,9 +45,14 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.utils import (
+    has_numpy,
+    get_active_spark_context,
+    escape_meta_characters,
+    StringConcat,
+)
 from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
@@ -199,6 +204,35 @@ class DataType:
         assert len(schema) == 1
         return schema[0].dataType
 
+    @classmethod
+    def _data_type_build_formatted_string(
+        cls,
+        dataType: "DataType",
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int,
+    ) -> None:
+        if isinstance(dataType, (ArrayType, StructType, MapType)):
+            dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
+
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
+    @classmethod
+    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
+        if isinstance(
+            dataType,
+            (
+                DecimalType,
+                CharType,
+                VarcharType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+            ),
+        ):
+            return dataType.simpleString()
+        else:
+            return dataType.typeName()
+
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -254,25 +288,12 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
     providerSpark = "spark"
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -285,7 +306,7 @@ class StringType(AtomicType):
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collationIdToName(self.collationId)}"
+        return f"string collate ${self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
@@ -295,13 +316,11 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collationId == 0
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -734,6 +753,21 @@ class ArrayType(DataType):
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
 
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
+                + f"(containsNull = {str(self.containsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.elementType, f"{prefix}    |", stringConcat, maxDepth
+            )
+
 
 class MapType(DataType):
     """Map data type.
@@ -868,6 +902,25 @@ class MapType(DataType):
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
 
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
+            DataType._data_type_build_formatted_string(
+                self.keyType, f"{prefix}    |", stringConcat, maxDepth
+            )
+            stringConcat.append(
+                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
+                + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.valueType, f"{prefix}    |", stringConcat, maxDepth
+            )
+
 
 class StructField(DataType):
     """A field in :class:`StructType`.
@@ -997,7 +1050,7 @@ class StructField(DataType):
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        collationName = StringType.collationIdToName(dt.collationId)
+        collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
 
@@ -1015,6 +1068,22 @@ class StructField(DataType):
             error_class="INVALID_TYPENAME_CALL",
             message_parameters={},
         )
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- {escape_meta_characters(self.name)}: "
+                + f"{DataType._get_jvm_type_name(self.dataType)} "
+                + f"(nullable = {str(self.nullable).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.dataType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class StructType(DataType):
@@ -1436,6 +1505,24 @@ class StructType(DataType):
             values = obj
         return _create_row(self.names, values)
 
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, maxDepth)
+
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
+        stringConcat = StringConcat()
+        stringConcat.append("root\n")
+        prefix = " |"
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, depth)
+        return stringConcat.toString()
+
 
 class VariantType(AtomicType):
     """
@@ -1654,13 +1741,45 @@ _atomic_types: List[Type[DataType]] = [
     TimestampNTZType,
     NullType,
     VariantType,
+    YearMonthIntervalType,
+    DayTimeIntervalType,
 ]
-_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
-_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [ArrayType, MapType, StructType]
-_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
-    (v.typeName(), v) for v in _complex_types
-)
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [
+    ArrayType,
+    MapType,
+    StructType,
+]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = {
+    "array": ArrayType,
+    "map": MapType,
+    "struct": StructType,
+}
+
+# Datatypes that can be directly parsed by mapping a json string without regex.
+# This dict should be only used in json parsing.
+# Note that:
+# 1, CharType and VarcharType are not listed here, since they need regex;
+# 2, DecimalType can be parsed by both mapping ('decimal') and regex ('decimal(10, 2)');
+# 3, CalendarIntervalType is not an atomic type, but can be mapped by 'interval';
+_all_mappable_types: Dict[str, Type[DataType]] = {
+    "string": StringType,
+    "binary": BinaryType,
+    "boolean": BooleanType,
+    "decimal": DecimalType,
+    "float": FloatType,
+    "double": DoubleType,
+    "byte": ByteType,
+    "short": ShortType,
+    "integer": IntegerType,
+    "long": LongType,
+    "date": DateType,
+    "timestamp": TimestampType,
+    "timestamp_ntz": TimestampNTZType,
+    "void": NullType,
+    "variant": VariantType,
+    "interval": CalendarIntervalType,
+}
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
@@ -1785,11 +1904,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     ...
-    >>> for cls in _all_atomic_types.values():
-    ...     if cls is not VarcharType and cls is not CharType:
-    ...         check_datatype(cls())
-    ...     else:
-    ...         check_datatype(cls(1))
+    >>> for cls in _all_mappable_types.values():
+    ...     check_datatype(cls())
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -1836,14 +1952,12 @@ def _parse_datatype_json_value(
     collationsMap: Optional[Dict[str, str]] = None,
 ) -> DataType:
     if not isinstance(json_value, dict):
-        if json_value in _all_atomic_types.keys():
+        if json_value in _all_mappable_types.keys():
             if collationsMap is not None and fieldPath in collationsMap:
                 _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
                 collation_name = collationsMap[fieldPath]
                 return StringType(collation_name)
-            return _all_atomic_types[json_value]()
-        elif json_value == "decimal":
-            return DecimalType()
+            return _all_mappable_types[json_value]()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
@@ -1863,8 +1977,6 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif json_value == "interval":
-            return CalendarIntervalType()
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -2171,6 +2283,7 @@ def _infer_type(
                 obj,
                 infer_dict_as_struct=infer_dict_as_struct,
                 infer_array_from_first_element=infer_array_from_first_element,
+                prefer_timestamp_ntz=prefer_timestamp_ntz,
             )
         except TypeError:
             raise PySparkTypeError(

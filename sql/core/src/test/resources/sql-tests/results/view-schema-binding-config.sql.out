@@ -958,6 +958,262 @@ View Query Output Columns	[c1, c2]
 
 
 -- !query
+SET spark.sql.legacy.viewSchemaBindingMode = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaBindingMode	false
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaCompensation	false
+
+
+-- !query
+CREATE OR REPLACE VIEW v AS SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaBindingMode	true
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+1                   	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	v                   	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT 1            	                    
+View Original Text  	SELECT 1            	                    
+View Schema Mode    	BINDING             	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[1]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+-- !query output
+default	v	false	Catalog: spark_catalog
+Database: default
+Table: v
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+View Text: SELECT 1
+View Original Text: SELECT 1
+View Schema Mode: BINDING
+View Catalog and Namespace: spark_catalog.default
+View Query Output Columns: [1]
+Schema: root
+ |-- 1: integer (nullable = false)
+
+
+-- !query
+SHOW CREATE TABLE v
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW default.v (
+  `1`)
+WITH SCHEMA BINDING
+AS SELECT 1
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaCompensation	true
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+1                   	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	v                   	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	VIEW                	                    
+View Text           	SELECT 1            	                    
+View Original Text  	SELECT 1            	                    
+View Schema Mode    	BINDING             	                    
+View Catalog and Namespace	spark_catalog.default	                    
+View Query Output Columns	[1]
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+-- !query output
+default	v	false	Catalog: spark_catalog
+Database: default
+Table: v
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+View Text: SELECT 1
+View Original Text: SELECT 1
+View Schema Mode: BINDING
+View Catalog and Namespace: spark_catalog.default
+View Query Output Columns: [1]
+Schema: root
+ |-- 1: integer (nullable = false)
+
+
+-- !query
+SHOW CREATE TABLE v
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE VIEW default.v (
+  `1`)
+WITH SCHEMA BINDING
+AS SELECT 1
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaBindingMode	false
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaCompensation	false
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaBindingMode = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaBindingMode	true
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+1                   	int
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+-- !query output
+	v	true	Table: v
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+View Text: SELECT 1
+View Schema Mode: BINDING
+View Catalog and Namespace: spark_catalog.default
+View Query Output Columns: [1]
+Schema: root
+ |-- 1: integer (nullable = false)
+
+
+-- !query
+SET spark.sql.legacy.viewSchemaCompensation = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.viewSchemaCompensation	true
+
+
+-- !query
+DESCRIBE EXTENDED v
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+1                   	int
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'v'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
+-- !query output
+	v	true	Table: v
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+View Text: SELECT 1
+View Schema Mode: BINDING
+View Catalog and Namespace: spark_catalog.default
+View Query Output Columns: [1]
+Schema: root
+ |-- 1: integer (nullable = false)
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS v
 -- !query schema
 struct<>

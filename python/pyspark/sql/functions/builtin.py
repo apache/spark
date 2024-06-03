@@ -86,7 +86,7 @@ def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
     Java gateway associated with sc.
     """
     assert sc._jvm is not None
-    return getattr(sc._jvm.functions, name)
+    return getattr(getattr(sc._jvm, "org.apache.spark.sql.functions"), name)
 
 
 def _invoke_function(name: str, *args: Any) -> Column:
@@ -9458,6 +9458,69 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
         unit,
         _to_java_column(start),
         _to_java_column(end),
+    )
+
+
+@_try_remote_functions
+def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
+    """
+    Gets the difference between the timestamps in the specified units by truncating
+    the fraction part.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    unit : str
+        This indicates the units of the difference between the given timestamps.
+        Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+    quantity : :class:`~pyspark.sql.Column` or str
+        The number of units of time that you want to add.
+    ts : :class:`~pyspark.sql.Column` or str
+        A timestamp to which you want to add.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the difference between the timestamps.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 2),
+    ...      (datetime.datetime(2024, 4, 2, 9, 0, 7), 3)], ["ts", "quantity"])
+    >>> df.select(sf.timestamp_add("year", "quantity", "ts")).show()
+    +--------------------------------+
+    |timestampadd(year, quantity, ts)|
+    +--------------------------------+
+    |             2018-03-11 09:00:07|
+    |             2027-04-02 09:00:07|
+    +--------------------------------+
+    >>> df.select(sf.timestamp_add("WEEK", sf.lit(5), "ts")).show()
+    +-------------------------+
+    |timestampadd(WEEK, 5, ts)|
+    +-------------------------+
+    |      2016-04-15 09:00:07|
+    |      2024-05-07 09:00:07|
+    +-------------------------+
+    >>> df.select(sf.timestamp_add("day", sf.lit(-5), "ts")).show()
+    +-------------------------+
+    |timestampadd(day, -5, ts)|
+    +-------------------------+
+    |      2016-03-06 09:00:07|
+    |      2024-03-28 09:00:07|
+    +-------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "timestamp_add",
+        unit,
+        _to_java_column(quantity),
+        _to_java_column(ts),
     )
 
 

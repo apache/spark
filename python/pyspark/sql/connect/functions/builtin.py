@@ -3404,6 +3404,13 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 timestamp_diff.__doc__ = pysparkfuncs.timestamp_diff.__doc__
 
 
+def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampadd", lit(unit), quantity, ts)
+
+
+timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
+
+
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,

@@ -19,6 +19,7 @@ package org.apache.spark.internal
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.text.StringEscapeUtils
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -28,6 +29,44 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
+
+/**
+ * Guidelines for the Structured Logging Framework - Scala Logging
+ * <p>
+ *
+ * Use the `org.apache.spark.internal.Logging` trait for logging in Scala code:
+ * Logging Messages with Variables:
+ *   When logging a message with variables, wrap all the variables with `MDC`s and they will be
+ *   automatically added to the Mapped Diagnostic Context (MDC).
+ * This allows for structured logging and better log analysis.
+ * <p>
+ *
+ * logInfo(log"Trying to recover app: ${MDC(LogKeys.APP_ID, app.id)}")
+ * <p>
+ *
+ * Constant String Messages:
+ *   If you are logging a constant string message, use the log methods that accept a constant
+ *   string.
+ * <p>
+ *
+ * logInfo("StateStore stopped")
+ * <p>
+ *
+ * Exceptions:
+ *   To ensure logs are compatible with Spark SQL and log analysis tools, avoid
+ *   `Exception.printStackTrace()`. Use `logError`, `logWarning`, and `logInfo` methods from
+ *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
+ * <p>
+ *
+ * If you want to output logs in `scala code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `scala` code as follows:
+ * <p>
+ *
+ * // To add a `custom LogKey`, implement `LogKey`
+ * case object CUSTOM_LOG_KEY extends LogKey
+ * import org.apache.spark.internal.MDC;
+ * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
+ */
 
 /**
  * Mapped Diagnostic Context (MDC) that will be used in log messages.
@@ -61,7 +100,7 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  def message: String = StringEscapeUtils.unescapeJava(messageWithContext.message)
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
