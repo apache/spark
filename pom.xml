@@ -1603,14 +1603,10 @@
         <artifactId>xz</artifactId>
         <version>1.9</version>
       </dependency>
-      <!-- See SPARK-23654 for info on this dependency;
-      It is used to keep javax.activation at v1.1.1 after dropping
-      jets3t as a dependency.
-       -->
       <dependency>
-        <groupId>javax.activation</groupId>
-        <artifactId>activation</artifactId>
-        <version>1.1.1</version>
+        <groupId>jakarta.activation</groupId>
+        <artifactId>jakarta.activation-api</artifactId>
+        <version>${jakarta.activation-api.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
@@ -2850,11 +2846,6 @@
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>jakarta.activation</groupId>
-        <artifactId>jakarta.activation-api</artifactId>
-        <version>${jakarta.activation-api.version}</version>
       </dependency>
       <dependency>
         <groupId>jakarta.servlet</groupId>
