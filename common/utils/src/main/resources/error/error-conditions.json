@@ -3718,6 +3718,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_PROVIDER" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."

@@ -1432,6 +1432,23 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("SPARK-48447: check state store provider class before invoking the constructor") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
+      val input = MemoryStream[Int]
+      input.addData(1)
+      val query = input.toDF().limit(2).writeStream
+        .trigger(Trigger.AvailableNow())
+        .format("console")
+        .start()
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
+    }
+  }
+
   private def checkExceptionMessage(df: DataFrame): Unit = {
     withTempDir { outputDir =>
       withTempDir { checkpointDir =>
