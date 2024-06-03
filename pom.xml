@@ -2606,7 +2606,7 @@
       <dependency>
         <groupId>io.airlift</groupId>
         <artifactId>aircompressor</artifactId>
-        <version>0.26</version>
+        <version>0.27</version>
       </dependency>
       <dependency>
         <groupId>org.apache.orc</groupId>
