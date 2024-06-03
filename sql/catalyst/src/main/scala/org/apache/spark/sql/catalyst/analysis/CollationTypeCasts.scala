@@ -150,8 +150,6 @@ object CollationTypeCasts extends TypeCoercionRule {
       case 0 =>
         val implicitTypes = expr.filter {
             case Literal(_, _: StringType) => false
-            case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-              true
             case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
               cast.child.dataType.isInstanceOf[StringType]
             case _ => true
