@@ -829,12 +829,7 @@ def assertDataFrameEqual(
                 actual, expected, almost=True, rtol=rtol, atol=atol, check_row_order=checkRowOrder
             )
 
-    from pyspark.sql.utils import get_dataframe_class
-
-    # if is_remote(), allow Connect DataFrame
-    SparkDataFrame = get_dataframe_class()
-
-    if not isinstance(actual, (DataFrame, SparkDataFrame, list)):
+    if not isinstance(actual, (DataFrame, list)):
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={
@@ -843,7 +838,7 @@ def assertDataFrameEqual(
                 "actual_type": type(actual),
             },
         )
-    elif not isinstance(expected, (DataFrame, SparkDataFrame, list)):
+    elif not isinstance(expected, (DataFrame, list)):
         raise PySparkAssertionError(
             error_class="INVALID_TYPE_DF_EQUALITY_ARG",
             message_parameters={

@@ -75,7 +75,7 @@ import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPy
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.expressions.{ReduceAggregator, SparkUserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.protobuf.{CatalystDataToProtobuf, ProtobufDataToCatalyst}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
@@ -1600,7 +1600,7 @@ class SparkConnectPlanner(
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        transformScalarScalaUDF(fun)
+        transformScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1629,14 +1629,14 @@ class SparkConnectPlanner(
   }
 
   private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
-    unpackScalarScalaUDF[UdfPacket](fun.getScalarScalaUdf)
+    unpackScalaUDF[UdfPacket](fun.getScalarScalaUdf)
   }
 
   private def unpackForeachWriter(fun: proto.ScalarScalaUDF): ForeachWriterPacket = {
-    unpackScalarScalaUDF[ForeachWriterPacket](fun)
+    unpackScalaUDF[ForeachWriterPacket](fun)
   }
 
-  private def unpackScalarScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+  private def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
@@ -1659,39 +1659,56 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
+   * Translates a Scala user-defined function from proto to the Catalyst expression.
    *
    * @param fun
-   *   Proto representation of the Scalar Scalar user-defined function.
+   *   Proto representation of the Scala user-defined function.
    * @return
    *   ScalaUDF.
    */
-  private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
+  private def transformScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
-    ScalaUDF(
-      function = udfPacket.function,
-      dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-      udfName = Option(fun.getFunctionName),
-      nullable = udf.getNullable,
-      udfDeterministic = fun.getDeterministic)
+    if (udf.getAggregate) {
+      transformScalaFunction(fun)
+        .asInstanceOf[UserDefinedAggregator[Any, Any, Any]]
+        .scalaAggregator(fun.getArgumentsList.asScala.map(transformExpression).toSeq)
+        .toAggregateExpression()
+    } else {
+      ScalaUDF(
+        function = udfPacket.function,
+        dataType = transformDataType(udf.getOutputType),
+        children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
+        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
+        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+        udfName = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        udfDeterministic = fun.getDeterministic)
+    }
   }
 
-  private def transformScalarScalaFunction(
-      fun: proto.CommonInlineUserDefinedFunction): SparkUserDefinedFunction = {
+  private def transformScalaFunction(
+      fun: proto.CommonInlineUserDefinedFunction): UserDefinedFunction = {
     val udf = fun.getScalarScalaUdf
     val udfPacket = unpackUdf(fun)
-    SparkUserDefinedFunction(
-      f = udfPacket.function,
-      dataType = transformDataType(udf.getOutputType),
-      inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
-      outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
-      name = Option(fun.getFunctionName),
-      nullable = udf.getNullable,
-      deterministic = fun.getDeterministic)
+    if (udf.getAggregate) {
+      assert(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+      UserDefinedAggregator(
+        aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]],
+        inputEncoder = ExpressionEncoder(udfPacket.inputEncoders.head),
+        name = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        deterministic = fun.getDeterministic)
+    } else {
+      SparkUserDefinedFunction(
+        f = udfPacket.function,
+        dataType = transformDataType(udf.getOutputType),
+        inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
+        outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
+        name = Option(fun.getFunctionName),
+        nullable = udf.getNullable,
+        deterministic = fun.getDeterministic)
+    }
   }
 
   /**
@@ -2786,7 +2803,7 @@ class SparkConnectPlanner(
       case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
         handleRegisterJavaUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        handleRegisterScalarScalaUDF(fun)
+        handleRegisterScalaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -2863,8 +2880,8 @@ class SparkConnectPlanner(
     }
   }
 
-  private def handleRegisterScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udf = transformScalarScalaFunction(fun)
+  private def handleRegisterScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = transformScalaFunction(fun)
     session.udf.register(fun.getFunctionName, udf)
   }
 
