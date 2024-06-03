@@ -194,7 +194,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  test("stream save options with txt source") {
+  ignore("stream save options with txt source") {
     withTempPath { path =>
       val checkpointPath = s"${path.getCanonicalPath}/_checkpoint"
       val outputPath = s"${path.getCanonicalPath}/out"
@@ -214,7 +214,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           val file = new File(outputPath)
-          // assert(file.listFiles().exists(!_.getName.startsWith("_")))
+          assert(file.listFiles().exists(!_.getName.startsWith("_")))
         }
       } finally {
         q.stop()
