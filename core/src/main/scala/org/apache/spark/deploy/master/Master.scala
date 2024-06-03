@@ -116,28 +116,6 @@ private[deploy] class Master(
 
   private val spreadOutDrivers = conf.get(SPREAD_OUT_DRIVERS)
 
-  object MasterRestAuthMode extends Enumeration {
-    val NoneOption    = "None"
-    val SecureGatewayOption = "SecureGateway"
-
-    def serverSecuredByAlternativeMethod(mode: MasterRestAuthMode): Boolean = {
-      mode match {
-        case SecureGatewayOption => true,
-        case _ => false
-      }
-    }
-
-    def fromStringOrNone(mode: String): MasterRestAuthMode = {
-      mode.toLowerCase match {
-        case MasterRestAuthMode.toLowerCase => SecureGatewayOption
-        case NoneOption.toLowerCase => NoneOption
-        case _ =>
-          logWarning(log"Specified master rest auth mode $mode was unrecognised. Defaulting to None.")
-          None
-      }
-    }
-  }
-
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -167,7 +145,7 @@ private[deploy] class Master(
     require(conf.getOption(authKey).isEmpty || canUseAuthKeyWithServerConf,
       s"The RestSubmissionServer does not support authentication via ${authKey}.  Either turn " +
         "off the RestSubmissionServer with spark.master.rest.enabled=false, or explicitly specify a setting " +
-        "to use for the RestSubmissionServer, such as mode \"SecureGateway\"".")
+        "to use for the RestSubmissionServer, such as mode \"SecureGateway\".")
   }
 
   override def onStart(): Unit = {

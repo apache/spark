@@ -49,9 +49,14 @@ specified below, the secret must be defined by setting the `spark.authenticate.s
 option. The same secret is shared by all Spark applications and daemons in that case, which limits
 the security of these deployments, especially on multi-tenant clusters.
 
-The REST Submission Server does not support authentication. You should
+The REST Submission Server does not natively support authentication. You should
 ensure that all network access to the REST API (port 6066 by default) 
-is restricted to hosts that are trusted to submit jobs.
+is restricted to hosts that are trusted to submit jobs, or use a proxy that provides authentication.
+
+If you plan to use a proxy to handle authentication to the REST submission server, you must configure the setting
+`spark.master.rest.auth.mode` to `"SecureGateway"`, which will enable you to continue to use the
+setting `spark.authenticate` properties for all other authentication, unless specified otherwise below. The default
+setting of this value is `"None"`, which will throw fatal errors during master startup when used in combination with `spark.authenticate`.
 
 ### YARN
 
