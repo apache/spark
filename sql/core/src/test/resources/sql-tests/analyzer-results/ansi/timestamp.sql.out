@@ -236,7 +236,7 @@ create temporary view ttf1 as select * from values
 CreateViewCommand `ttf1`, select * from values
   (1, 2),
   (2, 3)
-  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, true
+  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [current_date#x, current_timestamp#x]
       +- SubqueryAlias ttf1
          +- LocalRelation [current_date#x, current_timestamp#x]
@@ -263,7 +263,7 @@ create temporary view ttf2 as select * from values
 CreateViewCommand `ttf2`, select * from values
   (1, 2),
   (2, 3)
-  as ttf2(a, b), false, false, LocalTempView, true
+  as ttf2(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias ttf2
          +- LocalRelation [a#x, b#x]
@@ -575,7 +575,7 @@ select null - timestamp'2011-11-11 11:11:11'
 -- !query
 create temporary view ts_view as select '2011-11-11 11:11:11' str
 -- !query analysis
-CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, true
+CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-11-11 11:11:11 AS str#x]
       +- OneRowRelation
 

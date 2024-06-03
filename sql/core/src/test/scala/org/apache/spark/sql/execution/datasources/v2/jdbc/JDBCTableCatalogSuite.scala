@@ -200,7 +200,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
         },
-        errorClass = "FIELDS_ALREADY_EXISTS",
+        errorClass = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "add",
           "fieldNames" -> "`c3`",
@@ -239,7 +239,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME COLUMN C TO C0")
         },
-        errorClass = "FIELDS_ALREADY_EXISTS",
+        errorClass = "FIELD_ALREADY_EXISTS",
         parameters = Map(
           "op" -> "rename",
           "fieldNames" -> "`C0`",

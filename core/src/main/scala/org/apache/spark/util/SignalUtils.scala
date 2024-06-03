@@ -80,7 +80,7 @@ private[spark] object SignalUtils extends Logging {
       action: => Boolean): Unit = synchronized {
     try {
       val handler = handlers.getOrElseUpdate(signal, {
-        logInfo(s"Registering signal handler for $signal")
+        logInfo(log"Registering signal handler for ${MDC(SIGNAL, signal)}")
         new ActionHandler(new Signal(signal))
       })
       handler.register(action)

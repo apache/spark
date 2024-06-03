@@ -16,7 +16,6 @@
 #
 
 # mypy: disable-error-code="override"
-
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
@@ -43,6 +42,7 @@ from typing import (
     Type,
 )
 
+import copy
 import sys
 import random
 import pyarrow as pa
@@ -83,6 +83,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
 
 if TYPE_CHECKING:
@@ -813,7 +814,7 @@ class DataFrame(ParentDataFrame):
         if withReplacement is None:
             withReplacement = False
 
-        seed = int(seed) if seed is not None else None
+        seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
         return DataFrame(
             plan.Sample(
@@ -1768,6 +1769,10 @@ class DataFrame(ParentDataFrame):
         assert table is not None
         return (table, schema)
 
+    def toArrow(self) -> "pa.Table":
+        table, _ = self._to_table()
+        return table
+
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
         return self._session.client.to_pandas(query, self._plan.observations)
@@ -1782,7 +1787,7 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
-        return self._cached_schema
+        return copy.deepcopy(self._cached_schema)
 
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)
@@ -1806,7 +1811,10 @@ class DataFrame(ParentDataFrame):
         return result
 
     def printSchema(self, level: Optional[int] = None) -> None:
-        print(self._tree_string(level))
+        if level:
+            print(self.schema.treeString(level))
+        else:
+            print(self.schema.treeString())
 
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
@@ -1993,6 +2001,7 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
 
+        _validate_pandas_udf(func, evalType)
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
@@ -2089,19 +2098,23 @@ class DataFrame(ParentDataFrame):
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
+    def checkpoint(self, eager: bool = True) -> "DataFrame":
+        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        return checkpointed
+
+    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
+        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        assert "checkpoint_command_result" in properties
+        checkpointed = properties["checkpoint_command_result"]
+        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
+        return checkpointed
+
     if not is_remote_only():
-
-        def checkpoint(self, eager: bool = True) -> "DataFrame":
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "checkpoint()"},
-            )
-
-        def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-            raise PySparkNotImplementedError(
-                error_class="NOT_IMPLEMENTED",
-                message_parameters={"feature": "localCheckpoint()"},
-            )
 
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             raise PySparkNotImplementedError(
@@ -2196,8 +2209,6 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
-        del pyspark.sql.dataframe.DataFrame.checkpoint.__doc__
-        del pyspark.sql.dataframe.DataFrame.localCheckpoint.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

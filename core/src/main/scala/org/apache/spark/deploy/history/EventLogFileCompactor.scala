@@ -161,7 +161,8 @@ class EventLogFileCompactor(
     }
     logWriter.stop()
     val duration = System.currentTimeMillis() - startTime
-    logInfo(s"Finished rewriting eventLog files to ${logWriter.logPath} took $duration ms.")
+    logInfo(log"Finished rewriting eventLog files to ${MDC(LogKeys.PATH, logWriter.logPath)}" +
+      log" took ${MDC(LogKeys.TOTAL_TIME, duration)} ms.")
 
     logWriter.logPath
   }

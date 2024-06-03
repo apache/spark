@@ -27,6 +27,7 @@ from pyspark.sql.datasource import (
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
+from pyspark.sql.streaming import StreamingQueryException
 from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import (
     have_pyarrow,
@@ -152,7 +153,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         while current_batch_id < 10:
             time.sleep(0.2)
         q.stop()
-        q.awaitTermination
+        q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
 
     def test_simple_stream_reader(self):
@@ -230,7 +231,9 @@ class BasePythonStreamingDataSourceTestsMixin:
                 self.spark.read.text(os.path.join(output_dir.name, "1.txt")),
                 [Row("failed in batch 1")],
             )
-            q.awaitTermination
+            q.awaitTermination()
+        except StreamingQueryException as e:
+            self.assertIn("invalid value", str(e))
         finally:
             input_dir.cleanup()
             output_dir.cleanup()

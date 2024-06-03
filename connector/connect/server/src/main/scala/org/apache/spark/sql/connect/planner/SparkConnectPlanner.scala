@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.UUID
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -33,13 +35,13 @@ import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.SESSION_ID
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
@@ -57,8 +59,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, ProtoUtils, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -127,6 +129,7 @@ class SparkConnectPlanner(
    * @return
    *   The resolved logical plan.
    */
+  @DeveloperApi
   def transformRelation(rel: proto.Relation): LogicalPlan =
     transformRelation(rel, cachePlan = false)
 
@@ -140,6 +143,7 @@ class SparkConnectPlanner(
    * @return
    *   The resolved logical plan.
    */
+  @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
     sessionHolder.usePlanCache(rel, cachePlan) { rel =>
       val plan = rel.getRelTypeCase match {
@@ -230,14 +234,6 @@ class SparkConnectPlanner(
       }
       plan
     }
-  }
-
-  @DeveloperApi
-  def transformRelation(bytes: Array[Byte]): LogicalPlan = {
-    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
-    val relation =
-      ProtoUtils.parseWithRecursionLimit(bytes, proto.Relation.parser(), recursionLimit)
-    transformRelation(relation)
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1474,6 +1470,7 @@ class SparkConnectPlanner(
    * @return
    *   Catalyst expression
    */
+  @DeveloperApi
   def transformExpression(exp: proto.Expression): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
@@ -1513,14 +1510,6 @@ class SparkConnectPlanner(
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
-  }
-
-  @DeveloperApi
-  def transformExpression(bytes: Array[Byte]): Expression = {
-    val recursionLimit = session.conf.get(CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
-    val expression =
-      ProtoUtils.parseWithRecursionLimit(bytes, proto.Expression.parser(), recursionLimit)
-    transformExpression(expression)
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
@@ -1836,6 +1825,16 @@ class SparkConnectPlanner(
           new BloomFilterAggregate(children(0), children(1), children(2))
             .toAggregateExpression())
 
+      case "timestampdiff" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampDiff(unit, children(1), children(2)))
+
+      case "timestampadd" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+        val unit = extractString(children(0), "unit")
+        Some(TimestampAdd(unit, children(1), children(2)))
+
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         val timeCol = children.head
@@ -1980,11 +1979,6 @@ class SparkConnectPlanner(
       case "null_index" if fun.getArgumentsCount == 1 =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
         Some(NullIndex(children(0)))
-
-      case "timestampdiff" if fun.getArgumentsCount == 3 =>
-        val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val unit = extractString(children(0), "unit")
-        Some(TimestampDiff(unit, children(1), children(2)))
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
@@ -2594,6 +2588,10 @@ class SparkConnectPlanner(
         handleCreateResourceProfileCommand(
           command.getCreateResourceProfileCommand,
           responseObserver)
+      case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
+        handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
+      case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
+        handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
@@ -3518,6 +3516,41 @@ class SparkConnectPlanner(
             .setProfileId(profile.id)
             .build())
         .build())
+  }
+
+  private def handleCheckpointCommand(
+      checkpointCommand: CheckpointCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val target = Dataset
+      .ofRows(session, transformRelation(checkpointCommand.getRelation))
+    val checkpointed = target.checkpoint(
+      eager = checkpointCommand.getEager,
+      reliableCheckpoint = !checkpointCommand.getLocal)
+
+    val dfId = UUID.randomUUID().toString
+    logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+    sessionHolder.cacheDataFrameById(dfId, checkpointed)
+
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setCheckpointCommandResult(
+          proto.CheckpointCommandResult
+            .newBuilder()
+            .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
+            .build())
+        .build())
+  }
+
+  private def handleRemoveCachedRemoteRelationCommand(
+      removeCachedRemoteRelationCommand: proto.RemoveCachedRemoteRelationCommand): Unit = {
+    val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
+    logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+    sessionHolder.removeCachedDataFrame(dfId)
+    executeHolder.eventsManager.postFinished()
   }
 
   private val emptyLocalRelation = LocalRelation(

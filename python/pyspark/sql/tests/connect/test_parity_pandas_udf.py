@@ -20,8 +20,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
-    def test_udf_wrong_arg(self):
-        self.check_udf_wrong_arg()
+    pass
 
 
 if __name__ == "__main__":

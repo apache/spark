@@ -179,6 +179,35 @@ class ArrowTestsMixin:
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
         return pd.DataFrame(data=data_dict)
 
+    def create_arrow_table(self):
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        data_dict = {}
+        for j, name in enumerate(self.schema.names):
+            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
+        t = pa.Table.from_pydict(data_dict)
+        # convert these to Arrow types
+        new_schema = t.schema.set(
+            t.schema.get_field_index("2_int_t"), pa.field("2_int_t", pa.int32())
+        )
+        new_schema = new_schema.set(
+            new_schema.get_field_index("4_float_t"), pa.field("4_float_t", pa.float32())
+        )
+        new_schema = new_schema.set(
+            new_schema.get_field_index("6_decimal_t"),
+            pa.field("6_decimal_t", pa.decimal128(38, 18)),
+        )
+        t = t.cast(new_schema)
+        # convert timestamp to local timezone
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t = t.set_column(
+            t.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t["8_timestamp_t"], timezone),
+        )
+        return t
+
     @property
     def create_np_arrs(self):
         import numpy as np
@@ -338,6 +367,12 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
+
+    def test_arrow_round_trip(self):
+        t_in = self.create_arrow_table()
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        t_out = df.toArrow()
+        self.assertTrue(t_out.equals(t_in))
 
     def test_pandas_self_destruct(self):
         import pyarrow as pa

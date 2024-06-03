@@ -1238,7 +1238,12 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     case _: Attribute | _: OuterReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
-    case _: PythonUDF => true
+    case _: PythonUDF =>
+      if (conf.getConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR)) {
+        e.children.forall(isCheap)
+      } else {
+        true
+      }
     // Alias and ExtractValue are very cheap.
     case _: Alias | _: ExtractValue => e.children.forall(isCheap)
     case _ => false
@@ -1768,6 +1773,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
+    // We can push down deterministic predicate through Aggregate, including throwable predicate.
+    // If we can push down a filter through Aggregate, it means the filter only references the
+    // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
+    // keys so the filter won't see any new data after push down.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -1777,8 +1786,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // attributes produced by the aggregate operator's child operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && !cond.throwable &&
-          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && cond.references.nonEmpty &&
+          replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {

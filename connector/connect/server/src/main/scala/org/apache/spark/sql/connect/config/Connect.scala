@@ -279,6 +279,7 @@ object Connect {
       .doc("Sets the maximum number of cached resolved logical plans in Spark Connect Session." +
         " If set to a value less or equal than zero will disable the plan cache.")
       .version("4.0.0")
+      .internal()
       .intConf
       .createWithDefault(5)
 
@@ -289,6 +290,7 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
       .booleanConf
       .createWithDefault(true)
 }

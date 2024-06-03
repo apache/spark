@@ -121,8 +121,10 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
       }
     } catch {
       case e: Exception =>
-        logWarning("StreamingQueryListenerBus Handler thread received exception, all client" +
-          " side listeners are removed and handler thread is terminated.", e)
+        logWarning(
+          "StreamingQueryListenerBus Handler thread received exception, all client" +
+            " side listeners are removed and handler thread is terminated.",
+          e)
         lock.synchronized {
           executionThread = Option.empty
           listeners.forEach(remove(_))

@@ -241,7 +241,7 @@ Project [c0#x, c1#x, c2#x, c3#x]
 -- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
 -- !query analysis
-CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, true
+CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 
@@ -449,7 +449,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
 -- !query analysis
-CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, true
+CreateViewCommand `jsonTable`, [(jsonField,None), (a,None)], SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 

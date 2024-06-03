@@ -32,7 +32,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES, Python}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder

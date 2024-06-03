@@ -21,7 +21,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.functions.{lit, window}
+import org.apache.spark.sql.functions.{expr, lit, window}
 
 /**
  * This test ensures that any optimizations done by Spark SQL optimizer are
@@ -413,6 +413,41 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
         CheckAnswer(
           Row("key1", 1, 4),
           Row("key2", 3, 2))
+      )
+    }
+  }
+
+  test("SPARK-48267: regression test, stream-stream union followed by stream-batch join") {
+    withTempDir { dir =>
+      val input1 = MemoryStream[Int]
+      val input2 = MemoryStream[Int]
+
+      val df1 = input1.toDF().withColumn("code", lit(1))
+      val df2 = input2.toDF().withColumn("code", lit(null))
+
+      // NOTE: The column 'ref_code' is known to be non-nullable.
+      val batchDf = spark.range(1, 5).select($"id".as("ref_code"))
+
+      val unionDf = df1.union(df2)
+        .join(batchDf, expr("code = ref_code"))
+        .select("value")
+
+      testStream(unionDf)(
+        StartStream(checkpointLocation = dir.getAbsolutePath),
+
+        AddData(input1, 1, 2, 3),
+        CheckNewAnswer(1, 2, 3),
+
+        AddData(input2, 1, 2, 3),
+        // The test failed before SPARK-47305 - the test failed with below error message:
+        // org.apache.spark.sql.streaming.StreamingQueryException: Stream-stream join without
+        // equality predicate is not supported.;
+        // Join Inner
+        // :- StreamingDataSourceV2ScanRelation[value#3] MemoryStreamDataSource
+        // +- LocalRelation <empty>
+        // Note that LocalRelation <empty> is actually a batch source (Range) but due to
+        // a bug, it was incorrect marked to the streaming. SPARK-47305 fixed the bug.
+        CheckNewAnswer()
       )
     }
   }

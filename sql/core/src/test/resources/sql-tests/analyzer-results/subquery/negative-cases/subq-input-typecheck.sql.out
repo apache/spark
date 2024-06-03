@@ -6,7 +6,7 @@ AS t1(t1a, t1b, t1c)
 -- !query analysis
 CreateViewCommand `t1`, SELECT * FROM VALUES
   (1, 2, 3)
-AS t1(t1a, t1b, t1c), false, false, LocalTempView, true
+AS t1(t1a, t1b, t1c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t1a#x, t1b#x, t1c#x]
       +- SubqueryAlias t1
          +- LocalRelation [t1a#x, t1b#x, t1c#x]
@@ -19,7 +19,7 @@ AS t2(t2a, t2b, t2c)
 -- !query analysis
 CreateViewCommand `t2`, SELECT * FROM VALUES
   (1, 0, 1)
-AS t2(t2a, t2b, t2c), false, false, LocalTempView, true
+AS t2(t2a, t2b, t2c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x]
@@ -32,7 +32,7 @@ AS t3(t3a, t3b, t3c)
 -- !query analysis
 CreateViewCommand `t3`, SELECT * FROM VALUES
   (3, 1, 2)
-AS t3(t3a, t3b, t3c), false, false, LocalTempView, true
+AS t3(t3a, t3b, t3c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t3a#x, t3b#x, t3c#x]
       +- SubqueryAlias t3
          +- LocalRelation [t3a#x, t3b#x, t3c#x]
@@ -45,7 +45,7 @@ AS t1(t4a, t4b, t4c)
 -- !query analysis
 CreateViewCommand `t4`, SELECT * FROM VALUES
   (CAST(1 AS DOUBLE), CAST(2 AS STRING), CAST(3 AS STRING))
-AS t1(t4a, t4b, t4c), false, false, LocalTempView, true
+AS t1(t4a, t4b, t4c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t4a#x, t4b#x, t4c#x]
       +- SubqueryAlias t1
          +- LocalRelation [t4a#x, t4b#x, t4c#x]
@@ -58,7 +58,7 @@ AS t1(t5a, t5b, t5c)
 -- !query analysis
 CreateViewCommand `t5`, SELECT * FROM VALUES
   (CAST('2011-01-01 01:01:01' AS TIMESTAMP), CAST(2 AS STRING), CAST(3 AS BIGINT))
-AS t1(t5a, t5b, t5c), false, false, LocalTempView, true
+AS t1(t5a, t5b, t5c), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t5a#x, t5b#x, t5c#xL]
       +- SubqueryAlias t1
          +- LocalRelation [t5a#x, t5b#x, t5c#xL]
