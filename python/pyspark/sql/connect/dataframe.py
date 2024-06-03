@@ -1825,10 +1825,12 @@ class DataFrame(ParentDataFrame):
 
     def to(self, schema: StructType) -> ParentDataFrame:
         assert schema is not None
-        return DataFrame(
+        res = DataFrame(
             plan.ToSchema(child=self._plan, schema=schema),
             session=self._session,
         )
+        res._cached_schema = schema
+        return res
 
     def toDF(self, *cols: str) -> ParentDataFrame:
         for col_ in cols:
@@ -2009,7 +2011,7 @@ class DataFrame(ParentDataFrame):
             evalType=evalType,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.MapPartitions(
                 child=self._plan,
                 function=udf_obj,
@@ -2019,6 +2021,9 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     def mapInPandas(
         self,
