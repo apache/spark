@@ -114,6 +114,7 @@ jobs:
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"sparkr-window\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
