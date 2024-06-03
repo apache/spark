@@ -32,9 +32,7 @@ private[master] object MasterRestAuthMode extends Enumeration {
       mode.toLowerCase match {
         case MasterRestAuthMode.toLowerCase => SecureGatewayOption
         case NoneOption.toLowerCase => NoneOption
-        case _ =>
-          logWarning(log"Specified master rest auth mode $mode was unrecognised. Defaulting to None.")
-          None
+        case _ => NoneOption
       }
     }
   }
