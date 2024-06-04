@@ -2582,7 +2582,7 @@ class SparkConnectPlanner(
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
-      case _ => transformExpression(expr)
+      case _ => transformExpression(expr, Some(plan))
     }
   }
 

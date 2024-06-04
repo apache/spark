@@ -382,16 +382,11 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
   test("UDAF custom Aggregator - toColumn") {
     val session: SparkSession = spark
     import session.implicits._
-    val agg = newUdafTestInputAggregator
-    val aggCol = agg.toColumn
-    val result = spark
-      .range(10)
-      .withColumn("extra", col("id") * 2)
-      .as[UdafTestInput]
-      .select(aggCol)
-      .as[Long]
-      .head()
-    assert(result == 135) // 45 + 90
+    val aggCol = newUdafTestInputAggregator.toColumn
+    val ds = spark.range(10).withColumn("extra", col("id") * 2).as[UdafTestInput]
+
+    assert(ds.select(aggCol).head() == 135) // 45 + 90
+    assert(ds.agg(aggCol).head().getLong(0) == 135) // 45 + 90
   }
 
   private def newUdafTestInputAggregator: Aggregator[UdafTestInput, (Long, Long), Long] = {
