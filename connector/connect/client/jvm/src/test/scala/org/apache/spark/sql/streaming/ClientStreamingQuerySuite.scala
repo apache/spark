@@ -194,7 +194,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  ignore("stream save options with txt source") {
+  test("stream save options with txt source") {
     withTempPath { path =>
       val checkpointPath = s"${path.getCanonicalPath}/_checkpoint"
       val outputPath = s"${path.getCanonicalPath}/out"
@@ -214,6 +214,9 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         q.processAllAvailable()
         eventually(timeout(30.seconds)) {
           val file = new File(outputPath)
+          // scalastyle:off println
+          println(file.listFiles.map(f => f.getCanonicalPath).mkString(","))
+          // scalastyle:on println
           assert(file.listFiles().exists(!_.getName.startsWith("_")))
         }
       } finally {
