@@ -687,7 +687,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 }
 
 /**
- * A function that validates a UTF8 string.
+ * A function that checks if a UTF8 string is valid.
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns true if `str` is a valid UTF-8 sequence, otherwise returns false.",
@@ -725,6 +725,161 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
   override def prettyName: String = "is_valid_utf8"
 
   override protected def withNewChildInternal(newChild: Expression): IsValidUTF8 = {
+    copy(srcExpr = newChild)
+  }
+
+}
+
+/**
+ * A function that converts an invalid UTF8 byte sequences to a valid UTF8 byte sequence,
+ * according to the UNICODE standard rules (Section 3.9-D86). Valid sequences stay unchanged.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+    "otherwise returns a new string whose invalid UTF8 bytes sequences are replaced using the " +
+    "UNICODE replacement character U+FFFD.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(x'61');
+       a
+      > SELECT _FUNC_(x'80');
+       �
+      > SELECT _FUNC_(x'61C262');
+       a�b
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class MakeValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+
+  override def child: Expression = srcExpr
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(srcEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].makeValidUTF8
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.makeValidUTF8();")
+  }
+
+  override def prettyName: String = "make_valid_utf8"
+
+  override protected def withNewChildInternal(newChild: Expression): MakeValidUTF8 = {
+    copy(srcExpr = newChild)
+  }
+
+}
+
+/**
+ * A function that validates a UTF8 string.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+    "otherwise throws an exception.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(x'61');
+       a
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+
+  override def child: Expression = srcExpr
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(srcEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].validateUTF8
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if (!$c.isValidUTF8()) {
+          throw new IllegalArgumentException("Invalid UTF-8 string");
+        } else {
+          ${ev.value} = $c;
+        }
+      """
+    )
+  }
+
+  override def prettyName: String = "validate_utf8"
+
+  override protected def withNewChildInternal(newChild: Expression): ValidateUTF8 = {
+    copy(srcExpr = newChild)
+  }
+
+}
+
+/**
+ * A function that tries to validate a UTF8 string.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+    "otherwise returns null.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(x'61');
+       a
+      > SELECT _FUNC_(x'80');
+       null
+      > SELECT _FUNC_(x'61C262');
+       null
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class TryValidateUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+
+  override def child: Expression = srcExpr
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def dataType: DataType = child.dataType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(srcEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].tryValidateUTF8
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if (!$c.isValidUTF8()) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = $c;
+        }
+      """
+    )
+  }
+
+  override def prettyName: String = "try_validate_utf8"
+
+  override protected def withNewChildInternal(newChild: Expression): TryValidateUTF8 = {
     copy(srcExpr = newChild)
   }
 

@@ -1607,3 +1607,73 @@ select is_valid_utf8('abc')
 -- !query analysis
 Project [is_valid_utf8(abc) AS is_valid_utf8(abc)#x]
 +- OneRowRelation
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query analysis
+Project [is_valid_utf8(cast(0x80 as string)) AS is_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('')
+-- !query analysis
+Project [make_valid_utf8() AS make_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query analysis
+Project [make_valid_utf8(abc) AS make_valid_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query analysis
+Project [make_valid_utf8(cast(0x80 as string)) AS make_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('')
+-- !query analysis
+Project [validate_utf8() AS validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('abc')
+-- !query analysis
+Project [validate_utf8(abc) AS validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query analysis
+Project [validate_utf8(cast(0x80 as string)) AS validate_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('')
+-- !query analysis
+Project [try_validate_utf8() AS try_validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query analysis
+Project [try_validate_utf8(abc) AS try_validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query analysis
+Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
++- OneRowRelation

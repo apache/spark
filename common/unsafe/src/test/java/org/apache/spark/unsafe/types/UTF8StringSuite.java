@@ -951,4 +951,66 @@ public class UTF8StringSuite {
       new byte[] {(byte) 0xFB, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValidUTF8());
   }
 
+  @Test
+  public void makeValidUTF8() {
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.makeValidUTF8());
+    assertEquals(fromString(""), fromString("").makeValidUTF8());
+    assertEquals(fromString("abc"), fromString("abc").makeValidUTF8());
+    assertEquals(fromString("hello"), fromString("hello").makeValidUTF8());
+    assertEquals(fromString("大千世界"), fromString("大千世界").makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {}), fromBytes(new byte[] {}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {0x61}), fromBytes(new byte[] {0x61}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {0x7F}), fromBytes(new byte[] {0x7F}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBD}),
+      fromBytes(new byte[] {(byte) 0xFF}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xC0, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xC1, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xC0}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xFF}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0x9F, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0xC0, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xC0}).makeValidUTF8());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromString("����"),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x8F, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBD, (byte) 0x7F}),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x7F}).makeValidUTF8());
+    assertEquals(fromString("����"),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xC0}).makeValidUTF8());
+    assertEquals(fromString("�����"),
+      fromBytes(new byte[] {(byte) 0xF8, (byte) 0x8F, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("�����"),
+      fromBytes(new byte[] {(byte) 0xF8, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+    assertEquals(fromString("�����"),
+      fromBytes(new byte[] {(byte) 0xFB, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF, (byte) 0xBF}).makeValidUTF8());
+    assertEquals(fromString("�����"),
+      fromBytes(new byte[] {(byte) 0xFB, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValidUTF8());
+  }
+
 }

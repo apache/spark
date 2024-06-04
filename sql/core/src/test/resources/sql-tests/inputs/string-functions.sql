@@ -279,3 +279,13 @@ select luhn_check(123.456);
 --utf8 string validation
 select is_valid_utf8('');
 select is_valid_utf8('abc');
+select is_valid_utf8(x'80');
+select make_valid_utf8('');
+select make_valid_utf8('abc');
+select make_valid_utf8(x'80');
+select validate_utf8('');
+select validate_utf8('abc');
+select validate_utf8(x'80');
+select try_validate_utf8('');
+select try_validate_utf8('abc');
+select try_validate_utf8(x'80');
