@@ -120,9 +120,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): CompoundBody = {
-    if (ctx.singleCompound() != null) {
-      visit(ctx.singleCompound()).asInstanceOf[CompoundBody]
-    } else {
+    Option(ctx.singleCompound()).map { singleCompound =>
+      visit(singleCompound).asInstanceOf[CompoundBody]
+    }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
       CompoundBody(List(SparkStatementWithPlan(
         parsedPlan = logicalPlan,

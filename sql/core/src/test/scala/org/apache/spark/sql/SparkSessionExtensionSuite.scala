@@ -582,8 +582,8 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
 
-    override def parseScript(sqlScriptText: String): CompoundBody =
-      delegate.parseScript(sqlScriptText)
+  override def parseScript(sqlScriptText: String): CompoundBody =
+    delegate.parseScript(sqlScriptText)
 }
 
 object MyExtensions {
