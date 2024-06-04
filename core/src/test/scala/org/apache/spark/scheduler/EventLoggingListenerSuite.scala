@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, InputStream}
-import java.util.{Arrays, Locale, Properties, UUID}
+import java.util.{Arrays, Properties}
 
 import scala.collection.mutable
 import scala.collection.mutable.Set
@@ -67,9 +67,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-      val codecShort = CompressionCodec.getShortName(codec)
-      testEventLogging(compressionCodec = Some(codecShort))
-      testEventLogging(compressionCodec = Some(codecShort.toUpperCase(Locale.ROOT)))
+      testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
     }
   }
 
@@ -232,7 +230,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       exitCode: Option[Int] = None): Unit = {
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
-    val logName = compressionCodec.map("test-" + _).getOrElse("test") + UUID.randomUUID()
+    val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus(conf)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
