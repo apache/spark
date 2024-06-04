@@ -110,8 +110,8 @@ class GroupedApplyInPandasWithStateTestsMixin:
 
         def check_results(batch_df, _):
             assert (
-                set(batch_df.sort("key").collect()) ==
-                {Row(key="hello", countAsString="1"), Row(key="this", countAsString="1")},
+                set(batch_df.sort("key").collect())
+                == {Row(key="hello", countAsString="1"), Row(key="this", countAsString="1")},
             )
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
@@ -124,8 +124,8 @@ class GroupedApplyInPandasWithStateTestsMixin:
 
         def check_results(batch_df, _):
             assert (
-                set(batch_df.sort("key").collect()) ==
-                {
+                set(batch_df.sort("key").collect())
+                == {
                     Row(key="hello", countAsString="100"),
                     Row(key="this", countAsString="100"),
                     Row(key="foo", countAsString="222"),
@@ -157,8 +157,8 @@ class GroupedApplyInPandasWithStateTestsMixin:
 
         def check_results(batch_df, _):
             assert (
-                set(batch_df.sort("key").collect()) ==
-                {
+                set(batch_df.sort("key").collect())
+                == {
                     Row(key="hello", countAsString="1"),
                     Row(key="foo", countAsString="666"),
                     Row(key="hello_2", countAsString="2"),
@@ -194,10 +194,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [None], "countAsString": [str(total_len)]})
 
         def check_results(batch_df, _):
-            assert (
-                set(batch_df.sort("key").collect()) ==
-                {Row(key=None, countAsString="1")},
-            )
+            assert (set(batch_df.sort("key").collect()) == {Row(key=None, countAsString="1")},)
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
