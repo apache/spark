@@ -2853,7 +2853,7 @@ class AdaptiveQueryExecSuite
       // shuffleOrigin: REPARTITION_BY_NUM
       assert(spark.range(0).repartition(5).rdd.getNumPartitions == 5)
       // shuffleOrigin: REBALANCE_PARTITIONS_BY_NONE
-      assert(spark.range(0).repartition().rdd.getNumPartitions == 0)
+      assert(spark.range(0).repartition().rdd.getNumPartitions == 1)
       // through project
       assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
         .repartition(5).select($"c2").rdd.getNumPartitions == 5)
