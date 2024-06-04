@@ -318,8 +318,14 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
         ignoreValueSchema = ignoreValueSchema)
     }
-    assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
-      e.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+
+    // if value schema is ignored, the mismatch has to be on the key schema
+    if (ignoreValueSchema) {
+      assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
+    } else {
+      assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+        e.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+    }
     assert(e.getMessage.contains("does not match existing"))
   }
 
