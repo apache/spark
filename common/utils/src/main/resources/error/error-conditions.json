@@ -2514,11 +2514,6 @@
         "message" : [
           "A type of keys and values in `map()` must be string, but got <mapType>."
         ]
-      },
-      "NO_OPTIONS_SPECIFIED" : {
-        "message" : [
-          "No options specified."
-        ]
       }
     },
     "sqlState" : "42K06"

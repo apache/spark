@@ -2974,12 +2974,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   private def createUnresolvedRelation(identifier: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext] = None): LogicalPlan =
     withOrigin(identifier) {
-      val options = optionsClause.map{clause => {
-        if (clause.options == null) {
-          throw QueryCompilationErrors.noOptionsSpecifiedError()
-        }
+      val options = optionsClause.map{clause =>
         new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
-      }}.getOrElse(CaseInsensitiveStringMap.empty)
+      }.getOrElse(CaseInsensitiveStringMap.empty)
       withIdentClause(identifier, parts =>
         new UnresolvedRelation(parts, options, isStreaming = false))
   }
