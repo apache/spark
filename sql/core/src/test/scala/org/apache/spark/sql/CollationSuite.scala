@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -830,6 +831,45 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-47972: Cast expression limitation for collations") {
+    checkError(
+      exception = intercept[ParseException]
+        (sql("SELECT cast(1 as string collate unicode)")),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> toSQLType(StringType("UNICODE"))),
+      context =
+        ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
+    )
+
+    checkError(
+      exception = intercept[ParseException]
+        (sql("SELECT 'A' :: string collate unicode")),
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map(
+        "typeName" -> toSQLType(StringType("UNICODE"))),
+      context = ExpectedContext(fragment = s"'A' :: string collate unicode", start = 7, stop = 35)
+    )
+
+    checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
+    checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
+
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkError(
+        exception = intercept[ParseException]
+          (sql("SELECT cast(1 as string collate unicode)")),
+        errorClass = "UNSUPPORTED_DATATYPE",
+        parameters = Map(
+          "typeName" -> toSQLType(StringType("UNICODE"))),
+        context =
+          ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
+      )
+
+      checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
+      checkAnswer(sql(s"SELECT collation(cast(1 as string))"), Seq(Row("UNICODE")))
+    }
+  }
+
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
     withTable("t") {
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
@@ -1057,11 +1097,235 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           }.isEmpty
         )
 
-        // if collation doesn't support binary equality, collation key should be injected
+        // Only if collation doesn't support binary equality, collation key should be injected.
         if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
           assert(collectFirst(queryPlan) {
             case b: HashJoin => b.leftKeys.head
           }.head.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
+            case b: HashJoin => b.leftKeys.head
+          }.head.isInstanceOf[CollationKey])
+        }
+      }
+    })
+  }
+
+  test("hash join should be used for arrays of collated strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY",
+        Seq(Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Seq("aa"), 1, Seq("AA"), 2), Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UNICODE",
+        Seq(Row(Seq("aa"), 1, Seq("aa"), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Seq("aa"), 1, Seq("AA"), 2), Row(Seq("aa"), 1, Seq("aa"), 2)))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x ARRAY<STRING COLLATE ${t.collation}>, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (array('aa'), 1)")
+
+        sql(s"CREATE TABLE $t2 (y ARRAY<STRING COLLATE ${t.collation}>, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (array('AA'), 2), (array('aa'), 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+
+        // Only if collation doesn't support binary equality, collation key should be injected.
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.asInstanceOf[ArrayTransform].function.asInstanceOf[LambdaFunction].
+            function.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.isInstanceOf[ArrayTransform])
+        }
+      }
+    })
+  }
+
+  test("hash join should be used for arrays of arrays of collated strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY",
+        Seq(Row(Seq(Seq("aa")), 1, Seq(Seq("aa")), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Seq(Seq("aa")), 1, Seq(Seq("AA")), 2), Row(Seq(Seq("aa")), 1, Seq(Seq("aa")), 2))),
+      HashJoinTestCase("UNICODE",
+        Seq(Row(Seq(Seq("aa")), 1, Seq(Seq("aa")), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Seq(Seq("aa")), 1, Seq(Seq("AA")), 2), Row(Seq(Seq("aa")), 1, Seq(Seq("aa")), 2)))
+    )
+
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x ARRAY<ARRAY<STRING COLLATE ${t.collation}>>, i int) USING " +
+          s"PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (array(array('aa')), 1)")
+
+        sql(s"CREATE TABLE $t2 (y ARRAY<ARRAY<STRING COLLATE ${t.collation}>>, j int) USING " +
+          s"PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (array(array('AA')), 2), (array(array('aa')), 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+
+        // Only if collation doesn't support binary equality, collation key should be injected.
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.asInstanceOf[ArrayTransform].function.
+            asInstanceOf[LambdaFunction].function.asInstanceOf[ArrayTransform].function.
+            asInstanceOf[LambdaFunction].function.isInstanceOf[CollationKey])
+        } else {
+          assert(!collectFirst(queryPlan) {
+            case b: BroadcastHashJoinExec => b.leftKeys.head
+          }.head.isInstanceOf[ArrayTransform])
+        }
+      }
+    })
+  }
+
+  test("hash join should respect collation for struct of strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY",
+        Seq(Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Row("aa"), 1, Row("AA"), 2), Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UNICODE",
+        Seq(Row(Row("aa"), 1, Row("aa"), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Row("aa"), 1, Row("AA"), 2), Row(Row("aa"), 1, Row("aa"), 2)))
+    )
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x STRUCT<f:STRING COLLATE ${t.collation}>, i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (named_struct('f', 'aa'), 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRUCT<f:STRING COLLATE ${t.collation}>, j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (named_struct('f', 'AA'), 2), (named_struct('f', 'aa'), 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // Confirm that hash join is used instead of sort merge join.
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+
+        // Only if collation doesn't support binary equality, collation key should be injected.
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(queryPlan.toString().contains("collationkey"))
+        } else {
+          assert(!queryPlan.toString().contains("collationkey"))
+        }
+      }
+    })
+  }
+
+  test("hash join should respect collation for struct of array of struct of strings") {
+    val t1 = "T_1"
+    val t2 = "T_2"
+
+    case class HashJoinTestCase[R](collation: String, result: R)
+    val testCases = Seq(
+      HashJoinTestCase("UTF8_BINARY",
+        Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
+      HashJoinTestCase("UTF8_BINARY_LCASE",
+        Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("AA"))), 2),
+          Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
+      HashJoinTestCase("UNICODE",
+        Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2))),
+      HashJoinTestCase("UNICODE_CI",
+        Seq(Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("AA"))), 2),
+          Row(Row(Seq(Row("aa"))), 1, Row(Seq(Row("aa"))), 2)))
+    )
+    testCases.foreach(t => {
+      withTable(t1, t2) {
+        sql(s"CREATE TABLE $t1 (x STRUCT<f:ARRAY<STRUCT<f:STRING COLLATE ${t.collation}>>>, " +
+          s"i int) USING PARQUET")
+        sql(s"INSERT INTO $t1 VALUES (named_struct('f', array(named_struct('f', 'aa'))), 1)")
+
+        sql(s"CREATE TABLE $t2 (y STRUCT<f:ARRAY<STRUCT<f:STRING COLLATE ${t.collation}>>>, " +
+          s"j int) USING PARQUET")
+        sql(s"INSERT INTO $t2 VALUES (named_struct('f', array(named_struct('f', 'AA'))), 2), " +
+          s"(named_struct('f', array(named_struct('f', 'aa'))), 2)")
+
+        val df = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.x = $t2.y")
+        checkAnswer(df, t.result)
+
+        val queryPlan = df.queryExecution.executedPlan
+
+        // confirm that hash join is used instead of sort merge join
+        assert(
+          collectFirst(queryPlan) {
+            case _: HashJoin => ()
+          }.nonEmpty
+        )
+        assert(
+          collectFirst(queryPlan) {
+            case _: ShuffledJoin => ()
+          }.isEmpty
+        )
+
+        // Only if collation doesn't support binary equality, collation key should be injected.
+        if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
+          assert(queryPlan.toString().contains("collationkey"))
+        } else {
+          assert(!queryPlan.toString().contains("collationkey"))
         }
       }
     })
@@ -1085,7 +1349,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
         val queryPlan = df.queryExecution.executedPlan
 
-        // confirm that shuffle join is used instead of hash join
+        // confirm that sort merge join is used instead of hash join
         assert(
           collectFirst(queryPlan) {
             case _: HashJoin => ()

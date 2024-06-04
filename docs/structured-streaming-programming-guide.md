@@ -2082,12 +2082,12 @@ You can deduplicate records in data streams using a unique identifier in the eve
 streamingDf = spark.readStream. ...
 
 # Without watermark using guid column
-streamingDf.dropDuplicates(["guid"])
+streamingDf.dropDuplicates("guid")
 
 # With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
-  .dropDuplicates(["guid", "eventTime"])
+  .dropDuplicates("guid", "eventTime")
 {% endhighlight %}
 
 </div>
@@ -2163,7 +2163,7 @@ streamingDf = spark.readStream. ...
 # deduplicate using guid column with watermark based on eventTime column
 streamingDf \
   .withWatermark("eventTime", "10 hours") \
-  .dropDuplicatesWithinWatermark(["guid"])
+  .dropDuplicatesWithinWatermark("guid")
 {% endhighlight %}
 
 </div>

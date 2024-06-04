@@ -368,7 +368,7 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            message_parameters={"feature": f"Column.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
