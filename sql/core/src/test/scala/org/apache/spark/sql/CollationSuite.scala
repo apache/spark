@@ -988,6 +988,8 @@ class CollationSuite extends DatasourceV2SQLBase
       !cl.getConstructors.isEmpty
     }).filter(funInfo => {
       val className = funInfo.getClassName
+      // noinspection ScalaStyle
+      println("checking - " + className)
       val cl = Utils.classForName(funInfo.getClassName)
       // dummy instance
       // Take first constructor.
@@ -999,6 +1001,8 @@ class CollationSuite extends DatasourceV2SQLBase
         p.isAssignableFrom(classOf[Option[Expression]]))
 
       if (!allExpressions) {
+        // noinspection ScalaStyle
+        println("NotAll")
         false
       } else {
         val args = params.map {
@@ -1012,24 +1016,39 @@ class CollationSuite extends DatasourceV2SQLBase
           val expr = headConstructor.newInstance(args: _*)
           expr match {
             case types: ExpectsInputTypes =>
+              // noinspection ScalaStyle
+              println("AllExpects")
               val inputTypes = types.inputTypes
               // check if this is a collection...
               inputTypes.exists(hasStringType)
             case _: ComplexTypeMergingExpression =>
+              // Check other expressions here...
+              // noinspection ScalaStyle
+              println("TypeForMerging")
               false
             case _: InheritAnalysisRules =>
+              // Check other expressions here...
+              // noinspection ScalaStyle
+              println("Inherit")
               false
             case _ =>
               // Check other expressions here...
+              // noinspection ScalaStyle
+              println("NotExpects")
               false
           }
         } catch {
           // TODO: Try to get rid of this...
           case _: Throwable =>
+            // noinspection ScalaStyle
+            println("ErrorsOut")
             false
         }
       }
     }).toArray
+
+    // noinspection ScalaStyle
+    println("Found total of " + funInfos.size + " functions")
 
     // Helper methods for generating data.
     sealed trait CollationType
@@ -1094,10 +1113,12 @@ class CollationSuite extends DatasourceV2SQLBase
       "session_window",
       "transform_values",
       "arrays_zip",
-      "hex", // this is fine
+      "hex" // this is fine
     )
 
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      // noinspection ScalaStyle
+      println(f.getName)
 
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
@@ -1148,6 +1169,8 @@ class CollationSuite extends DatasourceV2SQLBase
 
       // no exception - check result.
       if (exceptionUtfBinary.isEmpty) {
+        // scalastyle:off println
+        println("GOODPASS")
         val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
         val resUtf8Lcase = instanceLcase.eval(EmptyRow)
 
