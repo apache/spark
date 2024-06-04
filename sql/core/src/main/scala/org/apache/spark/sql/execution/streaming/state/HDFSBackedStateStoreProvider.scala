@@ -269,6 +269,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     new HDFSBackedReadStateStore(version, newMap)
   }
 
+  override def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore = {
+    val newMap = getLoadedMapForStore(startVersion, endVersion)
+    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, startVersion)} to " +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
+      log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")
+    new HDFSBackedReadStateStore(startVersion, newMap)
+  }
+
   private def getLoadedMapForStore(version: Long): HDFSBackedStateStoreMap = synchronized {
     try {
       if (version < 0) {
@@ -277,6 +285,27 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       if (version > 0) {
         newMap.putAll(loadMap(version))
+      }
+      newMap
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  private def getLoadedMapForStore(startVersion: Long, endVersion: Long):
+    HDFSBackedStateStoreMap = synchronized {
+    try {
+      if (startVersion < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      }
+      if (endVersion < startVersion || endVersion < 0) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
+      }
+
+      val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
+      if (!(startVersion == 0 && endVersion == 0)) {
+        newMap.putAll(loadMap(startVersion, endVersion))
       }
       newMap
     }
@@ -544,6 +573,62 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     result
   }
 
+  private def loadMap(startVersion: Long, endVersion: Long): HDFSBackedStateStoreMap = {
+
+    val (result, elapsedMs) = Utils.timeTakenMs {
+    //   val snapshotCurrentVersionMap = readSnapshotFile(version)
+    //   if (snapshotCurrentVersionMap.isDefined) {
+    //     synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
+    //     return snapshotCurrentVersionMap.get
+    //   }
+
+    //   // Find the most recent map before this version that we can.
+    //   // [SPARK-22305] This must be done iteratively to avoid stack overflow.
+    //   var lastAvailableVersion = version
+    //   var lastAvailableMap: Option[HDFSBackedStateStoreMap] = None
+    //   while (lastAvailableMap.isEmpty) {
+    //     lastAvailableVersion -= 1
+
+    //     if (lastAvailableVersion <= 0) {
+    //       // Use an empty map for versions 0 or less.
+    //       lastAvailableMap = Some(HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey))
+    //     } else {
+    //       lastAvailableMap =
+    //         synchronized { Option(loadedMaps.get(lastAvailableVersion)) }
+    //           .orElse(readSnapshotFile(lastAvailableVersion))
+    //     }
+    //   }
+
+      val startVersionMap =
+        synchronized { Option(loadedMaps.get(startVersion)) }
+              .orElse{
+                logWarning(
+                  log"The state for version ${MDC(LogKeys.FILE_VERSION, startVersion)} doesn't " +
+                  log"exist in loadedMaps. Reading snapshot file and delta files if needed..." +
+                  log"Note that this is normal for the first batch of starting query.")
+                readSnapshotFile(startVersion)}
+      if (startVersionMap.isEmpty) {
+        throw QueryExecutionErrors.failedToReadSnapshotFileNotExistsError(
+          snapshotFile(startVersion), toString(), null)
+      }
+      synchronized { putStateIntoStateCacheMap(startVersion, startVersionMap.get)}
+
+      // Load all the deltas from the version after the start version up to the end version.
+      val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
+      resultMap.putAll(startVersionMap.get)
+      for (deltaVersion <- startVersion + 1 to endVersion) {
+        updateFromDeltaFile(deltaVersion, resultMap)
+      }
+
+      resultMap
+    }
+
+    // todo
+    logDebug(s"Loading state from $startVersion to $endVersion takes $elapsedMs ms.")
+
+    result
+  }
+
   private def writeUpdateToDeltaFile(
       output: DataOutputStream,
       key: UnsafeRow,
@@ -683,6 +768,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
+  /**
+  * try to read the snapshot file of the given version.
+  * If the snapshot file is not available, return None.
+  *
+  * @param version the version of the
+  */
   private def readSnapshotFile(version: Long): Option[HDFSBackedStateStoreMap] = {
     val fileToRead = snapshotFile(version)
     val map = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)

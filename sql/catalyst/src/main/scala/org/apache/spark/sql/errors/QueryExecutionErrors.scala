@@ -2159,6 +2159,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def failedToReadSnapshotFileNotExistsError(
+      fileToRead: Path,
+      clazz: String,
+      f: Throwable): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS",
+      messageParameters = Map(
+        "fileToRead" -> fileToRead.toString(),
+        "clazz" -> clazz),
+      cause = f)
+  }
+
   def failedToReadSnapshotFileValueSizeError(
       fileToRead: Path,
       clazz: String,
@@ -2184,6 +2196,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",
       messageParameters = Map("providerClass" -> providerClass),
       cause = f)
+  }
+
+  def snapshotPartitionNotFoundError(snapshotPartitionId : Long): Throwable = {
+    new SparkException(
+      errorClass = "SNAPSHOT_PARTITION_ID_NOT_FOUND",
+      messageParameters = Map("snapshotPartitionId" -> snapshotPartitionId.toString()),
+      cause = null)
   }
 
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {

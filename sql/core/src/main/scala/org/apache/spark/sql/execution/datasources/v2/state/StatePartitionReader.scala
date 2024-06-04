@@ -93,7 +93,14 @@ class StatePartitionReader(
   }
 
   private lazy val store: ReadStateStore = {
-    provider.getReadStore(partition.sourceOptions.batchId + 1)
+    if (partition.sourceOptions.snapshotStartBatchId.isEmpty) {
+      provider.getReadStore(partition.sourceOptions.batchId + 1)
+    }
+    else {
+      provider.getReadStore(
+        partition.sourceOptions.snapshotStartBatchId.get + 1,
+        partition.sourceOptions.batchId + 1)
+    }
   }
 
   private lazy val iter: Iterator[InternalRow] = {

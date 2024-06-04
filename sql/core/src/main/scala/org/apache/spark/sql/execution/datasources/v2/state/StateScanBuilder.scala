@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
@@ -81,9 +82,19 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      partitionNums.map {
-        pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
-      }.toArray
+      if (sourceOptions.snapshotPartitionId.isEmpty) {
+        partitionNums.map {
+          pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
+        }.toArray
+      }
+      else {
+        val snapshotPartitionId = sourceOptions.snapshotPartitionId.get
+        if (partitionNums.contains(snapshotPartitionId)) {
+          Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+        } else {
+          throw QueryExecutionErrors.snapshotPartitionNotFoundError(snapshotPartitionId)
+        }
+      }
     }
   }
 

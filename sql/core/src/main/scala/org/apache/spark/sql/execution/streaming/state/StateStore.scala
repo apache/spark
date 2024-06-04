@@ -378,6 +378,17 @@ trait StateStoreProvider {
   def getReadStore(version: Long): ReadStateStore =
     new WrappedReadStateStore(getStore(version))
 
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * The State Store will be constructed from the batch at startVersion, and applying delta files
+   * up to the endVersion. If there is no snapshot file of batch startVersion, an exception will
+   * be thrown.
+   *
+   * @param startVersion Batch ID of the snapshot to start with
+   * @param endVersion Batch ID to end with
+   */
+  def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore
+
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
 

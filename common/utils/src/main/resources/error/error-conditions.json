@@ -223,6 +223,11 @@
           "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
         ]
       },
+      "CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
       "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: value size cannot be <valueSize>."
@@ -3593,6 +3598,12 @@
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ],
     "sqlState" : "42K08"
+  },
+  "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
+    "message" : [
+      "Partition id <snapshotPartitionId> not found for given state source."
+    ],
+    "sqlState" : "54054"
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
