@@ -33,20 +33,23 @@ require_minimum_pandas_version()
 require_minimum_pyarrow_version()
 
 
-def dataframe_to_arrow_table_example(spark: SparkSession) -> None:
-    import pyarrow as pa  # noqa: F401
-    from pyspark.sql.functions import rand
+def dataframe_to_from_arrow_table_example(spark: SparkSession) -> None:
+    import pyarrow as pa
+    import numpy as np
 
-    # Create a Spark DataFrame
-    df = spark.range(100).drop("id").withColumns({"0": rand(), "1": rand(), "2": rand()})
+    # Create a PyArrow Table
+    table = pa.table([pa.array(np.random.rand(100)) for i in range(3)], names=["a", "b", "c"])
+
+    # Create a Spark DataFrame from the PyArrow Table
+    df = spark.createDataFrame(table)
 
     # Convert the Spark DataFrame to a PyArrow Table
-    table = df.select("*").toArrow()
+    result_table = df.select("*").toArrow()
 
-    print(table.schema)
-    # 0: double not null
-    # 1: double not null
-    # 2: double not null
+    print(result_table.schema)
+    # a: double
+    # b: double
+    # c: double
 
 
 def dataframe_with_arrow_example(spark: SparkSession) -> None:
@@ -319,7 +322,7 @@ if __name__ == "__main__":
         .getOrCreate()
 
     print("Running Arrow conversion example: DataFrame to Table")
-    dataframe_to_arrow_table_example(spark)
+    dataframe_to_from_arrow_table_example(spark)
     print("Running Pandas to/from conversion example")
     dataframe_with_arrow_example(spark)
     print("Running pandas_udf example: Series to Frame")

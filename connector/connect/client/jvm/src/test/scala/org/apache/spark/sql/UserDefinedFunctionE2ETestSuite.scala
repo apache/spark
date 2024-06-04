@@ -26,7 +26,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
-import org.apache.spark.sql.functions.{col, struct, udf}
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.{col, struct, udaf, udf}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.IntegerType
 
@@ -346,4 +347,47 @@ class UserDefinedFunctionE2ETestSuite extends QueryTest with RemoteSparkSession 
     val result = df.select(f($"id")).as[Long].head()
     assert(result == 1L)
   }
+
+  test("UDAF custom Aggregator - primitive types") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = b + a
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    spark.udf.register("agg", udaf(agg))
+    val result = spark.range(10).selectExpr("agg(id)").as[Long].head()
+    assert(result == 45)
+  }
+
+  test("UDAF custom Aggregator - case class as input types") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val agg = new Aggregator[UdafTestInput, (Long, Long), Long] {
+      override def zero: (Long, Long) = (0L, 0L)
+      override def reduce(b: (Long, Long), a: UdafTestInput): (Long, Long) =
+        (b._1 + a.id, b._2 + a.extra)
+      override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) =
+        (b1._1 + b2._1, b1._2 + b2._2)
+      override def finish(reduction: (Long, Long)): Long = reduction._1 + reduction._2
+      override def bufferEncoder: Encoder[(Long, Long)] =
+        Encoders.tuple(Encoders.scalaLong, Encoders.scalaLong)
+      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    spark.udf.register("agg", udaf(agg))
+    val result = spark
+      .range(10)
+      .withColumn("extra", col("id") * 2)
+      .as[UdafTestInput]
+      .selectExpr("agg(id, extra)")
+      .as[Long]
+      .head()
+    assert(result == 135) // 45 + 90
+  }
 }
+
+case class UdafTestInput(id: Long, extra: Long)
