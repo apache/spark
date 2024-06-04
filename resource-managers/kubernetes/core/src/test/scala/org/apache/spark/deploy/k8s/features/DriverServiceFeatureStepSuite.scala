@@ -109,17 +109,18 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
   }
 
   test("Long prefixes should switch to using a generated unique name.") {
+    val clock = new ManualClock()
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_NAMESPACE, "my-namespace")
-    val kconf = KubernetesTestConf.createDriverConf(
-      sparkConf = sparkConf,
-      resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
-      labels = DRIVER_LABELS)
-    val clock = new ManualClock()
 
     // Ensure that multiple services created at the same time generate unique names.
     val services = (1 to 10).map { _ =>
-      val configurationStep = new DriverServiceFeatureStep(kconf, clock = clock)
+      val kconf = KubernetesTestConf.createDriverConf(
+        sparkConf = sparkConf,
+        resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
+        labels = DRIVER_LABELS,
+        clock = clock)
+      val configurationStep = new DriverServiceFeatureStep(kconf)
       val serviceName = configurationStep
         .getAdditionalKubernetesResources()
         .head
@@ -130,11 +131,11 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       val hostAddress = configurationStep
         .getAdditionalPodSystemProperties()(DRIVER_HOST_ADDRESS.key)
 
-      (serviceName -> hostAddress)
-    }.toMap
+      Tuple3(kconf, serviceName, hostAddress)
+    }
 
     assert(services.size === 10)
-    services.foreach { case (name, address) =>
+    services.foreach { case (kconf, name, address) =>
       assert(!name.startsWith(kconf.resourceNamePrefix))
       assert(!address.startsWith(kconf.resourceNamePrefix))
       assert(InternetDomainName.isValid(address))

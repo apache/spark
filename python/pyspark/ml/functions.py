@@ -28,7 +28,7 @@ except ImportError:
     pass  # Let it throw a better error message later when the API is invoked.
 
 from pyspark.sql.functions import pandas_udf
-from pyspark.sql.classic.column import Column, _to_java_column
+from pyspark.sql.column import Column
 from pyspark.sql.types import (
     ArrayType,
     ByteType,
@@ -116,6 +116,7 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
      StructField('oldVec', ArrayType(FloatType(), False), False)]
     """
     from pyspark.core.context import SparkContext
+    from pyspark.sql.classic.column import Column, _to_java_column
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
@@ -159,6 +160,7 @@ def array_to_vector(col: Column) -> Column:
     [Row(vec1=DenseVector([1.0, 3.0]))]
     """
     from pyspark.core.context import SparkContext
+    from pyspark.sql.classic.column import Column, _to_java_column
 
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None

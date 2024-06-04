@@ -229,7 +229,7 @@ case class BitwiseCount(child: Expression)
   override def prettyName: String = "bit_count"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case BooleanType => defineCodeGen(ctx, ev, c => s"if ($c) 1 else 0")
+    case BooleanType => defineCodeGen(ctx, ev, c => s"($c) ? 1 : 0")
     case _ => defineCodeGen(ctx, ev, c => s"java.lang.Long.bitCount($c)")
   }
 

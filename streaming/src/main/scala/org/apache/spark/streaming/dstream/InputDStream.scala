@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.LogKey.{LAST_VALID_TIME, TIME}
+import org.apache.spark.internal.LogKeys.{LAST_VALID_TIME, TIME}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}

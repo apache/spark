@@ -219,6 +219,17 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Can't push down nondeterministic filter through aggregate") {
+    val originalQuery = testRelation
+      .groupBy($"a")($"a", count($"b") as "c")
+      .where(Rand(10) > $"a")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
   test("filters: combines filters") {
     val originalQuery = testRelation
       .select($"a")
@@ -1483,14 +1494,16 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-46707: push down predicate with sequence (without step) through aggregates") {
     val x = testRelation.subquery("x")
 
-    // do not push down when sequence has step param
+    // Always push down sequence as it's deterministic
     val queryWithStep = x.groupBy($"x.a", $"x.b")($"x.a", $"x.b")
       .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
       .analyze
     val optimizedQueryWithStep = Optimize.execute(queryWithStep)
-    comparePlans(optimizedQueryWithStep, queryWithStep)
+    val correctAnswerWithStep = x.where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
+      .groupBy($"x.a", $"x.b")($"x.a", $"x.b")
+      .analyze
+    comparePlans(optimizedQueryWithStep, correctAnswerWithStep)
 
-    // push down when sequence does not have step param
     val queryWithoutStep = x.groupBy($"x.a", $"x.b")($"x.a", $"x.b")
       .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
       .analyze

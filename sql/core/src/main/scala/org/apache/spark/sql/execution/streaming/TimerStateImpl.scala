@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXPIRY_TIMESTAMP, KEY}
+import org.apache.spark.internal.LogKeys.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._

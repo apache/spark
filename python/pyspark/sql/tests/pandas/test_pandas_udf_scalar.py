@@ -764,15 +764,17 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
+        df = self.spark.createDataFrame([Row(id=1)]).repartition(2)
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             f = pandas_udf(lambda x: x, LongType(), udf_type)
             res = df.select(f(col("id")))
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_struct_with_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2)).withColumn(
-            "name", lit("John Doe")
+        df = (
+            self.spark.createDataFrame([Row(id=1)])
+            .repartition(2)
+            .withColumn("name", lit("John Doe"))
         )
 
         @pandas_udf("first string, last string")

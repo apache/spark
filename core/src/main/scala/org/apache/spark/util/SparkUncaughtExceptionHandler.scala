@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.THREAD
+import org.apache.spark.internal.LogKeys.THREAD
 
 /**
  * The default uncaught exception handler for Spark daemons. It terminates the whole process for

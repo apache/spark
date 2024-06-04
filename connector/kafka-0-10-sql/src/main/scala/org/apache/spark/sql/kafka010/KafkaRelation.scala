@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.TOPIC_PARTITIONS
+import org.apache.spark.internal.LogKeys.TOPIC_PARTITIONS
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}

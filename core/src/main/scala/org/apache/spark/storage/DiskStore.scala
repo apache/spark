@@ -30,7 +30,8 @@ import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
@@ -62,7 +63,7 @@ private[spark] class DiskStore(
    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
     if (contains(blockId)) {
-      logWarning(s"Block $blockId is already present in the disk store")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} is already present in the disk store")
       try {
         diskManager.getFile(blockId).delete()
       } catch {
@@ -133,7 +134,7 @@ private[spark] class DiskStore(
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
-        logWarning(s"Error deleting ${file.getPath()}")
+        logWarning(log"Error deleting ${MDC(PATH, file.getPath())}")
       }
       ret
     } else {

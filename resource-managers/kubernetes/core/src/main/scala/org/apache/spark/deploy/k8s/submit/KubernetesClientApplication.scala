@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{APP_ID, APP_NAME, SUBMISSION_ID}
+import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, SUBMISSION_ID}
 import org.apache.spark.util.Utils
 
 /**

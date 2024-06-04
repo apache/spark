@@ -33,7 +33,7 @@ import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -105,8 +105,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())
 
   // Mapping from relation ID (passed to client) to runtime dataframe. Used for callbacks like
-  // foreachBatch() in Streaming. Lazy since most sessions don't need it.
-  private lazy val dataFrameCache: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap()
+  // foreachBatch() in Streaming, and DataFrame.checkpoint API. Lazy since most sessions don't
+  // need it.
+  private[spark] lazy val dataFrameCache: ConcurrentMap[String, DataFrame] =
+    new ConcurrentHashMap()
 
   // Mapping from id to StreamingQueryListener. Used for methods like removeListener() in
   // StreamingQueryManager.

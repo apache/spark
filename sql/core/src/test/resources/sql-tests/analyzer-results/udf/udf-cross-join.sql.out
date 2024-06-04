@@ -10,7 +10,7 @@ CreateViewCommand `nt1`, select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3)
-  as nt1(k, v1), false, false, LocalTempView, true
+  as nt1(k, v1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- LocalRelation [k#x, v1#x]
@@ -27,7 +27,7 @@ CreateViewCommand `nt2`, select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-  as nt2(k, v2), false, false, LocalTempView, true
+  as nt2(k, v2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v2#x]
       +- SubqueryAlias nt2
          +- LocalRelation [k#x, v2#x]
@@ -142,7 +142,7 @@ Project [cast(udf(cast(key#x as string)) as string) AS udf(key)#x, cast(udf(cast
 -- !query
 create temporary view A(a, va) as select * from nt1
 -- !query analysis
-CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
@@ -155,7 +155,7 @@ CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, L
 -- !query
 create temporary view B(b, vb) as select * from nt1
 -- !query analysis
-CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
@@ -168,7 +168,7 @@ CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, L
 -- !query
 create temporary view C(c, vc) as select * from nt1
 -- !query analysis
-CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])
@@ -181,7 +181,7 @@ CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, L
 -- !query
 create temporary view D(d, vd) as select * from nt1
 -- !query analysis
-CreateViewCommand `D`, [(d,None), (vd,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `D`, [(d,None), (vd,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- View (`nt1`, [k#x, v1#x])

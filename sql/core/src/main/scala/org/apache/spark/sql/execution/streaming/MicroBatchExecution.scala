@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKey.{LATEST_BATCH_ID, LATEST_COMMITTED_BATCH_ID, READ_LIMIT, SPARK_DATA_STREAM}
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
@@ -103,14 +102,14 @@ class MicroBatchExecution(
         // See SPARK-45178 for more details.
         if (sparkSession.sessionState.conf.getConf(
             SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)) {
-          logInfo("Configured to use the wrapper of Trigger.AvailableNow for query " +
-            s"$prettyIdString.")
+          logInfo(log"Configured to use the wrapper of Trigger.AvailableNow for query " +
+            log"${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)}.")
           MultiBatchExecutor()
         } else {
           val supportsTriggerAvailableNow = sources.distinct.forall { src =>
             val supports = src.isInstanceOf[SupportsTriggerAvailableNow]
             if (!supports) {
-              logWarning(log"source [${MDC(SPARK_DATA_STREAM, src)}] does not support " +
+              logWarning(log"source [${MDC(LogKeys.SPARK_DATA_STREAM, src)}] does not support " +
                 log"Trigger.AvailableNow. Falling back to single batch execution. Note that this " +
                 log"may not guarantee processing new data if there is an uncommitted batch. " +
                 log"Please consult with data source developer to support Trigger.AvailableNow.")
@@ -158,7 +157,9 @@ class MicroBatchExecution(
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           val source = dataSourceV1.createSource(metadataPath)
           nextSourceId += 1
-          logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
+          logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] " +
+            log"from DataSourceV1 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
+            log"[${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dataSourceV1)}]")
           StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
         })
 
@@ -171,7 +172,9 @@ class MicroBatchExecution(
             // Materialize source to avoid creating it in every batch
             val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
             nextSourceId += 1
-            logInfo(s"Reading table [$table] from DataSourceV2 named '$srcName' $dsStr")
+            logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
+              log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
+              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
@@ -189,7 +192,9 @@ class MicroBatchExecution(
             val source =
               v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
             nextSourceId += 1
-            logInfo(s"Using Source [$source] from DataSourceV2 named '$srcName' $dsStr")
+            logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] from " +
+              log"DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
+              log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // We don't have a catalog table but may have a table identifier. Given this is about
             // v1 fallback path, we just give up and set the catalog table as None.
             StreamingExecutionRelation(source, output, None)(sparkSession)
@@ -213,8 +218,8 @@ class MicroBatchExecution(
           case s: SupportsAdmissionControl =>
             val limit = s.getDefaultReadLimit
             if (limit != ReadLimit.allAvailable()) {
-              logWarning(log"The read limit ${MDC(READ_LIMIT, limit)} for " +
-                log"${MDC(SPARK_DATA_STREAM, s)} is ignored when Trigger.Once is used.")
+              logWarning(log"The read limit ${MDC(LogKeys.READ_LIMIT, limit)} for " +
+                log"${MDC(LogKeys.SPARK_DATA_STREAM, s)} is ignored when Trigger.Once is used.")
             }
             s -> ReadLimit.allAvailable()
           case s =>
@@ -280,7 +285,7 @@ class MicroBatchExecution(
       // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
-    logInfo(s"Query $prettyIdString was stopped")
+    logInfo(log"Query ${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)} was stopped")
   }
 
   private val watermarkPropagator = WatermarkPropagator(sparkSession.sessionState.conf)
@@ -290,7 +295,8 @@ class MicroBatchExecution(
 
     // shutdown and cleanup required for async log purge mechanism
     asyncLogPurgeShutdown()
-    logInfo(s"Async log purge executor pool for query ${prettyIdString} has been shutdown")
+    logInfo(log"Async log purge executor pool for query " +
+      log"${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)} has been shutdown")
   }
 
   private def initializeExecution(
@@ -306,7 +312,7 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
-    logInfo(s"Stream started from ${execCtx.startOffsets}")
+    logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
   /**
@@ -513,15 +519,16 @@ class MicroBatchExecution(
               }
             } else if (latestCommittedBatchId < latestBatchId - 1) {
               logWarning(log"Batch completion log latest batch id is " +
-                log"${MDC(LATEST_COMMITTED_BATCH_ID, latestCommittedBatchId)}, which is not " +
-                log"trailing batchid ${MDC(LATEST_BATCH_ID, latestBatchId)} by one")
+                log"${MDC(LogKeys.LATEST_COMMITTED_BATCH_ID, latestCommittedBatchId)}, which is " +
+                log"not trailing batchid ${MDC(LogKeys.LATEST_BATCH_ID, latestBatchId)} by one")
             }
           case None => logInfo("no commit log present")
         }
         // initialize committed offsets to start offsets of the most recent committed batch
         committedOffsets = execCtx.startOffsets
-        logInfo(s"Resuming at batch ${execCtx.batchId} with committed offsets " +
-          s"${execCtx.startOffsets} and available offsets ${execCtx.endOffsets}")
+        logInfo(log"Resuming at batch ${MDC(LogKeys.BATCH_ID, execCtx.batchId)} with committed " +
+          log"offsets ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)} and " +
+          log"available offsets ${MDC(LogKeys.STREAMING_OFFSETS_END, execCtx.endOffsets)}")
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
@@ -750,8 +757,8 @@ class MicroBatchExecution(
                 }
               } else if (catalogTable.exists(_ ne newRelation.catalogTable.get)) {
                 // Output a warning if `catalogTable` is provided by the source rather than engine
-                logWarning(log"Source ${MDC(SPARK_DATA_STREAM, source)} should not produce the " +
-                  log"information of catalog table by its own.")
+                logWarning(log"Source ${MDC(LogKeys.SPARK_DATA_STREAM, source)} should not " +
+                  log"produce the information of catalog table by its own.")
               }
               newRelation
           }
@@ -875,8 +882,8 @@ class MicroBatchExecution(
       throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
     }
 
-    logInfo(s"Committed offsets for batch ${execCtx.batchId}. " +
-      s"Metadata ${execCtx.offsetSeqMetadata.toString}")
+    logInfo(log"Committed offsets for batch ${MDC(LogKeys.BATCH_ID, execCtx.batchId)}. " +
+      log"Metadata ${MDC(LogKeys.OFFSET_SEQUENCE_METADATA, execCtx.offsetSeqMetadata.toString)}")
   }
 
   /**
