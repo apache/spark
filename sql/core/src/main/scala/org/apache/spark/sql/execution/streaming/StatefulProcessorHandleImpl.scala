@@ -98,7 +98,7 @@ class StatefulProcessorHandleImpl(
   private[sql] val stateVariables: util.List[StateVariableInfo] =
     new util.ArrayList[StateVariableInfo]()
 
-  private[sql] val columnFamilyMetadatas: util.List[ColumnFamilySchema] =
+  private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
@@ -132,6 +132,19 @@ class StatefulProcessorHandleImpl(
 
   def getHandleState: StatefulProcessorHandleState = currState
 
+  def validateStateVariableCreation(newColumnFamilySchema: ColumnFamilySchemaV1): Unit = {
+    existingColFamilies.get(
+        newColumnFamilySchema.columnFamilyName).foreach { existingColFamily =>
+      // TODO: Fill in with conditions we need to validate new state variable creation
+      if (existingColFamily.json != newColumnFamilySchema.json) {
+        throw new RuntimeException(
+          s"State variable with name ${newColumnFamilySchema.columnFamilyName} already exists " +
+            s"with different schema. Existing schema: ${existingColFamily.json}, " +
+            s"New schema: ${newColumnFamilySchema.json}")
+      }
+    }
+  }
+
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
@@ -139,7 +152,9 @@ class StatefulProcessorHandleImpl(
     incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     stateVariables.add(new StateVariableInfo(stateName, ValueState, false))
-    columnFamilyMetadatas.add(resultState.columnFamilyMetadata)
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(colFamilySchema)
     resultState
   }
 
@@ -151,13 +166,15 @@ class StatefulProcessorHandleImpl(
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
-    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+    val resultState = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numValueStateWithTTLVars")
-    ttlStates.add(valueStateWithTTL)
+    ttlStates.add(resultState)
     stateVariables.add(new StateVariableInfo(stateName, ValueState, true))
-    columnFamilyMetadatas.add(valueStateWithTTL.columnFamilyMetadata)
-    valueStateWithTTL
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(colFamilySchema)
+    resultState
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
@@ -165,7 +182,9 @@ class StatefulProcessorHandleImpl(
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     stateVariables.add(new StateVariableInfo(stateName, ListState, false))
-    columnFamilyMetadatas.add(resultState.columnFamilyMetadata)
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(resultState.columnFamilySchema)
     resultState
   }
 
@@ -193,14 +212,16 @@ class StatefulProcessorHandleImpl(
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
-    val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
+    val resultState = new ListStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numListStateWithTTLVars")
-    ttlStates.add(listStateWithTTL)
+    ttlStates.add(resultState)
     stateVariables.add(new StateVariableInfo(stateName, ListState, true))
-    columnFamilyMetadatas.add(listStateWithTTL.columnFamilyMetadata)
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(resultState.columnFamilySchema)
 
-    listStateWithTTL
+    resultState
   }
 
   override def getMapState[K, V](
@@ -211,7 +232,9 @@ class StatefulProcessorHandleImpl(
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     stateVariables.add(new StateVariableInfo(stateName, MapState, false))
-    columnFamilyMetadatas.add(resultState.columnFamilyMetadata)
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(resultState.columnFamilySchema)
     resultState
   }
 
@@ -224,14 +247,16 @@ class StatefulProcessorHandleImpl(
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
-    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+    val resultState = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
       valEncoder, ttlConfig, batchTimestampMs.get)
     incrementMetric("numMapStateWithTTLVars")
-    ttlStates.add(mapStateWithTTL)
+    ttlStates.add(resultState)
     stateVariables.add(new StateVariableInfo(stateName, MapState, true))
-    columnFamilyMetadatas.add(mapStateWithTTL.columnFamilyMetadata)
+    val colFamilySchema = resultState.columnFamilySchema
+    validateStateVariableCreation(colFamilySchema)
+    columnFamilySchemas.add(resultState.columnFamilySchema)
 
-    mapStateWithTTL
+    resultState
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo

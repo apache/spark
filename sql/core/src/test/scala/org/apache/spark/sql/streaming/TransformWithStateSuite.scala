@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.time.Duration
 import java.util.UUID
 
 import org.apache.spark.SparkRuntimeException
@@ -33,6 +34,36 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
+}
+
+class RunningCountStatefulProcessorWithTTL(ttlConfig: TTLConfig)
+  extends StatefulProcessor[String, String, (String, String)]
+    with Logging {
+
+  @transient private var _countState: ValueStateImplWithTTL[Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle
+      .getValueState("countState", Encoders.scalaLong, ttlConfig)
+      .asInstanceOf[ValueStateImplWithTTL[Long]]
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
 }
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
@@ -365,6 +396,58 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
+    }
+  }
+
+  test("transformWithState - verify that query with ttl enabled after restart fails") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { chkptDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = chkptDir.getCanonicalPath
+          ),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(
+            new RunningCountStatefulProcessorWithTTL(TTLConfig(Duration.ofMinutes(1))),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+
+        // verify that query with ttl enabled after restart fails
+        testStream(result2, OutputMode.Append())(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = chkptDir.getCanonicalPath
+          ),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          Execute { q =>
+            val e = intercept[Exception] {
+              q.processAllAvailable()
+            }
+            assert(e.getMessage.contains("State variable with name" +
+              " countState already exists with different schema"))
+          }
+        )
+      }
     }
   }
 

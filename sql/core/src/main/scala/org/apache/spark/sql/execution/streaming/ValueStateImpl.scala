@@ -42,12 +42,12 @@ class ValueStateImpl[S](
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
 
-  val columnFamilyMetadata = new ColumnFamilySchemaV1(
+  val columnFamilySchema = new ColumnFamilySchemaV1(
     stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), false)
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(columnFamilyMetadata)
+    store.createColFamilyIfAbsent(columnFamilySchema)
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
