@@ -73,15 +73,28 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
-        typeCtx.children.asScala.toSeq match {
-          case Seq(_) => SqlApiConf.get.defaultStringType
-          case Seq(_, ctx: CollateClauseContext) =>
-            val collationName = visitCollateClause(ctx)
-            val collationId = CollationFactory.collationNameToId(collationName)
-            StringType(collationId)
+        ctx.children.asScala.toSeq match {
+          case _ :+ (ctx: CollateClauseContext) =>
+            StringType(CollationFactory.collationNameToId(visitCollateClause(ctx)))
+          case _ =>
+            SqlApiConf.get.defaultStringType
         }
-      case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
-      case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)
+      case (CHARACTER | CHAR, length :: Nil) =>
+        ctx.children.asScala.toSeq match {
+          case _ :+ (ctx: CollateClauseContext) =>
+            val collationId = CollationFactory.collationNameToId(visitCollateClause(ctx))
+            CharType(length.getText.toInt, collationId)
+          case _ =>
+            CharType(length.getText.toInt)
+        }
+      case (VARCHAR, length :: Nil) =>
+        ctx.children.asScala.toSeq match {
+          case _ :+ (ctx: CollateClauseContext) =>
+            val collationId = CollationFactory.collationNameToId(visitCollateClause(ctx))
+            VarcharType(length.getText.toInt, collationId)
+          case _ =>
+            VarcharType(length.getText.toInt)
+        }
       case (BINARY, Nil) => BinaryType
       case (DECIMAL | DEC | NUMERIC, Nil) => DecimalType.USER_DEFAULT
       case (DECIMAL | DEC | NUMERIC, precision :: Nil) =>

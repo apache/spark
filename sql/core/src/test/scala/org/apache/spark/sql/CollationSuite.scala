@@ -343,7 +343,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("create table with collation") {
+  test("create table with collated STRING column") {
     val tableName = "dummy_tbl"
     val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
@@ -362,10 +362,55 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
         checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+        checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
         assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
       }
     }
   }
+
+  test("create table with collated VARCHAR column") {
+    val tableName = "dummy_tbl_varchar"
+    val collationName = "UTF8_BINARY_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  c1 VARCHAR(20) COLLATE $collationName
+           |)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+      checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
+      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+//  test("create table with collated CHAR column") {
+//    val tableName = "dummy_tbl_varchar"
+//    val collationName = "UTF8_BINARY_LCASE"
+//    val collationId = CollationFactory.collationNameToId(collationName)
+//    withTable(tableName) {
+//      sql(
+//        s"""
+//           |CREATE TABLE $tableName (
+//           |  c1 CHAR(20) COLLATE $collationName
+//           |)
+//           |USING PARQUET
+//           |""".stripMargin)
+//
+//      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+//      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+//
+//      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+//      checkAnswer(sql(s"SELECT COUNT(DISTINCT c1) FROM $tableName"), Seq(Row(1)))
+//      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+//    }
+//  }
 
   test("write collated data to different data sources with dataframe api") {
     val collationName = "UNICODE_CI"

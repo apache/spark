@@ -51,8 +51,8 @@ trait SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithString(field.dataType))
       })
-    case _: CharType => StringType
-    case _: VarcharType => StringType
+    case c: CharType => StringType(c.collationId)
+    case v: VarcharType => StringType(v.collationId)
     case _ => dt
   }
 }

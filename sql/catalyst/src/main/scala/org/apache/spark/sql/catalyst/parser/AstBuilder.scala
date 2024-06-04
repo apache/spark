@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.immutable.Seq
 import scala.collection.mutable.{ArrayBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -2270,11 +2269,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case context: PrimitiveDataTypeContext =>
         val typeCtx = context.`type`()
         if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
+          ctx.children.asScala.toSeq match {
+            case _ :+ (dtypeCtx: PrimitiveDataTypeContext) :+ _ =>
+              dtypeCtx.children.asScala.toSeq match {
+                case _ :+ (collateCtx: CollateClauseContext) =>
+                  throw QueryParsingErrors.dataTypeUnsupportedError(
+                    rawDataType.typeName,
+                    ctx.dataType().asInstanceOf[PrimitiveDataTypeContext]
+                  )
+                case _ =>
+              }
             case _ =>
           }
         }
@@ -2303,11 +2307,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case context: PrimitiveDataTypeContext =>
         val typeCtx = context.`type`()
         if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
+          ctx.children.asScala.toSeq match {
+            case _ :+ (dtypeCtx: PrimitiveDataTypeContext) =>
+              dtypeCtx.children.asScala.toSeq match {
+                case _ :+ (collateCtx: CollateClauseContext) =>
+                  throw QueryParsingErrors.dataTypeUnsupportedError(
+                    rawDataType.typeName,
+                    ctx.dataType().asInstanceOf[PrimitiveDataTypeContext]
+                  )
+                case _ =>
+              }
             case _ =>
           }
         }
