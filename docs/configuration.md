@@ -1896,6 +1896,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>4.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.io.compression.lzf.parallel.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, LZF compression will use multiple threads to compress data in parallel.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kryo.classesToRegister</code></td>
   <td>(none)</td>
   <td>
