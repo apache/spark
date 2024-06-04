@@ -1742,7 +1742,7 @@ class UtilsTestsMixin:
         self.assertRaisesRegex(
             IllegalArgumentException,
             "Setting negative mapred.reduce.tasks",
-            lambda: self.spark.conf.set("mapred.reduce.tasks", "-1"),
+            lambda: self.spark.sql("SET mapred.reduce.tasks=-1"),
         )
 
     def test_capture_pyspark_value_exception(self):
