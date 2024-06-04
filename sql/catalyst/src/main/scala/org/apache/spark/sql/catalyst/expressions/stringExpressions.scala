@@ -697,16 +697,17 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(decode(unhex('61'), 'UTF-8'));
+      > SELECT _FUNC_(x'61');
        true
-      > SELECT _FUNC_(decode(unhex('80'), 'UTF-8'));
+      > SELECT _FUNC_(x'80');
        false
-      > SELECT _FUNC_(decode(unhex('61C262'), 'UTF-8'));
+      > SELECT _FUNC_(x'61C262');
        false
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
 
   override def child: Expression = srcExpr
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)

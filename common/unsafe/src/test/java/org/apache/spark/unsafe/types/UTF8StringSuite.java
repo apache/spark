@@ -909,7 +909,6 @@ public class UTF8StringSuite {
     assertTrue(fromString("").isValidUTF8());
     assertTrue(fromString("abc").isValidUTF8());
     assertTrue(fromString("hello").isValidUTF8());
-    assertTrue(fromString("\u0061").isValidUTF8());
     assertTrue(fromString("大千世界").isValidUTF8());
     assertTrue(fromString("数据砖头").isValidUTF8());
     assertTrue(fromBytes(new byte[] {}).isValidUTF8());
