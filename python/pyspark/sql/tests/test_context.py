@@ -27,13 +27,12 @@ from pyspark import SparkContext, SQLContext
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import StructType, StringType, StructField
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-class HiveContextSQLTests(ReusedPySparkTestCase, ReusedSQLTestCase):
+class HiveContextSQLTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
+        ReusedSQLTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
         cls.spark = None
@@ -59,7 +58,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase, ReusedSQLTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
+        ReusedSQLTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         if cls.spark is not None:
             cls.spark.stop()
