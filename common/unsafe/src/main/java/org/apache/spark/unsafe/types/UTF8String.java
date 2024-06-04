@@ -29,6 +29,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.ibm.icu.lang.UCharacter;
 
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
@@ -370,22 +371,32 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - do char level uppercase conversion in case of chars in ASCII range
-    for (int i = 0; i < numBytes; i++) {
-      if (getByte(i) < 0) {
-        // non-ASCII
-        return toUpperCaseSlow();
-      }
+
+    return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlowJVM();
+  }
+
+  public UTF8String toUpperCaseICU() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
     }
-    byte[] bytes = new byte[numBytes];
-    for (int i = 0; i < numBytes; i++) {
+
+    return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlowICU();
+  }
+
+  private UTF8String toUpperCaseAscii() {
+    final var bytes = new byte[numBytes];
+    for (var i = 0; i < numBytes; i++) {
       bytes[i] = (byte) Character.toUpperCase(getByte(i));
     }
     return fromBytes(bytes);
   }
 
-  private UTF8String toUpperCaseSlow() {
+  private UTF8String toUpperCaseSlowJVM() {
     return fromString(toString().toUpperCase());
+  }
+
+  private UTF8String toUpperCaseSlowICU() {
+    return fromString(UCharacter.toUpperCase(toString()));
   }
 
   /**
@@ -413,7 +424,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       numBytes - pref);
     UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
       other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
+    return suffixLeft.toLowerCaseSlowICU().binaryCompare(suffixRight.toLowerCaseSlowICU());
   }
 
   /**
@@ -424,7 +435,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
+    return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlowJVM();
+  }
+
+  public UTF8String toLowerCaseICU() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
+    }
+
+    return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlowICU();
   }
 
   private boolean isFullAscii() {
@@ -436,8 +455,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return true;
   }
 
-  private UTF8String toLowerCaseSlow() {
+  private UTF8String toLowerCaseSlowJVM() {
     return fromString(toString().toLowerCase());
+  }
+
+  private UTF8String toLowerCaseSlowICU() {
+    return fromString(UCharacter.toLowerCase(toString()));
   }
 
   private UTF8String toLowerCaseAscii() {

@@ -206,19 +206,20 @@ public final class CollationSupport {
   }
 
   public static class Upper {
-    public static UTF8String exec(final UTF8String v, final int collationId) {
+    public static UTF8String exec(final UTF8String v, final int collationId, boolean useICU) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
-        return execUTF8(v);
+        return useICU ? execUTF8ICU(v) : execUTF8(v);
       } else {
         return execICU(v, collationId);
       }
     }
-    public static String genCode(final String v, final int collationId) {
+    public static String genCode(final String v, final int collationId, boolean useICU) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       String expr = "CollationSupport.Upper.exec";
+      String icuStr = useICU ? "ICU" : "";
       if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
-        return String.format(expr + "UTF8(%s)", v);
+        return String.format(expr + "UTF8" + useICU + "(%s)", v);
       } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
@@ -226,31 +227,38 @@ public final class CollationSupport {
     public static UTF8String execUTF8(final UTF8String v) {
       return v.toUpperCase();
     }
+    public static UTF8String execUTF8ICU(final UTF8String v) {
+      return v.toUpperCaseICU();
+    }
     public static UTF8String execICU(final UTF8String v, final int collationId) {
       return UTF8String.fromString(CollationAwareUTF8String.toUpperCase(v.toString(), collationId));
     }
   }
 
   public static class Lower {
-    public static UTF8String exec(final UTF8String v, final int collationId) {
+    public static UTF8String exec(final UTF8String v, final int collationId, boolean useICU) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
       if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
-        return execUTF8(v);
+        return useICU ? execUTF8ICU(v) : execUTF8(v);
       } else {
         return execICU(v, collationId);
       }
     }
-    public static String genCode(final String v, final int collationId) {
+    public static String genCode(final String v, final int collationId, boolean useICU) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-        String expr = "CollationSupport.Lower.exec";
+      String expr = "CollationSupport.Lower.exec";
+      String icuStr = useICU ? "ICU" : "";
       if (collation.supportsBinaryEquality || collation.supportsLowercaseEquality) {
-        return String.format(expr + "UTF8(%s)", v);
+        return String.format(expr + "UTF8" + useICU + "(%s)", v);
       } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
     public static UTF8String execUTF8(final UTF8String v) {
       return v.toLowerCase();
+    }
+    public static UTF8String execUTF8ICU(final UTF8String v) {
+      return v.toLowerCaseICU();
     }
     public static UTF8String execICU(final UTF8String v, final int collationId) {
       return UTF8String.fromString(CollationAwareUTF8String.toLowerCase(v.toString(), collationId));

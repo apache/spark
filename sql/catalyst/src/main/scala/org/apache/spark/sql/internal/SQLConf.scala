@@ -785,6 +785,14 @@ object SQLConf {
         _ => Map())
       .createWithDefault("UTF8_BINARY")
 
+  val ICU_CASE_MAPPINGS_ENABLED =
+    buildConf("spark.sql.icu.caseMappings.enabled")
+      .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +
+        " for strings.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
       .internal()

@@ -453,14 +453,17 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
+  private final lazy val useICU = SQLConf.get.spark.sql.icu.caseMappings.enabled
+
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Upper.exec(v, collationId)
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Upper.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
@@ -481,14 +484,17 @@ case class Upper(child: Expression)
 case class Lower(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
+  private final lazy val useICU = SQLConf.get.spark.sql.icu.caseMappings.enabled
+
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Lower.exec(v, collationId)
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Lower.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId, useICU))
   }
 
   override def prettyName: String =

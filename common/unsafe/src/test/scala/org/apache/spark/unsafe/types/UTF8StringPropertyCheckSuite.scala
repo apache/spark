@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.types
 
+import com.ibm.icu.lang.UCharacter
+
 import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
@@ -24,6 +26,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 /**
@@ -66,14 +69,26 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
 
   // scalastyle:off caselocale
   test("toUpperCase") {
-    forAll { (s: String) =>
-      assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase))
+    val useICU = SQLConf.conf.getConf(ICU_CASE_MAPPINGS_ENABLED).getKey
+    forAll { (s: String) => {
+      if (useICU) {
+        assert(toUTF8(s).toUpperCase === toUTF8(UCharacter.toUpperCase(s)))
+      } else {
+        assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase))
+      }
+    }
     }
   }
 
   test("toLowerCase") {
-    forAll { (s: String) =>
-      assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
+    val useICU = SQLConf.conf.getConf(ICU_CASE_MAPPINGS_ENABLED).getKey
+    forAll { (s: String) => {
+      if (useICU) {
+        assert(toUTF8(s).toLowerCase === toUTF8(UCharacter.toLowerCase(s)))
+      } else {
+        assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
+      }
+    }
     }
   }
   // scalastyle:on caselocale
