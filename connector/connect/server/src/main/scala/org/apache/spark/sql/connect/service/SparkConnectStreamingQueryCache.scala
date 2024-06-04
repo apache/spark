@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
@@ -148,7 +149,9 @@ private[connect] class SparkConnectStreamingQueryCache(
    * the queryCache. This is used when session is expired and we need to cleanup resources of that
    * session.
    */
-  def cleanupRunningQueries(sessionHolder: SessionHolder): Seq[String] = {
+  def cleanupRunningQueries(
+      sessionHolder: SessionHolder,
+      blocking: Boolean = true): Seq[String] = {
     val operationIds = new mutable.ArrayBuffer[String]()
     for ((k, v) <- queryCache) {
       if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
@@ -157,7 +160,11 @@ private[connect] class SparkConnectStreamingQueryCache(
             log"Stopping the query with id ${MDC(QUERY_ID, k.queryId)} " +
               log"since the session has timed out")
           try {
-            v.query.stop()
+            if (blocking) {
+              v.query.stop()
+            } else {
+              Future(v.query.stop())(ExecutionContext.global)
+            }
             operationIds.addOne(v.operationId)
           } catch {
             case NonFatal(ex) =>
