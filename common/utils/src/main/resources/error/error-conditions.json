@@ -3732,7 +3732,9 @@
   },
   "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
-      "Provided key schema does not match existing state key schema. Please check number and type of fields. Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>."
+      "Provided key schema does not match existing state key schema. ",
+      "Please check number and type of fields. ",
+      "Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>."
     ],
     "sqlState" : "XXKST"
   },
@@ -3762,7 +3764,9 @@
   },
   "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
-      "Provided value schema does not match existing state value schema. Please check number and type of fields. Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>."
+      "Provided value schema does not match existing state value schema. ",
+      "Please check number and type of fields. ",
+      "Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>."
     ],
     "sqlState" : "XXKST"
   },

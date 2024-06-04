@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StreamingAggregationStateManager}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreValueSchemaNotCompatible, StreamingAggregationStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -782,8 +782,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       testStream(aggregated, Update())(
         StartStream(checkpointLocation = tempDir.getAbsolutePath),
         AddData(inputData, 21),
-        ExpectFailure[
-          org.apache.spark.sql.execution.streaming.state.StateStoreValueSchemaNotCompatible] { e =>
+        ExpectFailure[StateStoreValueSchemaNotCompatible] { e =>
           val stateSchemaExc = findStateSchemaNotCompatible(e)
           assert(stateSchemaExc.isDefined)
           val msg = stateSchemaExc.get.getMessage

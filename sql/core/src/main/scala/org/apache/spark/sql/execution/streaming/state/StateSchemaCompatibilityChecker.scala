@@ -44,7 +44,7 @@ class StateSchemaCompatibilityChecker(
 
   private def logSchemaIncompatibleError(schemaErrorMsg: String): Unit = {
     val errorMsg = "Provided schema doesn't match the schema for existing state! " +
-      "Please note that Spark allow difference of field name: check count of fields " +
+      "Please note that Spark allows difference in field names: please check count of fields " +
       "and data type of each field.\n" +
       schemaErrorMsg +
       s"If you want to force running query without schema validation, please set " +
