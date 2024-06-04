@@ -480,7 +480,7 @@ class CanonicalizeSuite extends SparkFunSuite {
     }
   }
 
-  test("canonicalization of IsNull and IsNotNull") {
+  test("SPARK-48524: canonicalization of IsNull and IsNotNull") {
     val attr = AttributeReference("a", BooleanType)()
     assert(Not(IsNull(attr)).semanticEquals(IsNotNull(attr)))
     assert(Not(IsNull(attr)).canonicalized.isInstanceOf[IsNotNull])
