@@ -965,8 +965,6 @@ class CollationSuite extends DatasourceV2SQLBase
     // 6) Check if both expressions throw an exception.
     // 7) If no exception, check if the result is the same.
     // 8) There is a list of allowed expressions that can differ (e.g. hex)
-    //
-    // We currently capture 75/449 expressions. We could do better.
     def hasStringType(inputType: AbstractDataType): Boolean = {
       inputType match {
         case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
@@ -988,8 +986,6 @@ class CollationSuite extends DatasourceV2SQLBase
       !cl.getConstructors.isEmpty
     }).filter(funInfo => {
       val className = funInfo.getClassName
-      // noinspection ScalaStyle
-      println("checking - " + className)
       val cl = Utils.classForName(funInfo.getClassName)
       // dummy instance
       // Take first constructor.
@@ -1001,8 +997,6 @@ class CollationSuite extends DatasourceV2SQLBase
         p.isAssignableFrom(classOf[Option[Expression]]))
 
       if (!allExpressions) {
-        // noinspection ScalaStyle
-        println("NotAll")
         false
       } else {
         val args = params.map {
@@ -1016,39 +1010,15 @@ class CollationSuite extends DatasourceV2SQLBase
           val expr = headConstructor.newInstance(args: _*)
           expr match {
             case types: ExpectsInputTypes =>
-              // noinspection ScalaStyle
-              println("AllExpects")
               val inputTypes = types.inputTypes
               // check if this is a collection...
               inputTypes.exists(hasStringType)
-            case _: ComplexTypeMergingExpression =>
-              // Check other expressions here...
-              // noinspection ScalaStyle
-              println("TypeForMerging")
-              false
-            case _: InheritAnalysisRules =>
-              // Check other expressions here...
-              // noinspection ScalaStyle
-              println("Inherit")
-              false
-            case _ =>
-              // Check other expressions here...
-              // noinspection ScalaStyle
-              println("NotExpects")
-              false
           }
         } catch {
-          // TODO: Try to get rid of this...
-          case _: Throwable =>
-            // noinspection ScalaStyle
-            println("ErrorsOut")
-            false
+          case _: Throwable => false
         }
       }
     }).toArray
-
-    // noinspection ScalaStyle
-    println("Found total of " + funInfos.size + " functions")
 
     // Helper methods for generating data.
     sealed trait CollationType
@@ -1117,9 +1087,6 @@ class CollationSuite extends DatasourceV2SQLBase
     )
 
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      // noinspection ScalaStyle
-      println(f.getName)
-
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
       val params = headConstructor.getParameters.map(p => p.getType)
@@ -1163,14 +1130,10 @@ class CollationSuite extends DatasourceV2SQLBase
         }
       }
 
-      // if exception, assert that both cases have exception.
-      // TODO: check if exception is the same.
+      // Check that both cases either throw or pass
       assert(exceptionUtfBinary.isDefined == exceptionLcase.isDefined)
 
-      // no exception - check result.
       if (exceptionUtfBinary.isEmpty) {
-        // scalastyle:off println
-        println("GOODPASS")
         val resUtf8Binary = instanceUtf8Binary.eval(EmptyRow)
         val resUtf8Lcase = instanceLcase.eval(EmptyRow)
 
@@ -1186,6 +1149,9 @@ class CollationSuite extends DatasourceV2SQLBase
             // scalastyle:on caselocale
           case _ => resUtf8Lcase === resUtf8Binary
         }
+      }
+      else {
+        assert(exceptionUtfBinary.get.getClass == exceptionLcase.get.getClass)
       }
     }
   }
