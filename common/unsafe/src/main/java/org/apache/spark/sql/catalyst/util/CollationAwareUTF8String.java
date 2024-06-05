@@ -193,7 +193,41 @@ public class CollationAwareUTF8String {
    * @param right The second UTF8String to compare.
    * @return An integer representing the comparison result.
    */
-  public static int lowercaseCompare(final UTF8String left, final UTF8String right) {
+  public static int compareLowerCase(final UTF8String left, final UTF8String right) {
+    // Only if both strings are ASCII, we can use faster comparison (no string allocations).
+    if (left.isFullAscii() && right.isFullAscii()) {
+      return compareLowerCaseAscii(left, right);
+    }
+    return compareLowerCaseSlow(left, right);
+  }
+
+  /**
+   * Fast version of the `compareLowerCase` method, used when both arguments are ASCII strings.
+   *
+   * @param left The first ASCII UTF8String to compare.
+   * @param right The second ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseAscii(final UTF8String left, final UTF8String right) {
+    int leftBytes = left.numBytes(), rightBytes = right.numBytes();
+    for (int curr = 0; curr < leftBytes && curr < rightBytes; curr++) {
+      int lowerLeftByte = Character.toLowerCase(left.getByte(curr));
+      int lowerRightByte = Character.toLowerCase(right.getByte(curr));
+      if (lowerLeftByte != lowerRightByte) {
+        return lowerLeftByte - lowerRightByte;
+      }
+    }
+    return leftBytes - rightBytes;
+  }
+
+  /**
+   * Slow version of the `compareLowerCase` method, used when both arguments are non-ASCII strings.
+   *
+   * @param left The first non-ASCII UTF8String to compare.
+   * @param right The second non-ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseSlow(final UTF8String left, final UTF8String right) {
     return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
   }
 

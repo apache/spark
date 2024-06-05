@@ -28,6 +28,15 @@ import static org.junit.jupiter.api.Assertions.*;
 public class CollationSupportSuite {
 
   /**
+   * A list containing some of the supported collations in Spark. Use this list to iterate over
+   * all the important collation groups (binary, lowercase, icu) for complete unit test coverage.
+   * Note: this list may come in handy when the Spark function result is the same regardless of
+   * the specified collations (as often seen in some pass-through Spark expressions).
+   */
+  private final String[] testSupportedCollations =
+    {"UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"};
+
+  /**
    * Collation-aware UTF8String comparison.
    */
 
@@ -41,20 +50,46 @@ public class CollationSupportSuite {
 
   @Test
   public void testCompare() throws SparkException {
-    // Edge cases
-    assertStringCompare("", "", "UTF8_BINARY", 0);
-    assertStringCompare("a", "", "UTF8_BINARY", 1);
-    assertStringCompare("", "a", "UTF8_BINARY", -1);
-    assertStringCompare("", "", "UTF8_BINARY_LCASE", 0);
-    assertStringCompare("a", "", "UTF8_BINARY_LCASE", 1);
-    assertStringCompare("", "a", "UTF8_BINARY_LCASE", -1);
-    assertStringCompare("", "", "UNICODE", 0);
-    assertStringCompare("a", "", "UNICODE", 1);
-    assertStringCompare("", "a", "UNICODE", -1);
-    assertStringCompare("", "", "UNICODE_CI", 0);
-    assertStringCompare("a", "", "UNICODE_CI", 1);
-    assertStringCompare("", "a", "UNICODE_CI", -1);
-    // Basic tests
+    for (String collationName: testSupportedCollations) {
+      // Edge cases
+      assertStringCompare("", "", collationName, 0);
+      assertStringCompare("a", "", collationName, 1);
+      assertStringCompare("", "a", collationName, -1);
+      // Basic tests
+      assertStringCompare("a", "a", collationName, 0);
+      assertStringCompare("a", "b", collationName, -1);
+      assertStringCompare("b", "a", collationName, 1);
+      assertStringCompare("A", "A", collationName, 0);
+      assertStringCompare("A", "B", collationName, -1);
+      assertStringCompare("B", "A", collationName, 1);
+      assertStringCompare("aa", "a", collationName, 1);
+      assertStringCompare("b", "bb", collationName, -1);
+      assertStringCompare("abc", "a", collationName, 1);
+      assertStringCompare("abc", "b", collationName, -1);
+      assertStringCompare("abc", "ab", collationName, 1);
+      assertStringCompare("abc", "abc", collationName, 0);
+      // ASCII strings
+      assertStringCompare("aaaa", "aaa", collationName, 1);
+      assertStringCompare("hello", "world", collationName, -1);
+      assertStringCompare("Spark", "Spark", collationName, 0);
+      // Non-ASCII strings
+      assertStringCompare("ü", "ü", collationName, 0);
+      assertStringCompare("ü", "", collationName, 1);
+      assertStringCompare("", "ü", collationName, -1);
+      assertStringCompare("äü", "äü", collationName, 0);
+      assertStringCompare("äxx", "äx", collationName, 1);
+      assertStringCompare("a", "ä", collationName, -1);
+    }
+    // Non-ASCII strings
+    assertStringCompare("äü", "bü", "UTF8_BINARY", 1);
+    assertStringCompare("bxx", "bü", "UTF8_BINARY", -1);
+    assertStringCompare("äü", "bü", "UTF8_BINARY_LCASE", 1);
+    assertStringCompare("bxx", "bü", "UTF8_BINARY_LCASE", -1);
+    assertStringCompare("äü", "bü", "UNICODE", -1);
+    assertStringCompare("bxx", "bü", "UNICODE", 1);
+    assertStringCompare("äü", "bü", "UNICODE_CI", -1);
+    assertStringCompare("bxx", "bü", "UNICODE_CI", 1);
+    // Case variation
     assertStringCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
     assertStringCompare("ABCD", "abcd", "UTF8_BINARY_LCASE", 0);
     assertStringCompare("AbcD", "aBCd", "UNICODE", 1);

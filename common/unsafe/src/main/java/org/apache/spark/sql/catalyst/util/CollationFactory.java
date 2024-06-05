@@ -412,7 +412,7 @@ public final class CollationFactory {
             "UTF8_BINARY_LCASE",
             PROVIDER_SPARK,
             null,
-            CollationAwareUTF8String::lowercaseCompare,
+            CollationAwareUTF8String::compareLowerCase,
             "1.0",
             s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
             /* supportsBinaryEquality = */ false,
