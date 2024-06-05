@@ -32,10 +32,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
-class CollationSuite extends DatasourceV2SQLBase
-  with AdaptiveSparkPlanHelper with ExpressionEvalHelper {
+class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   private val collationPreservingSources = Seq("parquet")
