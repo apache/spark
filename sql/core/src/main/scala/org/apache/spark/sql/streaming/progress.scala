@@ -186,9 +186,8 @@ private[spark] object StreamingQueryProgress {
     ret
   }
 
-  private[spark] def jsonString(progress: StreamingQueryProgress): String = {
+  private[spark] def jsonString(progress: StreamingQueryProgress): String =
     progress.json
-  }
 
   private[spark] def fromJson(json: String): StreamingQueryProgress =
     mapper.readValue[StreamingQueryProgress](json)
