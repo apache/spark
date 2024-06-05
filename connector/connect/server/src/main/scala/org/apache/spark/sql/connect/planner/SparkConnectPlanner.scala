@@ -3259,10 +3259,6 @@ class SparkConnectPlanner(
       case StreamingQueryCommand.CommandCase.LAST_PROGRESS |
           StreamingQueryCommand.CommandCase.RECENT_PROGRESS =>
         val progressReports = if (command.getLastProgress) {
-          // scalastyle:off
-          println("wei== sparkconnnectplanner lasprogress" + query.lastProgress)
-          println("wei== sparkconnnectplanner jsonString" + StreamingQueryProgress.jsonString(query.lastProgress))
-          // scalastyle:on
           Option(query.lastProgress).toSeq
         } else {
           query.recentProgress.toImmutableArraySeq

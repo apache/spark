@@ -28,7 +28,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 class StreamingTestsMixin:
     def test_streaming_query_functions_basic(self):
-        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         query = (
             df.writeStream.format("memory")
             .queryName("test_streaming_query_functions_basic")
