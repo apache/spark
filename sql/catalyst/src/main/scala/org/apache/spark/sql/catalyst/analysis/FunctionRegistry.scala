@@ -222,7 +222,7 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
       builder: FunctionBuilder): Unit = {
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
-      case previousFunction if previousFunction != newFunction =>
+      case previousFunction if previousFunction != null =>
         logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
           log"previously registered function.")
       case _ =>
