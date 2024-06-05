@@ -2301,7 +2301,9 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-      "The number of skipped null values will be shown as custom metric of stream join operator.")
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
