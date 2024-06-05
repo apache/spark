@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -48,6 +48,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import com.sun.management.HotSpotDiagnosticMXBean
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
@@ -3058,15 +3059,10 @@ private[spark] object Utils
    */
   lazy val isG1GC: Boolean = {
     Try {
-      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-        .asInstanceOf[Class[_ <: PlatformManagedObject]]
-      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
-      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
-      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
-      val valueMethod = vmOptionClazz.getMethod("getValue")
-
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+      Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+      val hotSpotDiagnosticMXBean =
+        ManagementFactory.getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
+      val useG1GC = hotSpotDiagnosticMXBean.getVMOption("UseG1GC").getValue
       "true".equals(useG1GC)
     }.getOrElse(false)
   }
