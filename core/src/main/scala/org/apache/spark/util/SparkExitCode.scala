@@ -45,6 +45,10 @@ private[spark] object SparkExitCode {
       OutOfMemoryError. */
   val OOM = 52
 
+  /** The default uncaught exception handler was reached and the exception was thrown by
+     TaskReaper. */
+  val KILLED_BY_TASK_REAPER = 53
+
   /** Exit because the driver is running over the given threshold. */
   val DRIVER_TIMEOUT = 124
 
