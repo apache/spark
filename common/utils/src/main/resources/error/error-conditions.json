@@ -1802,6 +1802,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_STATE_STORE" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_STORAGE" : {
     "message" : [
       "<message>"

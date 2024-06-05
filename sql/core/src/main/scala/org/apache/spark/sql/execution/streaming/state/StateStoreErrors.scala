@@ -39,6 +39,19 @@ object StateStoreErrors {
     )
   }
 
+  def stateFormatValidationFailure(errorMsg: String): SparkException = {
+    SparkException.internalError(
+      msg = "The streaming query failed to validate written state. " +
+        "The following reasons may cause this: " +
+        "1. An old Spark version wrote the checkpoint that is incompatible with the current one; " +
+        "2. Corrupt checkpoint files; " +
+        "3. The query changed in an incompatible way between restarts. " +
+        "For the first case, use a new checkpoint directory or use the original Spark version" +
+        s"to process the streaming state. Retrieved error_message=$errorMsg",
+      category = "STATE_STORE"
+    )
+  }
+
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
     StateStoreUnsupportedOperationOnMissingColumnFamily = {
     new StateStoreUnsupportedOperationOnMissingColumnFamily(operationName, colFamilyName)
