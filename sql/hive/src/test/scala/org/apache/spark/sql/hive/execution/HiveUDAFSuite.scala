@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFEvaluator, GenericUDAFMax}
+import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDAFCount, GenericUDAFEvaluator, GenericUDAFMax, GenericUDAFnGrams}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.{AggregationBuffer, Mode}
 import org.apache.hadoop.hive.ql.util.JavaDataModel
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
@@ -47,6 +47,8 @@ class HiveUDAFSuite extends QueryTest
     super.beforeAll()
     sql(s"CREATE TEMPORARY FUNCTION mock AS '${classOf[MockUDAF].getName}'")
     sql(s"CREATE TEMPORARY FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION hive_count AS '${classOf[GenericUDAFCount].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION hive_ngrams AS '${classOf[GenericUDAFnGrams].getName}'")
     sql(s"CREATE TEMPORARY FUNCTION mock2 AS '${classOf[MockUDAF2].getName}'")
 
     Seq(
@@ -61,6 +63,8 @@ class HiveUDAFSuite extends QueryTest
     try {
       sql(s"DROP TEMPORARY FUNCTION IF EXISTS mock")
       sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+      sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_count")
+      sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_ngrams")
     } finally {
       super.afterAll()
     }
@@ -80,6 +84,53 @@ class HiveUDAFSuite extends QueryTest
     checkAnswer(df, Seq(
       Row(0, 2),
       Row(1, 3)
+    ))
+  }
+
+  test("Support Hive UDAF - GenericUDAFResolver") {
+    val dataDF = Seq("ChangE6 was launched on 3 May 2024").toDF("tweet")
+    dataDF.repartition(2).createOrReplaceTempView("twitter")
+
+    val df = sql("SELECT hive_ngrams(sentences(tweet), 2, 100) FROM twitter")
+
+    val aggs = collect(df.queryExecution.executedPlan) {
+      case agg: ObjectHashAggregateExec => agg
+    }
+
+    // There should be two aggregate operators, one for partial aggregation, and the other for
+    // global aggregation.
+    assert(aggs.length == 2)
+
+    val expected = Seq(
+      Row(
+        Seq(
+          Row(Seq("3", "May"), 1.0d),
+          Row(Seq("ChangE6", "was"), 1.0d),
+          Row(Seq("May", "2024"), 1.0d),
+          Row(Seq("launched", "on"), 1.0d),
+          Row(Seq("on", "3"), 1.0d),
+          Row(Seq("was", "launched"), 1.0d))
+      )
+    )
+    checkAnswer(df, expected)
+  }
+
+  test("Support Hive UDAF - GenericUDAFResolver2") {
+    sql("select key from t").show(false)
+    val df = sql("SELECT key % 2, hive_count(key) FROM t GROUP BY key % 2")
+    df.show(false)
+
+    val aggs = collect(df.queryExecution.executedPlan) {
+      case agg: ObjectHashAggregateExec => agg
+    }
+
+    // There should be two aggregate operators, one for partial aggregation, and the other for
+    // global aggregation.
+    assert(aggs.length == 2)
+
+    checkAnswer(df, Seq(
+      Row(0, 2),
+      Row(1, 2)
     ))
   }
 

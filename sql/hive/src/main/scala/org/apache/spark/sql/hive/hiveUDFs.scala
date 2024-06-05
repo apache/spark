@@ -342,14 +342,16 @@ private[hive] case class HiveUDAFFunction(
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
   private def newEvaluator(): GenericUDAFEvaluator = {
-    val resolver = if (isUDAFBridgeRequired) {
-      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]())
-    } else {
-      funcWrapper.createFunction[AbstractGenericUDAFResolver]()
-    }
-
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false, false)
-    resolver.getEvaluator(parameterInfo)
+    if (isUDAFBridgeRequired) {
+      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]()).getEvaluator(parameterInfo)
+    } else {
+      val func: AnyRef = funcWrapper.createFunction()
+      func match {
+        case resolver: GenericUDAFResolver2 => resolver.getEvaluator(parameterInfo)
+        case _ => func.asInstanceOf[GenericUDAFResolver].getEvaluator(parameterInfo.getParameters)
+      }
+    }
   }
 
   private case class HiveEvaluator(
