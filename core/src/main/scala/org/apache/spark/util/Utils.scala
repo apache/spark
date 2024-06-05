@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -3063,6 +3063,7 @@ private[spark] object Utils
       // the API of `HotSpotDiagnosticMXBean` can be used directly in subsequent operations,
       // instead of invoking it through reflection.
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[_ <: PlatformManagedObject]]
       val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
         .asInstanceOf[HotSpotDiagnosticMXBean]
       val useG1GC = hotSpotDiagnosticMXBean.getVMOption("UseG1GC").getValue
