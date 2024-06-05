@@ -60,7 +60,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
  * [[EmptyTableFunctionRegistry]]. Used for testing when all relations are already filled
@@ -4004,58 +4003,35 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveTranspose extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(TRANSPOSE), ruleId) {
-      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child) =>
-//      case t @ Transpose(columnsToTranspose, columnAlias, orderExpression, child)
-//        if t.expressions.forall(_.resolved) && child.resolved =>
-
-        // scalastyle:off println
-        val pivotColumnName = "__pivot_column"
-
-        val concatExpr = ConcatWs(Literal("_") +: columnsToTranspose)
-        val aliasExpr = Alias(concatExpr, pivotColumnName)()
-        val tempChild = Project(child.output :+ aliasExpr, child)
-
-        val columnsToKeep = child.output.filterNot(columnsToTranspose.contains)
-
-        val pivotValues = columnsToTranspose.map(_.asInstanceOf[NamedExpression])
-
-
-        println("Unpivot ids: " + Some(Seq(AttributeReference(pivotColumnName, StringType)())))
-        println(
-          "Unpivot values: " + Some(
-            columnsToKeep.map(col => Seq(col.asInstanceOf[NamedExpression])))
-        )
-        println("Unpivot variableColumnName: " + columnAlias)
-        println("Unpivot valueColumnNames: " + Seq("value"))
-        println("Unpivot child: " + tempChild.schema.treeString)
+      // scalastyle:off println
+      case t @ Transpose(child) =>
+        val firstColumn = child.output.head
+        val firstColumnNamedExpr = firstColumn.asInstanceOf[NamedExpression]
 
         val unpivot = Unpivot(
-          ids = Some(Seq(AttributeReference(pivotColumnName, StringType)())),
-          values = Some(columnsToKeep.map(col => Seq(col.asInstanceOf[NamedExpression]))),
+          ids = Some(Seq(firstColumnNamedExpr)),
+          values = None,
           aliases = None,
-          variableColumnName = columnAlias,
+          variableColumnName = "key",
           valueColumnNames = Seq("value"),
-          child = tempChild
+          child = child
         )
-        println("Unpivot logical node: " + unpivot)
-        println("Unpivot schema: " + unpivot.schema.treeString)
 
-        val valueType = unpivot.schema.find(_.name == "value").map(_.dataType).getOrElse(DoubleType)
-        val firstAgg = Alias(
-          First(AttributeReference("value", valueType)(), ignoreNulls = true),
-          "temp_value"
-        )()
+        val valueColumnDataType = IntegerType  // to fix
+        val pivotValues: Seq[Expression] = Seq(Literal("dotNET"), Literal("Java")) // to fix
+        val aggFunction = First(
+          AttributeReference("value", valueColumnDataType)(), ignoreNulls = true)
+        val aggExpression = aggFunction.toAggregateExpression(isDistinct = true, None) // to fix
 
         val pivot = Pivot(
-          groupByExprsOpt = Some(Seq(AttributeReference(columnAlias, StringType)())),
-          pivotColumn = AttributeReference(pivotColumnName, StringType)(),
-          pivotValues = pivotValues.map(expr => Literal(expr.name)),
-          aggregates = Seq(firstAgg),
+          groupByExprsOpt = Some(Seq(AttributeReference("key", StringType)())),
+          pivotColumn = firstColumnNamedExpr,
+          pivotValues = pivotValues,
+          aggregates = Seq(aggExpression),
           child = unpivot
         )
 
         pivot
-      // scalastyle:on println
     }
   }
 }
