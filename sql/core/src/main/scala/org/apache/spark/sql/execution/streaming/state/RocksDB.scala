@@ -186,11 +186,12 @@ class RocksDB(
         loadedVersion = latestSnapshotVersion
 
         // reset last snapshot version
-        if (lastSnapshotVersion > latestSnapshotVersion) {
-          // discard any newer snapshots
-          lastSnapshotVersion = 0L
-          latestSnapshot = None
-        }
+        lastSnapshotVersion = 0L
+//        if (lastSnapshotVersion > latestSnapshotVersion) {
+//          // discard any newer snapshots
+//          lastSnapshotVersion = 0L
+//          latestSnapshot = None
+//        }
         openDB()
 
         numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
@@ -584,14 +585,16 @@ class RocksDB(
           // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
-          // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
-          // inside the uploadSnapshot() called below.
-          // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
-          // during state store maintenance.
-          latestSnapshot.foreach(_.close())
-          latestSnapshot = Some(
-            RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
-          lastSnapshotVersion = newVersion
+          synchronized {
+            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+            // inside the uploadSnapshot() called below.
+            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+            // during state store maintenance.
+            latestSnapshot.foreach(_.close())
+            latestSnapshot = Some(
+              RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
+            lastSnapshotVersion = newVersion
+          }
         }
       }
 
@@ -681,20 +684,21 @@ class RocksDB(
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
-      // There is race to update latestSnapshot between load(), commit()
-      // and uploadSnapshot().
-      // The load method will reset latestSnapshot to discard any snapshots taken
-      // from newer versions (when a old version is reloaded).
-      // commit() method deletes the existing snapshot while creating a new snapshot.
-      // In order to ensure that the snapshot being uploaded would not be modified
-      // concurrently, we need to synchronize the snapshot access between task thread
-      // and maintenance thread.
-      acquire(StoreMaintenance)
-      try {
-        uploadSnapshot()
-      } finally {
-        release(StoreMaintenance)
-      }
+      uploadSnapshot()
+//      // There is race to update latestSnapshot between load(), commit()
+//      // and uploadSnapshot().
+//      // The load method will reset latestSnapshot to discard any snapshots taken
+//      // from newer versions (when a old version is reloaded).
+//      // commit() method deletes the existing snapshot while creating a new snapshot.
+//      // In order to ensure that the snapshot being uploaded would not be modified
+//      // concurrently, we need to synchronize the snapshot access between task thread
+//      // and maintenance thread.
+//      acquire(StoreMaintenance)
+//      try {
+//        uploadSnapshot()
+//      } finally {
+//        release(StoreMaintenance)
+//      }
     }
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(conf.minVersionsToRetain)
