@@ -1522,12 +1522,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
   }
-
-  test("test useG1") {
-    val c = Utils.isG1GC
-    // scalastyle:off
-    println(c)
-  }
 }
 
 private class SimpleExtension
