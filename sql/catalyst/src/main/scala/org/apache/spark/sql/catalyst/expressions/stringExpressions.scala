@@ -1422,6 +1422,8 @@ case class StringInstr(str: Expression, substr: Expression)
     Examples:
       > SELECT _FUNC_('www.apache.org', '.', 2);
        www.apache
+      > SELECT _FUNC_(col1, col2, col3) from values('www.apache.org', '.', 2);
+       www.apache
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1966,6 +1968,8 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
+       k SQL
+      > SELECT _FUNC_(col1, col2) from values('Spark SQL', 5);
        k SQL
   """,
   since = "1.5.0",

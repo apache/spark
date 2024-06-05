@@ -10949,15 +10949,16 @@ def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
-
-    >>> df = spark.createDataFrame([('abcd', 2, 3)], ['s', 'start', 'len'])
-    >>> df.select(substring(df.s, df.start, df.len).alias('s')).collect()
-    [Row(s='bcd')]
+    >>> df = spark.createDataFrame([('abcd', 1, 2)], ['s','p', 'l'])
+    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
+    [Row(s='ab')]
     """
+    # `str` is shadowed by the function's param
+    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
 
-    pos = _to_java_column(pos) if isinstance(pos, (str, Column)) else pos
-    len = _to_java_column(len) if isinstance(pos, (str, Column)) else len
+    pos = _to_java_column(pos) if isinstance(pos, (StrType, Column)) else pos
+    len = _to_java_column(len) if isinstance(pos, (StrType, Column)) else len
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
@@ -10995,11 +10996,16 @@ def substring_index(str: "ColumnOrName", delim: Union[Column, str], count: Union
     [Row(s='a.b')]
     >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
     [Row(s='b.c.d')]
+    >>> df = spark.createDataFrame([('a.b.c.d', '.', -3)], ['s', 'd', 'c'])
+    >>> df.select(substring_index(df.s, df.d, df.c).alias('s')).collect()
+    [Row(s='b.c.d')]
     """
+    # `str` is shadowed by the function's param
+    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
-
+    
     delim = delim._jc if isinstance(delim, Column) else delim
-    count = _to_java_column(count) if isinstance(count, (str, Column)) else count
+    count = _to_java_column(count) if isinstance(count, (StrType, Column)) else count
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
@@ -14051,8 +14057,9 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
     |array_position(data, col)|
     +-------------------------+
-    |                      2  |
+    |                        2|
     +-------------------------+
+
     """
     from pyspark.sql.classic.column import _to_java_column
 
