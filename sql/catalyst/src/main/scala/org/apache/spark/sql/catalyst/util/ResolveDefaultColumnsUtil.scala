@@ -285,10 +285,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
         statementType, colName, defaultSQL)
     }
 
-    if (!parsed.foldable) {
-      throw QueryCompilationErrors.defaultValueIsNotFoldable(colName, defaultSQL)
-    }
-
     // Analyze the parse result.
     val plan = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
@@ -303,6 +299,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
+
+    // ConstantFolding rule should evaluate expression if it is foldable to literal
+    if (!analyzed.isInstanceOf[Literal]) {
+      throw QueryCompilationErrors.defaultValueIsNotFoldable(colName, defaultSQL)
+    }
     // Perform implicit coercion from the provided expression type to the required column type.
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
