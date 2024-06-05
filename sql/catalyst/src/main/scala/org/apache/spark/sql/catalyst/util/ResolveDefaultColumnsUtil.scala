@@ -284,6 +284,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statementType, colName, defaultSQL)
     }
+
+    if (!parsed.foldable) {
+      throw QueryCompilationErrors.defaultValueIsNotFoldable(colName, defaultSQL)
+    }
+
     // Analyze the parse result.
     val plan = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer

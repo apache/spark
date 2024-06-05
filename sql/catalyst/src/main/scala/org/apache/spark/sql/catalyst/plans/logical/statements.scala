@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
@@ -143,16 +142,9 @@ case class QualifiedColType(
   def getV2Default: ColumnDefaultValue = {
     default.map { sql =>
       val e = ResolveDefaultColumns.analyze(colName, dataType, sql, "ALTER TABLE")
-      if (!e.resolved || !e.foldable) {
-        throw new AnalysisException(
-          errorClass = "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED",
-          messageParameters = Map(
-            "colName" -> colName,
-            "defaultValue" -> sql
-          )
-        )
-      }
-
+      assert(e.resolved && e.foldable,
+        "The existence default value must be a simple SQL string that is resolved and foldable, " +
+          "but got: " + sql)
       new ColumnDefaultValue(sql, LiteralValue(e.eval(), dataType))
     }.orNull
   }

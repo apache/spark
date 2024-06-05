@@ -3498,7 +3498,7 @@ class DataSourceV2SQLSuiteV1Filter
           spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
         }
         assert(exception.getSqlState == "42624")
-        assert(exception.errorClass.get == "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE_OR_RESOLVED")
+        assert(exception.errorClass.get == "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE")
         assert(exception.messageParameters("colName") == "col2")
         assert(exception.messageParameters("defaultValue") == "rand()")
       }
