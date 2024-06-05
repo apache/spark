@@ -233,8 +233,12 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
     val batchMetadataFile = batchIdToPath(batchId)
 
+    logError(s"### batchMetadataFile: ${batchMetadataFile.toString}")
     if ((metadataCacheEnabled && batchCache.containsKey(batchId))
       || fileManager.exists(batchMetadataFile)) {
+      logError(s"### ${path}: ${metadataCacheEnabled} " +
+        s"${batchCache.containsKey(batchId)} " +
+        s"${fileManager.exists(batchMetadataFile)}")
       false
     } else {
       write(batchMetadataFile, fn)

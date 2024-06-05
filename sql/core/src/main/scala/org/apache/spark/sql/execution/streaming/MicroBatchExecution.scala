@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -87,6 +87,22 @@ class MicroBatchExecution(
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
+
+  lazy val operatorStateMetadatas: Map[Long, OperatorStateMetadataLog] = {
+    populateOperatorStateMetadatas(getLatestExecutionContext().executionPlan.executedPlan)
+  }
+
+  private def populateOperatorStateMetadatas(plan: SparkPlan):
+    Map[Long, OperatorStateMetadataLog] = {
+    plan.flatMap {
+      case s: StateStoreWriter => s.stateInfo.map { info =>
+        val metadataPath = s.getOperatorStateMetadataPath()
+        info.operatorId -> new OperatorStateMetadataLog(sparkSession,
+          metadataPath.toString)
+      }
+      case _ => Seq.empty
+    }.toMap
+  }
 
   protected def getTrigger(): TriggerExecutor = {
     assert(sources.nonEmpty, "sources should have been retrieved from the plan!")
@@ -906,6 +922,15 @@ class MicroBatchExecution(
     execCtx.reportTimeTaken("commitOffsets") {
       if (!commitLog.add(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
+      }
+      execCtx.executionPlan.executedPlan.collect {
+        case s: StateStoreWriter =>
+          val metadata = s.operatorStateMetadata()
+          val id = metadata.operatorInfo.operatorId
+          val metadataFile = operatorStateMetadatas(id)
+          if (!metadataFile.add(execCtx.batchId, metadata)) {
+            throw new Exception("Could not add metadata file")
+          }
       }
     }
     committedOffsets ++= execCtx.endOffsets

@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -69,6 +71,11 @@ trait StatefulOperator extends SparkPlan {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
+  }
+
+  def getOperatorStateMetadataPath(): Path = {
+    new Path(new Path(stateInfo.get.checkpointLocation,
+      getStateInfo.operatorId.toString), "operatorStateMetadata")
   }
 }
 

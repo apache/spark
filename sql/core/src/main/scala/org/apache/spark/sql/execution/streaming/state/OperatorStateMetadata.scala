@@ -30,7 +30,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil, OperatorStateMetadataLog}
 import org.apache.spark.util.AccumulatorV2
 
 /**
@@ -64,8 +64,10 @@ trait OperatorStateMetadata {
 }
 
 object OperatorStateMetadata {
-  def metadataFilePath(stateCheckpointPath: Path): Path =
+  def metadataFilePath(stateCheckpointPath: Path): Path = {
+    print(s"### stateCheckpointPath: ${stateCheckpointPath.toString}")
     new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
+  }
 }
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
