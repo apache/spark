@@ -192,6 +192,17 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.numOutputRows, int))
         self.assertTrue(isinstance(progress.metrics, dict))
 
+    def test_streaming_last_progress(self):
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            query = df.writeStream.format("noop").queryName("test_streaming_progress").start()
+            query.processAllAvailable()
+
+            progress = StreamingQueryProgress.fromJson(query.lastProgress)
+            self.check_streaming_query_progress(progress, False)
+        finally:
+            query.stop()
+
 
 class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
     def test_number_of_public_methods(self):
