@@ -256,7 +256,8 @@ class SQLTestUtils:
         old_values = [os.environ.get(key, None) for key in keys]
         for key, new_value in zip(keys, new_values):
             if new_value is None:
-                del os.environ[key]
+                if key in os.environ:
+                    del os.environ[key]
             else:
                 os.environ[key] = new_value
         try:
@@ -264,7 +265,8 @@ class SQLTestUtils:
         finally:
             for key, old_value in zip(keys, old_values):
                 if old_value is None:
-                    del os.environ[key]
+                    if key in os.environ:
+                        del os.environ[key]
                 else:
                     os.environ[key] = old_value
 
