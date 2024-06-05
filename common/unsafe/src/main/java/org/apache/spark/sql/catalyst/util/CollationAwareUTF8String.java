@@ -293,6 +293,7 @@ public class CollationAwareUTF8String {
   public static UTF8String toUpperCase(final UTF8String target) {
     return UTF8String.fromString(toUpperCase(target.toString()));
   }
+
   public static String toUpperCase(final String target) {
     return UCharacter.toUpperCase(target);
   }
@@ -306,6 +307,7 @@ public class CollationAwareUTF8String {
   public static UTF8String toUpperCase(final UTF8String target, final int collationId) {
     return UTF8String.fromString(toUpperCase(target.toString(), collationId));
   }
+
   public static String toUpperCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
