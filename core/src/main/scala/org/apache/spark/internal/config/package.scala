@@ -2206,6 +2206,12 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT =
+    ConfigBuilder("spark.submit.callSystemExitOnMainExit")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
       .version("0.8.1")
