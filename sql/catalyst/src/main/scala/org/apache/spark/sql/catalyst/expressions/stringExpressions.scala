@@ -3146,29 +3146,30 @@ case class FormatNumber(x: Expression, d: Expression)
   group = "string_funcs")
 case class Sentences(
     str: Expression,
-    language: Expression = Literal(""),
-    country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+    language: Option[Expression] = None,
+    country: Option[Expression] = None)
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
-  def this(str: Expression) = this(str, Literal(""), Literal(""))
-  def this(str: Expression, language: Expression) = this(str, language, Literal(""))
+  def this(str: Expression) = this(str, None, None)
+
+  def this(str: Expression, language: Expression) = this(str, Some(language))
+
+  def this(str: Expression, language: Expression, country: Expression) =
+    this(str, Some(language), Some(country))
 
   override def nullable: Boolean = true
   override def dataType: DataType =
     ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
-  override def first: Expression = str
-  override def second: Expression = language
-  override def third: Expression = country
 
   override def eval(input: InternalRow): Any = {
     val string = str.eval(input)
     if (string == null) {
       null
     } else {
-      val languageStr = language.eval(input).asInstanceOf[UTF8String]
-      val countryStr = country.eval(input).asInstanceOf[UTF8String]
+      val languageStr = language.getOrElse(Literal("")).eval(input).asInstanceOf[UTF8String]
+      val countryStr = country.getOrElse(Literal("")).eval(input).asInstanceOf[UTF8String]
       val locale = if (languageStr != null && countryStr != null) {
         new Locale(languageStr.toString, countryStr.toString)
       } else {
@@ -3201,10 +3202,25 @@ case class Sentences(
     new GenericArrayData(result)
   }
 
-  override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
-    copy(str = newFirst, language = newSecond, country = newThird)
+  override def children: Seq[Expression] = {
+    if (language.isDefined && country.isDefined) {
+      Seq(str, language.get, country.get)
+    } else if (language.isDefined) {
+      Seq(str, language.get)
+    } else if (country.isDefined) {
+      Seq(str, country.get)
+    } else {
+      Seq(str)
+    }
+  }
 
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      str = newChildren.head,
+      language = if (language.isDefined) Some(newChildren(1)) else None,
+      country = if (country.isDefined) Some(newChildren(2)) else None)
+  }
 }
 
 /**
