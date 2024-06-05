@@ -1344,8 +1344,8 @@ private[hive] object HiveClientImpl extends Logging {
     // Bonecp might cause memory leak, it could affect some hive client versions we support
     // See more details in HIVE-15551
     // Also, Bonecp is removed in Hive 4.0.0, see HIVE-23258
-    // Here we DBCP to replace bonecp instead of HikariCP as HikariCP was introduced in
-    // Hive 2.2.0, see HIVE-13931
+    // Here we use DBCP to replace bonecp instead of HikariCP as HikariCP was introduced in
+    // Hive 2.2.0 (see HIVE-13931) while the minium Hive we support is 2.0.0.
     if ("bonecp".equalsIgnoreCase(cpType)) {
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
