@@ -219,6 +219,8 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
       assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
 
+      val tableSchema = "Some(StructType(StructField(name," +
+        "org.apache.spark.sql.types.StringType@0,true),StructField(id,IntegerType,true)))"
       checkError(
         exception = intercept[AnalysisException] {
           df3.write.mode(SaveMode.Overwrite).option("truncate", true)
@@ -227,8 +229,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         errorClass = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "seq",
-          "tableSchema" ->
-            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
+          "tableSchema" -> tableSchema))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect())
