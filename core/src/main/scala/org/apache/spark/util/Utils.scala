@@ -3059,9 +3059,11 @@ private[spark] object Utils
    */
   lazy val isG1GC: Boolean = {
     Try {
-      Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-      val hotSpotDiagnosticMXBean =
-        ManagementFactory.getPlatformMXBean(classOf[HotSpotDiagnosticMXBean])
+      // SPARK-48505: If the initialization probe of `HotSpotDiagnosticMXBean` is successful,
+      // the reflection API can be avoided in subsequent operations.
+      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+        .asInstanceOf[HotSpotDiagnosticMXBean]
       val useG1GC = hotSpotDiagnosticMXBean.getVMOption("UseG1GC").getValue
       "true".equals(useG1GC)
     }.getOrElse(false)
