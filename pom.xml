@@ -2332,6 +2332,10 @@
             <groupId>co.cask.tephra</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.jolbox</groupId>
+            <artifactId>bonecp</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
