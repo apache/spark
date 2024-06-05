@@ -3060,7 +3060,7 @@ private[spark] object Utils
   lazy val isG1GC: Boolean = {
     Try {
       // SPARK-48505: If the initialization probe of `HotSpotDiagnosticMXBean` is successful,
-      // the reflection API can be avoided in subsequent operations.
+      // subsequent reflection calls can be avoided.
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
       val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
         .asInstanceOf[HotSpotDiagnosticMXBean]
