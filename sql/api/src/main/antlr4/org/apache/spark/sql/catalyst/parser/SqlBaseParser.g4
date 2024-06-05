@@ -44,10 +44,10 @@ options { tokenVocab = SqlBaseLexer; }
 
 compoundOrSingleStatement
     : singleStatement
-    | singleCompound
+    | singleCompoundStatement
     ;
 
-singleCompound
+singleCompoundStatement
     : beginEndCompoundBlock SEMICOLON? EOF
     ;
 
