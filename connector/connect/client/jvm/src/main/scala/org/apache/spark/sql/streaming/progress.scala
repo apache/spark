@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.json4s._
 import org.json4s.JsonAST.JValue
@@ -202,8 +203,13 @@ private[spark] object StreamingQueryProgress {
     ret
   }
 
-  private[spark] def jsonString(progress: StreamingQueryProgress): String =
+  private[spark] def jsonString(progress: StreamingQueryProgress): String = {
+    val jsonNode = mapper.valueToTree[ObjectNode](StreamingQueryProgress)
+    jsonNode.put("numInputRows", progress.numInputRows)
+    jsonNode.put("inputRowsPerSecond", progress.inputRowsPerSecond)
+    jsonNode.put("processedRowsPerSecond", progress.processedRowsPerSecond)
     mapper.writeValueAsString(progress)
+  }
 
   private[spark] def fromJson(json: String): StreamingQueryProgress =
     mapper.readValue[StreamingQueryProgress](json)
