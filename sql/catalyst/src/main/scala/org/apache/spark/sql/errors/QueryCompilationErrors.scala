@@ -4074,14 +4074,4 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map()
     )
   }
-
-  def defaultValueIsNotFoldable(colName: String, defaultValueExpression: String): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_DEFAULT_VALUE_IS_NOT_FOLDABLE",
-      messageParameters = Map(
-        "colName" -> colName,
-        "defaultValue" -> defaultValueExpression
-      )
-    )
-  }
 }

@@ -300,10 +300,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
 
-    // ConstantFolding rule should evaluate expression if it is foldable to literal
-    if (!analyzed.isInstanceOf[Literal]) {
-      throw QueryCompilationErrors.defaultValueIsNotFoldable(colName, defaultSQL)
+    if (!analyzed.foldable) {
+      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName, defaultSQL)
     }
+
+    // Another extra check, expressions should already be resolved if AnalysisException is not
+    // thrown in the code block above
+    if (!analyzed.resolved) {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statementType,
+        colName,
+        defaultSQL,
+        cause = null)
+    }
+
     // Perform implicit coercion from the provided expression type to the required column type.
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
