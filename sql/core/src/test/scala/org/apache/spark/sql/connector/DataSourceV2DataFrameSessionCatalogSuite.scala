@@ -110,12 +110,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val provider =
-          if (properties.containsKey("provider")) {
-            Some(properties.get("provider"))
-          } else {
-            None
-          }
+        val provider = Option(properties.get("provider"))
 
         val schema = CatalogV2Util.applySchemaChanges(
           table.schema,
