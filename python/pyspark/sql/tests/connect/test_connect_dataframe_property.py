@@ -17,19 +17,10 @@
 
 import unittest
 
-from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
-    LongType,
-    MapType,
-    ArrayType,
-    Row,
-)
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+from pyspark.sql.utils import is_remote
 
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.utils import is_remote
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
