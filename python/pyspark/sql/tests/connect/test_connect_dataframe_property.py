@@ -206,8 +206,8 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
         cdf2 = self.connect.createDataFrame(data2, ("time", "id", "v2"))
         sdf2 = self.spark.createDataFrame(data2, ("time", "id", "v2"))
 
-        def asof_join(l, r):
-            return pd.merge_asof(l, r, on="time", by="id")
+        def asof_join(left, right):
+            return pd.merge_asof(left, right, on="time", by="id")
 
         schema = StructType(
             [
@@ -243,8 +243,13 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
         cdf2 = self.connect.createDataFrame(data2, ("id", "v2"))
         sdf2 = self.spark.createDataFrame(data2, ("id", "v2"))
 
-        def summarize(l, r):
-            return pa.Table.from_pydict({"left": [l.num_rows], "right": [r.num_rows]})
+        def summarize(left, right):
+            return pa.Table.from_pydict(
+                {
+                    "left": [left.num_rows],
+                    "right": [right.num_rows],
+                }
+            )
 
         schema = StructType(
             [
