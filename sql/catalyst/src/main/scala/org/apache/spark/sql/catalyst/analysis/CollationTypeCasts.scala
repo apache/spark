@@ -71,6 +71,13 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
+    case raiseError: RaiseError =>
+      val newErrorParams = raiseError.errorParms.dataType match {
+        case MapType(StringType, StringType, _) => raiseError.errorParms
+        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
+      }
+      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
@@ -85,11 +92,6 @@ object CollationTypeCasts extends TypeCoercionRule {
   private def extractStringType(dt: DataType): StringType = dt match {
     case st: StringType => st
     case ArrayType(et, _) => extractStringType(et)
-    case MapType(kt, vt, _) => if (hasStringType(kt)) {
-        extractStringType(kt)
-      } else {
-        extractStringType(vt)
-      }
   }
 
   /**
@@ -107,14 +109,6 @@ object CollationTypeCasts extends TypeCoercionRule {
       case st: StringType if st.collationId != castType.collationId => castType
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
-      case MapType(keyType, valueType, nullable) =>
-        val newKeyType = castStringType(keyType, castType).getOrElse(keyType)
-        val newValueType = castStringType(valueType, castType).getOrElse(valueType)
-        if (newKeyType != keyType || newValueType != valueType) {
-          MapType(newKeyType, newValueType, nullable)
-        } else {
-          null
-        }
       case _ => null
     }
     Option(ret)
@@ -138,8 +132,6 @@ object CollationTypeCasts extends TypeCoercionRule {
   def getOutputCollation(expr: Seq[Expression]): StringType = {
     val explicitTypes = expr.filter {
         case _: Collate => true
-        case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-          cast.dataType.isInstanceOf[StringType]
         case _ => false
       }
       .map(_.dataType.asInstanceOf[StringType].collationId)

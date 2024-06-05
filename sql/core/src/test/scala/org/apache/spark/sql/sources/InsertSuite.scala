@@ -23,7 +23,7 @@ import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
-import org.apache.spark.{SparkArithmeticException, SparkException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -953,10 +953,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      val msg = intercept[SparkException] {
+      val msg = intercept[SparkRuntimeException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getCause.getMessage
-      assert(msg.contains("Null value appeared in non-nullable field"))
+      }
+      assert(msg.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

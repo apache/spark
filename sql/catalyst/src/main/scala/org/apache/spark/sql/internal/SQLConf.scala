@@ -2301,7 +2301,9 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-      "The number of skipped null values will be shown as custom metric of stream join operator.")
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2331,6 +2333,17 @@ object SQLConf {
         "may show unexpected behavior including duplication, data loss, etc. So use with " +
         "extreme care! The ideal direction is to persuade developers of source(s) to " +
         "support Trigger.AvailableNow.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
+    buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")
+      .internal()
+      .doc("When true, enable OptimizeOneRowPlan rule for the case where the child is a " +
+        "streaming Dataset. This is a fallback flag to revert the 'incorrect' behavior, hence " +
+        "this configuration must not be used without understanding in depth. Use this only to " +
+        "quickly recover failure in existing query!")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4906,6 +4919,15 @@ object SQLConf {
       .internal()
       .doc("When set to true, restores legacy behavior of potential incorrect count bug " +
         "handling for scalar subqueries.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
+    buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
+      .internal()
+      .doc("When set to true, use incorrect legacy behavior for checking whether a scalar " +
+        "subquery with a group-by on correlated columns is allowed. See SPARK-48503")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

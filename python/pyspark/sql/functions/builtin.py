@@ -86,7 +86,7 @@ def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
     Java gateway associated with sc.
     """
     assert sc._jvm is not None
-    return getattr(sc._jvm.functions, name)
+    return getattr(getattr(sc._jvm, "org.apache.spark.sql.functions"), name)
 
 
 def _invoke_function(name: str, *args: Any) -> Column:
