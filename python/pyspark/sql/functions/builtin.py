@@ -10915,7 +10915,7 @@ def sentences(
 
 
 @_try_remote_functions
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
+def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
@@ -10934,9 +10934,9 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    pos : int
+    pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
-    len : int
+    len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
     Returns
@@ -10949,14 +10949,20 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
+
+    >>> df = spark.createDataFrame([('abcd', 2, 3)], ['s', 'start', 'len'])
+    >>> df.select(substring(df.s, df.start, df.len).alias('s')).collect()
+    [Row(s='bcd')]
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    pos = _to_java_column(pos) if isinstance(pos, (str, Column)) else pos
+    len = _to_java_column(len) if isinstance(pos, (str, Column)) else len
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
 @_try_remote_functions
-def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
+def substring_index(str: "ColumnOrName", delim: Union[Column, str], count: Union["ColumnOrName", int]) -> Column:
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
     If count is positive, everything the left of the final delimiter (counting from left) is
@@ -10972,9 +10978,9 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    delim : str
+    delim : :class:`~pyspark.sql.Column` or str
         delimiter of values.
-    count : int
+    count : :class:`~pyspark.sql.Column` or str or int
         number of occurrences.
 
     Returns
@@ -10992,6 +10998,8 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    delim = delim._jc if isinstance(delim, Column) else delim
+    count = _to_java_column(count) if isinstance(count, (str, Column)) else count
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
@@ -13969,7 +13977,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
     value : Any
-        value to look for.
+        value or a :class:`~pyspark.sql.Column` expression to look for.
 
     Returns
     -------
@@ -14034,9 +14042,21 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-----------------------+
     |                      3|
     +-----------------------+
+
+    Example 6: Finding the position of a column's value in an array of integers
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([10, 20, 30], 20)], ['data', 'col'])
+    >>> df.select(sf.array_position(df.data, df.col)).show()
+    +-------------------------+
+    |array_position(data, col)|
+    +-------------------------+
+    |                      2  |
+    +-------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    value = value._jc if isinstance(value, Column) else value
     return _invoke_function("array_position", _to_java_column(col), value)
 
 
@@ -14402,7 +14422,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         name of column containing array
     element :
-        element to be removed from the array
+        element or a :class:`~pyspark.sql.Column` expression to be removed from the array
 
     Returns
     -------
@@ -14470,9 +14490,21 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     +---------------------+
     |                   []|
     +---------------------+
+
+    Example 6: Removing a column's value from a simple array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1], 1)], ['data', 'col'])
+    >>> df.select(sf.array_remove(df.data, df.col)).show()
+    +-----------------------+
+    |array_remove(data, col)|
+    +-----------------------+
+    |                 [2, 3]|
+    +-----------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    element = element._jc if isinstance(element, Column) else element
     return _invoke_function("array_remove", _to_java_column(col), element)
 
 
@@ -17237,7 +17269,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or an expression that represents the map.
     value :
-        A literal value.
+        A literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -17270,6 +17302,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    value = value._jc if isinstance(value, Column) else value
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
