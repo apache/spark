@@ -194,16 +194,16 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(progress.numOutputRows, int))
         self.assertTrue(isinstance(progress.metrics, dict))
 
-    # def test_streaming_last_progress(self):
-    #     try:
-    #         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-    #         query = df.writeStream.format("noop").queryName("test_streaming_progress").start()
-    #         query.processAllAvailable()
-    #
-    #         progress = StreamingQueryProgress.fromJson(query.lastProgress)
-    #         self.check_streaming_query_progress(progress, False)
-    #     finally:
-    #         query.stop()
+    def test_streaming_last_progress(self):
+        try:
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            query = df.writeStream.format("noop").queryName("test_streaming_progress").start()
+            query.processAllAvailable()
+
+            progress = StreamingQueryProgress.fromJson(query.lastProgress)
+            self.check_streaming_query_progress(progress, False)
+        finally:
+            query.stop()
 
     # This is a generic test work for both classic Spark and Spark Connect
     def test_listener_observed_metrics(self):

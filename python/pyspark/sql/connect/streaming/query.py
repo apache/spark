@@ -123,7 +123,6 @@ class StreamingQuery:
         cmd = pb2.StreamingQueryCommand()
         cmd.last_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
-        # print("wei== progress is: " + str(progress[-1]))
         if len(progress) > 0:
             return json.loads(progress[-1])
         else:

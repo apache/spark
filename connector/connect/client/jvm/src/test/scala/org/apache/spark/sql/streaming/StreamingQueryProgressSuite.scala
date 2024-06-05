@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-
-// TODO: change me add back test field
-
 package org.apache.spark.sql.streaming
 
 import scala.jdk.CollectionConverters._
