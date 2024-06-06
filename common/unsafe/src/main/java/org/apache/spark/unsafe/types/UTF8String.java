@@ -283,15 +283,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Utility methods and constants for UTF-8 string validation.
    */
 
-  private static boolean byteMatchesMask(byte b, byte mask, byte val) {
-    return (b & mask) == val;
-  }
-
-  private static final byte CONTINUATION_BYTE_MASK = (byte) 0xC0;
-  private static final byte CONTINUATION_BYTE_VAL = (byte) 0x80;
-
   private static boolean isValidContinuationByte(byte b) {
-    return byteMatchesMask(b, CONTINUATION_BYTE_MASK, CONTINUATION_BYTE_VAL);
+     return (byte) 0x80 <= b && b <= (byte) 0xBF;
   }
 
   private static boolean isValidSecondByte(byte b, byte firstByte) {
@@ -312,12 +305,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Validates the current UTF-8 string by replacing invalid UTF-8 sequences with the Unicode
-   * replacement character (U+FFFD), as per the rules defined in the Unicode standard. This
-   * behaviour is consistent with the behaviour of `UnicodeString` function in ICU4C.
+   * Returns a validated version of the current UTF-8 string by replacing invalid UTF-8 sequences
+   * with the Unicode replacement character (U+FFFD), as per the rules defined in the Unicode
+   * standard. This behaviour is consistent with the behaviour of `UnicodeString` in ICU4C.
+   *
+   * @return A new UTF8String that is a valid UTF8 byte sequence.
    */
-
-  public UTF8String validateUTF8() {
+  public UTF8String makeValidUTF8() {
     ArrayList<Byte> bytes = new ArrayList<>();
     int byteIndex = 0;
     byteIteration:
@@ -370,11 +364,36 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Checks whether the string represents a valid UTF-8 byte sequence.
+   * Checks if the current UTF8String is valid.
+   *
+   * @return If string represents a valid UTF8 byte sequence.
    */
-
   public boolean isValidUTF8() {
-    return validateUTF8().equals(this);
+    return makeValidUTF8().equals(this);
+  }
+
+  /**
+   * Returns the current string if it is a valid UTF8 byte sequence, otherwise throws an exception.
+   *
+   * @return The UTF8String itself if it is a valid UTF8 byte sequence.
+   */
+  public UTF8String validateUTF8() {
+    if (!isValidUTF8()) {
+      throw new IllegalArgumentException("Invalid UTF-8 string");
+    }
+    return this;
+  }
+
+  /**
+   * Returns the current string if it is a valid UTF8 byte sequence, otherwise returns null.
+   *
+   * @return The UTF8String itself if it is a valid UTF8 byte sequence, otherwise null.
+   */
+  public UTF8String tryValidateUTF8() {
+    if (!isValidUTF8()) {
+      return null;
+    }
+    return this;
   }
 
   /**
