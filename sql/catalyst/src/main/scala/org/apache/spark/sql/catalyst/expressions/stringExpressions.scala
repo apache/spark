@@ -3156,11 +3156,11 @@ case class Sentences(
     this(str, Some(language), Some(country))
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length != 1 && children.length != 3) {
+    if (children.length == 1 || children.length == 3) {
+      super.checkInputDataTypes()
+    } else {
       throw QueryCompilationErrors.wrongNumArgsError(
         toSQLId(prettyName), Seq(1, 3), children.length)
-    } else {
-      super.checkInputDataTypes()
     }
   }
 
@@ -3172,13 +3172,10 @@ case class Sentences(
 
   override def eval(input: InternalRow): Any = {
     val s = str.eval(input).asInstanceOf[UTF8String]
-    val l = language match {
-      case Some(l) => l.eval(input).asInstanceOf[UTF8String]
-      case _ => null
-    }
-    val c = country match {
-      case Some(c) => c.eval(input).asInstanceOf[UTF8String]
-      case _ => null
+    val (l, c) = (language, country) match {
+      case (Some(l), Some(c)) =>
+        (l.eval(input).asInstanceOf[UTF8String], c.eval(input).asInstanceOf[UTF8String])
+      case _ => (null, null)
     }
     getSentences(s, l, c)
   }
@@ -3217,19 +3214,20 @@ case class Sentences(
   }
 
   override def children: Seq[Expression] = {
-    if (language.isDefined && country.isDefined) {
-      Seq(str, language.get, country.get)
-    } else {
-      Seq(str)
+    (language, country) match {
+      case (Some(l), Some(c)) => Seq(str, l, c)
+      case _ => Seq(str)
     }
   }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    if (language.isDefined && country.isDefined) {
-      copy(str = newChildren.head, language = Some(newChildren(1)), country = Some(newChildren(2)))
-    } else {
-      copy(str = newChildren.head, language = None, country = None)
+    (language, country) match {
+      case (Some(_), Some(_)) =>
+        copy(str = newChildren.head,
+          language = Some(newChildren(1)), country = Some(newChildren(2)))
+      case _ =>
+        copy(str = newChildren.head, language = None, country = None)
     }
   }
 
@@ -3238,22 +3236,23 @@ case class Sentences(
     val strEval = str.genCode(ctx)
     val resultType = CodeGenerator.boxedType(dataType)
     val resultTerm = ctx.freshName("result")
-    val baseCode = if (language.isDefined && country.isDefined) {
-      val languageEval = language.get.genCode(ctx)
-      val countryEval = country.get.genCode(ctx)
-      s"""
-         |${strEval.code}
-         |${languageEval.code}
-         |${countryEval.code}
-         |$resultType $resultTerm = ($resultType) $expr.getSentences(
-         |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
-         |""".stripMargin
-    } else {
-      s"""
-         |${strEval.code}
-         |$resultType $resultTerm = ($resultType) $expr.getSentences(
-         |  ${strEval.value}, null, null);
-         |""".stripMargin
+    val baseCode = (language, country) match {
+      case (Some(l), Some(c)) =>
+        val languageEval = l.genCode(ctx)
+        val countryEval = c.genCode(ctx)
+        s"""
+           |${strEval.code}
+           |${languageEval.code}
+           |${countryEval.code}
+           |$resultType $resultTerm = ($resultType) $expr.getSentences(
+           |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
+           |""".stripMargin
+      case _ =>
+        s"""
+           |${strEval.code}
+           |$resultType $resultTerm = ($resultType) $expr.getSentences(
+           |  ${strEval.value}, null, null);
+           |""".stripMargin
     }
     ev.copy(code =
       code"""
