@@ -267,6 +267,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Early checks for column definitions, to produce better error messages
         ColumnDefinition.checkColumnDefinitions(operator)
 
+        var checkLowPriorityErrors = () => ()
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
@@ -305,11 +306,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // `Grouping` and `GroupingID` are considered as of having less priority than other
+          // errors.
           case g: Grouping =>
-            g.failAnalysis(
+            checkLowPriorityErrors = () => g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
           case g: GroupingID =>
-            g.failAnalysis(
+            checkLowPriorityErrors = () => g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
@@ -369,6 +372,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+        checkLowPriorityErrors()
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
