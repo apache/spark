@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, Literal}
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, Decimal, DecimalType, IntegerType, LongType, NumericType, StringType, StructType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, Decimal, DecimalType, IntegerType, LongType, MapType, NumericType, StringType, StructType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -125,6 +125,14 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         generateLiterals(StringTypeAnyCollation, collationType).map(
           lit => Literal.create(Seq(lit.asInstanceOf[Literal].value), ArrayType(lit.dataType))
         ).head
+      case MapType =>
+        val key = generateLiterals(StringTypeAnyCollation, collationType)
+        val value = generateLiterals(StringTypeAnyCollation, collationType)
+        Literal.create(Map(key -> value))
+      case MapType(keyType, valueType, _) =>
+        val key = generateLiterals(keyType, collationType)
+        val value = generateLiterals(valueType, collationType)
+        Literal.create(Map(key -> value))
     }
 
   /**
@@ -137,6 +145,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
         true
       case ArrayType => true
+      case MapType => true
+      case MapType(keyType, valueType, _) => hasStringType(keyType) || hasStringType(valueType)
       case ArrayType(elementType, _) => hasStringType(elementType)
       case AbstractArrayType(elementType) => hasStringType(elementType)
       case TypeCollection(typeCollection) =>
@@ -202,12 +212,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }).toArray
 
     val toSkip = List(
-      "map_zip_with",
-      "transform_keys",
       "session_window", // has too complex inputType
-      "transform_values",
-      "reduce",
-      "parse_url", // Parse URL is using wrong concepts
+      "parse_url", // Parse URL is using wrong concepts, not related to ExpectsInputTypes
       "hex" // this is fine
     )
     // scalastyle:off println
@@ -216,6 +222,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     println("Number of extracted expressions of relevance: " + (funInfos.length - toSkip.length))
     // scalastyle:on println
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      // scalastyle:off println
+      println(f.getName)
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
       val params = headConstructor.getParameters.map(p => p.getType)
