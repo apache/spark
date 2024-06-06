@@ -94,7 +94,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
           s"${executeHolder.operationId}] Server side listener added. Now blocking until " +
           "all client side listeners are removed or there is error transmitting the event back.")
         // Block the handling thread, and have serverListener continuously send back new events
-        listenerHolder.streamingQueryListenerLatch.await()
+//        listenerHolder.streamingQueryListenerLatch.await()
         logInfo(s"[SessionId: $sessionId][UserId: $userId][operationId: " +
           s"${executeHolder.operationId}] Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
@@ -116,6 +116,8 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
     // a REMOVE_LISTENER_BUS_LISTENER command, or long-lived gRPC throws.
     // If this thread is the handling thread of the REMOVE_LISTENER_BUS_LISTENER command,
     // this is hit right away.
+
+    // TODO: don't send createResultComplete here
     executeHolder.eventsManager.postFinished()
   }
 }
