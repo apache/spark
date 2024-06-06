@@ -4231,7 +4231,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def substring(str: Column, pos: Any, len: Any): Column =
+  def substring(str: Column, pos: Int, len: Int): Column =
     Column.fn("substring", str, lit(pos), lit(len))
 
   /**
@@ -4242,7 +4242,7 @@ object functions {
    *
    * @group string_funcs
    */
-  def substring_index(str: Column, delim: Any, count: Any): Column =
+  def substring_index(str: Column, delim: String, count: Int): Column =
     Column.fn("substring_index", str, lit(delim), lit(count))
 
   /**

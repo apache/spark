@@ -10915,7 +10915,7 @@ def sentences(
 
 
 @_try_remote_functions
-def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]) -> Column:
+def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
@@ -10934,9 +10934,9 @@ def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    pos : :class:`~pyspark.sql.Column` or str or int
+    pos : int
         starting position in str.
-    len : :class:`~pyspark.sql.Column` or str or int
+    len : int
         length of chars.
 
     Returns
@@ -10949,21 +10949,14 @@ def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
-    >>> df = spark.createDataFrame([('abcd', 1, 2)], ['s','p', 'l'])
-    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
-    [Row(s='ab')]
     """
-    # `str` is shadowed by the function's param
-    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
 
-    pos = _to_java_column(pos) if isinstance(pos, (StrType, Column)) else pos
-    len = _to_java_column(len) if isinstance(pos, (StrType, Column)) else len
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
 @_try_remote_functions
-def substring_index(str: "ColumnOrName", delim: Union[Column, str], count: Union["ColumnOrName", int]) -> Column:
+def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     """
     Returns the substring from string str before count occurrences of the delimiter delim.
     If count is positive, everything the left of the final delimiter (counting from left) is
@@ -10979,9 +10972,9 @@ def substring_index(str: "ColumnOrName", delim: Union[Column, str], count: Union
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    delim : :class:`~pyspark.sql.Column` or str
+    delim : str
         delimiter of values.
-    count : :class:`~pyspark.sql.Column` or str or int
+    count : int
         number of occurrences.
 
     Returns
@@ -10996,16 +10989,9 @@ def substring_index(str: "ColumnOrName", delim: Union[Column, str], count: Union
     [Row(s='a.b')]
     >>> df.select(substring_index(df.s, '.', -3).alias('s')).collect()
     [Row(s='b.c.d')]
-    >>> df = spark.createDataFrame([('a.b.c.d', '.', -3)], ['s', 'd', 'c'])
-    >>> df.select(substring_index(df.s, df.d, df.c).alias('s')).collect()
-    [Row(s='b.c.d')]
     """
-    # `str` is shadowed by the function's param
-    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
-    
-    delim = delim._jc if isinstance(delim, Column) else delim
-    count = _to_java_column(count) if isinstance(count, (StrType, Column)) else count
+
     return _invoke_function("substring_index", _to_java_column(str), delim, count)
 
 
