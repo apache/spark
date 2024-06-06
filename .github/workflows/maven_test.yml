@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 21
       branch:
         description: Branch to run the build against
         required: false
@@ -40,12 +40,12 @@ on:
         description: OS to run this build.
         required: false
         type: string
-        default: ubuntu-22.04
+        default: macos-14
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{}'
+        default: '{"OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"}'
 jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:

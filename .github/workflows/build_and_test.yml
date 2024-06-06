@@ -1174,4 +1174,4 @@ jobs:
     name: "Run Maven Test jdk21 macos14"
     permissions:
       packages: write
-    uses: ./.github/workflows/build_maven_java21_macos14.yml
+    uses: ./.github/workflows/maven_test.yml
