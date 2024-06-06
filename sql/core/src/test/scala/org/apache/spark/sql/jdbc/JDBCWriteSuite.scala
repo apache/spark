@@ -187,6 +187,8 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val tableSchema = "Some(StructType(StructField(name,org.apache.spark.sql.types." +
+        "StringType@0,true),StructField(id,IntegerType,true)))"
       checkError(
         exception = intercept[AnalysisException] {
           df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
@@ -194,8 +196,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         errorClass = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "NAME",
-          "tableSchema" ->
-            "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
+          "tableSchema" -> tableSchema))
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
