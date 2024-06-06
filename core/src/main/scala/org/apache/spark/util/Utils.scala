@@ -48,7 +48,6 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
-import com.sun.management.HotSpotDiagnosticMXBean
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
@@ -3063,6 +3062,7 @@ private[spark] object Utils
       // the API of `HotSpotDiagnosticMXBean` can be used directly in subsequent operations,
       // instead of invoking it through reflection.
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+      import com.sun.management.HotSpotDiagnosticMXBean
       val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
         .asInstanceOf[HotSpotDiagnosticMXBean]
       val useG1GC = hotSpotDiagnosticMXBean.getVMOption("UseG1GC").getValue
