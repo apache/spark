@@ -366,7 +366,8 @@ object SparkConnectService extends Logging {
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
-    val protoReflectionService = if (debugMode) Some(ProtoReflectionService.newInstance()) else None
+    val protoReflectionService =
+      if (debugMode) Some(ProtoReflectionService.newInstance()) else None
     val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
 
     val startServiceFn = (port: Int) => {
@@ -403,12 +404,7 @@ object SparkConnectService extends Logging {
     }
 
     val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
-    Utils.startServiceOnPort[Server](
-      startPort,
-      startServiceFn,
-      maxRetries,
-      getClass.getName
-    )
+    Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
   }
 
   // Starts the service
@@ -456,8 +452,8 @@ object SparkConnectService extends Logging {
   }
 
   /**
-   * Post the event that the Spark Connect service has started.
-   * This is expected to be called only once after the service is ready.
+   * Post the event that the Spark Connect service has started. This is expected to be called only
+   * once after the service is ready.
    */
   private def postSparkConnectServiceStarted(sc: SparkContext): Unit = {
     postServiceEvent(isa =>
@@ -473,15 +469,12 @@ object SparkConnectService extends Logging {
    */
   private[connect] def postSparkConnectServiceEnd(): Unit = {
     postServiceEvent(isa =>
-      SparkListenerConnectServiceEnd(
-        hostAddress,
-        isa.getPort,
-        System.currentTimeMillis()))
+      SparkListenerConnectServiceEnd(hostAddress, isa.getPort, System.currentTimeMillis()))
   }
 
   /**
-   * Post the event to the Spark listener bus.
-   * To deliver the event to the listeners, the listener bus must be active in this time.
+   * Post the event to the Spark listener bus. To deliver the event to the listeners, the listener
+   * bus must be active in this time.
    */
   private def postServiceEvent(eventBuilder: InetSocketAddress => SparkListenerEvent): Unit = {
     // Sanity checks
@@ -498,8 +491,7 @@ object SparkConnectService extends Logging {
     }
 
     if (listenerBus == null) {
-      logWarning(
-        "The Spark Connect event was dropped because the listener bus has not been set.")
+      logWarning("The Spark Connect event was dropped because the listener bus has not been set.")
       return
     }
 
@@ -521,8 +513,8 @@ object SparkConnectService extends Logging {
 }
 
 /**
- * The event is sent after the Spark Connect service has started
- * and is ready to receive the inbound requests.
+ * The event is sent after the Spark Connect service has started and is ready to receive the
+ * inbound requests.
  *
  * @param hostAddress:
  *   The host address of the started Spark Connect service.
@@ -538,12 +530,12 @@ case class SparkListenerConnectServiceStarted(
     bindingPort: Int,
     sparkConf: SparkConf,
     eventTime: Long)
-  extends SparkListenerEvent
+    extends SparkListenerEvent
 
 /**
- * The event is sent to inform that Spark Connect service has already been shutdown.
- * This event indicates the end of the service, and any in-processing requests
- * or upcoming requests are not guaranteed to be handled properly by the service.
+ * The event is sent to inform that Spark Connect service has already been shutdown. This event
+ * indicates the end of the service, and any in-processing requests or upcoming requests are not
+ * guaranteed to be handled properly by the service.
  *
  * @param hostAddress:
  *   The host address of the Spark Connect service.
@@ -552,8 +544,5 @@ case class SparkListenerConnectServiceStarted(
  * @param eventTime:
  *   The time in ms when the event was generated.
  */
-case class SparkListenerConnectServiceEnd(
-   hostAddress: String,
-   bindingPort: Int,
-   eventTime: Long)
-  extends SparkListenerEvent
+case class SparkListenerConnectServiceEnd(hostAddress: String, bindingPort: Int, eventTime: Long)
+    extends SparkListenerEvent

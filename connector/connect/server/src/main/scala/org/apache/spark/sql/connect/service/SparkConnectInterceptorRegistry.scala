@@ -49,8 +49,9 @@ object SparkConnectInterceptorRegistry {
     chainInterceptors(sb, createConfiguredInterceptors())
   }
 
-  def chainInterceptors(sb: NettyServerBuilder,
-                        additionalInterceptors: Seq[ServerInterceptor]): Unit = {
+  def chainInterceptors(
+      sb: NettyServerBuilder,
+      additionalInterceptors: Seq[ServerInterceptor]): Unit = {
     interceptorChain.foreach(i => sb.intercept(i()))
     additionalInterceptors.foreach(sb.intercept(_))
   }

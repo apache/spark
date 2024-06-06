@@ -86,19 +86,19 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     }
 
     // 4. The value of port will be validated before the service starts
-    Seq((CONNECT_GRPC_BINDING_PORT.key, (1024 - 1).toString),
-      (CONNECT_GRPC_BINDING_PORT.key, (65535 + 1).toString)).foreach(
-      conf => {
-        withSparkEnvConfs(conf) {
-          val invalidPort = intercept[IllegalArgumentException] {
-            SparkConnectService.start(sc)
-          }
-          assert(invalidPort.getMessage.contains(
+    Seq(
+      (CONNECT_GRPC_BINDING_PORT.key, (1024 - 1).toString),
+      (CONNECT_GRPC_BINDING_PORT.key, (65535 + 1).toString)).foreach(conf => {
+      withSparkEnvConfs(conf) {
+        val invalidPort = intercept[IllegalArgumentException] {
+          SparkConnectService.start(sc)
+        }
+        assert(
+          invalidPort.getMessage.contains(
             "requirement failed: startPort should be between 1024 and 65535 (inclusive)," +
               " or 0 for a random free port."))
-        }
       }
-    )
+    })
   }
 
   test("The SparkConnectService will post events for each pair of start and stop") {
@@ -106,58 +106,59 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     val startedEventValidations: CopyOnWriteArrayList[(String, Boolean)] =
       new CopyOnWriteArrayList[(String, Boolean)]()
     val startedEventSignal = new Semaphore(0)
-    SparkConnectServiceLifeCycleListener.checksOnServiceStartedEvent = Some(Seq(
-      _ => {
-        startedEventSignal.release()
-        startedEventValidations.add((
-          "The listener should receive the `SparkListenerConnectServiceStarted` event.",
-          true))
-      },
-      _ => {
-        startedEventValidations.add((
-          "The server should has already been started" +
-            " if the listener receives the `SparkListenerConnectServiceStarted` event.",
-          SparkConnectService.started &&
-            !SparkConnectService.stopped &&
-            SparkConnectService.server != null))
-      },
-      serviceStarted => {
-        startedEventValidations.add((
-          "The SparkConnectService should post it's address " +
-            "by the `SparkListenerConnectServiceStarted` event",
-          serviceStarted.bindingPort == SparkConnectService.server.getPort &&
-            serviceStarted.hostAddress == SparkConnectService.hostAddress
-        ))
-      }
-    ))
+    SparkConnectServiceLifeCycleListener.checksOnServiceStartedEvent = Some(
+      Seq(
+        _ => {
+          startedEventSignal.release()
+          startedEventValidations.add(
+            ("The listener should receive the `SparkListenerConnectServiceStarted` event.", true))
+        },
+        _ => {
+          startedEventValidations.add(
+            (
+              "The server should has already been started" +
+                " if the listener receives the `SparkListenerConnectServiceStarted` event.",
+              SparkConnectService.started &&
+                !SparkConnectService.stopped &&
+                SparkConnectService.server != null))
+        },
+        serviceStarted => {
+          startedEventValidations.add(
+            (
+              "The SparkConnectService should post it's address " +
+                "by the `SparkListenerConnectServiceStarted` event",
+              serviceStarted.bindingPort == SparkConnectService.server.getPort &&
+                serviceStarted.hostAddress == SparkConnectService.hostAddress))
+        }))
 
     // Future validations when listener receive the `SparkListenerConnectServiceEnd` event
     val endEventValidations: CopyOnWriteArrayList[(String, Boolean)] =
       new CopyOnWriteArrayList[(String, Boolean)]()
     val endEventSignal = new Semaphore(0)
-    SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent = Some(Seq(
-      _ => {
-        endEventSignal.release()
-        startedEventValidations.add((
-          "The listener should receive the `SparkListenerConnectServiceEnd` event.",
-          true))
-      },
-      _ => {
-        endEventValidations.add((
-          "The server has already been stopped" +
-            " if the listener receives the `SparkListenerConnectServiceEnd` event.",
-          SparkConnectService.stopped &&
-            !SparkConnectService.started &&
-            SparkConnectService.server.isShutdown))
-      },
-      serviceEnd => {
-        endEventValidations.add((
-          "The SparkConnectService should post it's address " +
-            "by the `SparkListenerConnectServiceEnd` event",
-          serviceEnd.bindingPort == SparkConnectService.server.getPort &&
-            serviceEnd.hostAddress == SparkConnectService.hostAddress))
-      }
-    ))
+    SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent = Some(
+      Seq(
+        _ => {
+          endEventSignal.release()
+          startedEventValidations.add(
+            ("The listener should receive the `SparkListenerConnectServiceEnd` event.", true))
+        },
+        _ => {
+          endEventValidations.add(
+            (
+              "The server has already been stopped" +
+                " if the listener receives the `SparkListenerConnectServiceEnd` event.",
+              SparkConnectService.stopped &&
+                !SparkConnectService.started &&
+                SparkConnectService.server.isShutdown))
+        },
+        serviceEnd => {
+          endEventValidations.add(
+            (
+              "The SparkConnectService should post it's address " +
+                "by the `SparkListenerConnectServiceEnd` event",
+              serviceEnd.bindingPort == SparkConnectService.server.getPort &&
+                serviceEnd.hostAddress == SparkConnectService.hostAddress))
+        }))
 
     val conf = new SparkConf()
       .setAppName(getClass().getName())
@@ -225,19 +226,15 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
   test("SparkConnectPlugin will post started and end events that can be received by listeners") {
     // Future validations when listener receive the `SparkListenerConnectServiceStarted` event
     val startedEventSignal = new Semaphore(0)
-    SparkConnectServiceLifeCycleListener.checksOnServiceStartedEvent = Some(Seq(
-      _ => {
-        startedEventSignal.release()
-      }
-    ))
+    SparkConnectServiceLifeCycleListener.checksOnServiceStartedEvent = Some(Seq(_ => {
+      startedEventSignal.release()
+    }))
 
     // Future validations when listener receive the `SparkListenerConnectServiceEnd` event
     val endEventSignal = new Semaphore(0)
-    SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent = Some(Seq(
-      _ => {
-        endEventSignal.release()
-      }
-    ))
+    SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent = Some(Seq(_ => {
+      endEventSignal.release()
+    }))
 
     val conf = new SparkConf()
       .setAppName(getClass().getName())
@@ -280,15 +277,13 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
       }
       f
     } finally {
-      startedServers.foreach(
-        server => {
-          try {
-            server.close()
-          } catch {
-            case _: Throwable =>
-          }
+      startedServers.foreach(server => {
+        try {
+          server.close()
+        } catch {
+          case _: Throwable =>
         }
-      )
+      })
     }
   }
 }
@@ -321,7 +316,8 @@ private class SparkConnectServiceLifeCycleListener extends SparkListener {
 private object SparkConnectServiceLifeCycleListener {
 
   var currentInstance: SparkConnectServiceLifeCycleListener = _
-  var checksOnServiceStartedEvent: Option[Seq[(SparkListenerConnectServiceStarted) => Unit]] = None
+  var checksOnServiceStartedEvent: Option[Seq[(SparkListenerConnectServiceStarted) => Unit]] =
+    None
   var checksOnServiceEndEvent: Option[Seq[(SparkListenerConnectServiceEnd) => Unit]] = None
 
   def reset(): Unit = {
