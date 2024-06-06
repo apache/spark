@@ -10915,7 +10915,9 @@ def sentences(
 
 
 @_try_remote_functions
-def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]) -> Column:
+def substring(
+    str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]
+) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
