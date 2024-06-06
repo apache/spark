@@ -49,7 +49,7 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
-from functools import cached_property
+import functools
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -208,6 +208,7 @@ class DataFrame(ParentDataFrame):
     def write(self) -> "DataFrameWriter":
         return DataFrameWriter(self._plan, self._session)
 
+    @functools.cache
     def isEmpty(self) -> bool:
         return len(self.select().take(1)) == 0
 
@@ -1805,13 +1806,14 @@ class DataFrame(ParentDataFrame):
             self._cached_schema = self._session.client.schema(query)
         return copy.deepcopy(self._cached_schema)
 
+    @functools.cache
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_local", plan=query).is_local
         assert result is not None
         return result
 
-    @cached_property
+    @functools.cached_property
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
@@ -1832,6 +1834,7 @@ class DataFrame(ParentDataFrame):
         else:
             print(self.schema.treeString())
 
+    @functools.cache
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files
@@ -1913,6 +1916,7 @@ class DataFrame(ParentDataFrame):
         query = self._plan.to_proto(self._session.client)
         return self._session.client.explain_string(query, explain_mode)
 
+    @functools.cache
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
@@ -2108,6 +2112,7 @@ class DataFrame(ParentDataFrame):
             other=other._plan.to_proto(other._session.client),
         )
 
+    @functools.cache
     def semanticHash(self) -> int:
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),
