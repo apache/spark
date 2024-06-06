@@ -80,7 +80,14 @@ object CurrentOrigin {
     // remember the previous one so it can be reset to this
     // this way withOrigin can be recursive
     val previous = get
-    set(o)
+    // Optimization: a pointer comparison is cheaper than a thread
+    // local set and most of the time the origin is not changed:
+    if (o ne previous) {
+      set(o)
+    }
+    // We cannot optimize out set in the try-finally block because it's
+    // possible that code inside of `f` may have called set() directly
+    // without resetting it in a finally.
     val ret = try f finally { set(previous) }
     ret
   }
