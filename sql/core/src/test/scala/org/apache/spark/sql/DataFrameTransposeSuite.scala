@@ -29,11 +29,10 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   test("logical plan transformation for transpose") {
     // scalastyle:off println
 
-    val logicalPlan = courseSales.queryExecution.logical
     val transposePlan = Transpose(
-      child = logicalPlan,
       firstColumnValues = Seq(Literal("dotNET"), Literal("Java")),
-      valueType = IntegerType
+      valueType = IntegerType,
+      child = courseSales.queryExecution.logical
     )
 
     println(s"Logical plan before analysis:\n$transposePlan")

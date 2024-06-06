@@ -4004,7 +4004,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(TRANSPOSE), ruleId) {
       // scalastyle:off println
-      case t @ Transpose(child, firstColumnValues, valueType) =>
+      case t @ Transpose(firstColumnValues, valueType, child) =>
         val firstColumn = child.output.head
         val firstColumnNamedExpr = firstColumn.asInstanceOf[NamedExpression]
 
