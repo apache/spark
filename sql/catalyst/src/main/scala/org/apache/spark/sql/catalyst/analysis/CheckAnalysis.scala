@@ -306,8 +306,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
-          // `Grouping` and `GroupingID` are considered as of having less priority than other
-          // errors.
+          // `Grouping` and `GroupingID` are considered as of having lower priority than the other
+          // nodes which cause errors.
           case g: Grouping =>
             checkLowPriorityErrors = () => g.failAnalysis(
               errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
