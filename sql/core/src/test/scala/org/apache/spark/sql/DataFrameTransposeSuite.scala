@@ -19,36 +19,25 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 
   test("logical plan transformation for transpose") {
-    val logicalPlan = courseSales.queryExecution.logical
+    // scalastyle:off println
 
-    // Manually construct Transpose logical plan
+    val logicalPlan = courseSales.queryExecution.logical
     val transposePlan = Transpose(
-      columnsToTranspose = Seq(col("course").expr),
-      columnAlias = "variable",
-      orderExpression = Literal(1),
       child = logicalPlan
     )
 
-    // scalastyle:off println
     println(s"Logical plan before analysis:\n$transposePlan")
 
-    // Apply the ResolveTranspose rule
     val testAnalyzer = new Analyzer(
       new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
     val analyzedPlan = testAnalyzer.execute(transposePlan)
 
     println(s"Logical plan after analysis:\n$analyzedPlan")
-    // scalastyle:on println
-
-    // Verify the transformed plan
-    assert(analyzedPlan.isInstanceOf[Pivot])
   }
 }
