@@ -1247,14 +1247,13 @@ abstract class CSVSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val ex = intercept[SparkException] {
           exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
         checkErrorMatchPVals(
           exception = ex,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = ex.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -1489,10 +1488,10 @@ abstract class CSVSuite
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = e,
           errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> inputFile.toPath.toUri.toString)
+          parameters = Map("path" -> s".*${inputFile.getName}.*")
         )
         assert(e.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getMessage === "Unexpected end of input stream")

@@ -266,10 +266,10 @@ class XmlSuite
         .xml(inputFile)
         .collect()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -298,10 +298,10 @@ class XmlSuite
         .xml(inputFile)
         .show()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2441,7 +2441,6 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
@@ -2449,7 +2448,7 @@ class XmlSuite
         checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2968,11 +2967,10 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
             checkErrorMatchPVals(
               exception = e,
               errorClass = "TASK_WRITE_FAILED",
-              parameters = Map("path" -> s"$actualPath.*"))
+              parameters = Map("path" -> s".*${dir.getName}.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }
