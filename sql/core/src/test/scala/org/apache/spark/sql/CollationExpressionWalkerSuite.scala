@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, GenericInternalRow, Literal}
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, Decimal, DecimalType, IntegerType, LongType, MapType, NumericType, StringType, StructType, TypeCollection}
@@ -133,6 +133,13 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         val key = generateLiterals(keyType, collationType)
         val value = generateLiterals(valueType, collationType)
         Literal.create(Map(key -> value))
+      case StructType =>
+        Literal.create((generateLiterals(StringTypeAnyCollation, collationType),
+          generateLiterals(StringTypeAnyCollation, collationType)))
+      case StructType(fields) =>
+        Literal.create(new GenericInternalRow(
+          fields.map(f => generateLiterals(f.dataType, collationType).asInstanceOf[Any])),
+          StructType(fields))
     }
 
   /**
@@ -151,6 +158,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case AbstractArrayType(elementType) => hasStringType(elementType)
       case TypeCollection(typeCollection) =>
         typeCollection.exists(hasStringType)
+      case StructType => true
+      case StructType(fields) => fields.exists(sf => hasStringType(sf.dataType))
       case _ => false
     }
   }
@@ -212,7 +221,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }).toArray
 
     val toSkip = List(
-      "session_window", // has too complex inputType
       "parse_url", // Parse URL is using wrong concepts, not related to ExpectsInputTypes
       "hex" // this is fine
     )
