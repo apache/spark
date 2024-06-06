@@ -2260,7 +2260,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       )
 
       withGlobalTempView("src") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE GLOBAL TEMP VIEW src AS SELECT 1 AS a, '2' AS b")
         sql(s"CREATE TABLE t4 LIKE $globalTempDB.src USING parquet")
         val table = catalog.getTableMetadata(TableIdentifier("t4"))
