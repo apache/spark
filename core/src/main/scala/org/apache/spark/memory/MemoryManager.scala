@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.storage.BlockId
-import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.storage.memory.{ExternalMemoryStore, MemoryStore}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
@@ -65,6 +65,14 @@ private[spark] abstract class MemoryManager(
   offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
 
+  var extMemoryStore: ExternalMemoryStore = null
+  // initialize setExternalMemoryStore
+  if (conf.get(EXTERNAL_MEMORY_CACHE_ENABLED)) {
+    extMemoryStore = new ExternalMemoryStore(conf, this)
+    extMemoryStore.initExternalCache(conf)
+    setExternalMemoryStore(extMemoryStore)
+  }
+
   /**
    * Total available on heap memory for storage, in bytes. This amount can vary over time,
    * depending on the MemoryManager implementation.
@@ -85,6 +93,11 @@ private[spark] abstract class MemoryManager(
   final def setMemoryStore(store: MemoryStore): Unit = synchronized {
     onHeapStorageMemoryPool.setMemoryStore(store)
     offHeapStorageMemoryPool.setMemoryStore(store)
+  }
+
+  final def setExternalMemoryStore(extMemoryStore: ExternalMemoryStore): Unit = synchronized {
+    onHeapStorageMemoryPool.setExternalMemoryStore(extMemoryStore)
+    offHeapStorageMemoryPool.setExternalMemoryStore(extMemoryStore)
   }
 
   /**

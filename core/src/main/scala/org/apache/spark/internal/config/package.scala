@@ -450,6 +450,26 @@ package object config {
     .checkValue(v => v >= 0.0 && v < 1.0, "Storage fraction must be in [0,1)")
     .createWithDefault(0.5)
 
+  private[spark] val EXTERNAL_MEMORY_CACHE_ENABLED =
+    ConfigBuilder("spark.memory.external.cache.enabled")
+      .doc("Enable external file cache or not")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXTERNAL_MEMORY_STORAGE_FRACTION =
+    ConfigBuilder("spark.memory.external.storageFraction")
+    .doc("Amount of external storage memory used like file cache, expressed as a fraction of " +
+      "spark storage memory.")
+    .doubleConf
+    .checkValue(v => v >= 0.0 && v < 1.0, "External storage fraction must be in [0,1)")
+    .createWithDefault(0.5)
+
+  private[spark] val STORAGE_MEMORY_EVICT_PREFERENCE =
+    ConfigBuilder("spark.memory.storage.preferEvictExtCache")
+    .doc("Preference to evict RDD cache or external file cache when storage memory is not enough.")
+    .booleanConf
+    .createWithDefault(true)
+
   private[spark] val MEMORY_FRACTION = ConfigBuilder("spark.memory.fraction")
     .doc("Fraction of (heap space - 300MB) used for execution and storage. The " +
       "lower this is, the more frequently spills and cached data eviction occur. " +
