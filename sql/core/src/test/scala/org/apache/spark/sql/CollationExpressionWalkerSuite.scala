@@ -223,7 +223,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }).toArray
 
     val toSkip = List(
-      "parse_url", // Parse URL is using wrong concepts, not related to ExpectsInputTypes
+      "parse_url", // Parse URL cannot be generalized with ExpectInputTypes
       "hex" // this is fine
     )
     // scalastyle:off println
