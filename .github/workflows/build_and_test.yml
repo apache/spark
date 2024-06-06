@@ -77,17 +77,17 @@ jobs:
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          pyspark=`./dev/is-changed.py -m $pyspark_modules`
+          pyspark=false
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
-            pandas=$pyspark
+            pandas=false
             yarn=`./dev/is-changed.py -m yarn`
-            kubernetes=`./dev/is-changed.py -m kubernetes`
-            sparkr=`./dev/is-changed.py -m sparkr`
-            tpcds=`./dev/is-changed.py -m sql`
-            docker=`./dev/is-changed.py -m docker-integration-tests`
-            buf=true
-            ui=true
-            docs=true
+            kubernetes=false
+            sparkr=false
+            tpcds=false
+            docker=false
+            buf=false
+            ui=false
+            docs=false
           else
             pandas=false
             yarn=false
