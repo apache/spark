@@ -10915,7 +10915,7 @@ def sentences(
 
 
 @_try_remote_functions
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
+def substring(str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
@@ -10926,6 +10926,9 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        `pos` and `len` now also accept Columns or names of Columns.
+
     Notes
     -----
     The position is not zero based, but 1 based index.
@@ -10934,9 +10937,9 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    pos : int
+    pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
-    len : int
+    len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
     Returns
@@ -10949,9 +10952,20 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
+    >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
+    >>> df.select(substring(df.s, 2, df.l).alias('s')).collect()
+    [Row(s='par')]
+    >>> df.select(substring(df.s, df.p, 3).alias('s')).collect()
+    [Row(s='par')]
+    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
+    [Row(s='par')]
     """
+    # the native str type is shadowed by the function's `str` param
+    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
 
+    pos = _to_java_column(pos) if isinstance(pos, (StrType, Column)) else pos
+    len = _to_java_column(len) if isinstance(len, (StrType, Column)) else len
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
@@ -13959,6 +13973,9 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        `value` now also accepts a Column type.
+
     Notes
     -----
     The position is not zero based, but 1 based index. Returns 0 if the given
@@ -14409,6 +14426,9 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.0.0
+        `element` now also accepts a Column type.
 
     Parameters
     ----------
@@ -17257,6 +17277,9 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        `value` now also accepts a Column type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -17292,6 +17315,17 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     +--------------------------+
     |                     false|
     +--------------------------+
+
+    Example 3: Check for key using a column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data, 1 as key")
+    >>> df.select(sf.map_contains_key("data", sf.col("key"))).show()
+    +---------------------------+
+    |map_contains_key(data, key)|
+    +---------------------------+
+    |                       true|
+    +---------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
