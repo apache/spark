@@ -110,12 +110,10 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
             }
             Thread.sleep(sleepPerRowReadMs)
           }
+        } catch {
+          case e: Throwable =>
+            e.printStackTrace()
         } finally {
-          while (iterator.hasNext) {
-            outputBuffer.synchronized {
-              outputBuffer += iterator.next().getInt(0)
-            }
-          }
           buffer.close()
         }
       }
