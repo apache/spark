@@ -351,9 +351,8 @@ public class CollationAwareUTF8String {
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
-    if (pattern.numBytes() == 0) {
-      return target.indexOfEmpty(start);
-    }
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     stringSearch.setIndex(start);

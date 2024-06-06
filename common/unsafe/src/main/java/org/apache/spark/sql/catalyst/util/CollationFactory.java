@@ -671,7 +671,7 @@ public final class CollationFactory {
           (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
           ICU_COLLATOR_VERSION,
           s -> (long) collator.getCollationKey(s.toString()).hashCode(),
-          /* supportsBinaryEquality = */ collationId == UNICODE_COLLATION_ID,
+          /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
           /* supportsLowercaseEquality = */ false);
       }
