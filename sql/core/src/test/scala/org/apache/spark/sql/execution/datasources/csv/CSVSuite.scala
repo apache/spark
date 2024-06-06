@@ -1498,6 +1498,11 @@ abstract class CSVSuite
         val e2 = intercept[SparkException] {
           spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
         }
+        checkErrorMatchPVals(
+          exception = e2,
+          errorClass = "FAILED_READ_FILE.NO_HINT",
+          parameters = Map("path" -> s".*${inputFile.getName}.*")
+        )
         assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
         assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
