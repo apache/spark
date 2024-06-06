@@ -20,7 +20,7 @@ import java.io.{File, FileWriter}
 
 import org.scalatest.Assertions
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
@@ -194,6 +194,79 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       }
     }
   }
+
+  test("ERROR: snapshotStartBatchId specified to negative") {
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, -1)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID))
+    }
+  }
+
+  test("ERROR: snapshotPartitionId specified to negative") {
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, -1)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.IS_NEGATIVE", "42616",
+        Map("optionName" -> StateSourceOptions.SNAPSHOT_PARTITION_ID))
+    }
+  }
+
+  test("ERROR: snapshotStartBatchId specified without snapshotPartitionId or vice versa") {
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+        Map("optionName" -> StateSourceOptions.SNAPSHOT_PARTITION_ID))
+    }
+
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceUnspecifiedRequiredOption] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 0)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_REQUIRED_OPTION_UNSPECIFIED", "42601",
+        Map("optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID))
+    }
+  }
+
+  test("ERROR: snapshotStartBatchId is greater than snapshotEndBatchId") {
+    withTempDir { tempDir =>
+      val startBatchId = 1
+      val endBatchId = 0
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, startBatchId)
+          .option(StateSourceOptions.BATCH_ID, endBatchId)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
+          "message" -> s"value should be less than or equal to $endBatchId"))
+    }
+  }
 }
 
 /**
@@ -305,6 +378,55 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[HDFSBackedStateStoreProvider].getName)
+  }
+
+
+  test("ERROR: snapshot partition not found") {
+    val exc = intercept[SparkException] {
+      val checkpointPath = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+      spark.read.format("statestore")
+        .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
+        .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 0)
+        .load(checkpointPath).show()
+    }
+    assert(exc.getCause.getMessage.contains(
+      "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS"))
+  }
+
+  test("reconstruct state from specific snapshot and partition") {
+    val checkpointPath = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+    val stateFromBatch11 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .load(checkpointPath)
+    val stateFromBatch23 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 23)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .load(checkpointPath)
+    val stateFromLatestBatch = spark.read.format("statestore").load(checkpointPath)
+    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
+      stateFromLatestBatch("partition_id") === 1)
+
+    checkAnswer(stateFromBatch23, stateFromLatestBatchPartition1)
+    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
+  }
+
+  test("use snapshotStartBatchId together with batchId") {
+    val checkpointPath = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+    val stateFromBatch11 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .option(StateSourceOptions.BATCH_ID, 20)
+      .load(checkpointPath)
+    val stateFromLatestBatch = spark.read.format("statestore")
+      .option(StateSourceOptions.BATCH_ID, 20).load(checkpointPath)
+    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
+      stateFromLatestBatch("partition_id") === 1)
+
+    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
   }
 }
 

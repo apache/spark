@@ -611,7 +611,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         throw QueryExecutionErrors.failedToReadSnapshotFileNotExistsError(
           snapshotFile(startVersion), toString(), null)
       }
-      synchronized { putStateIntoStateCacheMap(startVersion, startVersionMap.get)}
+      synchronized { putStateIntoStateCacheMap(startVersion, startVersionMap.get) }
 
       // Load all the deltas from the version after the start version up to the end version.
       val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)

@@ -387,7 +387,9 @@ trait StateStoreProvider {
    * @param startVersion Batch ID of the snapshot to start with
    * @param endVersion Batch ID to end with
    */
-  def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore
+  def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore =
+    throw new SparkUnsupportedOperationException("getReadStore with startVersion and endVersion " +
+      "is not supported by this StateStoreProvider")
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }

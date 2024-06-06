@@ -1,0 +1,2 @@
+v1
+{"operatorInfo":{"operatorId":0,"operatorName":"stateStoreSave"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":4}]}
