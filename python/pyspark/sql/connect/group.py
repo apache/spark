@@ -301,7 +301,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -310,6 +310,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
@@ -370,7 +373,7 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -379,6 +382,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkGroupedData.applyInArrow.__doc__
 
@@ -410,7 +416,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -420,6 +426,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
 
@@ -436,7 +445,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -446,6 +455,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 
