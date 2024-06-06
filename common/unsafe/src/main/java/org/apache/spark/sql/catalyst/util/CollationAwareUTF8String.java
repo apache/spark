@@ -346,7 +346,9 @@ public class CollationAwareUTF8String {
 
   /**
    * Converts a single code point to lowercase using ICU rules, with special handling for
-   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase).
+   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase) and
+   * context-insensitive case mappings (i.e. characters that map to different characters based on
+   * string context - e.g. the position in the string relative to other characters).
    *
    * @param codePoint The code point to convert to lowercase.
    * @param sb The StringBuilder to append the lowercase character to.
@@ -370,7 +372,8 @@ public class CollationAwareUTF8String {
   /**
    * Converts an entire string to lowercase using ICU rules, code point by code point, with
    * special handling for one-to-many case mappings (i.e. characters that map to multiple
-   * characters in lowercase). This method omits information about context-sensitive case mappings.
+   * characters in lowercase). Also, this method omits information about context-sensitive case
+   * mappings using special handling in the `lowercaseCodePoint` method.
    *
    * @param target The target string to convert to lowercase.
    * @return The string converted to lowercase in a context-unaware manner.
