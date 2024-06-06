@@ -50,17 +50,11 @@ case class Mode(
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else if (UnsafeRowUtils.isBinaryStable(child.dataType) ||
-      child.dataType.isInstanceOf[StringType]) {
-      TypeCheckResult.TypeCheckSuccess
+    if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
+      super.checkInputDataTypes()
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input to the function 'mode' was a complex type with non-binary collated fields," +
-          " which are currently not supported by 'mode'."
-      )
+      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was a type of binary-unstable type that is " +
+        s"not currently supported by ${prettyName}.")
     }
   }
 
