@@ -666,11 +666,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     // Please note that this behaviour has a downside as well that we can only mark the rule on the
     // original node ineffective if the rule didn't match.
     var ruleApplied = true
-    val afterRules = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, (_: BaseType) => {
-        ruleApplied = false
-        Seq.empty
-      })
+    val afterRules = if (rule.isDefinedAt(this)) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.apply(this)
+      }
+    } else {
+      ruleApplied = false
+      Seq.empty
     }
 
     val afterRulesLazyList = if (afterRules.isEmpty) {
