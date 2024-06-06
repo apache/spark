@@ -31,12 +31,12 @@ class RemoveNoopOperatorsSuite extends PlanTest {
         RemoveNoopOperators) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("Remove all redundant projections in one iteration") {
     val originalQuery = testRelation
-      .select('a, 'b, 'c)
-      .select('a, 'b, 'c)
+      .select($"a", $"b", $"c")
+      .select($"a", $"b", $"c")
       .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -57,12 +57,12 @@ class RemoveNoopOperatorsSuite extends PlanTest {
 
   test("SPARK-36353: RemoveNoopOperators should keep output schema") {
     val query = testRelation
-      .select(('a + 'b).as("c"))
+      .select(($"a" + $"b").as("c"))
       .analyze
     val originalQuery = Project(Seq(query.output.head.withName("C")), query)
     val optimized = Optimize.execute(originalQuery.analyze)
     val result = testRelation
-      .select(('a + 'b).as("C"))
+      .select(($"a" + $"b").as("C"))
       .analyze
     comparePlans(optimized, result)
   }

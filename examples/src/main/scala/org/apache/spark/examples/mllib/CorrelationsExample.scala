@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import scala.collection.immutable
+
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.linalg._
@@ -33,9 +35,11 @@ object CorrelationsExample {
     val sc = new SparkContext(conf)
 
     // $example on$
-    val seriesX: RDD[Double] = sc.parallelize(Array(1, 2, 3, 3, 5))  // a series
+    val seriesX: RDD[Double] = sc.parallelize(
+      immutable.ArraySeq.unsafeWrapArray(Array(1.0, 2.0, 3.0, 3.0, 5.0)))  // a series
     // must have the same number of partitions and cardinality as seriesX
-    val seriesY: RDD[Double] = sc.parallelize(Array(11, 22, 33, 33, 555))
+    val seriesY: RDD[Double] = sc.parallelize(
+      immutable.ArraySeq.unsafeWrapArray(Array(11.0, 22.0, 33.0, 33.0, 555.0)))
 
     // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
     // method is not specified, Pearson's method will be used by default.

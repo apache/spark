@@ -22,23 +22,26 @@ import java.util
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -74,9 +77,10 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("read: read non-exist table") {
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       spark.readStream.table("non_exist_table")
-    }.message.contains("Table not found")
+    }
+    checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
   test("read: stream table API with temp view") {
@@ -109,9 +113,16 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
     spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
 
-    intercept[AnalysisException] {
-      spark.readStream.table(tableIdentifier)
-    }.message.contains("does not support either micro-batch or continuous scan")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.table(tableIdentifier)
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "operation" -> "either micro-batch or continuous scan"
+      )
+    )
   }
 
   test("read: read table with custom catalog") {
@@ -162,11 +173,9 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         spark.sql(s"CREATE TABLE $tblName (data int) USING $v2Source")
 
         // Check the StreamingRelationV2 has been replaced by StreamingRelation
-        val plan = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
-          .queryExecution.analyzed.collectFirst {
-            case d: StreamingRelationV2 => d
-          }
-        assert(plan.isEmpty)
+        val exists = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
+          .queryExecution.analyzed.exists(_.isInstanceOf[StreamingRelationV2])
+        assert(!exists)
       }
     }
   }
@@ -195,7 +204,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("write: write to table with default session catalog") {
-    val v2Source = classOf[FakeV2Provider].getName
+    val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
     spark.conf.set(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[InMemoryTableSessionCatalog].getName)
 
@@ -325,6 +334,192 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("explain with table on DSv1 data source") {
+    val tblSourceName = "tbl_src"
+    val tblTargetName = "tbl_target"
+    val tblSourceQualified = s"default.$tblSourceName"
+    val tblTargetQualified = s"`default`.`$tblTargetName`"
+
+    withTable(tblSourceQualified, tblTargetQualified) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $tblSourceQualified (col1 string, col2 integer) USING parquet")
+        sql(s"CREATE TABLE $tblTargetQualified (col1 string, col2 integer) USING parquet")
+
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('a', 1)")
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('b', 2)")
+        sql(s"INSERT INTO $tblSourceQualified VALUES ('c', 3)")
+
+        val df = spark.readStream.table(tblSourceQualified)
+        val sq = df.writeStream
+          .format("parquet")
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(tblTargetQualified)
+          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+
+        try {
+          sq.processAllAvailable()
+
+          val explainWithoutExtended = sq.explainInternal(false)
+          // `extended = false` only displays the physical plan.
+          assert("FileScan".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert(tblSourceName.r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+
+          // We have marker node for DSv1 sink only in logical node. In physical plan, there is no
+          // information for DSv1 sink.
+
+          val explainWithExtended = sq.explainInternal(true)
+          // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
+          // plan.
+          assert("Relation".r
+            .findAllMatchIn(explainWithExtended).size === 3)
+          assert("FileScan".r
+            .findAllMatchIn(explainWithExtended).size === 1)
+          // we don't compare with exact number since the number is also affected by SubqueryAlias
+          assert(tblSourceQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 4)
+
+          assert("WriteToMicroBatchDataSourceV1".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          assert(tblTargetQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 2)
+        } finally {
+          sq.stop()
+        }
+      }
+    }
+  }
+
+  test("explain with table on DSv2 data source") {
+    val tblSourceName = "tbl_src"
+    val tblTargetName = "tbl_target"
+    val tblSourceQualified = s"teststream.ns.$tblSourceName"
+    val tblTargetQualified = s"testcat.ns.$tblTargetName"
+
+    spark.sql("CREATE NAMESPACE teststream.ns")
+    spark.sql("CREATE NAMESPACE testcat.ns")
+
+    withTable(tblSourceQualified, tblTargetQualified) {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE $tblSourceQualified (value int) USING foo")
+        sql(s"CREATE TABLE $tblTargetQualified (col1 string, col2 integer) USING foo")
+
+        val stream = MemoryStream[Int]
+        val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
+        val table = testCatalog.loadTable(Identifier.of(Array("ns"), tblSourceName))
+        table.asInstanceOf[InMemoryStreamTable].setStream(stream)
+
+        val df = spark.readStream.table(tblSourceQualified)
+          .select(lit('a'), $"value")
+        val sq = df.writeStream
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .toTable(tblTargetQualified)
+          .asInstanceOf[StreamingQueryWrapper].streamingQuery
+
+        try {
+          stream.addData(1, 2, 3)
+
+          sq.processAllAvailable()
+
+          val explainWithoutExtended = sq.explainInternal(false)
+          // `extended = false` only displays the physical plan.
+          // we don't guarantee the table information is available in physical plan.
+          assert("MicroBatchScan".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+          assert("WriteToDataSourceV2".r
+            .findAllMatchIn(explainWithoutExtended).size === 1)
+
+          val explainWithExtended = sq.explainInternal(true)
+          // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
+          // plan.
+          assert("StreamingDataSourceV2ScanRelation".r
+            .findAllMatchIn(explainWithExtended).size === 3)
+          // WriteToMicroBatchDataSource is used for both parsed and analyzed logical plan
+          assert("WriteToMicroBatchDataSource".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          // optimizer replaces WriteToMicroBatchDataSource to WriteToDataSourceV2
+          assert("WriteToDataSourceV2".r
+            .findAllMatchIn(explainWithExtended).size === 2)
+          assert("MicroBatchScan".r
+            .findAllMatchIn(explainWithExtended).size === 1)
+
+          assert(tblSourceQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 3)
+          assert(tblTargetQualified.r
+            .findAllMatchIn(explainWithExtended).size >= 3)
+        } finally {
+          sq.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-39940: refresh table when streaming query writes to the catalog table via DSv1") {
+    withTable("tbl1", "tbl2") {
+      withTempDir { dir =>
+        val baseTbls = new File(dir, "tables")
+        val tbl1File = new File(baseTbls, "tbl1")
+        val tbl2File = new File(baseTbls, "tbl2")
+        val checkpointLocation = new File(dir, "checkpoint")
+
+        val format = "parquet"
+        Seq((1, 2)).toDF("i", "d")
+          .write.format(format).option("path", tbl1File.getCanonicalPath).saveAsTable("tbl1")
+
+        val query = spark.readStream.format(format).table("tbl1")
+          .writeStream.format(format)
+          .option("checkpointLocation", checkpointLocation.getCanonicalPath)
+          .option("path", tbl2File.getCanonicalPath)
+          .toTable("tbl2")
+
+        try {
+          query.processAllAvailable()
+          checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2)))
+
+          Seq((3, 4)).toDF("i", "d")
+            .write.format(format).option("path", tbl1File.getCanonicalPath)
+            .mode(SaveMode.Append).saveAsTable("tbl1")
+
+          query.processAllAvailable()
+          checkAnswer(spark.table("tbl2").sort($"i"), Seq(Row(1, 2), Row(3, 4)))
+
+          assert(query.exception.isEmpty, "No exception should happen in streaming query: " +
+            s"exception - ${query.exception}")
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-41040: self-union using readStream.table should not fail") {
+    withTable("self_union_table") {
+      spark.range(10).write.format("parquet").saveAsTable("self_union_table")
+      val df = spark.readStream.format("parquet").table("self_union_table")
+      val q = df.union(df).writeStream.format("noop").start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("SPARK-44865: Test StreamingRelationV2 with metadata column") {
+    val tblName = "teststream.table_name"
+    withTable(tblName) {
+      spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
+      val stream = MemoryStream[Int]
+      val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+      table.asInstanceOf[InMemoryStreamTable].setStream(stream)
+      // It will not throw UNRESOLVED_COLUMN exception because
+      // we add metadata column to StreamingRelationV2
+      spark.readStream.table(tblName).select("value", "_seq")
+    }
+  }
+
   private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")
@@ -402,7 +597,10 @@ object DataStreamTableAPISuite {
   val V1FallbackTestTableName = "fallbackV1Test"
 }
 
-class InMemoryStreamTable(override val name: String) extends Table with SupportsRead {
+class InMemoryStreamTable(override val name: String)
+  extends Table
+  with SupportsRead
+  with SupportsMetadataColumns {
   var stream: MemoryStream[Int] = _
 
   def setStream(inputData: MemoryStream[Int]): Unit = stream = inputData
@@ -416,6 +614,14 @@ class InMemoryStreamTable(override val name: String) extends Table with Supports
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new MemoryStreamScanBuilder(stream)
   }
+
+  private object SeqColumn extends MetadataColumn {
+    override def name: String = "_seq"
+    override def dataType: DataType = IntegerType
+    override def comment: String = "Seq"
+  }
+
+  override val metadataColumns: Array[MetadataColumn] = Array(SeqColumn)
 }
 
 class NonStreamV2Table(override val name: String)
@@ -443,11 +649,11 @@ class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
 
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     val table = if (ident.name() == DataStreamTableAPISuite.V1FallbackTestTableName) {

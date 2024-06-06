@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import org.apache.spark.SparkException
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JSONOptions
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.DataType
 
 object JsonUtils {
   /**
@@ -46,6 +51,16 @@ object JsonUtils {
       json
     } else {
       json.sample(withReplacement = false, options.samplingRatio, 1)
+    }
+  }
+
+  def checkJsonSchema(schema: DataType): Unit = {
+    ExprUtils.checkJsonSchema(schema) match {
+      case DataTypeMismatch("INVALID_JSON_MAP_KEY_TYPE", _) =>
+        throw QueryCompilationErrors.invalidJsonSchema(schema)
+      case TypeCheckSuccess =>
+      case result =>
+        throw SparkException.internalError(s"Unknown type check result: $result.")
     }
   }
 }

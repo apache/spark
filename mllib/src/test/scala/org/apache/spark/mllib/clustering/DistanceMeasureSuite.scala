@@ -40,12 +40,12 @@ class DistanceMeasureSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rng = new Random(seed)
 
     centers = Array.tabulate(k) { i =>
-      val values = Array.fill(dim)(rng.nextGaussian)
+      val values = Array.fill(dim)(rng.nextGaussian())
       new VectorWithNorm(Vectors.dense(values))
     }
 
     data = Array.tabulate(1000) { i =>
-      val values = Array.fill(dim)(rng.nextGaussian)
+      val values = Array.fill(dim)(rng.nextGaussian())
       new VectorWithNorm(Vectors.dense(values))
     }
   }

@@ -59,13 +59,13 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
       val q5 = df1.selectExpr("IF(l > 1 AND null, 5, 1) AS out")
       checkAnswer(q5, Row(1) :: Row(1) :: Nil)
       q5.queryExecution.executedPlan.foreach { p =>
-        assert(p.expressions.forall(e => e.find(_.isInstanceOf[If]).isEmpty))
+        assert(p.expressions.forall(e => !e.exists(_.isInstanceOf[If])))
       }
 
       val q6 = df1.selectExpr("CASE WHEN (l > 2 AND null) THEN 3 ELSE 2 END")
       checkAnswer(q6, Row(2) :: Row(2) :: Nil)
       q6.queryExecution.executedPlan.foreach { p =>
-        assert(p.expressions.forall(e => e.find(_.isInstanceOf[CaseWhen]).isEmpty))
+        assert(p.expressions.forall(e => !e.exists(_.isInstanceOf[CaseWhen])))
       }
 
       checkAnswer(df1.where("IF(l > 10, false, b OR null)"), Row(1, true))
@@ -75,10 +75,10 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
   test("SPARK-26107: Replace Literal(null, _) with FalseLiteral in higher-order functions") {
     def assertNoLiteralNullInPlan(df: DataFrame): Unit = {
       df.queryExecution.executedPlan.foreach { p =>
-        assert(p.expressions.forall(_.find {
+        assert(p.expressions.forall(!_.exists {
           case Literal(null, BooleanType) => true
           case _ => false
-        }.isEmpty))
+        }))
       }
     }
 

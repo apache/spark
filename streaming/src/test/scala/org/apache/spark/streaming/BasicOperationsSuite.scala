@@ -742,7 +742,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         }
 
         Thread.sleep(200)
-        for (i <- 0 until input.size) {
+        for (i <- input.indices) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(200)
           val numCompletedBatches = batchCounter.getNumCompletedBatches
@@ -775,7 +775,7 @@ class BasicOperationsSuite extends TestSuiteBase {
 
         // verify that the latest input blocks are present but the earliest blocks have been removed
         assert(latestBlockRdd.isValid)
-        assert(latestBlockRdd.collect != null)
+        assert(latestBlockRdd.collect() != null)
         assert(!earliestBlockRdd.isValid)
         earliestBlockRdd.blockIds.foreach { blockId =>
           assert(!ssc.sparkContext.env.blockManager.master.contains(blockId))

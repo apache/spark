@@ -21,39 +21,49 @@ import java.io.File
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
-import io.fabric8.kubernetes.client.utils.HttpClientUtils
+import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory
 import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.K8S_CONTEXT
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.util.ThreadUtils
 
 /**
+ * :: DeveloperApi ::
+ *
  * Spark-opinionated builder for Kubernetes clients. It uses a prefix plus common suffixes to
  * parse configuration keys, similar to the manner in which Spark's SecurityManager parses SSL
  * options for different components.
+ *
+ * This can be used to implement new ExternalClusterManagers.
+ *
+ * @since 4.0.0
  */
-private[spark] object SparkKubernetesClientFactory extends Logging {
+@Stable
+@DeveloperApi
+object SparkKubernetesClientFactory extends Logging {
 
+  @Since("4.0.0")
   def createKubernetesClient(
       master: String,
       namespace: Option[String],
       kubernetesAuthConfPrefix: String,
       clientType: ClientType.Value,
       sparkConf: SparkConf,
-      defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
     val oauthTokenFile = sparkConf.getOption(oauthTokenFileConf)
       .map(new File(_))
-      .orElse(defaultServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     KubernetesUtils.requireNandDefined(
       oauthTokenFile,
@@ -68,14 +78,16 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
       .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
+    // TODO(SPARK-37687): clean up direct usage of OkHttpClient, see also:
+    // https://github.com/fabric8io/kubernetes-client/issues/3547
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
-    logInfo("Auto-configuring K8S client using " +
-      kubeContext.map("context " + _).getOrElse("current context") +
-      " from users K8S config file")
+    logInfo(log"Auto-configuring K8S client using " +
+      log"${MDC(K8S_CONTEXT, kubeContext.map("context " + _).getOrElse("current context"))}" +
+      log" from users K8S config file")
 
     // if backoff limit is not set then set it to 3
     if (getSystemPropertyOrEnvVar(KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY) == null) {
@@ -85,7 +97,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     // Start from an auto-configured config with the desired context
     // Fabric 8 uses null to indicate that the users current context should be used so if no
     // explicit setting pass null
-    val config = new ConfigBuilder(autoConfigure(kubeContext.getOrElse(null)))
+    val config = new ConfigBuilder(autoConfigure(kubeContext.orNull))
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
@@ -105,13 +117,17 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       }.withOption(namespace) {
         (ns, configBuilder) => configBuilder.withNamespace(ns)
       }.build()
-    val baseHttpClient = HttpClientUtils.createHttpClient(config)
-    val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
-      .dispatcher(dispatcher)
-      .build()
+    val factoryWithCustomDispatcher = new OkHttpClientFactory() {
+      override protected def additionalConfig(builder: OkHttpClient.Builder): Unit = {
+        builder.dispatcher(dispatcher)
+      }
+    }
     logDebug("Kubernetes client config: " +
       new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(config))
-    new DefaultKubernetesClient(httpClientWithCustomDispatcher, config)
+    new KubernetesClientBuilder()
+      .withHttpClientFactory(factoryWithCustomDispatcher)
+      .withConfig(config)
+      .build()
   }
 
   private implicit class OptionConfigurableConfigBuilder(val configBuilder: ConfigBuilder)

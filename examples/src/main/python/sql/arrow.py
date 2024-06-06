@@ -23,6 +23,8 @@ Run with:
 
 # NOTE that this file is imported in user guide in PySpark documentation.
 # The codes are referred via line numbers. See also `literalinclude` directive in Sphinx.
+import pandas as pd
+from typing import Iterable
 
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -31,9 +33,28 @@ require_minimum_pandas_version()
 require_minimum_pyarrow_version()
 
 
-def dataframe_with_arrow_example(spark):
+def dataframe_to_from_arrow_table_example(spark: SparkSession) -> None:
+    import pyarrow as pa
     import numpy as np
-    import pandas as pd  # type: ignore[import]
+
+    # Create a PyArrow Table
+    table = pa.table([pa.array(np.random.rand(100)) for i in range(3)], names=["a", "b", "c"])
+
+    # Create a Spark DataFrame from the PyArrow Table
+    df = spark.createDataFrame(table)
+
+    # Convert the Spark DataFrame to a PyArrow Table
+    result_table = df.select("*").toArrow()
+
+    print(result_table.schema)
+    # a: double
+    # b: double
+    # c: double
+
+
+def dataframe_with_arrow_example(spark: SparkSession) -> None:
+    import numpy as np
+    import pandas as pd
 
     # Enable Arrow-based columnar data transfers
     spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
@@ -50,12 +71,12 @@ def dataframe_with_arrow_example(spark):
     print("Pandas DataFrame result statistics:\n%s\n" % str(result_pdf.describe()))
 
 
-def ser_to_frame_pandas_udf_example(spark):
+def ser_to_frame_pandas_udf_example(spark: SparkSession) -> None:
     import pandas as pd
 
     from pyspark.sql.functions import pandas_udf
 
-    @pandas_udf("col1 string, col2 long")
+    @pandas_udf("col1 string, col2 long")  # type: ignore[call-overload]
     def func(s1: pd.Series, s2: pd.Series, s3: pd.DataFrame) -> pd.DataFrame:
         s3['col2'] = s1 + s2.str.len()
         return s3
@@ -78,7 +99,7 @@ def ser_to_frame_pandas_udf_example(spark):
     # |    |-- col2: long (nullable = true)
 
 
-def ser_to_ser_pandas_udf_example(spark):
+def ser_to_ser_pandas_udf_example(spark: SparkSession) -> None:
     import pandas as pd
 
     from pyspark.sql.functions import col, pandas_udf
@@ -88,7 +109,7 @@ def ser_to_ser_pandas_udf_example(spark):
     def multiply_func(a: pd.Series, b: pd.Series) -> pd.Series:
         return a * b
 
-    multiply = pandas_udf(multiply_func, returnType=LongType())
+    multiply = pandas_udf(multiply_func, returnType=LongType())  # type: ignore[call-overload]
 
     # The function for a pandas_udf should be able to execute with local Pandas data
     x = pd.Series([1, 2, 3])
@@ -112,7 +133,7 @@ def ser_to_ser_pandas_udf_example(spark):
     # +-------------------+
 
 
-def iter_ser_to_iter_ser_pandas_udf_example(spark):
+def iter_ser_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     from typing import Iterator
 
     import pandas as pd
@@ -123,7 +144,7 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark):
     df = spark.createDataFrame(pdf)
 
     # Declare the function and create the UDF
-    @pandas_udf("long")
+    @pandas_udf("long")  # type: ignore[call-overload]
     def plus_one(iterator: Iterator[pd.Series]) -> Iterator[pd.Series]:
         for x in iterator:
             yield x + 1
@@ -138,7 +159,7 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark):
     # +-----------+
 
 
-def iter_sers_to_iter_ser_pandas_udf_example(spark):
+def iter_sers_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     from typing import Iterator, Tuple
 
     import pandas as pd
@@ -149,7 +170,7 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark):
     df = spark.createDataFrame(pdf)
 
     # Declare the function and create the UDF
-    @pandas_udf("long")
+    @pandas_udf("long")  # type: ignore[call-overload]
     def multiply_two_cols(
             iterator: Iterator[Tuple[pd.Series, pd.Series]]) -> Iterator[pd.Series]:
         for a, b in iterator:
@@ -165,7 +186,7 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark):
     # +-----------------------+
 
 
-def ser_to_scalar_pandas_udf_example(spark):
+def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
     import pandas as pd
 
     from pyspark.sql.functions import pandas_udf
@@ -176,7 +197,7 @@ def ser_to_scalar_pandas_udf_example(spark):
         ("id", "v"))
 
     # Declare the function and create the UDF
-    @pandas_udf("double")
+    @pandas_udf("double")  # type: ignore[call-overload]
     def mean_udf(v: pd.Series) -> float:
         return v.mean()
 
@@ -210,12 +231,12 @@ def ser_to_scalar_pandas_udf_example(spark):
     # +---+----+------+
 
 
-def grouped_apply_in_pandas_example(spark):
+def grouped_apply_in_pandas_example(spark: SparkSession) -> None:
     df = spark.createDataFrame(
         [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ("id", "v"))
 
-    def subtract_mean(pdf):
+    def subtract_mean(pdf: pd.DataFrame) -> pd.DataFrame:
         # pdf is a pandas.DataFrame
         v = pdf.v
         return pdf.assign(v=v - v.mean())
@@ -232,10 +253,10 @@ def grouped_apply_in_pandas_example(spark):
     # +---+----+
 
 
-def map_in_pandas_example(spark):
+def map_in_pandas_example(spark: SparkSession) -> None:
     df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
-    def filter_func(iterator):
+    def filter_func(iterator: Iterable[pd.DataFrame]) -> Iterable[pd.DataFrame]:
         for pdf in iterator:
             yield pdf[pdf.id == 1]
 
@@ -247,7 +268,7 @@ def map_in_pandas_example(spark):
     # +---+---+
 
 
-def cogrouped_apply_in_pandas_example(spark):
+def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
     import pandas as pd
 
     df1 = spark.createDataFrame(
@@ -258,19 +279,40 @@ def cogrouped_apply_in_pandas_example(spark):
         [(20000101, 1, "x"), (20000101, 2, "y")],
         ("time", "id", "v2"))
 
-    def asof_join(l, r):
-        return pd.merge_asof(l, r, on="time", by="id")
+    def merge_ordered(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        return pd.merge_ordered(left, right)
 
     df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        asof_join, schema="time int, id int, v1 double, v2 string").show()
-    # +--------+---+---+---+
-    # |    time| id| v1| v2|
-    # +--------+---+---+---+
-    # |20000101|  1|1.0|  x|
-    # |20000102|  1|3.0|  x|
-    # |20000101|  2|2.0|  y|
-    # |20000102|  2|4.0|  y|
-    # +--------+---+---+---+
+        merge_ordered, schema="time int, id int, v1 double, v2 string").show()
+    # +--------+---+---+----+
+    # |    time| id| v1|  v2|
+    # +--------+---+---+----+
+    # |20000101|  1|1.0|   x|
+    # |20000102|  1|3.0|null|
+    # |20000101|  2|2.0|   y|
+    # |20000102|  2|4.0|null|
+    # +--------+---+---+----+
+
+
+def arrow_python_udf_example(spark: SparkSession) -> None:
+    from pyspark.sql.functions import udf
+
+    @udf(returnType='int')  # A default, pickled Python UDF
+    def slen(s):  # type: ignore[no-untyped-def]
+        return len(s)
+
+    @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
+    def arrow_slen(s):  # type: ignore[no-untyped-def]
+        return len(s)
+
+    df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+
+    df.select(slen("name"), arrow_slen("name")).show()
+    # +----------+----------------+
+    # |slen(name)|arrow_slen(name)|
+    # +----------+----------------+
+    # |         8|               8|
+    # +----------+----------------+
 
 
 if __name__ == "__main__":
@@ -279,6 +321,8 @@ if __name__ == "__main__":
         .appName("Python Arrow-in-Spark example") \
         .getOrCreate()
 
+    print("Running Arrow conversion example: DataFrame to Table")
+    dataframe_to_from_arrow_table_example(spark)
     print("Running Pandas to/from conversion example")
     dataframe_with_arrow_example(spark)
     print("Running pandas_udf example: Series to Frame")

@@ -17,10 +17,10 @@
 
 __all__ = ["StorageLevel"]
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 
-class StorageLevel(object):
+class StorageLevel:
 
     """
     Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
@@ -31,6 +31,7 @@ class StorageLevel(object):
     formats.
     """
 
+    NONE: ClassVar["StorageLevel"]
     DISK_ONLY: ClassVar["StorageLevel"]
     DISK_ONLY_2: ClassVar["StorageLevel"]
     DISK_ONLY_3: ClassVar["StorageLevel"]
@@ -73,7 +74,18 @@ class StorageLevel(object):
         result += "%sx Replicated" % self.replication
         return result
 
+    def __eq__(self, other: Any) -> bool:
+        return (
+            isinstance(other, StorageLevel)
+            and self.useMemory == other.useMemory
+            and self.useDisk == other.useDisk
+            and self.useOffHeap == other.useOffHeap
+            and self.deserialized == other.deserialized
+            and self.replication == other.replication
+        )
 
+
+StorageLevel.NONE = StorageLevel(False, False, False, False)
 StorageLevel.DISK_ONLY = StorageLevel(True, False, False, False)
 StorageLevel.DISK_ONLY_2 = StorageLevel(True, False, False, False, 2)
 StorageLevel.DISK_ONLY_3 = StorageLevel(True, False, False, False, 3)

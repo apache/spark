@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import org.apache.spark.unsafe.array.LongArray;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -33,10 +33,8 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.internal.config.package$;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.isIn;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
@@ -62,7 +60,7 @@ public class UnsafeInMemorySorterSuite {
       100,
       shouldUseRadixSort());
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
-    Assert.assertFalse(iter.hasNext());
+    Assertions.assertFalse(iter.hasNext());
   }
 
   @Test
@@ -137,8 +135,8 @@ public class UnsafeInMemorySorterSuite {
       final String str =
         getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset(), iter.getRecordLength());
       final long keyPrefix = iter.getKeyPrefix();
-      assertThat(str, isIn(Arrays.asList(dataToSort)));
-      assertThat(keyPrefix, greaterThanOrEqualTo(prevPrefix));
+      assertTrue(Arrays.asList(dataToSort).contains(str));
+      assertTrue(keyPrefix >= prevPrefix);
       prevPrefix = keyPrefix;
       iterLength++;
     }
@@ -177,7 +175,7 @@ public class UnsafeInMemorySorterSuite {
     testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
-    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+    Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
 
     // Get the sorter in an usable state again by allocating a new pointer array.
     LongArray array = consumer.allocateArray(1000);
@@ -188,7 +186,7 @@ public class UnsafeInMemorySorterSuite {
     sorter.freeMemory();
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
-    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+    Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
 
     assertEquals(0L, memoryManager.cleanUpAllAllocatedMemory());
   }

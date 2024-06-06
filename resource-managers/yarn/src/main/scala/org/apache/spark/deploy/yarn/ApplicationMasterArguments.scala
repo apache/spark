@@ -102,7 +102,3 @@ class ApplicationMasterArguments(val args: Array[String]) {
     System.exit(exitCode)
   }
 }
-
-object ApplicationMasterArguments {
-  val DEFAULT_NUMBER_EXECUTORS = 2
-}

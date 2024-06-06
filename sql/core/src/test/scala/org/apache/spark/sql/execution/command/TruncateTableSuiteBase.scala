@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,10 +38,12 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("table does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part)).mkString(".")
+      val e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $t")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, parsed, ExpectedContext(t, 15, 14 + t.length))
     }
   }
 
@@ -173,27 +177,48 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       withView("v0") {
         sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v0")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE v0")
+          },
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          parameters = Map(
+            "viewName" -> "`spark_catalog`.`default`.`v0`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(
+            fragment = "v0",
+            start = 15,
+            stop = 16)
+        )
       }
 
       withTempView("v1") {
         sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v1")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE v1")
+          },
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          parameters = Map(
+            "viewName" -> "`v1`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = "v1", start = 15, stop = 16)
+        )
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $v2")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $v2")
+          },
+          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          parameters = Map(
+            "viewName" -> "`global_temp`.`v2`",
+            "operation" -> "TRUNCATE TABLE"),
+          context = ExpectedContext(fragment = v2, start = 15, stop = 28)
+        )
       }
     }
   }

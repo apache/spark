@@ -36,19 +36,19 @@ import org.apache.spark.util.SerializableConfiguration
  * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
  * @param readDataSchema Required schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param textOptions Options for reading a text file.
+ * @param options Options for reading a text file.
  * */
 case class TextPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     readDataSchema: StructType,
     partitionSchema: StructType,
-    textOptions: TextOptions) extends FilePartitionReaderFactory {
+    options: TextOptions) extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
-    val reader = if (!textOptions.wholeText) {
-      new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+    val reader = if (!options.wholeText) {
+      new HadoopFileLinesReader(file, options.lineSeparatorInRead, confValue)
     } else {
       new HadoopFileWholeTextReader(file, confValue)
     }

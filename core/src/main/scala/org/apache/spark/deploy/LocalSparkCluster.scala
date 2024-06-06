@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy
 
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -33,7 +35,7 @@ import org.apache.spark.util.Utils
  * fault recovery without spinning up a lot of processes.
  */
 private[spark]
-class LocalSparkCluster(
+class LocalSparkCluster private (
     numWorkers: Int,
     coresPerWorker: Int,
     memoryPerWorker: Int,
@@ -45,9 +47,12 @@ class LocalSparkCluster(
   private val workerRpcEnvs = ArrayBuffer[RpcEnv]()
   // exposed for testing
   var masterWebUIPort = -1
+  // for test only
+  private val workerDirs = ArrayBuffer[String]()
 
   def start(): Array[String] = {
-    logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
+    logInfo(log"Starting a local Spark cluster with " +
+      log"${MDC(LogKeys.NUM_WORKERS, numWorkers)} workers.")
 
     // Disable REST server on Master in this mode unless otherwise specified
     val _conf = conf.clone()
@@ -66,6 +71,9 @@ class LocalSparkCluster(
       val workDir = if (Utils.isTesting) {
         Utils.createTempDir(namePrefix = "worker").getAbsolutePath
       } else null
+      if (Utils.isTesting) {
+        workerDirs += workDir
+      }
       val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, workDir, Some(workerNum), _conf,
         conf.get(config.Worker.SPARK_WORKER_RESOURCE_FILE))
@@ -73,6 +81,13 @@ class LocalSparkCluster(
     }
 
     masters
+  }
+
+  def workerLogfiles(): Seq[File] = {
+    workerDirs.toSeq.flatMap { dir =>
+      Utils.recursiveList(new File(dir))
+        .filter(f => f.isFile && """.*\.log$""".r.findFirstMatchIn(f.getName).isDefined)
+    }
   }
 
   def stop(): Unit = {
@@ -84,5 +99,26 @@ class LocalSparkCluster(
     masterRpcEnvs.foreach(_.awaitTermination())
     masterRpcEnvs.clear()
     workerRpcEnvs.clear()
+    workerDirs.clear()
+    LocalSparkCluster.clear()
+  }
+}
+
+private[spark] object LocalSparkCluster {
+
+  private var localCluster: Option[LocalSparkCluster] = None
+
+  private[spark] def get: Option[LocalSparkCluster] = localCluster
+
+  private def clear(): Unit = localCluster = None
+
+  def apply(
+      numWorkers: Int,
+      coresPerWorker: Int,
+      memoryPerWorker: Int,
+      conf: SparkConf): LocalSparkCluster = {
+    localCluster =
+      Some(new LocalSparkCluster(numWorkers, coresPerWorker, memoryPerWorker, conf))
+    localCluster.get
   }
 }

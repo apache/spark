@@ -36,8 +36,24 @@ should be installed.
 If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
 SQL module with the command ``pip install pyspark[sql]``. Otherwise, you must ensure that PyArrow
 is installed and available on all cluster nodes.
-You can install using pip or conda from the conda-forge channel. See PyArrow
+You can install it using pip or conda from the conda-forge channel. See PyArrow
 `installation <https://arrow.apache.org/docs/python/install.html>`_ for details.
+
+Conversion to/from Arrow Table
+------------------------------
+
+From Spark 4.0, you can create a Spark DataFrame from a PyArrow Table with
+:meth:`SparkSession.createDataFrame`, and you can convert a Spark DataFrame to a PyArrow Table
+with :meth:`DataFrame.toArrow`.
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
+    :language: python
+    :lines: 37-52
+    :dedent: 4
+
+Note that :meth:`DataFrame.toArrow` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. Not all Spark and Arrow data
+types are currently supported and an error can be raised if a column has an unsupported type.
 
 Enabling for Conversion to/from Pandas
 --------------------------------------
@@ -53,7 +69,7 @@ This can be controlled by ``spark.sql.execution.arrow.pyspark.fallback.enabled``
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 35-48
+    :lines: 56-71
     :dedent: 4
 
 Using the above optimizations with Arrow will produce the same results as when Arrow is not
@@ -90,7 +106,7 @@ specify the type hints of ``pandas.Series`` and ``pandas.DataFrame`` as below:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 54-78
+    :lines: 75-99
     :dedent: 4
 
 In the following sections, it describes the combinations of the supported type hints. For simplicity,
@@ -113,7 +129,7 @@ The following example shows how to create this Pandas UDF that computes the prod
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 82-112
+    :lines: 103-133
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -143,7 +159,7 @@ identically as Series to Series case. The pseudocode below illustrates the examp
         # Do some expensive initialization with a state
         state = very_expensive_initialization()
         for x in iterator:
-            # Use that state for whole iterator.
+            # Use that state for the whole iterator.
             yield calculate_with_state(x, state)
 
     df.select(calculate("value")).show()
@@ -152,7 +168,7 @@ The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 116-138
+    :lines: 137-159
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -167,14 +183,14 @@ The type hint can be expressed as ``Iterator[Tuple[pandas.Series, ...]]`` -> ``I
 By using :func:`pandas_udf` with the function having such type hints above, it creates a Pandas UDF where the
 given function takes an iterator of a tuple of multiple ``pandas.Series`` and outputs an iterator of ``pandas.Series``.
 In this case, the created pandas UDF requires multiple input columns as many as the series in the tuple
-when the Pandas UDF is called. Otherwise, it has the same characteristics and restrictions as Iterator of Series
+when the Pandas UDF is called. Otherwise, it has the same characteristics and restrictions as the Iterator of Series
 to Iterator of Series case.
 
 The following example shows how to create this Pandas UDF:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 142-165
+    :lines: 163-186
     :dedent: 4
 
 For detailed usage, please see :func:`pandas_udf`.
@@ -205,7 +221,7 @@ and window operations:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 169-210
+    :lines: 190-231
     :dedent: 4
 
 .. currentmodule:: pyspark.sql.functions
@@ -270,7 +286,7 @@ in the group.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 214-232
+    :lines: 235-253
     :dedent: 4
 
 For detailed usage, please see  please see :meth:`GroupedData.applyInPandas`
@@ -288,7 +304,7 @@ The following example shows how to use :meth:`DataFrame.mapInPandas`:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 236-247
+    :lines: 257-268
     :dedent: 4
 
 For detailed usage, please see :meth:`DataFrame.mapInPandas`.
@@ -327,11 +343,37 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 251-273
+    :lines: 272-294
     :dedent: 4
 
 
 For detailed usage, please see :meth:`PandasCogroupedOps.applyInPandas`
+
+Arrow Python UDFs
+-----------------
+
+Arrow Python UDFs are user defined functions that are executed row-by-row, utilizing Arrow for efficient batch data
+transfer and serialization. To define an Arrow Python UDF, you can use the :meth:`udf` decorator or wrap the function
+with the :meth:`udf` method, ensuring the ``useArrow`` parameter is set to True. Additionally, you can enable Arrow
+optimization for Python UDFs throughout the entire SparkSession by setting the Spark configuration
+``spark.sql.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes
+effect only when ``useArrow`` is either not set or set to None.
+
+The type hints for Arrow Python UDFs should be specified in the same way as for default, pickled Python UDFs.
+
+Here's an example that demonstrates the usage of both a default, pickled Python UDF and an Arrow Python UDF:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
+    :language: python
+    :lines: 298-316
+    :dedent: 4
+
+Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
+type coercion poses challenges when the Python instances returned by UDFs do not align with the user-specified
+return type. The default, pickled Python UDFs' type coercion has certain limitations, such as relying on None as a
+fallback for type mismatches, leading to potential ambiguity and data loss. Additionally, converting date, datetime,
+and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
+capabilities to standardize type coercion and address these issues effectively.
 
 Usage Notes
 -----------
@@ -342,8 +384,9 @@ Supported SQL Types
 .. currentmodule:: pyspark.sql.types
 
 Currently, all Spark SQL data types are supported by Arrow-based conversion except
-:class:`ArrayType` of :class:`TimestampType`, and nested :class:`StructType`.
-:class:`MapType` is only supported when using PyArrow 2.0.0 and above.
+:class:`ArrayType` of :class:`TimestampType`.
+:class:`MapType` and :class:`ArrayType` of nested :class:`StructType` are only supported
+when using PyArrow 2.0.0 and above.
 
 Setting Arrow Batch Size
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -373,49 +416,37 @@ and each column will be converted to the Spark session time zone then localized 
 zone, which removes the time zone and displays values as local time. This will occur
 when calling :meth:`DataFrame.toPandas()` or ``pandas_udf`` with timestamp columns.
 
-When timestamp data is transferred from Pandas to Spark, it will be converted to UTC microseconds. This
-occurs when calling :meth:`SparkSession.createDataFrame` with a Pandas DataFrame or when returning a timestamp from a
-``pandas_udf``. These conversions are done automatically to ensure Spark will have data in the
-expected format, so it is not necessary to do any of these conversions yourself. Any nanosecond
-values will be truncated.
+When timestamp data is transferred from Spark to a PyArrow Table, it will remain in microsecond
+resolution with the UTC time zone. This occurs when calling :meth:`DataFrame.toArrow()` with
+timestamp columns.
+
+When timestamp data is transferred from Pandas or PyArrow to Spark, it will be converted to UTC
+microseconds. This occurs when calling :meth:`SparkSession.createDataFrame` with a Pandas DataFrame
+or PyArrow Table, or when returning a timestamp from a ``pandas_udf``. These conversions are done
+automatically to ensure Spark will have data in the expected format, so it is not necessary to do
+any of these conversions yourself. Any nanosecond values will be truncated.
 
 Note that a standard UDF (non-Pandas) will load timestamp data as Python datetime objects, which is
-different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
+different from a Pandas timestamp. It is recommended to use Pandas time series functionality when
 working with timestamps in ``pandas_udf``\s to get the best performance, see
 `here <https://pandas.pydata.org/pandas-docs/stable/timeseries.html>`_ for details.
 
 Recommended Pandas and PyArrow Versions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For usage with pyspark.sql, the minimum supported versions of Pandas is 0.23.2 and PyArrow is 1.0.0.
+For usage with pyspark.sql, the minimum supported versions of Pandas is 2.0.0 and PyArrow is 10.0.0.
 Higher versions may be used, however, compatibility and data correctness can not be guaranteed and should
 be verified by the user.
-
-Compatibility Setting for PyArrow >= 0.15.0 and Spark 2.3.x, 2.4.x
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Since Arrow 0.15.0, a change in the binary IPC format requires an environment variable to be
-compatible with previous versions of Arrow <= 0.14.1. This is only necessary to do for PySpark
-users with versions 2.3.x and 2.4.x that have manually upgraded PyArrow to 0.15.0. The following
-can be added to ``conf/spark-env.sh`` to use the legacy Arrow IPC format:
-
-.. code-block:: bash
-
-    ARROW_PRE_0_15_IPC_FORMAT=1
-
-
-This will instruct PyArrow >= 0.15.0 to use the legacy IPC format with the older Arrow Java that
-is in Spark 2.3.x and 2.4.x. Not setting this environment variable will lead to a similar error as
-described in `SPARK-29367 <https://issues.apache.org/jira/browse/SPARK-29367>`_ when running
-``pandas_udf``\s or :meth:`DataFrame.toPandas` with Arrow enabled. More information about the Arrow IPC change can
-be read on the Arrow 0.15.0 release `blog <https://arrow.apache.org/blog/2019/10/06/0.15.0-release/#columnar-streaming-protocol-change-since-0140>`_.
 
 Setting Arrow ``self_destruct`` for memory savings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled`` can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas DataFrame.
-This option is experimental, and some operations may fail on the resulting Pandas DataFrame due to immutable backing arrays.
-Typically, you would see the error ``ValueError: buffer source array is read-only``.
-Newer versions of Pandas may fix these errors by improving support for such cases.
-You can work around this error by copying the column(s) beforehand.
-Additionally, this conversion may be slower because it is single-threaded.
+Since Spark 3.2, the Spark configuration ``spark.sql.execution.arrow.pyspark.selfDestruct.enabled``
+can be used to enable PyArrow's ``self_destruct`` feature, which can save memory when creating a
+Pandas DataFrame via ``toPandas`` by freeing Arrow-allocated memory while building the Pandas
+DataFrame. This option can also save memory when creating a PyArrow Table via ``toArrow``.
+This option is experimental. When used with ``toPandas``, some operations may fail on the resulting
+Pandas DataFrame due to immutable backing arrays. Typically, you would see the error
+``ValueError: buffer source array is read-only``. Newer versions of Pandas may fix these errors by
+improving support for such cases. You can work around this error by copying the column(s)
+beforehand. Additionally, this conversion may be slower because it is single-threaded.

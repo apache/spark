@@ -18,8 +18,9 @@
 package org.apache.spark.status.api.v1.streaming
 
 import java.util.{Arrays => JArrays, Collections, Date, List => JList}
-import javax.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
-import javax.ws.rs.core.MediaType
+
+import jakarta.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
+import jakarta.ws.rs.core.MediaType
 
 import org.apache.spark.status.api.v1.NotFoundException
 import org.apache.spark.streaming.Time

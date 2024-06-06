@@ -1,0 +1,20 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "expressions": [{
+      "expressionString": {
+        "expression": "rand(123) BETWEEN 0.1 AND 0.2"
+      }
+    }]
+  }
+}

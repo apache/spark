@@ -28,11 +28,11 @@ import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -54,7 +54,7 @@ public class RpcIntegrationSuite {
   static ConcurrentHashMap<String, VerifyingStreamCallback> streamCallbacks =
       new ConcurrentHashMap<>();
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() throws Exception {
     conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     testData = new StreamTestHelper();
@@ -67,14 +67,10 @@ public class RpcIntegrationSuite {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
         switch (parts[0]) {
-          case "hello":
+          case "hello" ->
             callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-            break;
-          case "return error":
-            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-            break;
-          case "throw error":
-            throw new RuntimeException("Thrown: " + parts[1]);
+          case "return error" -> callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+          case "throw error" -> throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 
@@ -104,9 +100,9 @@ public class RpcIntegrationSuite {
     try {
       if (msg.startsWith("fail/")) {
         String[] parts = msg.split("/");
-        switch (parts[1]) {
-          case "exception-ondata":
-            return new StreamCallbackWithID() {
+        return switch (parts[1]) {
+          case "exception-ondata" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
                 throw new IOException("failed to read stream data!");
@@ -125,8 +121,8 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "exception-oncomplete":
-            return new StreamCallbackWithID() {
+          case "exception-oncomplete" ->
+            new StreamCallbackWithID() {
               @Override
               public void onData(String streamId, ByteBuffer buf) throws IOException {
               }
@@ -145,11 +141,9 @@ public class RpcIntegrationSuite {
                 return msg;
               }
             };
-          case "null":
-            return null;
-          default:
-            throw new IllegalArgumentException("unexpected msg: " + msg);
-        }
+          case "null" -> null;
+          default -> throw new IllegalArgumentException("unexpected msg: " + msg);
+        };
       } else {
         VerifyingStreamCallback streamCallback = new VerifyingStreamCallback(msg);
         streamCallbacks.put(msg, streamCallback);
@@ -160,7 +154,7 @@ public class RpcIntegrationSuite {
     }
   }
 
-  @AfterClass
+  @AfterAll
   public static void tearDown() {
     server.close();
     clientFactory.close();
@@ -236,17 +230,8 @@ public class RpcIntegrationSuite {
     return res;
   }
 
-  private static class RpcStreamCallback implements RpcResponseCallback {
-    final String streamId;
-    final RpcResult res;
-    final Semaphore sem;
-
-    RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) {
-      this.streamId = streamId;
-      this.res = res;
-      this.sem = sem;
-    }
-
+  private record RpcStreamCallback(
+      String streamId, RpcResult res, Semaphore sem) implements RpcResponseCallback {
     @Override
     public void onSuccess(ByteBuffer message) {
       res.successMessages.add(streamId);
@@ -325,7 +310,7 @@ public class RpcIntegrationSuite {
   public void sendRpcWithStreamOneAtATime() throws Exception {
     for (String stream : StreamTestHelper.STREAMS) {
       RpcResult res = sendRpcWithStream(stream);
-      assertTrue("there were error messages!" + res.errorMessages, res.errorMessages.isEmpty());
+      assertTrue(res.errorMessages.isEmpty(), "there were error messages!" + res.errorMessages);
       assertEquals(Sets.newHashSet(stream), res.successMessages);
     }
   }
@@ -362,21 +347,21 @@ public class RpcIntegrationSuite {
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {
-    assertEquals("Expected " + contains.size() + " errors, got " + errors.size() + "errors: " +
-        errors, contains.size(), errors.size());
+    assertEquals(contains.size(), errors.size(),
+      "Expected " + contains.size() + " errors, got " + errors.size() + "errors: " + errors);
 
     Pair<Set<String>, Set<String>> r = checkErrorsContain(errors, contains);
-    assertTrue("Could not find error containing " + r.getRight() + "; errors: " + errors,
-        r.getRight().isEmpty());
+    assertTrue(r.getRight().isEmpty(),
+      "Could not find error containing " + r.getRight() + "; errors: " + errors);
 
     assertTrue(r.getLeft().isEmpty());
   }
 
   private void assertErrorAndClosed(RpcResult result, String expectedError) {
-    assertTrue("unexpected success: " + result.successMessages, result.successMessages.isEmpty());
+    assertTrue(result.successMessages.isEmpty(), "unexpected success: " + result.successMessages);
     Set<String> errors = result.errorMessages;
-    assertEquals("Expected 2 errors, got " + errors.size() + "errors: " +
-        errors, 2, errors.size());
+    assertEquals(2, errors.size(),
+      "Expected 2 errors, got " + errors.size() + "errors: " + errors);
 
     // We expect 1 additional error due to closed connection and here are possible keywords in the
     // error message.
@@ -392,15 +377,15 @@ public class RpcIntegrationSuite {
 
     Pair<Set<String>, Set<String>> r = checkErrorsContain(errors, containsAndClosed);
 
-    assertTrue("Got a non-empty set " + r.getLeft(), r.getLeft().isEmpty());
+    assertTrue(r.getLeft().isEmpty(), "Got a non-empty set " + r.getLeft());
 
     Set<String> errorsNotFound = r.getRight();
     assertEquals(
-        "The size of " + errorsNotFound + " was not " + (possibleClosedErrors.size() - 1),
         possibleClosedErrors.size() - 1,
-        errorsNotFound.size());
+        errorsNotFound.size(),
+        "The size of " + errorsNotFound + " was not " + (possibleClosedErrors.size() - 1));
     for (String err: errorsNotFound) {
-      assertTrue("Found a wrong error " + err, containsAndClosed.contains(err));
+      assertTrue(containsAndClosed.contains(err), "Found a wrong error " + err);
     }
   }
 
@@ -446,7 +431,7 @@ public class RpcIntegrationSuite {
 
     void verify() throws IOException {
       if (streamId.equals("file")) {
-        assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
+        assertTrue(Files.equal(testData.testFile, outFile), "File stream did not match.");
       } else {
         byte[] result = ((ByteArrayOutputStream)out).toByteArray();
         ByteBuffer srcBuffer = testData.srcBuffer(streamId);
@@ -457,7 +442,7 @@ public class RpcIntegrationSuite {
         byte[] expected = new byte[base.remaining()];
         base.get(expected);
         assertEquals(expected.length, result.length);
-        assertArrayEquals("buffers don't match", expected, result);
+        assertArrayEquals(expected, result, "buffers don't match");
       }
     }
 

@@ -19,7 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.WORKER_URL
 import org.apache.spark.rpc._
 
 /**
@@ -34,7 +35,7 @@ private[spark] class WorkerWatcher(
     isChildProcessStopping: AtomicBoolean = new AtomicBoolean(false))
   extends RpcEndpoint with Logging {
 
-  logInfo(s"Connecting to worker $workerUrl")
+  logInfo(log"Connecting to worker ${MDC(WORKER_URL, workerUrl)}")
   if (!isTesting) {
     rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
   }
@@ -47,15 +48,19 @@ private[spark] class WorkerWatcher(
   private[deploy] var isShutDown = false
 
   // Lets filter events only from the worker's rpc system
-  private val expectedAddress = RpcAddress.fromURIString(workerUrl)
+  private val expectedAddress = RpcAddress.fromUrlString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
   private def exitNonZero() =
     if (isTesting) {
       isShutDown = true
     } else if (isChildProcessStopping.compareAndSet(false, true)) {
-      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
-      System.exit(-1)
+      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock.
+      // Same as SPARK-14180, we should run `System.exit` in a separate thread to avoid
+      // dead lock since `System.exit` will trigger the shutdown hook of `executor.stop`.
+      new Thread("WorkerWatcher-exit-executor") {
+        override def run(): Unit = System.exit(-1)
+      }.start()
     }
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -64,14 +69,14 @@ private[spark] class WorkerWatcher(
 
   override def onConnected(remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
-      logInfo(s"Successfully connected to $workerUrl")
+      logInfo(log"Successfully connected to ${MDC(WORKER_URL, workerUrl)}")
     }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
       // This log message will never be seen
-      logError(s"Lost connection to worker rpc endpoint $workerUrl. Exiting.")
+      logError(log"Lost connection to worker rpc endpoint ${MDC(WORKER_URL, workerUrl)}. Exiting.")
       exitNonZero()
     }
   }
@@ -79,8 +84,9 @@ private[spark] class WorkerWatcher(
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
       // These logs may not be seen if the worker (and associated pipe) has died
-      logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
-      logError(s"Error was: $cause")
+      logError(
+        log"Could not initialize connection to worker ${MDC(WORKER_URL, workerUrl)}. Exiting.",
+        cause)
       exitNonZero()
     }
   }

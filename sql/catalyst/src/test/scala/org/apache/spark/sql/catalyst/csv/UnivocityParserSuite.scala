@@ -23,7 +23,7 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -304,19 +304,23 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       filters = Seq(EqualTo("d", 3.14)),
       expected = Some(InternalRow(1, 3.14)))
 
-    val errMsg = intercept[IllegalArgumentException] {
-      check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
-    }.getMessage
-    assert(errMsg.contains("invalid attr does not exist"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`invalid attr`", "fields" -> "`i`"))
 
-    val errMsg2 = intercept[IllegalArgumentException] {
-      check(
-        dataSchema = new StructType(),
-        requiredSchema = new StructType(),
-        filters = Seq(EqualTo("i", 1)),
-        expected = Some(InternalRow.empty))
-    }.getMessage
-    assert(errMsg2.contains("i does not exist"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        check(
+          dataSchema = new StructType(),
+          requiredSchema = new StructType(),
+          filters = Seq(EqualTo("i", 1)),
+          expected = Some(InternalRow.empty))
+      },
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`i`", "fields" -> ""))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
@@ -354,8 +358,25 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     val options = new CSVOptions(Map.empty[String, String], false, "UTC")
     check(new UnivocityParser(StructType(Seq.empty), options))
 
-    val optionsWithPattern = new CSVOptions(
-      Map("timestampFormat" -> "invalid", "dateFormat" -> "invalid"), false, "UTC")
-    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern))
+    def optionsWithPattern(enableFallback: Boolean): CSVOptions = new CSVOptions(
+      Map(
+        "timestampFormat" -> "invalid",
+        "dateFormat" -> "invalid",
+        "enableDateTimeParsingFallback" -> s"$enableFallback"),
+      false,
+      "UTC")
+
+    // With fallback enabled, we are still able to parse dates and timestamps.
+    check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(true)))
+
+    // With legacy parser disabled, parsing results in error.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
+      },
+      errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+      parameters = Map(
+        "c" -> "n",
+        "pattern" -> "invalid"))
   }
 }

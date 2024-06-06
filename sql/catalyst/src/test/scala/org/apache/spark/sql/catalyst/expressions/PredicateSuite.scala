@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -134,20 +135,27 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("basic IN/INSET predicate test") {
-    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
-      Literal(2))), null)
-    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType),
-      Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty), null)
-    checkInAndInSet(In(Literal(1), Seq.empty), false)
-    checkInAndInSet(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkInAndInSet(In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
-      true)
-    checkInAndInSet(In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
-      null)
-    checkInAndInSet(In(Literal(1), Seq(Literal(1), Literal(2))), true)
-    checkInAndInSet(In(Literal(2), Seq(Literal(1), Literal(2))), true)
-    checkInAndInSet(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+    Seq(true, false).foreach { legacyNullInBehavior =>
+      withSQLConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> legacyNullInBehavior.toString) {
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
+          Literal(2))), null)
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType),
+          Seq(NonFoldableLiteral.create(null, IntegerType))), null)
+        checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty),
+          expected = if (legacyNullInBehavior) null else false)
+        checkInAndInSet(In(Literal(1), Seq.empty), false)
+        checkInAndInSet(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
+        checkInAndInSet(In(Literal(1),
+          Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+          true)
+        checkInAndInSet(In(Literal(2),
+          Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+          null)
+        checkInAndInSet(In(Literal(1), Seq(Literal(1), Literal(2))), true)
+        checkInAndInSet(In(Literal(2), Seq(Literal(1), Literal(2))), true)
+        checkInAndInSet(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+      }
+    }
 
     checkEvaluation(
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1),
@@ -239,7 +247,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     In(map, Seq(map)).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
         assert(msg.contains("function in does not support ordering on type map"))
-      case _ => fail("In should not work on map type")
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass == "INVALID_ORDERING_TYPE")
+        assert(messageParameters === Map(
+          "functionName" -> "`in`", "dataType" -> "\"MAP<INT, INT>\""))
     }
   }
 
@@ -392,7 +403,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: lessThan") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(LessThan(smallValues(i), largeValues(i)), true)
       checkEvaluation(LessThan(equalValues1(i), equalValues2(i)), false)
       checkEvaluation(LessThan(largeValues(i), smallValues(i)), false)
@@ -400,7 +411,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: LessThanOrEqual") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(LessThanOrEqual(smallValues(i), largeValues(i)), true)
       checkEvaluation(LessThanOrEqual(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(LessThanOrEqual(largeValues(i), smallValues(i)), false)
@@ -408,7 +419,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: GreaterThan") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(GreaterThan(smallValues(i), largeValues(i)), false)
       checkEvaluation(GreaterThan(equalValues1(i), equalValues2(i)), false)
       checkEvaluation(GreaterThan(largeValues(i), smallValues(i)), true)
@@ -416,7 +427,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: GreaterThanOrEqual") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(GreaterThanOrEqual(smallValues(i), largeValues(i)), false)
       checkEvaluation(GreaterThanOrEqual(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(GreaterThanOrEqual(largeValues(i), smallValues(i)), true)
@@ -424,7 +435,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: EqualTo") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(EqualTo(smallValues(i), largeValues(i)), false)
       checkEvaluation(EqualTo(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(EqualTo(largeValues(i), smallValues(i)), false)
@@ -432,7 +443,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: EqualNullSafe") {
-    for (i <- 0 until smallValues.length) {
+    for (i <- smallValues.indices) {
       checkEvaluation(EqualNullSafe(smallValues(i), largeValues(i)), false)
       checkEvaluation(EqualNullSafe(equalValues1(i), equalValues2(i)), true)
       checkEvaluation(EqualNullSafe(largeValues(i), smallValues(i)), false)
@@ -528,8 +539,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
     checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
     IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("argument 1 requires boolean type"))
+      case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+        assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
+        assert(messageParameters === Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"BOOLEAN\"",
+          "inputSql" -> "\"NULL\"",
+          "inputType" -> "\"INT\""))
     }
   }
 

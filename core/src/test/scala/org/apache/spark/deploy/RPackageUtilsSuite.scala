@@ -23,17 +23,16 @@ import java.util.jar.{JarFile, Manifest}
 import java.util.jar.Attributes.Name
 import java.util.zip.ZipFile
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
-import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.util.{IvyTestUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class RPackageUtilsSuite
   extends SparkFunSuite
@@ -105,7 +104,7 @@ class RPackageUtilsSuite
     val deps = Seq(dep1, dep2).mkString(",")
     IvyTestUtils.withRepository(main, Some(deps), None, withR = true) { repo =>
       val jars = Seq(main, dep1, dep2).map { c =>
-        getJarPath(c, new File(new URI(repo))) + "dummy"
+        getJarPath(c, new File(new URI(repo))).toString + "dummy"
       }.mkString(",")
       RPackageUtils.checkAndBuildRPackage(jars, new BufferPrintStream, verbose = true)
       val individualJars = jars.split(",")
@@ -128,7 +127,7 @@ class RPackageUtilsSuite
       RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream,
         verbose = true)
       val output = lineBuffer.mkString("\n")
-      assert(output.contains(RPackageUtils.RJarDoc))
+      assert(output.contains(RPackageUtils.RJarDoc.message))
     }
   }
 
@@ -144,7 +143,7 @@ class RPackageUtilsSuite
   }
 
   test("SparkR zipping works properly") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     Utils.tryWithSafeFinally {
       IvyTestUtils.writeFile(tempDir, "test.R", "abc")
       val fakeSparkRDir = new File(tempDir, "SparkR")

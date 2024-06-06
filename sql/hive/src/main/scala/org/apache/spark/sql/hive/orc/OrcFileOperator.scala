@@ -24,10 +24,11 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -58,8 +59,8 @@ private[hive] object OrcFileOperator extends Logging {
       reader.getObjectInspector match {
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
           logInfo(
-            s"ORC file $path has empty schema, it probably contains no rows. " +
-              "Trying to read another ORC file to figure out the schema.")
+            log"ORC file ${MDC(PATH, path)} has empty schema, it probably contains no rows. " +
+              log"Trying to read another ORC file to figure out the schema.")
           false
         case _ => true
       }
@@ -77,10 +78,10 @@ private[hive] object OrcFileOperator extends Logging {
       } catch {
         case e: IOException =>
           if (ignoreCorruptFiles) {
-            logWarning(s"Skipped the footer in the corrupted file: $path", e)
+            logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
             None
           } else {
-            throw new SparkException(s"Could not read footer for file: $path", e)
+            throw QueryExecutionErrors.cannotReadFooterForFileError(path, e)
           }
       }
       path -> reader
@@ -93,7 +94,7 @@ private[hive] object OrcFileOperator extends Logging {
       : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.toIterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
+    paths.iterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
       case Some(reader) =>
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName

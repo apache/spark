@@ -27,7 +27,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -37,10 +38,11 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils
@@ -505,8 +507,12 @@ class LogisticRegression @Since("1.2.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
-    val instances = extractInstances(dataset)
-      .setName("training instances")
+    val instances = dataset.select(
+      checkClassificationLabels($(labelCol), None),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
 
     val (summarizer, labelSummarizer) = Summarizer
       .getClassificationSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
@@ -525,10 +531,11 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     if (numInvalid != 0) {
-      val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
-        s"Found $numInvalid invalid labels."
+      val msg = log"Classification labels should be in " +
+        log"${MDC(RANGE, s"[0 to ${numClasses - 1}]")}. " +
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels."
       instr.logError(msg)
-      throw new SparkException(msg)
+      throw new SparkException(msg.message)
     }
 
     instr.logNumClasses(numClasses)
@@ -629,9 +636,7 @@ class LogisticRegression @Since("1.2.0") (
         initialSolution.toArray, regularization, optimizer)
 
     if (allCoefficients == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val allCoefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept,
@@ -667,7 +672,7 @@ class LogisticRegression @Since("1.2.0") (
       denseCoefficientMatrix.foreachActive { case (i, j, v) =>
         centers(j) += v
       }
-      centers.transform(_ / numCoefficientSets)
+      centers.mapInPlace(_ / numCoefficientSets)
       denseCoefficientMatrix.foreachActive { case (i, j, v) =>
         denseCoefficientMatrix.update(i, j, v - centers(j))
       }
@@ -842,9 +847,11 @@ class LogisticRegression @Since("1.2.0") (
           (_initialModel.interceptVector.size == numCoefficientSets) &&
           (_initialModel.getFitIntercept == $(fitIntercept))
         if (!modelIsValid) {
-          instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
-            s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
-            s"expected size ($numCoefficientSets, $numFeatures)")
+          instr.logWarning(log"Initial coefficients will be ignored! Its dimensions " +
+            log"(${MDC(LogKeys.NUM_ROWS, providedCoefs.numRows)}}, " +
+            log"${MDC(LogKeys.NUM_COLUMNS, providedCoefs.numCols)}) did not match the " +
+            log"expected size (${MDC(LogKeys.NUM_COEFFICIENTS, numCoefficientSets)}, " +
+            log"${MDC(LogKeys.NUM_FEATURES, numFeatures)})")
         }
         modelIsValid
       case None => false
@@ -1031,7 +1038,7 @@ class LogisticRegression @Since("1.2.0") (
         solution(numFeatures) -= adapt
       }
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   @Since("1.4.0")
@@ -1107,46 +1114,36 @@ class LogisticRegressionModel private[spark] (
     _intercept
   }
 
-  private lazy val _intercept = interceptVector(0)
-  private lazy val _interceptVector = interceptVector.toDense
-  private lazy val _binaryThresholdArray = {
-    val array = Array(Double.NaN, Double.NaN)
-    updateBinaryThresholds(array)
-    array
-  }
-  private def _threshold: Double = _binaryThresholdArray(0)
-  private def _rawThreshold: Double = _binaryThresholdArray(1)
+  private val _interceptVector = if (isMultinomial) interceptVector.toDense else null
+  private val _intercept = if (!isMultinomial) interceptVector(0) else Double.NaN
+  // Array(0.5, 0.0) is the value for default threshold (0.5) and thresholds (unset)
+  private var _binaryThresholds: Array[Double] = if (!isMultinomial) Array(0.5, 0.0) else null
 
-  private def updateBinaryThresholds(array: Array[Double]): Unit = {
-    if (!isMultinomial) {
-      val _threshold = getThreshold
-      array(0) = _threshold
-      if (_threshold == 0.0) {
-        array(1) = Double.NegativeInfinity
-      } else if (_threshold == 1.0) {
-        array(1) = Double.PositiveInfinity
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (!isMultinomial && (param.name == "threshold" || param.name == "thresholds")) {
+      if (isDefined(threshold) || isDefined(thresholds)) {
+        val _threshold = getThreshold
+        if (_threshold == 0.0) {
+          _binaryThresholds = Array(_threshold, Double.NegativeInfinity)
+        } else if (_threshold == 1.0) {
+          _binaryThresholds = Array(_threshold, Double.PositiveInfinity)
+        } else {
+          _binaryThresholds = Array(_threshold, math.log(_threshold / (1.0 - _threshold)))
+        }
       } else {
-        array(1) = math.log(_threshold / (1.0 - _threshold))
+        _binaryThresholds = null
       }
     }
   }
 
   @Since("1.5.0")
-  override def setThreshold(value: Double): this.type = {
-    super.setThreshold(value)
-    updateBinaryThresholds(_binaryThresholdArray)
-    this
-  }
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
   @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
 
   @Since("1.5.0")
-  override def setThresholds(value: Array[Double]): this.type = {
-    super.setThresholds(value)
-    updateBinaryThresholds(_binaryThresholdArray)
-    this
-  }
+  override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
@@ -1218,7 +1215,7 @@ class LogisticRegressionModel private[spark] (
     super.predict(features)
   } else {
     // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-    if (score(features) > _threshold) 1 else 0
+    if (score(features) > _binaryThresholds(0)) 1 else 0
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -1260,7 +1257,7 @@ class LogisticRegressionModel private[spark] (
       super.raw2prediction(rawPrediction)
     } else {
       // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (rawPrediction(1) > _rawThreshold) 1.0 else 0.0
+      if (rawPrediction(1) > _binaryThresholds(1)) 1.0 else 0.0
     }
   }
 
@@ -1269,7 +1266,7 @@ class LogisticRegressionModel private[spark] (
       super.probability2prediction(probability)
     } else {
       // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (probability(1) > _threshold) 1.0 else 0.0
+      if (probability(1) > _binaryThresholds(0)) 1.0 else 0.0
     }
   }
 
@@ -1334,7 +1331,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val model = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt == 0)) {
+      val model = if (major < 2 || (major == 2 && minor == 0)) {
         // 2.0 and before
         val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
           MLUtils.convertVectorColumnsToML(data, "coefficients")

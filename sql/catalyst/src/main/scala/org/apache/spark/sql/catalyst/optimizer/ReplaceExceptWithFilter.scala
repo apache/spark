@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -87,8 +88,8 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     val rightProjectList = projectList(right)
 
     left.output.size == left.output.map(_.name).distinct.size &&
-      left.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
-        right.find(_.expressions.exists(SubqueryExpression.hasSubquery)).isEmpty &&
+      !left.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
+        !right.exists(_.expressions.exists(SubqueryExpression.hasSubquery)) &&
           Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
             Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
@@ -104,7 +105,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
-    throw new IllegalStateException("Leaf node is expected")
+    throw SparkException.internalError("Leaf node is expected")
   }
 
   private def combineFilters(plan: LogicalPlan): LogicalPlan = {

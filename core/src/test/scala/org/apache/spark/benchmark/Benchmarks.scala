@@ -21,7 +21,7 @@ import java.lang.reflect.Modifier
 import java.nio.file.{FileSystems, Paths}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import com.google.common.reflect.ClassPath
@@ -96,8 +96,6 @@ object Benchmarks {
       require(args.length > 0, "Benchmark class to run should be specified.")
       if (
           info.getName.endsWith("Benchmark") &&
-          // TODO(SPARK-34927): Support TPCDSQueryBenchmark in Benchmarks
-          !info.getName.endsWith("TPCDSQueryBenchmark") &&
           matcher.matches(Paths.get(info.getName)) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?

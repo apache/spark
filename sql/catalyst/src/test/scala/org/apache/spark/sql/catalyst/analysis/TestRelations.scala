@@ -46,6 +46,8 @@ object TestRelations {
 
   val testRelation5 = LocalRelation(AttributeReference("i", StringType)())
 
+  val testRelation6 = LocalRelation(AttributeReference("the.id", LongType)())
+
   val nestedRelation = LocalRelation(
     AttributeReference("top", StructType(
       StructField("duplicateField", StringType) ::
@@ -66,4 +68,18 @@ object TestRelations {
 
   val mapRelation = LocalRelation(
     AttributeReference("map", MapType(IntegerType, IntegerType))())
+
+  val streamingRelation = LocalRelation(
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
+    isStreaming = true)
+
+  val batchRelationWithTs = LocalRelation(
+    Seq(
+      AttributeReference("a", IntegerType)(),
+      AttributeReference("ts", TimestampType)()
+    ),
+    isStreaming = false)
 }

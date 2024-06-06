@@ -21,12 +21,14 @@ import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLAUSES, LOWER_BOUND, NEW_VALUE, NUM_PARTITIONS, OLD_VALUE, UPPER_BOUND}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -113,12 +115,12 @@ private[sql] object JDBCRelation extends Logging {
           (upperBound - lowerBound) < 0) {
         partitioning.numPartitions
       } else {
-        logWarning("The number of partitions is reduced because the specified number of " +
-          "partitions is less than the difference between upper bound and lower bound. " +
-          s"Updated number of partitions: ${upperBound - lowerBound}; Input number of " +
-          s"partitions: ${partitioning.numPartitions}; " +
-          s"Lower bound: ${boundValueToString(lowerBound)}; " +
-          s"Upper bound: ${boundValueToString(upperBound)}.")
+        logWarning(log"The number of partitions is reduced because the specified number of " +
+          log"partitions is less than the difference between upper bound and lower bound. " +
+          log"Updated number of partitions: ${MDC(NEW_VALUE, upperBound - lowerBound)}; " +
+          log"Input number of partitions: ${MDC(OLD_VALUE, partitioning.numPartitions)}; " +
+          log"Lower bound: ${MDC(LOWER_BOUND, boundValueToString(lowerBound))}; " +
+          log"Upper bound: ${MDC(UPPER_BOUND, boundValueToString(upperBound))}.")
         upperBound - lowerBound
       }
 
@@ -162,8 +164,9 @@ private[sql] object JDBCRelation extends Logging {
       i = i + 1
     }
     val partitions = ans.toArray
-    logInfo(s"Number of partitions: $numPartitions, WHERE clauses of these partitions: " +
-      partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", "))
+    val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", ")
+    logInfo(log"Number of partitions: ${MDC(NUM_PARTITIONS, numPartitions)}, " +
+      log"WHERE clauses of these partitions: ${MDC(CLAUSES, clauses)}")
     partitions
   }
 
@@ -269,10 +272,11 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  // Check if JDBCRDD.compileFilter can accept input filters
+  // Check if JdbcDialect can compile input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      filters.filter(JDBCRDD.compileFilter(_, JdbcDialects.get(jdbcOptions.url)).isEmpty)
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      filters.filter(f => dialect.compileExpression(f.toV2).isEmpty)
     } else {
       filters
     }
@@ -280,17 +284,17 @@ private[sql] case class JDBCRelation(
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
-    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
-      filters
+    val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
+      filters.map(_.toV2)
     } else {
-      Array.empty[Filter]
+      Array.empty[Predicate]
     }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      pushedFilters,
+      pushedPredicates,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
   }
@@ -298,22 +302,26 @@ private[sql] case class JDBCRelation(
   def buildScan(
       requiredColumns: Array[String],
       finalSchema: StructType,
-      filters: Array[Filter],
+      predicates: Array[Predicate],
       groupByColumns: Option[Array[String]],
       tableSample: Option[TableSampleInfo],
-      limit: Int): RDD[Row] = {
+      limit: Int,
+      sortOrders: Array[String],
+      offset: Int): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      filters,
+      predicates,
       parts,
       jdbcOptions,
       Some(finalSchema),
       groupByColumns,
       tableSample,
-      limit).asInstanceOf[RDD[Row]]
+      limit,
+      sortOrders,
+      offset).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
@@ -325,6 +333,6 @@ private[sql] case class JDBCRelation(
   override def toString: String = {
     val partitioningInfo = if (parts.nonEmpty) s" [numPartitions=${parts.length}]" else ""
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${jdbcOptions.tableOrQuery})" + partitioningInfo
+    s"JDBCRelation(${jdbcOptions.prepareQuery}${jdbcOptions.tableOrQuery})$partitioningInfo"
   }
 }

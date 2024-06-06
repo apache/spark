@@ -35,7 +35,9 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
     )
 
 
-class MissingPandasLikeIndex(object):
+class MissingPandasLikeIndex:
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
     nbytes = _unsupported_property("nbytes")
@@ -49,7 +51,6 @@ class MissingPandasLikeIndex(object):
     get_indexer_non_unique = _unsupported_function("get_indexer_non_unique")
     get_loc = _unsupported_function("get_loc")
     get_slice_bound = _unsupported_function("get_slice_bound")
-    get_value = _unsupported_function("get_value")
     groupby = _unsupported_function("groupby")
     is_ = _unsupported_function("is_")
     join = _unsupported_function("join")
@@ -65,7 +66,6 @@ class MissingPandasLikeIndex(object):
     is_mixed = _unsupported_function("is_mixed")
 
     # Deprecated functions
-    set_value = _unsupported_function("set_value", deprecated=True)
     to_native_types = _unsupported_function("to_native_types", deprecated=True)
 
     # Properties we won't support.
@@ -78,6 +78,8 @@ class MissingPandasLikeIndex(object):
 
 
 class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Properties
     nanosecond = _unsupported_property("nanosecond", cls="DatetimeIndex")
@@ -100,7 +102,26 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     std = _unsupported_function("std", cls="DatetimeIndex")
 
 
-class MissingPandasLikeMultiIndex(object):
+class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
+
+    # Properties
+    nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
+    components = _unsupported_property("components", cls="TimedeltaIndex")
+    inferred_freq = _unsupported_property("inferred_freq", cls="TimedeltaIndex")
+
+    # Functions
+    to_pytimedelta = _unsupported_function("to_pytimedelta", cls="TimedeltaIndex")
+    round = _unsupported_function("round", cls="TimedeltaIndex")
+    floor = _unsupported_function("floor", cls="TimedeltaIndex")
+    ceil = _unsupported_function("ceil", cls="TimedeltaIndex")
+    mean = _unsupported_function("mean", cls="TimedeltaIndex")
+
+
+class MissingPandasLikeMultiIndex:
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions
     argsort = _unsupported_function("argsort")

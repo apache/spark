@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
@@ -27,7 +27,8 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetColumnsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -60,7 +61,14 @@ private[hive] class SparkGetColumnsOperation(
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
-    logInfo(s"$logMsg with $statementId")
+
+    val catalogNameStr = if (catalogName == null) "null" else catalogName
+    val schemaNameStr = if (schemaName == null) "null" else schemaName
+    logInfo(log"Listing columns 'catalog : ${MDC(CATALOG_NAME, catalogNameStr)}, " +
+      log"schemaPattern : ${MDC(DATABASE_NAME, schemaNameStr)}, " +
+      log"tablePattern : ${MDC(TABLE_NAME, tableName)}, " +
+      log"columnName : ${MDC(COLUMN_NAME, columnName)}' " +
+      log"with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -87,7 +95,7 @@ private[hive] class SparkGetColumnsOperation(
     }.toMap
 
     if (isAuthV2Enabled) {
-      val privObjs = seqAsJavaListConverter(getPrivObjs(db2Tabs)).asJava
+      val privObjs = getPrivObjs(db2Tabs).asJava
       authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
     }
 

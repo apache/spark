@@ -20,14 +20,23 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 
 
-private object DerbyDialect extends JdbcDialect {
+private case class DerbyDialect() extends JdbcDialect {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
+
+  // See https://db.apache.org/derby/docs/10.15/ref/index.html
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -39,17 +48,28 @@ private object DerbyDialect extends JdbcDialect {
     case ByteType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
-    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
-    case t: DecimalType if t.precision > 31 =>
-      Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    // 31 is the maximum precision
+    // https://db.apache.org/derby/docs/10.13/ref/rrefsqlj15260.html
+    case t: DecimalType =>
+      val (p, s) = if (t.precision > 31) {
+        (31, math.max(t.scale - (t.precision - 31), 0))
+      } else {
+        (t.precision, t.scale)
+      }
+      Option(JdbcType(s"DECIMAL($p,$s)", java.sql.Types.DECIMAL))
     case _ => None
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
-  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqljrenametablestatement.html
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"RENAME TABLE $oldTable TO $newTable"
+  // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    if (!oldTable.namespace().sameElements(newTable.namespace())) {
+      throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
+    }
+    // New table name restriction:
+    // https://db.apache.org/derby/docs/10.2/ref/rrefnewtablename.html#rrefnewtablename
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO ${newTable.name()}"
   }
 
   // Derby currently doesn't support comment on table. Here is the ticket to add the support
@@ -58,7 +78,20 @@ private object DerbyDialect extends JdbcDialect {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 
-  // ToDo: use fetch first n rows only for limit, e.g.
-  //  select * from employee fetch first 10 rows only;
-  override def supportsLimit(): Boolean = false
+  // Derby Support 2 types of clauses for nullability constraint alteration
+  //   columnName { SET | DROP } NOT NULL
+  //   columnName [ NOT ] NULL
+  // Here we use the 2nd one
+  // For more information, https://db.apache.org/derby/docs/10.16/ref/rrefsqlj81859.html
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def getLimitClause(limit: Integer): String = {
+    ""
+  }
 }

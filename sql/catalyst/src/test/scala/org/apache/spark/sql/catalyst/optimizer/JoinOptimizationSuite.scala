@@ -44,13 +44,13 @@ class JoinOptimizationSuite extends PlanTest {
 
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation1 = LocalRelation('d.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation1 = LocalRelation($"d".int)
 
   test("extract filters and joins") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
-    val z = testRelation.subquery('z)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val z = testRelation.subquery("z")
 
     def testExtract(plan: LogicalPlan,
         expected: Option[(Seq[LogicalPlan], Seq[Expression])]): Unit = {
@@ -96,9 +96,9 @@ class JoinOptimizationSuite extends PlanTest {
   }
 
   test("reorder inner joins") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
-    val z = testRelation.subquery('z)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val z = testRelation.subquery("z")
 
     val queryAnswers = Seq(
       (

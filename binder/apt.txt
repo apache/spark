@@ -1,2 +1,2 @@
-openjdk-8-jre
+openjdk-17-jre
 git

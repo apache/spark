@@ -25,8 +25,8 @@ import org.apache.commons.math3.distribution.LogNormalDistribution
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, INT, LONG, NativeColumnType, SHORT, STRING}
-import org.apache.spark.sql.types.AtomicType
 import org.apache.spark.util.Utils._
 
 /**
@@ -36,8 +36,8 @@ import org.apache.spark.util.Utils._
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/CompressionSchemeBenchmark-results.txt".
  * }}}
  */
@@ -57,7 +57,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     () => rng.sample
   }
 
-  private[this] def prepareEncodeInternal[T <: AtomicType](
+  private[this] def prepareEncodeInternal[T <: PhysicalDataType](
     count: Int,
     tpe: NativeColumnType[T],
     supportedScheme: CompressionScheme,
@@ -80,7 +80,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     (encoder.compress, encoder.compressionRatio, allocateLocal(4 + compressedSize))
   }
 
-  private[this] def runEncodeBenchmark[T <: AtomicType](
+  private[this] def runEncodeBenchmark[T <: PhysicalDataType](
       name: String,
       iters: Int,
       count: Int,
@@ -104,7 +104,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     benchmark.run()
   }
 
-  private[this] def runDecodeBenchmark[T <: AtomicType](
+  private[this] def runDecodeBenchmark[T <: PhysicalDataType](
       name: String,
       iters: Int,
       count: Int,

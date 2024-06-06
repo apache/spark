@@ -24,6 +24,7 @@ import org.apache.spark.ml.regression.FMRegressorSuite._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
 
@@ -43,6 +44,11 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = new FMClassificationModel("fmc_test", 0.0, Vectors.dense(0.0),
       new DenseMatrix(1, 8, new Array[Double](8)))
     ParamsSuite.checkParams(model)
+  }
+
+  test("FMClassifier validate input dataset") {
+    testInvalidClassificationLabels(new FMClassifier().fit(_), Some(2))
+    testInvalidVectors(new FMClassifier().fit(_))
   }
 
   test("FMClassifier: Predictor, Classifier methods") {
@@ -117,7 +123,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       (0.0, Vectors.sparse(3, Array(0, 2), Array(-1.0, 2.0))),
       (0.0, Vectors.sparse(3, Array.emptyIntArray, Array.emptyDoubleArray)),
       (1.0, Vectors.sparse(3, Array(0, 1), Array(2.0, 3.0)))
-    )).toDF("label", "features")
+    ).toImmutableArraySeq).toDF("label", "features")
     val fm = new FMClassifier().setMaxIter(10)
     fm.fit(dataset)
   }

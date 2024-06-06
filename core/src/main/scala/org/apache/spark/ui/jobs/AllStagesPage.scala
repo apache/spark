@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Attribute, Elem, Node, NodeSeq, Null, Text}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.{AppSummary, PoolData}

@@ -25,6 +25,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsPartitionManagement, Tabl
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for showing partitions.
@@ -60,6 +61,6 @@ case class ShowPartitionsExec(
       }
       partitions.mkString("/")
     }
-    output.sorted.map(p => InternalRow(UTF8String.fromString(p)))
+    output.sorted.map(p => InternalRow(UTF8String.fromString(p))).toImmutableArraySeq
   }
 }

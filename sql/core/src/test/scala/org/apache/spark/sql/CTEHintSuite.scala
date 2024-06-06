@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -65,7 +65,7 @@ class CTEHintSuite extends QueryTest with SharedSparkSession {
     }
     val warningMessages = logAppender.loggingEvents
       .filter(_.getLevel == Level.WARN)
-      .map(_.getRenderedMessage)
+      .map(_.getMessage.getFormattedMessage)
       .filter(_.contains("hint"))
     assert(warningMessages.size == warnings.size)
     warnings.foreach { w =>

@@ -18,10 +18,10 @@
 package org.apache.spark.sql.streaming.ui
 
 import java.util.{Locale, UUID}
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
@@ -29,8 +29,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.ui.SparkUI
 
+@SlowSQLTest
 class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("correctly display streaming query page") {
@@ -103,7 +105,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(summary.isActive).thenReturn(true)
     when(summary.name).thenReturn("query")
     when(summary.id).thenReturn(id)
-    when(summary.runId).thenReturn(id)
+    when(summary.runId).thenReturn(id.toString)
     when(summary.startTimestamp).thenReturn(1L)
     when(summary.exception).thenReturn(None)
 

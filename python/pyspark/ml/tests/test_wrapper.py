@@ -21,7 +21,7 @@ import py4j
 
 from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.wrapper import (  # type: ignore[attr-defined]
+from pyspark.ml.wrapper import (
     _java2py,
     _py2java,
     JavaParams,
@@ -63,11 +63,11 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
             self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
             return True
 
-        eventually(condition, timeout=10, catch_assertions=True)
+        eventually(timeout=10, catch_assertions=True)(condition)()
 
         try:
             summary.__del__()
-        except:
+        except BaseException:
             pass
 
         def condition():
@@ -77,7 +77,7 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
                 summary._java_obj.toString()
             return True
 
-        eventually(condition, timeout=10, catch_assertions=True)
+        eventually(timeout=10, catch_assertions=True)(condition)()
 
 
 class WrapperTests(MLlibTestCase):
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_wrapper import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

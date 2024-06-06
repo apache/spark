@@ -84,9 +84,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return data;
   }
 
-  @Override
-  public void close() {
-    super.close();
+  protected void releaseMemory() {
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
@@ -95,6 +93,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     data = 0;
     lengthData = 0;
     offsetData = 0;
+  }
+
+  @Override
+  public void close() {
+    super.close();
   }
 
   //
@@ -132,7 +135,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return Platform.getByte(null, nulls + rowId) == 1;
+    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -150,6 +153,18 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       Platform.putByte(null, data + rowId + i, v);
     }
+  }
+
+  @Override
+  public void putBooleans(int rowId, byte src) {
+    Platform.putByte(null, data + rowId, (byte)(src & 1));
+    Platform.putByte(null, data + rowId + 1, (byte)(src >>> 1 & 1));
+    Platform.putByte(null, data + rowId + 2, (byte)(src >>> 2 & 1));
+    Platform.putByte(null, data + rowId + 3, (byte)(src >>> 3 & 1));
+    Platform.putByte(null, data + rowId + 4, (byte)(src >>> 4 & 1));
+    Platform.putByte(null, data + rowId + 5, (byte)(src >>> 5 & 1));
+    Platform.putByte(null, data + rowId + 6, (byte)(src >>> 6 & 1));
+    Platform.putByte(null, data + rowId + 7, (byte)(src >>> 7 & 1));
   }
 
   @Override
@@ -198,15 +213,27 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public byte[] getBytes(int rowId, int count) {
-    assert(dictionary == null);
     byte[] array = new byte[count];
-    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromAddress(null, data + rowId, count);
+  }
+
+  @Override
+  public ByteBuffer getByteBuffer(int rowId, int count) {
+    return ByteBuffer.wrap(getBytes(rowId, count));
   }
 
   //
@@ -249,9 +276,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public short[] getShorts(int rowId, int count) {
-    assert(dictionary == null);
     short[] array = new short[count];
-    Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId * 2L, array, Platform.SHORT_ARRAY_OFFSET, count * 2L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 
@@ -310,9 +344,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public int[] getInts(int rowId, int count) {
-    assert(dictionary == null);
     int[] array = new int[count];
-    Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId * 4L, array, Platform.INT_ARRAY_OFFSET, count * 4L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 
@@ -321,6 +362,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
    * This should only be called when the ColumnVector is dictionaryIds.
    * We have this separate method for dictionaryIds as per SPARK-16928.
    */
+  @Override
   public int getDictId(int rowId) {
     assert(dictionary == null)
             : "A ColumnVector dictionary should not have a dictionary for itself.";
@@ -382,9 +424,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public long[] getLongs(int rowId, int count) {
-    assert(dictionary == null);
     long[] array = new long[count];
-    Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId * 8L, array, Platform.LONG_ARRAY_OFFSET, count * 8L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToLong(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 
@@ -441,9 +490,16 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public float[] getFloats(int rowId, int count) {
-    assert(dictionary == null);
     float[] array = new float[count];
-    Platform.copyMemory(null, data + rowId * 4L, array, Platform.FLOAT_ARRAY_OFFSET, count * 4L);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId * 4L, array, Platform.FLOAT_ARRAY_OFFSET, count * 4L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToFloat(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 
@@ -501,9 +557,17 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public double[] getDoubles(int rowId, int count) {
-    assert(dictionary == null);
     double[] array = new double[count];
-    Platform.copyMemory(null, data + rowId * 8L, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8L);
+    if (dictionary == null) {
+      Platform.copyMemory(null, data + rowId * 8L, array, Platform.DOUBLE_ARRAY_OFFSET,
+        count * 8L);
+    } else {
+      for (int i = 0; i < count; i++) {
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToDouble(dictionaryIds.getDictId(rowId + i));
+        }
+      }
+    }
     return array;
   }
 

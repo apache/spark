@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
@@ -33,59 +34,35 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**
  * Physical operator for executing `FlatMapGroupsWithState`
- *
- * @param func function called on each group
- * @param keyDeserializer used to extract the key object for each group.
- * @param valueDeserializer used to extract the items in the iterator from an input row.
- * @param initialStateDeserializer used to extract the state object from the initialState dataset
- * @param groupingAttributes used to group the data
- * @param dataAttributes used to read the data
- * @param outputObjAttr Defines the output object
- * @param stateEncoder used to serialize/deserialize state before calling `func`
- * @param outputMode the output mode of `func`
- * @param timeoutConf used to timeout groups that have not received data in a while
- * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermark event time watermark for the current batch
- * @param initialState the user specified initial state
- * @param hasInitialState indicates whether the initial state is provided or not
- * @param child the physical plan for the underlying data
  */
-case class FlatMapGroupsWithStateExec(
-    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
-    keyDeserializer: Expression,
-    valueDeserializer: Expression,
-    initialStateDeserializer: Expression,
-    groupingAttributes: Seq[Attribute],
-    initialStateGroupAttrs: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    initialStateDataAttrs: Seq[Attribute],
-    outputObjAttr: Attribute,
-    stateInfo: Option[StatefulOperatorStateInfo],
-    stateEncoder: ExpressionEncoder[Any],
-    stateFormatVersion: Int,
-    outputMode: OutputMode,
-    timeoutConf: GroupStateTimeout,
-    batchTimestampMs: Option[Long],
-    eventTimeWatermark: Option[Long],
-    initialState: SparkPlan,
-    hasInitialState: Boolean,
-    child: SparkPlan
-  ) extends BinaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
-
-  import FlatMapGroupsWithStateExecHelper._
+trait FlatMapGroupsWithStateExecBase
+    extends StateStoreWriter with WatermarkSupport {
   import GroupStateImpl._
+  import FlatMapGroupsWithStateExecHelper._
 
-  override def left: SparkPlan = child
+  protected val groupingAttributes: Seq[Attribute]
 
-  override def right: SparkPlan = initialState
+  protected val initialStateDeserializer: Expression
+  protected val initialStateGroupAttrs: Seq[Attribute]
+  protected val initialStateDataAttrs: Seq[Attribute]
+  protected val initialState: SparkPlan
+  protected val hasInitialState: Boolean
 
-  private val isTimeoutEnabled = timeoutConf != NoTimeout
-  private val watermarkPresent = child.output.exists {
+  val stateInfo: Option[StatefulOperatorStateInfo]
+  protected val stateEncoder: ExpressionEncoder[Any]
+  protected val stateFormatVersion: Int
+  protected val outputMode: OutputMode
+  protected val timeoutConf: GroupStateTimeout
+  protected val batchTimestampMs: Option[Long]
+  val eventTimeWatermarkForLateEvents: Option[Long]
+  val eventTimeWatermarkForEviction: Option[Long]
+  protected val isTimeoutEnabled: Boolean = timeoutConf != NoTimeout
+  protected val watermarkPresent: Boolean = child.output.exists {
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
     case _ => false
   }
 
-  private[sql] val stateManager =
+  lazy val stateManager: StateManager =
     createStateManager(stateEncoder, isTimeoutEnabled, stateFormatVersion)
 
   /**
@@ -93,8 +70,10 @@ case class FlatMapGroupsWithStateExec(
    * to have the same grouping so that the data are co-lacated on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
-    ClusteredDistribution(initialStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      groupingAttributes, getStateInfo, conf) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      initialStateGroupAttrs, getStateInfo, conf) ::
       Nil
   }
 
@@ -111,17 +90,23 @@ case class FlatMapGroupsWithStateExec(
 
   override def shortName: String = "flatMapGroupsWithState"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     timeoutConf match {
       case ProcessingTimeTimeout =>
         true  // Always run batches to process timeouts
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
-        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
+        eventTimeWatermarkForEviction.isDefined &&
+          newInputWatermark > eventTimeWatermarkForEviction.get
       case _ =>
         false
     }
   }
+
+  // There is no guarantee that any of the column in the output is bound to the watermark. The
+  // user function is quite flexible. Hence Spark does not support the stateful operator(s) after
+  // (flat)MapGroupsWithState.
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = None
 
   /**
    * Process data by applying the user defined function on a per partition basis.
@@ -146,7 +131,7 @@ case class FlatMapGroupsWithStateExec(
     var timeoutProcessingStartTimeNs = currentTimeNs
 
     // If timeout is based on event time, then filter late data based on watermark
-    val filteredIter = watermarkPredicateForData match {
+    val filteredIter = watermarkPredicateForDataForLateEvents match {
       case Some(predicate) if timeoutConf == EventTimeTimeout =>
         applyRemovingRowsOlderThanWatermark(iter, predicate)
       case _ =>
@@ -167,12 +152,20 @@ case class FlatMapGroupsWithStateExec(
           timeoutProcessingStartTimeNs = System.nanoTime
         })
 
-    val timeoutProcessorIter =
-      CompletionIterator[InternalRow, Iterator[InternalRow]](processor.processTimedOutState(), {
-        // Note: `timeoutLatencyMs` also includes the time the parent operator took for
-        // processing output returned through iterator.
-        timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
-      })
+    // SPARK-38320: Late-bind the timeout processing iterator so it is created *after* the input is
+    // processed (the input iterator is exhausted) and the state updates are written into the
+    // state store. Otherwise the iterator may not see the updates (e.g. with RocksDB state store).
+    val timeoutProcessorIter = new Iterator[InternalRow] {
+      private lazy val itr = getIterator()
+      override def hasNext = itr.hasNext
+      override def next() = itr.next()
+      private def getIterator(): Iterator[InternalRow] =
+        CompletionIterator[InternalRow, Iterator[InternalRow]](processor.processTimedOutState(), {
+          // Note: `timeoutLatencyMs` also includes the time the parent operator took for
+          // processing output returned through iterator.
+          timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
+        })
+    }
 
     // Generate a iterator that returns the rows grouped by the grouping function
     // Note that this code ensures that the filtering for timeout occurs only after
@@ -195,6 +188,7 @@ case class FlatMapGroupsWithStateExec(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    stateManager // force lazy init at driver
     metrics // force lazy init at driver
 
     // Throw errors early if parameters are not as expected
@@ -202,8 +196,12 @@ case class FlatMapGroupsWithStateExec(
       case ProcessingTimeTimeout =>
         require(batchTimestampMs.nonEmpty)
       case EventTimeTimeout =>
-        require(eventTimeWatermark.nonEmpty) // watermark value has been populated
-        require(watermarkExpression.nonEmpty) // input schema has watermark attribute
+        // watermark value has been populated
+        require(eventTimeWatermarkForLateEvents.nonEmpty)
+        require(eventTimeWatermarkForEviction.nonEmpty)
+        // input schema has watermark attribute
+        require(watermarkExpressionForLateEvents.nonEmpty)
+        require(watermarkExpressionForEviction.nonEmpty)
       case _ =>
     }
 
@@ -228,9 +226,11 @@ case class FlatMapGroupsWithStateExec(
             storeProviderId,
             groupingAttributes.toStructType,
             stateManager.stateSchema,
-            numColsPrefixKey = 0,
-            stateInfo.get.storeVersion, storeConf, hadoopConfBroadcast.value.value)
-          val processor = new InputProcessor(store)
+            NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
+            stateInfo.get.storeVersion,
+            useColumnFamilies = false,
+            storeConf, hadoopConfBroadcast.value.value)
+          val processor = createInputProcessor(store)
           processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))
       }
     } else {
@@ -238,25 +238,19 @@ case class FlatMapGroupsWithStateExec(
         getStateInfo,
         groupingAttributes.toStructType,
         stateManager.stateSchema,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processor = new InputProcessor(store)
+        val processor = createInputProcessor(store)
         processDataWithPartition(singleIterator, store, processor)
       }
     }
   }
 
-  /** Helper class to update the state store */
-  class InputProcessor(store: StateStore) {
+  def createInputProcessor(store: StateStore): InputProcessor
 
-    // Converters for translating input keys, values, output data between rows and Java objects
-    private val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-    private val getValueObj =
-      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-    private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+  abstract class InputProcessor(store: StateStore) {
     private val getStateObj = if (hasInitialState) {
       Some(ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs))
     } else {
@@ -264,9 +258,9 @@ case class FlatMapGroupsWithStateExec(
     }
 
     // Metrics
-    private val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-    private val numOutputRows = longMetric("numOutputRows")
-    private val numRemovedStateRows = longMetric("numRemovedStateRows")
+    protected val numUpdatedStateRows: SQLMetric = longMetric("numUpdatedStateRows")
+    protected val numOutputRows: SQLMetric = longMetric("numOutputRows")
+    protected val numRemovedStateRows: SQLMetric = longMetric("numRemovedStateRows")
 
     /**
      * For every group, get the key, values and corresponding state and call the function,
@@ -329,7 +323,7 @@ case class FlatMapGroupsWithStateExec(
       if (isTimeoutEnabled) {
         val timeoutThreshold = timeoutConf match {
           case ProcessingTimeTimeout => batchTimestampMs.get
-          case EventTimeTimeout => eventTimeWatermark.get
+          case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
@@ -352,7 +346,76 @@ case class FlatMapGroupsWithStateExec(
      * @param valueRowIter Iterator of values as rows, cannot be null, but can be empty
      * @param hasTimedOut Whether this function is being called for a key timeout
      */
-    private def callFunctionAndUpdateState(
+    protected def callFunctionAndUpdateState(
+        stateData: StateData,
+        valueRowIter: Iterator[InternalRow],
+        hasTimedOut: Boolean): Iterator[InternalRow]
+  }
+}
+
+/**
+ * Physical operator for executing `FlatMapGroupsWithState`
+ *
+ * @param func function called on each group
+ * @param keyDeserializer used to extract the key object for each group.
+ * @param valueDeserializer used to extract the items in the iterator from an input row.
+ * @param initialStateDeserializer used to extract the state object from the initialState dataset
+ * @param groupingAttributes used to group the data
+ * @param dataAttributes used to read the data
+ * @param outputObjAttr Defines the output object
+ * @param stateEncoder used to serialize/deserialize state before calling `func`
+ * @param outputMode the output mode of `func`
+ * @param timeoutConf used to timeout groups that have not received data in a while
+ * @param batchTimestampMs processing timestamp of the current batch.
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param initialState the user specified initial state
+ * @param hasInitialState indicates whether the initial state is provided or not
+ * @param child the physical plan for the underlying data
+ */
+case class FlatMapGroupsWithStateExec(
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    initialStateDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    initialStateGroupAttrs: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    outputObjAttr: Attribute,
+    stateInfo: Option[StatefulOperatorStateInfo],
+    stateEncoder: ExpressionEncoder[Any],
+    stateFormatVersion: Int,
+    outputMode: OutputMode,
+    timeoutConf: GroupStateTimeout,
+    batchTimestampMs: Option[Long],
+    eventTimeWatermarkForLateEvents: Option[Long],
+    eventTimeWatermarkForEviction: Option[Long],
+    initialState: SparkPlan,
+    hasInitialState: Boolean,
+    child: SparkPlan)
+  extends FlatMapGroupsWithStateExecBase with BinaryExecNode with  ObjectProducerExec {
+  import GroupStateImpl._
+  import FlatMapGroupsWithStateExecHelper._
+
+  override def left: SparkPlan = child
+
+  override def right: SparkPlan = initialState
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
+    copy(child = newLeft, initialState = newRight)
+
+  override def createInputProcessor(
+      store: StateStore): InputProcessor = new InputProcessor(store) {
+    // Converters for translating input keys, values, output data between rows and Java objects
+    private val getKeyObj =
+      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+    private val getValueObj =
+      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+    private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
+
+    override protected def callFunctionAndUpdateState(
         stateData: StateData,
         valueRowIter: Iterator[InternalRow],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
@@ -362,7 +425,7 @@ case class FlatMapGroupsWithStateExec(
       val groupState = GroupStateImpl.createForStreaming(
         Option(stateData.stateObj),
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
-        eventTimeWatermark.getOrElse(NO_TIMESTAMP),
+        eventTimeWatermarkForEviction.getOrElse(NO_TIMESTAMP),
         timeoutConf,
         hasTimedOut,
         watermarkPresent)
@@ -395,10 +458,6 @@ case class FlatMapGroupsWithStateExec(
       CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIterator, onIteratorCompletion)
     }
   }
-
-  override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newLeft, initialState = newRight)
 }
 
 object FlatMapGroupsWithStateExec {
@@ -459,12 +518,12 @@ object FlatMapGroupsWithStateExec {
       }
       CoGroupExec(
         func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
-        child, initialState)
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, Seq.empty, Seq.empty,
+        outputObjAttr, child, initialState)
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, outputObjAttr, timeoutConf, child)
+        dataAttributes, Seq.empty, outputObjAttr, timeoutConf, child)
     }
   }
 }

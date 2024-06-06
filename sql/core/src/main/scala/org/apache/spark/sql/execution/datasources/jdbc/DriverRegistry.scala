@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Driver, DriverManager}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -65,7 +66,7 @@ object DriverRegistry extends Logging {
       case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == className => d.wrapped
       case d if d.getClass.getCanonicalName == className => d
     }.getOrElse {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"Did not find registered driver with class $className")
     }
   }

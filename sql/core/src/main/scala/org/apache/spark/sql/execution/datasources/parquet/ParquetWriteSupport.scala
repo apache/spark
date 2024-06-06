@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util
 
-import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.ParquetProperties
@@ -29,15 +29,14 @@ import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -82,16 +81,16 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
   private val int96RebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE))
 
-  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val int96RebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     int96RebaseMode, "Parquet INT96")
 
   override def init(configuration: Configuration): WriteContext = {
@@ -117,19 +116,23 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
     ) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        Some(SPARK_LEGACY_DATETIME -> "")
+        Map(
+          SPARK_LEGACY_DATETIME_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
-        None
+        Map.empty
       }
     } ++ {
       if (int96RebaseMode == LegacyBehaviorPolicy.LEGACY) {
-        Some(SPARK_LEGACY_INT96 -> "")
+        Map(
+          SPARK_LEGACY_INT96_METADATA_KEY -> "",
+          SPARK_TIMEZONE_METADATA_KEY -> SQLConf.get.sessionLocalTimeZone)
       } else {
-        None
+        Map.empty
       }
     }
 
-    logInfo(
+    logDebug(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
          |${schema.prettyJson}
          |and corresponding Parquet message type:
@@ -196,7 +199,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addDouble(row.getDouble(ordinal))
 
-      case StringType =>
+      case _: StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
@@ -235,6 +238,18 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
 
+      case VariantType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val v = row.getVariant(ordinal)
+          consumeGroup {
+            consumeField("value", 0) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getValue))
+            }
+            consumeField("metadata", 1) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getMetadata))
+            }
+          }
+
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter).toArray[ValueWriter]
         (row: SpecializedGetters, ordinal: Int) =>
@@ -248,8 +263,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      // TODO Adds IntervalType support
-      case _ => sys.error(s"Unsupported data type $dataType.")
+      case _ => throw SparkException.internalError(s"Unsupported data type $dataType.")
     }
   }
 

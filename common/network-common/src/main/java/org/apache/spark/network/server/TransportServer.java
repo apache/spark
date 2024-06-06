@@ -34,9 +34,9 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.commons.lang3.SystemUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.*;
 
@@ -44,7 +44,7 @@ import org.apache.spark.network.util.*;
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportServer.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportServer.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -140,7 +140,7 @@ public class TransportServer implements Closeable {
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
-        context.initializePipeline(ch, rpcHandler);
+        context.initializePipeline(ch, rpcHandler, false);
       }
     });
 
@@ -149,8 +149,9 @@ public class TransportServer implements Closeable {
     channelFuture = bootstrap.bind(address);
     channelFuture.syncUninterruptibly();
 
-    port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
-    logger.debug("Shuffle server started on port: {}", port);
+    InetSocketAddress localAddress = (InetSocketAddress) channelFuture.channel().localAddress();
+    port = localAddress.getPort();
+    logger.debug("Shuffle server started on {} with port {}", localAddress.getHostString(), port);
   }
 
   public MetricSet getAllMetrics() {

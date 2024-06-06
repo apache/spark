@@ -22,6 +22,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
 
@@ -83,11 +84,11 @@ class VarianceThresholdSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test VarianceThresholdSelector: sparse vector") {
     val df = spark.createDataFrame(Seq(
-      (1, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0))),
+      (1, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)).toImmutableArraySeq),
         Vectors.dense(Array(6.0, 0.0, 7.0, 0.0))),
-      (2, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0))),
+      (2, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)).toImmutableArraySeq),
         Vectors.dense(Array(0.0, 6.0, 0.0, 9.0))),
-      (3, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0))),
+      (3, Vectors.sparse(6, Array((1, 9.0), (2, 3.0), (4, 5.0), (5, 5.0)).toImmutableArraySeq),
         Vectors.dense(Array(0.0, 3.0, 0.0, 5.0))),
       (4, Vectors.dense(Array(0.0, 9.0, 8.0, 5.0, 6.0, 4.0)),
         Vectors.dense(Array(0.0, 8.0, 5.0, 4.0))),

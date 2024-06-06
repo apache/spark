@@ -39,7 +39,7 @@ case class PlanAdaptiveDynamicPruningFilters(
     plan.transformAllExpressionsWithPruning(
       _.containsAllPatterns(DYNAMIC_PRUNING_EXPRESSION, IN_SUBQUERY_EXEC)) {
       case DynamicPruningExpression(InSubqueryExec(
-          value, SubqueryAdaptiveBroadcastExec(name, index, onlyInBroadcast, buildPlan, buildKeys,
+          value, SubqueryAdaptiveBroadcastExec(name, indices, onlyInBroadcast, buildPlan, buildKeys,
           adaptivePlan: AdaptiveSparkPlanExec), exprId, _, _, _)) =>
         val packedKeys = BindReferences.bindReferences(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
@@ -61,23 +61,20 @@ case class PlanAdaptiveDynamicPruningFilters(
           val newAdaptivePlan = adaptivePlan.copy(inputPlan = exchange)
 
           val broadcastValues = SubqueryBroadcastExec(
-            name, index, buildKeys, newAdaptivePlan)
+            name, indices, buildKeys, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
         } else if (onlyInBroadcast) {
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
-          val alias = Alias(buildKeys(index), buildKeys(index).toString)()
-          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          val aliases = indices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
+          val aggregate = Aggregate(aliases, aliases, buildPlan)
 
           val session = adaptivePlan.context.session
-          val planner = session.sessionState.planner
-          // Here we can't call the QueryExecution.prepareExecutedPlan() method to
-          // get the sparkPlan as Non-AQE use case, which will cause the physical
-          // plan optimization rules be inserted twice, once in AQE framework and
-          // another in prepareExecutedPlan() method.
-          val sparkPlan = QueryExecution.createSparkPlan(session, planner, aggregate)
-          val newAdaptivePlan = adaptivePlan.copy(inputPlan = sparkPlan)
+          val sparkPlan = QueryExecution.prepareExecutedPlan(
+            session, aggregate, adaptivePlan.context)
+          assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
+          val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, values, exprId))
         }

@@ -19,11 +19,11 @@ package org.apache.spark.mllib.feature
 
 import java.lang.{Iterable => JavaIterable}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -31,7 +31,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ALPHA, COUNT, NUM_TRAIN_WORD, VOCAB_SIZE}
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -39,6 +40,7 @@ import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{Utils => CUtils}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -180,7 +182,7 @@ class Word2Vec extends Serializable with Logging {
   private var trainWordsCount = 0L
   private var vocabSize = 0
   @transient private var vocab: Array[VocabWord] = null
-  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private val vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab[S <: Iterable[String]](dataset: RDD[S]): Unit = {
     val words = dataset.flatMap(x => x)
@@ -207,7 +209,8 @@ class Word2Vec extends Serializable with Logging {
       trainWordsCount += vocab(a).cn
       a += 1
     }
-    logInfo(s"vocabSize = $vocabSize, trainWordsCount = $trainWordsCount")
+    logInfo(log"vocabSize = ${MDC(VOCAB_SIZE, vocabSize)}," +
+      log" trainWordsCount = ${MDC(NUM_TRAIN_WORD, trainWordsCount)}")
   }
 
   private def createExpTable(): Array[Float] = {
@@ -378,8 +381,9 @@ class Word2Vec extends Serializable with Logging {
                 (1 - (numPartitions * wordCount.toDouble + numWordsProcessedInPreviousIterations) /
                   totalWordsCounts)
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
-              logInfo(s"wordCount = ${wordCount + numWordsProcessedInPreviousIterations}, " +
-                s"alpha = $alpha")
+              logInfo(log"wordCount =" +
+                log" ${MDC(COUNT, wordCount + numWordsProcessedInPreviousIterations)}," +
+                log" alpha = ${MDC(ALPHA, alpha)}")
             }
             wc += sentence.length
             var pos = 0
@@ -470,7 +474,7 @@ class Word2Vec extends Serializable with Logging {
     newSentences.unpersist()
 
     val wordArray = vocab.map(_.word)
-    new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)
+    new Word2VecModel(CUtils.toMapWithIndex(wordArray), syn0Global)
   }
 
   /**
@@ -639,7 +643,7 @@ class Word2VecModel private[spark] (
 object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {
-    model.keys.zipWithIndex.toMap
+    CUtils.toMapWithIndex(model.keys)
   }
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
@@ -703,7 +707,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
   override def load(sc: SparkContext, path: String): Word2VecModel = {
 
     val (loadedClassName, loadedVersion, metadata) = Loader.loadMetadata(sc, path)
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val expectedVectorSize = (metadata \ "vectorSize").extract[Int]
     val expectedNumWords = (metadata \ "numWords").extract[Int]
     val classNameV1_0 = SaveLoadV1_0.classNameV1_0

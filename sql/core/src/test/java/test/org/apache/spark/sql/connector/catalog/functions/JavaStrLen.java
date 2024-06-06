@@ -49,7 +49,7 @@ public class JavaStrLen implements UnboundFunction {
       return fn;
     }
 
-    throw new UnsupportedOperationException("Except StringType");
+    throw new UnsupportedOperationException("Expect StringType");
   }
 
   @Override
@@ -72,6 +72,11 @@ public class JavaStrLen implements UnboundFunction {
     @Override
     public String name() {
       return "strlen";
+    }
+
+    @Override
+    public String canonicalName() {
+      return name();
     }
   }
 

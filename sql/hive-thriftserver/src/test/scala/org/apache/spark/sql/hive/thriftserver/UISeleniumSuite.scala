@@ -33,8 +33,10 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
@@ -69,18 +71,20 @@ class UISeleniumSuite
     }
 
     val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """rootLogger.level = info
+          |rootLogger.appenderRef.file.ref = console
+          |appender.console.type = Console
+          |appender.console.name = console
+          |appender.console.target = SYSTEM_ERR
+          |appender.console.layout.type = PatternLayout
+          |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
         """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
+        new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
 
       tempLog4jConf
@@ -88,9 +92,9 @@ class UISeleniumSuite
 
     s"""$startScript
         |  --master local
-        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
+        |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+        |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
+        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
         |  --driver-class-path $driverClassPath
@@ -101,10 +105,10 @@ class UISeleniumSuite
 
   test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
-        "CREATE TABLE test_map(key INT, value STRING)",
+        "CREATE TABLE test_map (key INT, value STRING) USING HIVE",
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)
@@ -129,11 +133,11 @@ class UISeleniumSuite
 
   test("SPARK-36400: Redact sensitive information in UI by config") {
     withJdbcStatement("test_tbl1", "test_tbl2") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = s"http://$localhost:$uiPort"
 
       val Seq(nonMaskedQuery, maskedQuery) = Seq("test_tbl1", "test_tbl2").map (tblName =>
         s"CREATE TABLE $tblName(a int) " +
-          s"OPTIONS(url='jdbc:postgresql://localhost:5432/$tblName', " +
+          s"OPTIONS(url='jdbc:postgresql://$localhost:5432/$tblName', " +
           "user='test_user', password='abcde')")
       statement.execute(nonMaskedQuery)
 

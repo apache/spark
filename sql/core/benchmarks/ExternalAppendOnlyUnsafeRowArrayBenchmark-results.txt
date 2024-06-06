@@ -2,44 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
 Array with 100000 rows:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        5579           5669         128         18.4          54.5       1.0X
-ExternalAppendOnlyUnsafeRowArray                   5589           5591           2         18.3          54.6       1.0X
+ArrayBuffer                                        2330           2333           4         44.0          22.8       1.0X
+ExternalAppendOnlyUnsafeRowArray                   3306           3317          15         31.0          32.3       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
 Array with 1000 rows:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       12989          13075         122         20.2          49.5       1.0X
-ExternalAppendOnlyUnsafeRowArray                  29432          29595         231          8.9         112.3       0.4X
+ArrayBuffer                                        5594           5598           6         46.9          21.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                  12278          12332          75         21.4          46.8       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
 Array with 30000 rows:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       25378          25500         171         19.4          51.6       1.0X
-ExternalAppendOnlyUnsafeRowArray                  29897          30232         474         16.4          60.8       0.8X
+ArrayBuffer                                       10249          10252           4         48.0          20.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  16386          16397          16         30.0          33.3       0.6X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
 Spilling with 1000 rows:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                              26731          27063         469          9.8         102.0       1.0X
-ExternalAppendOnlyUnsafeRowArray                  14471          14653         258         18.1          55.2       1.8X
+UnsafeExternalSorter                               8294           8315          30         31.6          31.6       1.0X
+ExternalAppendOnlyUnsafeRowArray                   6767           6797          42         38.7          25.8       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
 Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                                  9             11           2         18.1          55.1       1.0X
-ExternalAppendOnlyUnsafeRowArray                      9              9           1         18.7          53.5       1.0X
+UnsafeExternalSorter                                  5              5           0         34.2          29.2       1.0X
+ExternalAppendOnlyUnsafeRowArray                      4              4           0         38.8          25.8       1.1X
 
 

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
@@ -71,6 +71,31 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       "",
       true,
       KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID")
+    )
+    val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val driverStep = new MountVolumesFeatureStep(driverConf)
+    val driverPod = driverStep.configurePod(SparkPod.initialPod())
+
+    assert(driverPod.pod.getSpec.getVolumes.size() === 1)
+    val driverPVC = driverPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(driverPVC.getClaimName === "pvc-spark-SPARK_EXECUTOR_ID")
+
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    val executorPod = executorStep.configurePod(SparkPod.initialPod())
+
+    assert(executorPod.pod.getSpec.getVolumes.size() === 1)
+    val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+    assert(executorPVC.getClaimName === s"pvc-spark-${KubernetesTestConf.EXECUTOR_ID}")
+  }
+
+  test("SPARK-32713 Mounts parameterized persistentVolumeClaims in executors with storage class") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      true,
+      KubernetesPVCVolumeConf("pvc-spark-SPARK_EXECUTOR_ID", Some("fast"), Some("512M"))
     )
     val driverConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val driverStep = new MountVolumesFeatureStep(driverConf)

@@ -73,12 +73,31 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       }
     }
   }
+
+  test("char/varchar type values length check: partitioned columns of other types") {
+    val tableName = "t"
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(i STRING, c $typ) USING $format PARTITIONED BY (c)")
+        Seq(1, 10, 100, 1000, 10000).foreach { v =>
+          sql(s"INSERT OVERWRITE $tableName VALUES ('1', $v)")
+          checkPlainResult(spark.table(tableName), typ, v.toString)
+          sql(s"ALTER TABLE $tableName DROP PARTITION(c=$v)")
+          checkAnswer(spark.table(tableName), Nil)
+        }
+        assertLengthCheckFailure(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)")
+        assertLengthCheckFailure("ALTER TABLE t DROP PARTITION(c=100000)")
+      }
+    }
+  }
 }
 
 class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {
 
   // The default Hive serde doesn't support nested null values.
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
+
+  override def getTableName(name: String): String = s"`spark_catalog`.`default`.`$name`"
 
   private var originalPartitionMode = ""
 

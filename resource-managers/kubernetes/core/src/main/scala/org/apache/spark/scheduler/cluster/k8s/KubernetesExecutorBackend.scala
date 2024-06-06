@@ -66,7 +66,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
       // Debug code
-      Utils.checkHost(arguments.hostname)
+      assert(arguments.hostname != null &&
+          (arguments.hostname.indexOf(':') == -1 || arguments.hostname.split(":").length > 2))
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
@@ -81,7 +82,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         clientMode = true)
 
       var driver: RpcEndpointRef = null
-      val nTries = 3
+      val nTries = sys.env.getOrElse("EXECUTOR_DRIVER_PROPS_FETCHER_MAX_ATTEMPTS", "3").toInt
       for (i <- 0 until nTries if driver == null) {
         try {
           driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
@@ -157,7 +158,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
           bindAddress = value
           argv = tail
         case ("--hostname") :: value :: tail =>
-          hostname = value
+          // entrypoint.sh sets SPARK_EXECUTOR_POD_IP without '[]'
+          hostname = Utils.addBracketsIfNeeded(value)
           argv = tail
         case ("--cores") :: value :: tail =>
           cores = value.toInt

@@ -111,7 +111,7 @@ sparkR.conf <- function(key, defaultValue) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
                 estr <- as.character(e)
-                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                if (any(grepl("SQL_CONF_NOT_FOUND", estr, fixed = TRUE))) {
                   stop("Config '", key, "' is not set")
                 } else {
                   stop("Unknown error: ", estr)
@@ -153,7 +153,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
-      1
+      # If numPartitions is not set, chunk the R DataFrame based on the batch size.
+      ceiling(
+        nrow(rdf) / as.numeric(sparkR.conf("spark.sql.execution.arrow.maxRecordsPerBatch")[[1]]))
     }
 
     rdf_slices <- if (numPartitions > 1) {
@@ -382,9 +384,9 @@ setMethod("toDF", signature(x = "RDD"),
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
 #'            You can find the JSON-specific options for reading JSON files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'            Data Source Option} in the version you use.
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @return SparkDataFrame
 #' @rdname read.json
 #' @examples
@@ -414,9 +416,9 @@ read.json <- function(path, ...) {
 #' @param path Path of file to read.
 #' @param ... additional external data source specific named properties.
 #'            You can find the ORC-specific options for reading ORC files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
-#'            Data Source Option} in the version you use.
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @return SparkDataFrame
 #' @rdname read.orc
 #' @name read.orc
@@ -439,9 +441,9 @@ read.orc <- function(path, ...) {
 #' @param path path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional data source specific named properties.
 #'            You can find the Parquet-specific options for reading Parquet files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
-#'            }{Data Source Option} in the version you use.
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
@@ -468,9 +470,9 @@ read.parquet <- function(path, ...) {
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param ... additional external data source specific named properties.
 #'            You can find the text-specific options for reading text files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
-#'            Data Source Option} in the version you use.
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @return SparkDataFrame
 #' @rdname read.text
 #' @examples
@@ -619,8 +621,9 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #'
 #' Additional JDBC database connection properties can be set (...)
 #' You can find the JDBC-specific option and parameter documentation for reading tables via JDBC in
-#' \url{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
-#' Data Source Option} in the version you use.
+# nolint start
+#' \url{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #'
 #' Only one of partitionColumn or predicates should be set. Partitions of the table will be
 #' retrieved in parallel based on the \code{numPartitions} or by the predicates.

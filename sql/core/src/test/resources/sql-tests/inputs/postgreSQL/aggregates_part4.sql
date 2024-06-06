@@ -33,10 +33,10 @@
 --      (values (0::float8),(0.1),(0.25),(0.4),(0.5),(0.6),(0.75),(0.9),(1)) v(p)
 -- group by p order by p;
 
--- select percentile_cont(0.5) within group (order by b) from aggtest;
--- select percentile_cont(0.5) within group (order by b), sum(b) from aggtest;
--- select percentile_cont(0.5) within group (order by thousand) from tenk1;
--- select percentile_disc(0.5) within group (order by thousand) from tenk1;
+select percentile_cont(0.5) within group (order by b) from aggtest;
+select percentile_cont(0.5) within group (order by b), sum(b) from aggtest;
+select percentile_cont(0.5) within group (order by thousand) from tenk1;
+select percentile_disc(0.5) within group (order by thousand) from tenk1;
 -- [SPARK-28661] Hypothetical-Set Aggregate Functions
 -- select rank(3) within group (order by x)
 -- from (values (1),(1),(2),(2),(3),(3),(4)) v(x);

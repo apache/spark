@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package test.org.apache.spark.sql;
 
@@ -25,9 +25,9 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class JavaDataFrameReaderWriterSuite {
   private SparkSession spark = new TestSparkSession();
@@ -35,7 +35,7 @@ public class JavaDataFrameReaderWriterSuite {
   private transient String input;
   private transient String output;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
     File f = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "output");
@@ -43,7 +43,7 @@ public class JavaDataFrameReaderWriterSuite {
     output = f.toString();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;

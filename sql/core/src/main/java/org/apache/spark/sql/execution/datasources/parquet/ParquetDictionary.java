@@ -70,7 +70,7 @@ public final class ParquetDictionary implements Dictionary {
       long signed = dictionary.decodeToLong(id);
       return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
     } else {
-      return dictionary.decodeToBinary(id).getBytes();
+      return dictionary.decodeToBinary(id).getBytesUnsafe();
     }
   }
 }

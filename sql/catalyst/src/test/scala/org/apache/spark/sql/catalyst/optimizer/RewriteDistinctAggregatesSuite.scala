@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullInt = Literal(null, IntegerType)
   val nullString = Literal(null, StringType)
-  val testRelation = LocalRelation('a.string, 'b.string, 'c.string, 'd.string, 'e.int)
+  val testRelation = LocalRelation($"a".string, $"b".string, $"c".string, $"d".string, $"e".int)
+  val testRelation2 = LocalRelation($"a".double, $"b".int, $"c".int, $"d".int, $"e".int)
 
   private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
     case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
@@ -36,7 +37,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("single distinct group") {
     val input = testRelation
-      .groupBy('a)(countDistinct('e))
+      .groupBy($"a")(countDistinct($"e"))
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)
@@ -44,9 +45,9 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("single distinct group with partial aggregates") {
     val input = testRelation
-      .groupBy('a, 'd)(
-        countDistinct('e, 'c).as('agg1),
-        max('b).as('agg2))
+      .groupBy($"a", $"d")(
+        countDistinct($"e", $"c").as("agg1"),
+        max($"b").as("agg2"))
       .analyze
     val rewrite = RewriteDistinctAggregates(input)
     comparePlans(input, rewrite)
@@ -54,25 +55,58 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
   test("multiple distinct groups") {
     val input = testRelation
-      .groupBy('a)(countDistinct('b, 'c), countDistinct('d))
+      .groupBy($"a")(countDistinct($"b", $"c"), countDistinct($"d"))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
 
   test("multiple distinct groups with partial aggregates") {
     val input = testRelation
-      .groupBy('a)(countDistinct('b, 'c), countDistinct('d), sum('e))
+      .groupBy($"a")(countDistinct($"b", $"c"), countDistinct($"d"), sum($"e"))
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
   }
 
   test("multiple distinct groups with non-partial aggregates") {
     val input = testRelation
-      .groupBy('a)(
-        countDistinct('b, 'c),
-        countDistinct('d),
-        CollectSet('b).toAggregateExpression())
+      .groupBy($"a")(
+        countDistinct($"b", $"c"),
+        countDistinct($"d"),
+        CollectSet($"b").toAggregateExpression())
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
+  }
+
+  test("SPARK-40382: eliminate multiple distinct groups due to superficial differences") {
+    val input = testRelation2
+      .groupBy($"a")(
+        countDistinct($"b" + $"c").as("agg1"),
+        countDistinct($"c" + $"b").as("agg2"),
+        max($"c").as("agg3"))
+      .analyze
+
+    val rewrite = RewriteDistinctAggregates(input)
+    rewrite match {
+      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case _ => fail(s"Plan is not as expected:\n$rewrite")
+    }
+  }
+
+  test("SPARK-40382: reduce multiple distinct groups due to superficial differences") {
+    val input = testRelation2
+      .groupBy($"a")(
+        countDistinct($"b" + $"c" + $"d").as("agg1"),
+        countDistinct($"d" + $"c" + $"b").as("agg2"),
+        countDistinct($"b" + $"c").as("agg3"),
+        countDistinct($"c" + $"b").as("agg4"),
+        max($"c").as("agg5"))
+      .analyze
+
+    val rewrite = RewriteDistinctAggregates(input)
+    rewrite match {
+      case Aggregate(_, _, Aggregate(_, _, e: Expand)) =>
+        assert(e.projections.size == 3)
+      case _ => fail(s"Plan is not rewritten:\n$rewrite")
+    }
   }
 }

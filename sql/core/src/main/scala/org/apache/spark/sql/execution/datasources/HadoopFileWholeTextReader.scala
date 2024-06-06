@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
-import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
@@ -37,7 +35,7 @@ class HadoopFileWholeTextReader(file: PartitionedFile, conf: Configuration)
   extends Iterator[Text] with Closeable {
   private val _iterator = {
     val fileSplit = new CombineFileSplit(
-      Array(new Path(new URI(file.filePath))),
+      Array(file.toPath),
       Array(file.start),
       Array(file.length),
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.

@@ -1,41 +1,69 @@
 # PySpark dependencies (required)
-py4j
+py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
-numpy
-pyarrow
-pandas
+numpy>=1.21
+pyarrow>=4.0.0
+six==1.16.0
+pandas>=1.4.4
 scipy
 plotly
-mlflow>=1.0
-sklearn
-matplotlib<3.3.0
+mlflow>=2.3.1
+scikit-learn
+matplotlib
+memory-profiler>=0.61.0
 
 # PySpark test dependencies
-xmlrunner
+unittest-xml-reporting
+openpyxl
 
 # PySpark test dependencies (optional)
 coverage
 
 # Linter
-mypy
-flake8
+mypy==1.8.0
+pytest-mypy-plugins==1.9.3
+flake8==3.9.0
+# See SPARK-38680.
+pandas-stubs<1.2.0.54
 
 # Documentation (SQL)
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
-sphinx<3.1.0
+jinja2
+sphinx==4.5.0
 sphinx-plotly-directive
+sphinx-copybutton
+docutils<0.18.0
+markupsafe
 
 # Development scripts
-jira
+jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black
+black==23.9.1
+py
+
+# Spark Connect (required)
+grpcio>=1.62.0
+grpcio-status>=1.62.0
+googleapis-common-protos>=1.56.4
+
+# Spark Connect python proto generation plugin (optional)
+mypy-protobuf==3.3.0
+googleapis-common-protos-stubs==2.2.0
+grpc-stubs==1.24.11
+
+# TorchDistributor dependencies
+torch
+torchvision
+torcheval
+
+# DeepspeedTorchDistributor dependencies
+deepspeed; sys_platform != 'darwin'

@@ -24,7 +24,7 @@ Should I use PySpark's DataFrame API or pandas API on Spark?
 ------------------------------------------------------------
 
 If you are already familiar with pandas and want to leverage Spark for big data, we recommend using pandas API on Spark.
-If you are learning Spark from ground up, we recommend you start with PySpark's API.
+If you are learning Spark from the ground up, we recommend you start with PySpark's API.
 
 Does pandas API on Spark support Structured Streaming?
 ------------------------------------------------------

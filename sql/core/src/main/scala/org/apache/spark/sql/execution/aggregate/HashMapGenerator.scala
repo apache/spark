@@ -129,7 +129,7 @@ abstract class HashMapGenerator(
   protected def generateRowIterator(): String
 
   protected final def generateClose(): String = {
-    s"""
+    """
        |public void close() {
        |  batch.close();
        |}
@@ -173,7 +173,11 @@ abstract class HashMapGenerator(
             ${hashBytes(bytes)}
           """
         }
-      case StringType => hashBytes(s"$input.getBytes()")
+      case st: StringType if st.supportsBinaryEquality => hashBytes(s"$input.getBytes()")
+      case st: StringType if !st.supportsBinaryEquality =>
+        hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
+          s".hashFunction.applyAsLong($input)")
+      case CalendarIntervalType => hashInt(s"$input.hashCode()")
     }
   }
 }

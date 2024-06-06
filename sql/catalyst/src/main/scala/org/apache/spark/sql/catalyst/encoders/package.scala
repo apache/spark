@@ -31,6 +31,6 @@ package object encoders {
     case e: ExpressionEncoder[A] =>
       e.assertUnresolved()
       e
-    case _ => throw QueryExecutionErrors.unsupportedEncoderError()
+    case other => throw QueryExecutionErrors.invalidExpressionEncoderError(other.getClass.getName)
   }
 }

@@ -17,14 +17,14 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException}
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -38,7 +38,8 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -104,6 +105,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(java.lang.Long.MAX_VALUE)
     check(java.lang.Long.MIN_VALUE)
     check[String](null)
+    check(Array(1.toByte))
     check(Array(1, 2, 3))
     check(Array(1L, 2L, 3L))
     check(Array(1.0, 2.0, 3.0))
@@ -114,6 +116,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array('a', 'b', 'c'))
     check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
+    check(Array(Array(1.toByte)))
   }
 
   test("pairs") {
@@ -170,6 +173,18 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(List(
       mutable.HashMap("one" -> 1, "two" -> 2),
       mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+  }
+
+  test("SPARK-42071: Register scala.math.Ordering$Reverse") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T): Unit = {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    // Scala 2.12.12 added a new class 'Reverse' via https://github.com/scala/scala/pull/8965
+    check(Utils.classForName("scala.math.Ordering$Reverse"))
   }
 
   test("Bug: SPARK-10251") {
@@ -276,11 +291,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with parallelize for specialized tuples") {
-    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).count === 3)
+    assert(sc.parallelize(Seq((1, 11), (2, 22), (3, 33))).count() === 3)
   }
 
   test("kryo with parallelize for primitive arrays") {
-    assert(sc.parallelize(Array(1, 2, 3)).count === 3)
+    assert(sc.parallelize(Array(1, 2, 3).toImmutableArraySeq).count() === 3)
   }
 
   test("kryo with collect for specialized tuples") {
@@ -288,7 +303,8 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("kryo with SerializableHyperLogLog") {
-    assert(sc.parallelize(Array(1, 2, 3, 2, 3, 3, 2, 3, 1)).countApproxDistinct(0.01) === 3)
+    assert(sc.parallelize(Array(1, 2, 3, 2, 3, 3, 2, 3, 1).toImmutableArraySeq)
+      .countApproxDistinct(0.01) === 3)
   }
 
   test("kryo with reduce") {
@@ -411,11 +427,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("getAutoReset") {
     val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
-    assert(ser.getAutoReset)
+    assert(ser.getAutoReset())
     val conf = new SparkConf().set(KRYO_USER_REGISTRATORS,
       Seq(classOf[RegistratorWithoutAutoReset].getName))
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
-    assert(!ser2.getAutoReset)
+    assert(!ser2.getAutoReset())
   }
 
   test("SPARK-25176 ClassCastException when writing a Map after previously " +
@@ -537,6 +553,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val set = new OpenHashMap[Double, Double](10)
     ser.serialize(set)
   }
+
+  test("SPARK-43898: Register scala.collection.immutable.ArraySeq$ofRef for Scala 2.13") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T): Unit = {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    check(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
+  }
 }
 
 class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
@@ -583,6 +609,28 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     byteBuffer.flip()
     assert(serInstance.deserialize[Any](serObj) === (obj))
     assert(serInstance.deserialize[Any](byteBuffer) === (obj))
+  }
+
+  test("SPARK-40912: Ignore unexpectedly truncated buffer") {
+    // This test checks that the improvement in SPARK-40912 does not break backwards compatabillity.
+    // But the behvaior of the asIterator iterface of silently ignoring trucated data should be
+    // revisited in a follow up ticket.
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    val serialized: Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val serStream = serInstance.serializeStream(baos)
+      serStream.writeObject(KryoTest.CaseClass(0, ""))
+      serStream.close()
+      baos.toByteArray
+    }
+    // Make sure we disregard some data
+    assert(serialized.length > 2)
+    val trucated = serialized.take(2).toArray
+    val deserializationStream = serInstance.deserializeStream(new ByteArrayInputStream(trucated))
+    intercept[EOFException](
+      serInstance.deserializeStream(new ByteArrayInputStream(trucated)).readValue()
+    )
+    assert(deserializationStream.asIterator.toSeq == Seq())
   }
 }
 

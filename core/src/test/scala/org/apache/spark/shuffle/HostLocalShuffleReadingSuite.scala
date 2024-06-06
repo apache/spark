@@ -38,13 +38,13 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
 
   override def afterEach(): Unit = {
     Option(rpcHandler).foreach { handler =>
-      Utils.tryLogNonFatalError{
+      Utils.tryLogNonFatalError {
         server.close()
       }
-      Utils.tryLogNonFatalError{
+      Utils.tryLogNonFatalError {
         handler.close()
       }
-      Utils.tryLogNonFatalError{
+      Utils.tryLogNonFatalError {
         transportContext.close()
       }
       server = null

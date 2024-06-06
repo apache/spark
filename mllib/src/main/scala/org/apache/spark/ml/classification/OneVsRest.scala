@@ -30,6 +30,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -180,9 +181,9 @@ final class OneVsRestModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol.isEmpty && getRawPredictionCol.isEmpty) {
-      logWarning(s"$uid: OneVsRestModel.transform() does nothing" +
-        " because no output columns were set.")
-      return dataset.toDF
+      logWarning(log"${MDC(LogKeys.UUID, uid)}: OneVsRestModel.transform() does nothing " +
+        log"because no output columns were set.")
+      return dataset.toDF()
     }
 
     val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]
@@ -213,9 +214,10 @@ final class OneVsRestModel private[ml] (
         tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
       }
 
+      import org.apache.spark.util.ArrayImplicits._
       tmpModel.transform(df)
         .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
-        .select(columns: _*)
+        .select(columns.toImmutableArraySeq: _*)
     }
 
     if (handlePersistence) {
@@ -399,7 +401,8 @@ final class OneVsRest @Since("1.4.0") (
       getClassifier match {
         case _: HasWeightCol => true
         case c =>
-          instr.logWarning(s"weightCol is ignored, as it is not supported by $c now.")
+          instr.logWarning(log"weightCol is ignored, as it is not supported by " +
+            log"${MDC(LogKeys.CLASSIFIER, c)} now.")
           false
       }
     }

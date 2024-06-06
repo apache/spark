@@ -32,7 +32,7 @@ from pyspark.ml.classification import (
     OneVsRestModel,
 )
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.feature import Binarizer, HashingTF, PCA
+from pyspark.ml.feature import Binarizer, Bucketizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel
@@ -379,7 +379,7 @@ class PersistenceTest(SparkSessionTestCase):
         )
 
         lr = LogisticRegressionCls(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        OneVsRest(classifier=lr)
 
         def reload_and_compare(ovr, suffix):
             model = ovr.fit(df)
@@ -518,12 +518,27 @@ class PersistenceTest(SparkSessionTestCase):
         )
         reader.getAndSetParams(lr, loadedMetadata)
 
+    # Test for SPARK-35542 fix.
+    def test_save_and_load_on_nested_list_params(self):
+        temp_path = tempfile.mkdtemp()
+        splitsArray = [
+            [-float("inf"), 0.5, 1.4, float("inf")],
+            [-float("inf"), 0.1, 1.2, float("inf")],
+        ]
+        bucketizer = Bucketizer(
+            splitsArray=splitsArray, inputCols=["values", "values"], outputCols=["b1", "b2"]
+        )
+        savePath = temp_path + "/bk"
+        bucketizer.write().overwrite().save(savePath)
+        loadedBucketizer = Bucketizer.load(savePath)
+        assert loadedBucketizer.getSplitsArray() == splitsArray
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_persistence import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

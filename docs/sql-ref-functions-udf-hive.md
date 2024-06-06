@@ -52,10 +52,22 @@ SELECT testUDF(value) FROM t;
 |           2.0|
 |           3.0|
 +--------------+
+
+-- Register `UDFSubstr` and use it in Spark SQL.
+-- Note that, it can achieve better performance if the return types and method parameters use Java primitives.
+-- e.g., UDFSubstr. The data processing method is UTF8String <-> Text <-> String. we can avoid UTF8String <-> Text. 
+CREATE TEMPORARY FUNCTION hive_substr AS 'org.apache.hadoop.hive.ql.udf.UDFSubstr';
+
+select hive_substr('Spark SQL', 1, 5) as value;
++-----+
+|value|
++-----+
+|Spark|
++-----+
 ```
 
 
-An example below uses [GenericUDTFExplode](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDTFExplode.java) derived from [GenericUDTF](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDF.java).
+An example below uses [GenericUDTFExplode](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDTFExplode.java) derived from [GenericUDTF](https://github.com/apache/hive/blob/master/ql/src/java/org/apache/hadoop/hive/ql/udf/generic/GenericUDTF.java).
 
 ```sql
 -- Register `GenericUDTFExplode` and use it in Spark SQL

@@ -1,0 +1,5 @@
+Project [row_number() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
++- Project [a#0, id#0L, row_number() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0, row_number() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0]
+   +- Window [row_number() windowspecdefinition(a#0, id#0L ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#0], [a#0], [id#0L ASC NULLS FIRST]
+      +- Project [a#0, id#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

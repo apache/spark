@@ -128,7 +128,7 @@ private[streaming] class ExecutorAllocationManager(
     logDebug(s"Executors (${allExecIds.size}) = ${allExecIds}")
 
     if (allExecIds.nonEmpty && allExecIds.size > minNumExecutors) {
-      val execIdsWithReceivers = receiverTracker.allocatedExecutors.values.flatten.toSeq
+      val execIdsWithReceivers = receiverTracker.allocatedExecutors().values.flatten.toSeq
       logInfo(s"Executors with receivers (${execIdsWithReceivers.size}): ${execIdsWithReceivers}")
 
       val removableExecIds = allExecIds.diff(execIdsWithReceivers)

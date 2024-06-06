@@ -21,13 +21,13 @@ import java.math.BigDecimal;
 
 import org.apache.hadoop.hive.ql.exec.vector.*;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
-import org.apache.spark.sql.types.TimestampNTZType;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -37,7 +37,6 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class OrcAtomicColumnVector extends OrcColumnVector {
   private final boolean isTimestamp;
-  private final boolean isTimestampNTZ;
   private final boolean isDate;
 
   // Column vector for each type. Only 1 is populated for any type.
@@ -56,30 +55,24 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
       isTimestamp = false;
     }
 
-    if (type instanceof TimestampNTZType) {
-      isTimestampNTZ = true;
-    } else {
-      isTimestampNTZ = false;
-    }
-
     if (type instanceof DateType) {
       isDate = true;
     } else {
       isDate = false;
     }
 
-    if (vector instanceof LongColumnVector) {
-      longData = (LongColumnVector) vector;
-    } else if (vector instanceof DoubleColumnVector) {
-      doubleData = (DoubleColumnVector) vector;
-    } else if (vector instanceof BytesColumnVector) {
-      bytesData = (BytesColumnVector) vector;
-    } else if (vector instanceof DecimalColumnVector) {
-      decimalData = (DecimalColumnVector) vector;
-    } else if (vector instanceof TimestampColumnVector) {
-      timestampData = (TimestampColumnVector) vector;
+    if (vector instanceof LongColumnVector longColumnVector) {
+      longData = longColumnVector;
+    } else if (vector instanceof DoubleColumnVector doubleColumnVector) {
+      doubleData = doubleColumnVector;
+    } else if (vector instanceof BytesColumnVector bytesColumnVector) {
+      bytesData = bytesColumnVector;
+    } else if (vector instanceof DecimalColumnVector decimalColumnVector) {
+      decimalData = decimalColumnVector;
+    } else if (vector instanceof TimestampColumnVector timestampColumnVector) {
+      timestampData = timestampColumnVector;
     } else {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 
@@ -113,8 +106,6 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     int index = getRowIndex(rowId);
     if (isTimestamp) {
       return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
-    } else if (isTimestampNTZ) {
-      return OrcUtils.fromOrcNTZ(timestampData.asScratchTimestamp(index));
     } else {
       return longData.vector[index];
     }
@@ -156,16 +147,16 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
 
   @Override
   public ColumnarArray getArray(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public ColumnarMap getMap(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public org.apache.spark.sql.vectorized.ColumnVector getChild(int ordinal) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 }

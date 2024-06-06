@@ -27,10 +27,10 @@ final class UnsafeDataUtils {
   }
 
   public static byte[] getBytes(Object baseObject, long baseOffset, int sizeInBytes) {
-    if (baseObject instanceof byte[]
+    if (baseObject instanceof byte[] bytes
       && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
+      && (bytes.length == sizeInBytes)) {
+      return bytes;
     }
     byte[] bytes = new byte[sizeInBytes];
     Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET,

@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 

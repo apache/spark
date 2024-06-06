@@ -1,0 +1,2 @@
+Project [if (isnull(g#0)) null else if ((cast(g#0 as int) <= 0))  else substring(g#0, -cast(g#0 as int), 2147483647) AS right(g, g)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

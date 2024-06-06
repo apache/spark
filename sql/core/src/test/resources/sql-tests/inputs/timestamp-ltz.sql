@@ -1,6 +1,6 @@
 -- timestamp_ltz literals and constructors
 --CONFIG_DIM1 spark.sql.timestampType=TIMESTAMP_LTZ
---CONFIG_DIM1 spark.sql.timestampType=TIMESTAMP_NTZ
+--CONFIG_DIM2 spark.sql.timestampType=TIMESTAMP_NTZ
 
 select timestamp_ltz'2016-12-31 00:12:00', timestamp_ltz'2016-12-31';
 
@@ -14,3 +14,5 @@ select to_timestamp_ltz(to_timestamp_ntz(null)), to_timestamp_ltz(to_timestamp_n
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007);
+
+SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles');

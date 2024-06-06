@@ -23,6 +23,7 @@ import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -81,7 +82,7 @@ class ForeachWrite[T](
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(
-              inputSchema.toAttributes,
+              toAttributes(inputSchema),
               SparkSession.getActiveSession.get.sessionState.analyzer)
             boundEnc.createDeserializer()
           case Right(func) =>

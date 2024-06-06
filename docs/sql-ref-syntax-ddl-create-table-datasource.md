@@ -55,6 +55,10 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
     Data Source is the input format used to create the table. Data source can be CSV, TXT, ORC, JDBC, PARQUET, etc.
 
+* **OPTIONS**
+
+    Options of data source which will be injected to storage properties.
+
 * **PARTITIONED BY**
 
     Partitions are created on the table, based on the columns specified.
@@ -100,7 +104,9 @@ In general CREATE TABLE is creating a "pointer", and you need to make sure it po
 existing. An exception is file source such as parquet, json. If you don't specify the LOCATION,
 Spark will create a default table location for you.
 
-For CREATE TABLE AS SELECT, Spark will overwrite the underlying data source with the data of the
+For CREATE TABLE AS SELECT with LOCATION, Spark throws analysis exceptions if the given location
+exists as a non-empty directory. If `spark.sql.legacy.allowNonEmptyLocationInCTAS` is set to true,
+Spark overwrites the underlying data source with the data of the
 input query, to make sure the table gets created contains exactly the same data as the input query.
 
 ### Examples
@@ -117,6 +123,15 @@ CREATE TABLE student_copy USING CSV
 --Omit the USING clause, which uses the default data source (parquet by default)
 CREATE TABLE student (id INT, name STRING, age INT);
 
+--Use parquet data source with parquet storage options
+--The columns 'id' and 'name' enable the bloom filter during writing parquet file,
+--column 'age' does not enable
+CREATE TABLE student_parquet(id INT, name STRING, age INT) USING PARQUET
+    OPTIONS (
+      'parquet.bloom.filter.enabled'='true',
+      'parquet.bloom.filter.enabled#age'='false'
+    );
+
 --Specify table comment and properties
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV
     COMMENT 'this is a comment'
@@ -132,6 +147,23 @@ CREATE TABLE student (id INT, name STRING, age INT)
     USING CSV
     PARTITIONED BY (age)
     CLUSTERED BY (Id) INTO 4 buckets;
+
+--Create partitioned and bucketed table through CTAS
+CREATE TABLE student_partition_bucket
+    USING parquet
+    PARTITIONED BY (age)
+    CLUSTERED BY (id) INTO 4 buckets
+    AS SELECT * FROM student;
+
+--Create bucketed table through CTAS and CTE
+CREATE TABLE student_bucket
+    USING parquet
+    CLUSTERED BY (id) INTO 4 buckets (
+    WITH tmpTable AS (
+        SELECT * FROM student WHERE id > 100
+    )
+    SELECT * FROM tmpTable
+);
 ```
 
 ### Related Statements

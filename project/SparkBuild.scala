@@ -22,16 +22,16 @@ import java.util.Locale
 
 import scala.io.Source
 import scala.util.Properties
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import sbt._
-import sbt.Classpaths.publishTask
+import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
 import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import sbtpomreader.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
@@ -39,28 +39,35 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 import spray.revolver.RevolverPlugin._
 
+import sbtprotoc.ProtocPlugin.autoImport._
+
 object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, tokenProviderKafka010, sqlKafka010, avro, protobuf) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "token-provider-kafka-0-10", "sql-kafka-0-10", "avro", "protobuf"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
+  val connectCommon = ProjectRef(buildLocation, "connect-common")
+  val connect = ProjectRef(buildLocation, "connect")
+  val connectClient = ProjectRef(buildLocation, "connect-client-jvm")
+
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
+    commonUtils, sqlApi, variant, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore"
-  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
+    "tags", "sketch", "kvstore", "common-utils", "sql-api", "variant"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
-  val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
+  val optionallyEnabledProjects@Seq(kubernetes, yarn,
     sparkGangliaLgpl, streamingKinesisAsl,
     dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
-    Seq("kubernetes", "mesos", "yarn",
+    Seq("kubernetes", "yarn",
       "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
@@ -79,6 +86,12 @@ object BuildCommons {
   val testTempDir = s"$sparkHome/target/tmp"
 
   val javaVersion = settingKey[String]("source and target JVM version for javac and scalac")
+
+  // Google Protobuf version used for generating the protobuf.
+  // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
+  val protoVersion = "3.25.1"
+  // GRPC version used for Spark Connect.
+  val grpcVersion = "1.62.2"
 }
 
 object SparkBuild extends PomBuild {
@@ -99,6 +112,16 @@ object SparkBuild extends PomBuild {
     }
     if (profiles.contains("jdwp-test-debug")) {
       sys.props.put("test.jdwp.enabled", "true")
+    }
+    if (profiles.contains("user-defined-protoc")) {
+      val sparkProtocExecPath = Properties.envOrNone("SPARK_PROTOC_EXEC_PATH")
+      val connectPluginExecPath = Properties.envOrNone("CONNECT_PLUGIN_EXEC_PATH")
+      if (sparkProtocExecPath.isDefined) {
+        sys.props.put("spark.protoc.executable.path", sparkProtocExecPath.get)
+      }
+      if (connectPluginExecPath.isDefined) {
+        sys.props.put("connect.plugin.executable.path", connectPluginExecPath.get)
+      }
     }
     profiles
   }
@@ -137,16 +160,21 @@ object SparkBuild extends PomBuild {
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    var contents = Source.fromFile(in).getLines.mkString("\n")
-    for ((k, v) <- replacements) {
-      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
-      contents = contents.replace(k, v)
+    val source = Source.fromFile(in)
+    try {
+      var contents = source.getLines.mkString("\n")
+      for ((k, v) <- replacements) {
+        require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+        contents = contents.replace(k, v)
+      }
+      new PrintWriter(out) {
+        write(contents)
+        close()
+      }
+      out
+    } finally {
+      source.close()
     }
-    new PrintWriter(out) {
-      write(contents)
-      close()
-    }
-    out
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
@@ -200,82 +228,45 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  // Silencer: Scala compiler plugin for warning suppression
-  // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
-  // depends on scala version:
-  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
-  // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
-    libraryDependencies ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = "1.7.6"
-        Seq(
-          "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
-          compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
-          "com.github.ghik" % "silencer-lib" % silencerVersion % Provided cross CrossVersion.full
-        )
-      } else {
-        Seq.empty
-      }
-    },
     (Compile / scalacOptions) ++= {
-      if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        Seq(
-          "-Xfatal-warnings",
-          "-deprecation",
-          "-Ywarn-unused-import",
-          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and suppress them
-        )
-      } else {
-        Seq(
-          // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
-          // verbose warning on deprecation, error on all others
-          // see `scalac -Wconf:help` for details
-          "-Wconf:cat=deprecation:wv,any:e",
-          // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
-          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
-          // "-Wunused:imports",
-          "-Wconf:cat=lint-multiarg-infix:wv",
-          "-Wconf:cat=other-nullary-override:wv",
-          "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
-          // SPARK-33775 Suppress compilation warnings that contain the following contents.
-          // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
-          //  fixed.
-          "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
-          "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
-          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-          "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
-          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
-          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-          // SPARK-35496 Upgrade Scala to 2.13.7 and suppress:
-          // 1. `The outer reference in this type test cannot be checked at run time`
-          // 2. `the type test for pattern TypeA cannot be checked at runtime because it
-          //    has type parameters eliminated by erasure`
-          // 3. `abstract type TypeA in type pattern Seq[TypeA] (the underlying of
-          //    Seq[TypeA]) is unchecked since it is eliminated by erasure`
-          // 4. `fruitless type test: a value of TypeA cannot also be a TypeB`
-          "-Wconf:cat=unchecked&msg=outer reference:s",
-          "-Wconf:cat=unchecked&msg=eliminated by erasure:s",
-          "-Wconf:msg=^(?=.*?a value of type)(?=.*?cannot also be).+$:s"
-        )
-      }
+      Seq(
+        // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
+        // verbose warning on deprecation, error on all others
+        // see `scalac -Wconf:help` for details
+        "-Wconf:cat=deprecation:wv,any:e",
+        // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
+        "-Wunused:imports",
+        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
+        "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
+        // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
+        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
+        // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+        "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
+        // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
+        "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
+        // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
+        // so they are prohibited from being used as variable names in Scala 2.13 to
+        // reduce the cost of migration in subsequent versions.
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
+        // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
+      )
     }
   )
 
+  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
+      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
+      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.18",
+    unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -298,39 +289,37 @@ object SparkBuild extends PomBuild {
         .withLogging(ivyLoggingLevel.value),
     (MavenCompile / publishMavenStyle) := true,
     (SbtCompile / publishMavenStyle) := false,
-    (MavenCompile / publishLocal) := publishTask((MavenCompile / publishLocalConfiguration)).value,
-    (SbtCompile / publishLocal) := publishTask((SbtCompile / publishLocalConfiguration)).value,
+    (MavenCompile / publishLocal) := publishOrSkip((MavenCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
+    (SbtCompile / publishLocal) := publishOrSkip((SbtCompile / publishLocalConfiguration),
+      (publishLocal / skip)).value,
     publishLocal := Seq((MavenCompile / publishLocal), (SbtCompile / publishLocal)).dependOn.value,
 
     javaOptions ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major >= 16) Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn") else Seq.empty
+      // for `dev.ludovic.netlib.blas` which implements such hardware-accelerated BLAS operations
+      Seq("--add-modules=jdk.incubator.vector")
     },
 
     (Compile / doc / javacOptions) ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-      if (major >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+      Seq("-Xdoclint:all", "-Xdoclint:-missing")
     },
 
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
-      "-source", javaVersion.value
+      "-g",
+      "--release", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
     // for additional discussion and explanation.
     (Compile / compile / javacOptions) ++= Seq(
-      "-target", javaVersion.value,
       "-Xlint:unchecked"
     ),
 
     (Compile / scalacOptions) ++= Seq(
-      s"-target:jvm-${javaVersion.value}",
+      "-release", javaVersion.value,
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -346,18 +335,15 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    ) ++ {
-      // Do not attempt to scaladoc javadoc comments under 2.12 since it can't handle inner classes
-      if (scalaBinaryVersion.value == "2.12") Seq("-no-java-comments") else Seq.empty
-    },
+    ),
 
     // disable Mima check for all modules,
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
 
-    // To prevent intermittent compilation failures, see also SPARK-33297
-    // Apparently we can remove this when we use JDK 11.
-    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := protoVersion,
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -376,8 +362,9 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, kvstore, avro
+      spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      variant
     ).contains(x)
   }
 
@@ -386,6 +373,8 @@ object SparkBuild extends PomBuild {
   }
 
   /* Generate and pick the spark build info from extra-resources */
+  enable(CommonUtils.settings)(commonUtils)
+
   enable(Core.settings)(core)
 
   /* Unsafe settings */
@@ -409,8 +398,8 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Catalyst ANTLR generation settings */
-  enable(Catalyst.settings)(catalyst)
+  /* Sql-api ANTLR generation settings */
+  enable(SqlApi.settings)(sqlApi)
 
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
@@ -418,8 +407,19 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
-  // SPARK-14738 - Remove docker tests from main Spark build
-  // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+  enable(SparkConnectCommon.settings)(connectCommon)
+  enable(SparkConnect.settings)(connect)
+  enable(SparkConnectClient.settings)(connectClient)
+
+  /* Protobuf settings */
+  enable(SparkProtobuf.settings)(protobuf)
+
+  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+
+  if (!profiles.contains("volcano")) {
+    enable(Volcano.settings)(kubernetes)
+    enable(Volcano.settings)(kubernetesIntegrationTests)
+  }
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
@@ -509,13 +509,13 @@ object SparkParallelTestGrouping {
 
   private val testsWhichShouldRunInTheirOwnDedicatedJvm = Set(
     "org.apache.spark.DistributedSuite",
+    "org.apache.spark.scheduler.HealthTrackerIntegrationSuite",
     "org.apache.spark.sql.catalyst.expressions.DateExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
-    "org.apache.spark.sql.hive.client.VersionsSuite",
     "org.apache.spark.sql.hive.client.HiveClientVersions",
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
@@ -528,8 +528,10 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
-    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite"
-  )
+    "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
+    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
+    "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
+  ) ++ sys.env.get("DEDICATED_JVM_SBT_TESTS").map(_.split(",")).getOrElse(Array.empty).toSet
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
   private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
@@ -573,18 +575,367 @@ object SparkParallelTestGrouping {
   )
 }
 
-object Core {
+object CommonUtils {
   import scala.sys.process.Process
+  def buildenv = Process(Seq("uname")).!!.trim.replaceFirst("[^A-Za-z0-9].*", "").toLowerCase
+  def bashpath = Process(Seq("where", "bash")).!!.split("[\r\n]+").head.replace('\\', '/')
   lazy val settings = Seq(
     (Compile / resourceGenerators) += Def.task {
-      val buildScript = baseDirectory.value + "/../build/spark-build-info"
+      val buildScript = baseDirectory.value + "/../../build/spark-build-info"
       val targetDir = baseDirectory.value + "/target/extra-resources/"
-      val command = Seq("bash", buildScript, targetDir, version.value)
+      // support Windows build under cygwin/mingw64, etc
+      val bash = buildenv match {
+        case "cygwin" | "msys2" | "mingw64" | "clang64" => bashpath
+        case _ => "bash"
+      }
+      val command = Seq(bash, buildScript, targetDir, version.value)
       Process(command).!!
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
     }.taskValue
   )
+}
+
+object Core {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
+object SparkConnectCommon {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.grpcVersion asProtocPlugin(),
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+        ),
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> (Compile / sourceManaged).value,
+          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+        )
+      )
+    }
+  }
+}
+
+object SparkConnect {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      val guavaFailureaccessVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "guava.failureaccess.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
+    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
+    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
+    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
+    // `proto-google-common-protos-*.jar` in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
+        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
+        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
+        "proto-google-common-protos")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
+      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
+      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.android_annotation.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.io_perfmark.@1").inAll,
+      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" -> "org.sparkproject.connect.animal_sniffer.@1").inAll,
+      ShadeRule.rename("com.google.j2objc.annotations.**" -> "org.sparkproject.connect.j2objc_annotations.@1").inAll,
+      ShadeRule.rename("com.google.errorprone.annotations.**" -> "org.sparkproject.connect.errorprone_annotations.@1").inAll,
+      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.checkerframework.@1").inAll,
+      ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.connect.gson.@1").inAll,
+      ShadeRule.rename("com.google.api.**" -> "org.sparkproject.connect.google_protos.api.@1").inAll,
+      ShadeRule.rename("com.google.cloud.**" -> "org.sparkproject.connect.google_protos.cloud.@1").inAll,
+      ShadeRule.rename("com.google.geo.**" -> "org.sparkproject.connect.google_protos.geo.@1").inAll,
+      ShadeRule.rename("com.google.logging.**" -> "org.sparkproject.connect.google_protos.logging.@1").inAll,
+      ShadeRule.rename("com.google.longrunning.**" -> "org.sparkproject.connect.google_protos.longrunning.@1").inAll,
+      ShadeRule.rename("com.google.rpc.**" -> "org.sparkproject.connect.google_protos.rpc.@1").inAll,
+      ShadeRule.rename("com.google.type.**" -> "org.sparkproject.connect.google_protos.type.@1").inAll
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
+}
+
+object SparkConnectClient {
+  import BuildCommons.protoVersion
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    buildTestDeps := {
+      (LocalProject("assembly") / Compile / Keys.`package`).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
+    },
+
+    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // so no additional configuration is required.
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
+      ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
+      ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
+      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
+      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
+      ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
+      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
+}
+
+object SparkProtobuf {
+  import BuildCommons.protoVersion
+
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
+    (Test / PB.protoSources) += (Test / sourceDirectory).value / "resources" / "protobuf",
+
+    (Test / PB.protocOptions) += "--include_imports",
+
+    (Test / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-test-sources",
+      PB.gens.descriptorSet -> target.value / "generated-test-sources/descriptor-set-sbt.desc",
+      // The above creates single descriptor file with all the proto files. This is different from
+      // Maven, which create one descriptor file for each proto file.
+    ),
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,
+    // `spark-tags_*.jar`, "guava-*.jar" and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("spark-tags_") || name.startsWith("guava-") || name == "unused-1.0.0.jar"
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.spark_protobuf.protobuf.@1").inAll,
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    },
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object Unsafe {
@@ -598,15 +949,13 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
-    libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
+    dependencyOverrides += "com.google.guava" % "guava" % "33.1.0-jre"
   )
 }
 
 /**
- * These settings run a hardcoded configuration of the Kubernetes integration tests using
- * minikube. Docker images will have the "dev" tag, and will be overwritten every time the
+ * These settings run the Kubernetes integration tests.
+ * Docker images will have the "dev" tag, and will be overwritten every time the
  * integration tests are run. The integration tests are actually bound to the "test" phase,
  * so running "test" on this module will run the integration tests.
  *
@@ -624,8 +973,10 @@ object KubernetesIntegrationTests {
 
   val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
   val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
-  val imageTag = settingKey[String]("Tag to use for images built during the test.")
-  val namespace = settingKey[String]("Namespace where to run pods.")
+  val imageRepo = sys.props.getOrElse("spark.kubernetes.test.imageRepo", "docker.io/kubespark")
+  val imageTag = sys.props.get("spark.kubernetes.test.imageTag")
+  val namespace = sys.props.get("spark.kubernetes.test.namespace")
+  val deployMode = sys.props.get("spark.kubernetes.test.deployMode")
 
   // Hack: this variable is used to control whether to build docker images. It's updated by
   // the tasks below in a non-obvious way, so that you get the functionality described in
@@ -633,22 +984,44 @@ object KubernetesIntegrationTests {
   private var shouldBuildImage = true
 
   lazy val settings = Seq(
-    imageTag := "dev",
-    namespace := "default",
     dockerBuild := {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
-        val cmd = Seq(dockerTool, "-m",
-          "-t", imageTag.value,
-          "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile",
-          "-b", s"java_image_tag=${sys.env.getOrElse("JAVA_IMAGE_TAG", "8-jre-slim")}",
+        val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
+        val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
+            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
+        val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
+            s"$bindingsDir/python/Dockerfile")
+        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+            s"$bindingsDir/R/Dockerfile")
+        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
+        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
+          rDockerFile = ""
+        }
+        val extraOptions = if (javaImageTag.isDefined) {
+          Seq("-b", s"java_image_tag=$javaImageTag")
+        } else {
+          Seq("-f", s"$dockerFile")
+        }
+        val cmd = Seq(dockerTool,
+          "-r", imageRepo,
+          "-t", imageTag.getOrElse("dev"),
+          "-p", pyDockerFile,
+          "-R", rDockerFile) ++
+          (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
+          extraOptions :+
           "build"
-        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
+        if (deployMode == Some("cloud")) {
+          val cmd = Seq(dockerTool, "-r", imageRepo, "-t", imageTag.getOrElse("dev"), "push")
+          val ret = Process(cmd).!
+          if (ret != 0) {
+            throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ret.")
+          }
         }
       }
       shouldBuildImage = true
@@ -661,11 +1034,12 @@ object KubernetesIntegrationTests {
     }.value,
     (Test / test) := (Test / test).dependsOn(dockerBuild).value,
     (Test / javaOptions) ++= Seq(
-      "-Dspark.kubernetes.test.deployMode=minikube",
-      s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
-      s"-Dspark.kubernetes.test.namespace=${namespace.value}",
+      s"-Dspark.kubernetes.test.deployMode=${deployMode.getOrElse("minikube")}",
+      s"-Dspark.kubernetes.test.imageRepo=${imageRepo}",
+      s"-Dspark.kubernetes.test.imageTag=${imageTag.getOrElse("dev")}",
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
+    (Test / javaOptions) ++= namespace.map("-Dspark.kubernetes.test.namespace=" + _),
     // Force packaging before building images, so that the latest code is tested.
     dockerBuild := dockerBuild
       .dependsOn(assembly / Compile / packageBin)
@@ -681,9 +1055,9 @@ object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
-    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
+    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.10.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.3")
 }
 
 /**
@@ -705,10 +1079,8 @@ object ExcludedDependencies {
     // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule("io.netty", "netty-handler"),
-      ExclusionRule("io.netty", "netty-transport-native-epoll"))
+      ExclusionRule(organization = "ch.qos.logback"),
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -717,9 +1089,11 @@ object ExcludedDependencies {
  */
 object OldDeps {
 
+  import BuildCommons.protoVersion
+
   lazy val project = Project("oldDeps", file("dev"))
     .settings(oldDepsSettings)
-    .disablePlugins(com.typesafe.sbt.pom.PomReaderPlugin)
+    .disablePlugins(sbtpomreader.PomReaderPlugin)
 
   lazy val allPreviousArtifactKeys = Def.settingDyn[Seq[Set[ModuleID]]] {
     SparkBuild.mimaProjects
@@ -729,12 +1103,15 @@ object OldDeps {
   }
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := protoVersion,
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
 }
 
-object Catalyst {
+object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 
@@ -839,7 +1216,6 @@ object YARN {
 }
 
 object Assembly {
-  import sbtassembly.AssemblyUtils._
   import sbtassembly.AssemblyPlugin.autoImport._
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
@@ -865,7 +1241,7 @@ object Assembly {
                                                                => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
                                                                => MergeStrategy.discard
-      case "log4j.properties"                                  => MergeStrategy.discard
+      case "log4j2.properties"                                 => MergeStrategy.discard
       case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
@@ -942,6 +1318,13 @@ object SparkR {
   )
 }
 
+object Volcano {
+  // Exclude all volcano file for Compile and Test
+  lazy val settings = Seq(
+    unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
+  )
+}
+
 object Unidoc {
 
   import BuildCommons._
@@ -973,8 +1356,10 @@ object Unidoc {
         !f.getCanonicalPath.contains("org/apache/spark/unsafe/types/CalendarInterval")))
       .map(_.filterNot(_.getCanonicalPath.contains("python")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -990,6 +1375,7 @@ object Unidoc {
     classpaths
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
@@ -1002,10 +1388,10 @@ object Unidoc {
 
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1028,10 +1414,6 @@ object Unidoc {
     },
 
     (JavaUnidoc / unidoc / javacOptions) := {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-
       Seq(
         "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
         "-public",
@@ -1043,7 +1425,8 @@ object Unidoc {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
-      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+        "--ignore-source-errors", "-notree"
+      )
     },
 
     // Use GitHub repository for Scaladoc source links
@@ -1066,7 +1449,7 @@ object Unidoc {
 
 object Checkstyle {
   lazy val settings = Seq(
-    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
     (Compile / checkstyle / javaSource) := baseDirectory.value / "src/main/java",
     (Test / checkstyle / javaSource) := baseDirectory.value / "src/test/java",
     checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),
@@ -1087,14 +1470,37 @@ object CopyDependencies {
         throw new IOException("Failed to create jars directory.")
       }
 
+      // For the SparkConnect build, we manually call the assembly target to
+      // produce the shaded Jar which happens automatically in the case of Maven.
+      // Later, when the dependencies are copied, we manually copy the shaded Jar only.
+      val fid = (LocalProject("connect") / assembly).value
+      val fidClient = (LocalProject("connect-client-jvm") / assembly).value
+      val fidProtobuf = (LocalProject("protobuf") / assembly).value
+
       (Compile / dependencyClasspath).value.map(_.data)
         .filter { jar => jar.isFile() }
+        // Do not copy the Spark Connect JAR as it is unshaded in the SBT build.
         .foreach { jar =>
           val destJar = new File(dest, jar.getName())
           if (destJar.isFile()) {
             destJar.delete()
           }
-          Files.copy(jar.toPath(), destJar.toPath())
+
+          if (jar.getName.contains("spark-connect-common") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            // Don't copy the spark connect common JAR as it is shaded in the spark connect.
+          } else if (jar.getName.contains("spark-connect") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            Files.copy(fid.toPath, destJar.toPath)
+          } else if (jar.getName.contains("connect-client-jvm") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect-client-jvm")) {
+            Files.copy(fidClient.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-protobuf") &&
+            !SbtPomKeys.profiles.value.contains("noshade-protobuf")) {
+            Files.copy(fidProtobuf.toPath, destJar.toPath)
+          } else {
+            Files.copy(jar.toPath(), destJar.toPath())
+          }
         }
     },
     (Compile / packageBin / crossTarget) := destPath.value,
@@ -1105,7 +1511,13 @@ object CopyDependencies {
 
 object TestSettings {
   import BuildCommons._
-  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest")
+  private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
+    "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite") ++
+    (if (System.getProperty("os.name").startsWith("Mac OS X") &&
+        System.getProperty("os.arch").equals("aarch64")) {
+      Seq("org.apache.spark.tags.ExtendedLevelDBTest")
+    } else Seq.empty)
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
@@ -1119,7 +1531,21 @@ object TestSettings {
       "SPARK_PREPEND_CLASSES" -> "1",
       "SPARK_SCALA_VERSION" -> scalaBinaryVersion.value,
       "SPARK_TESTING" -> "1",
-      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
+      "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home")),
+      "SPARK_BEELINE_OPTS" -> "-DmyKey=yourValue"),
+
+    // Copy system properties to forked JVMs so that tests know proxy settings
+    (Test / javaOptions) ++= {
+      val q = "\""
+      sys.props.toList
+        .filter {
+          case (key, value) => key.startsWith("http.") || key.startsWith("https.")
+        }
+        .map {
+          case (key, value) => s"-D$key=$q$value$q"
+        }
+    },
+
     (Test / javaOptions) += s"-Djava.io.tmpdir=$testTempDir",
     (Test / javaOptions) += "-Dspark.test.home=" + sparkHome,
     (Test / javaOptions) += "-Dspark.testing=1",
@@ -1130,14 +1556,22 @@ object TestSettings {
     (Test / javaOptions) += "-Dspark.ui.showConsoleProgress=false",
     (Test / javaOptions) += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     (Test / javaOptions) += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
+    (Test / javaOptions) += "-Dhive.conf.validation=false",
     (Test / javaOptions) += "-Dsun.io.serialization.extendedDebugInfo=false",
     (Test / javaOptions) += "-Dderby.system.durability=test",
-    (Test / javaOptions) += "-Dio.netty.tryReflectionSetAccessible=true",
+    (Test / javaOptions) ++= {
+      if ("true".equals(System.getProperty("java.net.preferIPv6Addresses"))) {
+        Seq("-Djava.net.preferIPv6Addresses=true")
+      } else {
+        Seq.empty
+      }
+    },
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")
       val extraTestJavaArgs = Array("-XX:+IgnoreUnrecognizedVMOptions",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -1148,20 +1582,20 @@ object TestSettings {
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
         "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
         "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
         "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
         "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-        // SPARK-37070 In order to enable the UTs in `mllib-local` and `mllib` to use `mockito`
-        // to mock `j.u.Random`, "-add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED"
-        // is added. Should remove it when `mockito` can mock `j.u.Random` directly.
-        "--add-exports=java.base/jdk.internal.util.random=ALL-UNNAMED").mkString(" ")
-      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m $extraTestJavaArgs"
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true").mkString(" ")
+      s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")
+      s"-Xmx$heapSize -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
@@ -1205,7 +1639,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
+    libraryDependencies += "net.aichler" % "jupiter-interface" % "0.11.1" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

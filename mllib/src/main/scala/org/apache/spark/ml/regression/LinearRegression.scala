@@ -21,10 +21,10 @@ import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, FirstOrderMinimizer, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
+import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
@@ -37,6 +37,7 @@ import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -332,21 +333,25 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       epsilon, maxBlockSizeInMB)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     // Extract the number of features before deciding optimization solver.
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
+
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)
+    }.setName("training instances")
 
     if ($(loss) == SquaredError && (($(solver) == Auto &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal)) {
-      return trainWithNormal(dataset, instr)
+      return trainWithNormal(dataset, instances, instr)
     }
-
-    val instances = extractInstances(dataset)
-      .setName("training instances")
 
     val (summarizer, labelSummarizer) = Summarizer
       .getRegressionSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
@@ -372,7 +377,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        instr.logWarning(s"The standard deviation of the label is zero. " +
+        instr.logWarning("The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }
@@ -422,9 +427,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         featuresMean, featuresStd, initialSolution, regularization, optimizer)
 
     if (parameters == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val model = createModel(parameters, yMean, yStd, featuresMean, featuresStd)
@@ -439,6 +442,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   private def trainWithNormal(
       dataset: Dataset[_],
+      instances: RDD[Instance],
       instr: Instrumentation): LinearRegressionModel = {
     // For low dimensional data, WeightedLeastSquares is more efficient since the
     // training algorithm only requires one pass through the data. (SPARK-10668)
@@ -446,8 +450,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
       elasticNetParam = $(elasticNetParam), $(standardization), true,
       solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
-    val instances = extractInstances(dataset)
-      .setName("training instances")
     val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
     // When it is trained by WeightedLeastSquares, training summary does not
     // attach returned model.
@@ -470,13 +472,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // Also, if rawYStd==0 and yMean==0, all the coefficients are zero regardless of
     // the fitIntercept.
     if (yMean == 0.0) {
-      instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-        s"coefficients and the intercept will all be zero; as a result, training is not " +
-        s"needed.")
+      instr.logWarning("Mean and standard deviation of the label are zero, so the " +
+        "coefficients and the intercept will all be zero; as a result, training is not " +
+        "needed.")
     } else {
-      instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-        s"will be zeros and the intercept will be the mean of the label; as a result, " +
-        s"training is not needed.")
+      instr.logWarning("The standard deviation of the label is zero, so the coefficients " +
+        "will be zeros and the intercept will be the mean of the label; as a result, " +
+        "training is not needed.")
     }
     val coefficients = Vectors.sparse(numFeatures, Seq.empty)
     val intercept = yMean
@@ -554,7 +556,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     if ($(fitIntercept) && $(loss) == Huber) {
-      // orginal `initialSolution` is for problem:
+      // original `initialSolution` is for problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
@@ -607,7 +609,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val adapt = BLAS.javaBLAS.ddot(numFeatures, solution, 1, scaledMean, 1)
       solution(numFeatures) -= adapt
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   private def createModel(

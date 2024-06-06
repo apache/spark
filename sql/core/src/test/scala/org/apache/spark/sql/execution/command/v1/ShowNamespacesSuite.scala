@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands
@@ -32,31 +33,27 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
+  override protected def createNamespaceWithSpecialName(ns: String): Unit = {
+    // Call `ExternalCatalog` directly to bypass the database name validation in `SessionCatalog`.
+    spark.sharedState.externalCatalog.createDatabase(
+      CatalogDatabase(
+        name = ns,
+        description = "",
+        locationUri = Utils.createTempDir().toURI,
+        properties = Map.empty),
+      ignoreIfExists = false)
+  }
+
   test("IN namespace doesn't exist") {
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
-    }.getMessage
-    assert(errMsg.contains("Namespace 'dummy' not found"))
+    }
+    checkError(e,
+      errorClass = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> "`dummy`"))
   }
 }
 
 class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase {
   override def commandVersion: String = "V2" // There is only V2 variant of SHOW NAMESPACES.
-
-  test("case sensitivity") {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
-          sql(s"CREATE NAMESPACE $catalog.AAA")
-          sql(s"CREATE NAMESPACE $catalog.bbb")
-          val expected = if (caseSensitive) "AAA" else "aaa"
-          runShowNamespacesSql(
-            s"SHOW NAMESPACES IN $catalog",
-            Seq(expected, "bbb") ++ builtinTopNamespaces)
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq(expected))
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq(expected))
-        }
-      }
-    }
-  }
 }

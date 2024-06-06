@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite for generated projections
@@ -75,7 +76,7 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
@@ -126,7 +127,7 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
@@ -240,7 +241,7 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test generated MutableProjection
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)

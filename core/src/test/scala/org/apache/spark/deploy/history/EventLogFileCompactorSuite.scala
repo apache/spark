@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -162,7 +161,7 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         val lines = Source.fromInputStream(is)(Codec.UTF8).getLines().toList
         assert(lines.length === 2, "Compacted file should have only two events being accepted")
         lines.foreach { line =>
-          val event = JsonProtocol.sparkEventFromJson(parse(line))
+          val event = JsonProtocol.sparkEventFromJson(line)
           assert(!event.isInstanceOf[SparkListenerJobStart] &&
             !event.isInstanceOf[SparkListenerJobEnd])
         }

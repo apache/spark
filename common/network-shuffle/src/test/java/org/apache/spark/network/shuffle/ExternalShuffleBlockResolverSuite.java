@@ -28,11 +28,11 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class ExternalShuffleBlockResolverSuite {
   private static final String sortBlock0 = "Hello!";
@@ -44,7 +44,7 @@ public class ExternalShuffleBlockResolverSuite {
   private static final TransportConf conf =
       new TransportConf("shuffle", MapConfigProvider.EMPTY);
 
-  @BeforeClass
+  @BeforeAll
   public static void beforeAll() throws IOException {
     dataContext = new TestShuffleDataContext(2, 5);
 
@@ -55,7 +55,7 @@ public class ExternalShuffleBlockResolverSuite {
         sortBlock1.getBytes(StandardCharsets.UTF_8)});
   }
 
-  @AfterClass
+  @AfterAll
   public static void afterAll() {
     dataContext.cleanup();
   }
@@ -64,22 +64,15 @@ public class ExternalShuffleBlockResolverSuite {
   public void testBadRequests() throws IOException {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     // Unregistered executor
-    try {
-      resolver.getBlockData("app0", "exec1", 1, 1, 0);
-      fail("Should have failed");
-    } catch (RuntimeException e) {
-      assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
-    }
+    RuntimeException e = assertThrows(RuntimeException.class,
+      () -> resolver.getBlockData("app0", "exec1", 1, 1, 0));
+    assertTrue(e.getMessage().contains("not registered"), "Bad error message: " + e);
 
     // Nonexistent shuffle block
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));
-    try {
-      resolver.getBlockData("app0", "exec3", 1, 1, 0);
-      fail("Should have failed");
-    } catch (Exception e) {
-      // pass
-    }
+    assertThrows(Exception.class,
+      () -> resolver.getBlockData("app0", "exec3", 1, 1, 0));
   }
 
   @Test

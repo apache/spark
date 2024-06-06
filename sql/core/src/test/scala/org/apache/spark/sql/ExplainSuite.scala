@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.TestOptionsSource
@@ -106,7 +110,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       keywords = "InMemoryRelation", "StorageLevel(disk, memory, deserialized, 1 replicas)")
   }
 
-  test("optimized plan should show the rewritten aggregate expression") {
+  test("optimized plan should show the rewritten expression") {
     withTempView("test_agg") {
       sql(
         """
@@ -125,6 +129,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
           "any(v#x) AS any(v)#x]")
     }
+
+    withTable("t") {
+      sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
+      val df = sql("SELECT date_part('month', col) FROM t")
+      checkKeywordsExistsInExplain(df,
+        "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
+    }
   }
 
   test("explain inline tables cross-joins") {
@@ -140,11 +151,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain table valued functions") {
-    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1, splits=None)")
+    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1)")
     checkKeywordsExistsInExplain(sql("SELECT * FROM range(3) CROSS JOIN range(3)"),
       "Join Cross",
-      ":- Range (0, 3, step=1, splits=None)",
-      "+- Range (0, 3, step=1, splits=None)")
+      ":- Range (0, 3, step=1)",
+      "+- Range (0, 3, step=1)")
   }
 
   test("explain lateral joins") {
@@ -182,8 +193,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         """.stripMargin)
       checkKeywordsExistsInExplain(df2,
         "Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]")
+          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
+          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
 
       val df3 = sql(
         """
@@ -198,8 +209,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         """.stripMargin)
       checkKeywordsExistsInExplain(df3,
         "Project [concat(cast(id#xL as string), " +
-          "cast(encode(cast((id#xL + 2) as string), utf-8) as string), " +
-          "cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]")
+          "cast(encode(cast((id#xL + 2) as string), utf-8, false) as string), " +
+          "cast(encode(cast((id#xL + 3) as string), utf-8, false) as string)) AS col#x]")
     }
   }
 
@@ -217,8 +228,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // AND                                               conjunction
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
-    checkKeywordsExistsInExplain(sql("select 'a' || 1 + 2"),
-      "Project [null AS (concat(a, 1) + 2)#x]")
+    checkKeywordsExistsInExplain(sql("select '1' || 1 + 2"),
+      "Project [13", " AS (concat(1, 1) + 2)#x")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
       "Project [-1b AS concat((1 - 2), b)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
@@ -232,19 +243,23 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain for these functions; use range to avoid constant folding") {
-    val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
+    val df = sql("select ifnull(id, 1), nullif(id, 1), nvl(id, 1), nvl2(id, 1, 2) " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
-        "x AS nvl2(id, x, y)#x]")
+      "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
+        "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
     withTable("temptable") {
       val df = sql("create table temptable using parquet as select * from range(2)")
       withNormalizedExplain(df, SimpleMode) { normalizedOutput =>
-        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
+        // scalastyle:off
+        // == Physical Plan ==
+        // Execute CreateDataSourceTableAsSelectCommand
+        //   +- CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`temptable`, ErrorIfExists, Project [id#5L], [id]
+        // scalastyle:on
+        assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 2)
       }
     }
   }
@@ -408,7 +423,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("Dataset.toExplainString has mode as string") {
-    val df = spark.range(10).toDF
+    val df = spark.range(10).toDF()
     def assertExplainOutput(mode: ExplainMode): Unit = {
       assert(df.queryExecution.explainString(mode).replaceAll("#\\d+", "#x").trim ===
         getNormalizedExplain(df, mode).trim)
@@ -456,27 +471,18 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     withTempDir { dir =>
       Seq("parquet", "orc", "csv", "json").foreach { fmt =>
         val basePath = dir.getCanonicalPath + "/" + fmt
-        val pushFilterMaps = Map (
-          "parquet" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "orc" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "csv" ->
-            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
-          "json" ->
-            "|remove_marker"
-        )
-        val expected_plan_fragment1 =
+
+        val expectedPlanFragment =
           s"""
-             |\\(1\\) BatchScan
+             |\\(1\\) BatchScan $fmt file:$basePath
              |Output \\[2\\]: \\[value#x, id#x\\]
              |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
              |Format: $fmt
              |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
              |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
-             ${pushFilterMaps.get(fmt).get}
+             |PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
              |ReadSchema: struct\\<value:int\\>
-             |""".stripMargin.replaceAll("\nremove_marker", "").trim
+             |""".stripMargin.trim
 
         spark.range(10)
           .select(col("id"), col("id").as("value"))
@@ -494,7 +500,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             .format(fmt)
             .load(basePath).where($"id" > 1 && $"value" > 2)
           val normalizedOutput = getNormalizedExplain(df, FormattedMode)
-          assert(expected_plan_fragment1.r.findAllMatchIn(normalizedOutput).length == 1)
+          assert(expectedPlanFragment.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }
@@ -520,6 +526,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(
         sql("CREATE TEMPORARY VIEW test AS SELECT 1"),
         "== Analyzed Logical Plan ==\nCreateViewCommand")
+    }
+  }
+
+  test("SPARK-39112: UnsupportedOperationException if explain cost command using v2 command") {
+    withTempDir { dir =>
+      sql("EXPLAIN COST CREATE DATABASE tmp")
+      sql("EXPLAIN COST DESC DATABASE tmp")
+      sql(s"EXPLAIN COST ALTER DATABASE tmp SET LOCATION '${dir.toURI.toString}'")
+      sql("EXPLAIN COST USE tmp")
+      sql("EXPLAIN COST CREATE TABLE t(c1 int) USING PARQUET")
+      sql("EXPLAIN COST SHOW TABLES")
+      sql("EXPLAIN COST SHOW CREATE TABLE t")
+      sql("EXPLAIN COST SHOW TBLPROPERTIES t")
+      sql("EXPLAIN COST DROP TABLE t")
+      sql("EXPLAIN COST DROP DATABASE tmp")
     }
   }
 }
@@ -578,6 +599,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |(16) BroadcastHashJoin
         |Left keys [1]: [k#x]
         |Right keys [1]: [k#x]
+        |Join type: Inner
         |Join condition: None
         |""".stripMargin,
       """
@@ -594,7 +616,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   }
 
   test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
-    val df = (0 to 10).toDF("id").where('id > 5)
+    val df = (0 to 10).toDF("id").where($"id" > 5)
     val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
     modes.foreach { mode =>
       checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
@@ -609,7 +631,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain formatted with subquery") {
     withTempView("t1", "t2") {
-      spark.range(100).select('id % 10 as "key", 'id as "value").createOrReplaceTempView("t1")
+      spark.range(100).select($"id" % 10 as "key", $"id" as "value")
+        .createOrReplaceTempView("t1")
       spark.range(10).createOrReplaceTempView("t2")
       val query =
         """
@@ -658,13 +681,13 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         df.createTempView("df")
 
         val sqlText = "EXPLAIN CODEGEN SELECT key, MAX(value) FROM df GROUP BY key"
-        val expectedCodegenText = "Found 2 WholeStageCodegen subtrees."
+        val expectedCodegenText = "Found 1 WholeStageCodegen subtrees."
         val expectedNoCodegenText = "Found 0 WholeStageCodegen subtrees."
         withNormalizedExplain(sqlText) { normalizedOutput =>
           assert(normalizedOutput.contains(expectedNoCodegenText))
         }
 
-        val aggDf = df.groupBy('key).agg(max('value))
+        val aggDf = df.groupBy($"key").agg(max($"value"))
         withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
           assert(normalizedOutput.contains(expectedNoCodegenText))
         }
@@ -713,7 +736,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       val query = "SELECT * FROM (SELECT * FROM t1) join t2 " +
         "ON k = t2.key"
       val df = sql(query).toDF()
-
+      df.collect()
       val inMemoryRelationRegex = """InMemoryRelation \(([0-9]+)\)""".r
       val columnarToRowRegex = """ColumnarToRow \(([0-9]+)\)""".r
       val explainString = getNormalizedExplain(df, FormattedMode)
@@ -722,6 +745,196 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
       assert(inMemoryRelationNodeId != columnarToRowNodeId)
     }
+  }
+
+  test("SPARK-38232: Explain formatted does not collect subqueries under query stage in AQE") {
+    withTable("t") {
+      sql("CREATE TABLE t USING PARQUET AS SELECT 1 AS c")
+      val expected =
+        "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]"
+      val df = sql("SELECT count(s) FROM (SELECT (SELECT c FROM t) as s)")
+      df.collect()
+      withNormalizedExplain(df, FormattedMode) { output =>
+        assert(output.contains(expected))
+      }
+    }
+  }
+
+  test("SPARK-38322: Support query stage show runtime statistics in formatted explain mode") {
+    val df = Seq(1, 2).toDF("c").distinct()
+    val statistics = "Statistics(sizeInBytes=32.0 B, rowCount=2)"
+
+    checkKeywordsNotExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
+
+    df.collect()
+    checkKeywordsExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
+  }
+
+  test("SPARK-42753: Process subtree for ReusedExchange with unknown child") {
+    // Simulate a simplified subtree with a ReusedExchange pointing to an Exchange node that has
+    // no ID. This is a rare edge case that could arise during AQE if there are multiple
+    // ReusedExchanges. We check to make sure the child Exchange gets an ID and gets printed
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused = ReusedExchangeExec(exchange.output, exchange)
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+    ExplainUtils.processPlan[SparkPlan](reused, appendStr(_))
+
+    val expectedTree = """|ReusedExchange (1)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 3]
+                          |Output [1]: [id#xL]
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (3)
+                          |+- Range (2)
+                          |
+                          |
+                          |(2) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(3) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
+  }
+
+  test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
+    // Simulate a simplified subtree with a two ReusedExchange reusing the same exchange
+    // Only one exchange node should be printed
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(exchange.output, exchange)
+    val reused2 = ReusedExchangeExec(exchange.output, exchange)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |+- ReusedExchange (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
+                          |
+                          |(4) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
+  }
+
+  test("SPARK-42753: Correctly separate two ReusedExchange not sharing subtree") {
+    // Simulate two ReusedExchanges reusing two different Exchanges that appear similar
+    // The two exchanges should have separate IDs and printed separately
+    val exchange1 = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(exchange1.output, exchange1)
+    val exchange2 = ShuffleExchangeExec(RoundRobinPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused2 = ReusedExchangeExec(exchange2.output, exchange2)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |+- ReusedExchange (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 5]
+                          |Output [1]: [id#xL]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 7]
+                          |Output [1]: [id#xL]
+                          |
+                          |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
+                          |
+                          |(4) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |Subplan:2
+                          |Exchange (7)
+                          |+- Range (6)
+                          |
+                          |
+                          |(6) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(7) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
+                          |""".stripMargin
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
   }
 }
 

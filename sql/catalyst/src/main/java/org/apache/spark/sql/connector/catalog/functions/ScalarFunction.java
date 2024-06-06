@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
@@ -148,8 +149,7 @@ public interface ScalarFunction<R> extends BoundFunction {
    * @return a result value
    */
   default R produceResult(InternalRow input) {
-    throw new UnsupportedOperationException(
-        "Cannot find a compatible ScalarFunction#produceResult");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3146");
   }
 
 }

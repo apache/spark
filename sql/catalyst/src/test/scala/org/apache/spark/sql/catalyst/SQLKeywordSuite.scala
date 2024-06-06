@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -30,11 +30,15 @@ import org.apache.spark.sql.catalyst.util.fileToString
 trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
   val sqlSyntaxDefs = {
-    val sqlBasePath = {
-      getWorkspaceFilePath("sql", "catalyst", "src", "main", "antlr4", "org",
-        "apache", "spark", "sql", "catalyst", "parser", "SqlBase.g4").toFile
-    }
-    fileToString(sqlBasePath).split("\n")
+    val sqlBaseParserPath =
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+        "apache", "spark", "sql", "catalyst", "parser", "SqlBaseParser.g4").toFile
+
+    val sqlBaseLexerPath =
+      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+        "apache", "spark", "sql", "catalyst", "parser", "SqlBaseLexer.g4").toFile
+
+    (fileToString(sqlBaseParserPath) + fileToString(sqlBaseLexerPath)).split("\n")
   }
 
   // each element is an array of 4 string: the keyword name, reserve or not in Spark ANSI mode,
@@ -54,7 +58,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     val default = (_: String) => Nil
     var startTagFound = false
     var parseFinished = false
-    val lineIter = sqlSyntaxDefs.toIterator
+    val lineIter = sqlSyntaxDefs.iterator
     while (!parseFinished && lineIter.hasNext) {
       val line = lineIter.next()
       if (line.trim.startsWith(startTag)) {
@@ -67,8 +71,9 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
         }
       }
     }
-    assert(keywords.nonEmpty && startTagFound && parseFinished, "cannot extract keywords from " +
-      s"the `SqlBase.g4` file, so please check if the start/end tags (`$startTag` and `$endTag`) " +
+    assert(keywords.nonEmpty && startTagFound && parseFinished,
+      "cannot extract keywords from the `SqlBaseParser.g4` or `SqlBaseLexer.g4` file, " +
+      s"so please check if the start/end tags (`$startTag` and `$endTag`) " +
       "are placed correctly in the file.")
     keywords.toSet
   }
@@ -93,7 +98,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
           }
           (symbol, literals) :: Nil
         } else {
-          val literal = literalDef.replaceAll("'", "").trim
+          val literal = literalDef.split("\\{")(0).replaceAll("'", "").trim
           // The case where a symbol string and its literal string are different,
           // e.g., `SETMINUS: 'MINUS';`.
           if (symbol != literal) {
@@ -106,7 +111,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     keywords.toMap
   }
 
-  // All the SQL keywords defined in `SqlBase.g4`
+  // All the SQL keywords defined in `SqlBaseLexer.g4`
   val allCandidateKeywords: Set[String] = {
     val kwDef = """([A-Z_]+):.+;""".r
     parseAntlrGrammars(
@@ -155,7 +160,9 @@ class SQLKeywordSuite extends SQLKeywordUtils {
     val documentedKeywords = keywordsInDoc.map(_.head).toSet
     if (allCandidateKeywords != documentedKeywords) {
       val undocumented = (allCandidateKeywords -- documentedKeywords).toSeq.sorted
-      fail("Some keywords are not documented: " + undocumented.mkString(", "))
+      val overdocumented = (documentedKeywords -- allCandidateKeywords).toSeq.sorted
+      fail("Some keywords are not documented: " + undocumented.mkString(", ") +
+        " Extras: " + overdocumented.mkString(", "))
     }
   }
 

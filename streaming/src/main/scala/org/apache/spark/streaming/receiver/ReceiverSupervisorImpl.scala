@@ -21,14 +21,15 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ERROR, MESSAGE}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
@@ -169,7 +170,7 @@ private[streaming] class ReceiverSupervisorImpl(
   def reportError(message: String, error: Throwable): Unit = {
     val errorString = Option(error).map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.send(ReportError(streamId, message, errorString))
-    logWarning("Reported error " + message + " - " + error)
+    logWarning(log"Reported error ${MDC(MESSAGE, message)} - ${MDC(ERROR, error)}")
   }
 
   override protected def onStart(): Unit = {
@@ -215,7 +216,7 @@ private[streaming] class ReceiverSupervisorImpl(
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
-    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    logDebug(s"Cleaning up blocks older than $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 }

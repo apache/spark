@@ -72,6 +72,7 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
       sleepPerRowReadMs: Int = 0
     )(f: BufferTester => Unit): Unit = {
 
+    System.gc()
     test(name) {
       var tester: BufferTester = null
       try {
@@ -102,11 +103,15 @@ class PythonForeachWriterSuite extends SparkFunSuite with Eventually with Mockit
     private val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
     private val thread = new Thread() {
       override def run(): Unit = {
-        while (iterator.hasNext) {
-          outputBuffer.synchronized {
-            outputBuffer += iterator.next().getInt(0)
+        try {
+          while (iterator.hasNext) {
+            outputBuffer.synchronized {
+              outputBuffer += iterator.next().getInt(0)
+            }
+            Thread.sleep(sleepPerRowReadMs)
           }
-          Thread.sleep(sleepPerRowReadMs)
+        } finally {
+          buffer.close()
         }
       }
     }

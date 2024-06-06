@@ -23,7 +23,8 @@ import org.apache.spark.annotation.Evolving;
  * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
  * interfaces to do operator push down, and keep the operator push down result in the returned
  * {@link Scan}. When pushing down operators, the push down order is:
- * sample -&gt; filter -&gt; aggregate -&gt; limit -&gt; column pruning.
+ * sample -&gt; filter -&gt; aggregate -&gt; limit/top-n(sort + limit) -&gt; offset -&gt;
+ * column pruning.
  *
  * @since 3.0.0
  */

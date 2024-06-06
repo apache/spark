@@ -1,0 +1,33 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- case: InheritedLDAMethods
+  main: |
+    from pyspark.ml.clustering import LDAModel, LocalLDAModel, DistributedLDAModel
+
+    distributed_model = DistributedLDAModel.load("foo")
+    reveal_type(distributed_model)
+    reveal_type(distributed_model.setFeaturesCol("foo"))
+
+    local_model = distributed_model.toLocal()
+    reveal_type(local_model)
+    reveal_type(local_model.setFeaturesCol("foo"))
+  out: |
+    main:4: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel"
+    main:5: note: Revealed type is "pyspark.ml.clustering.DistributedLDAModel"
+    main:8: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel"
+    main:9: note: Revealed type is "pyspark.ml.clustering.LocalLDAModel"

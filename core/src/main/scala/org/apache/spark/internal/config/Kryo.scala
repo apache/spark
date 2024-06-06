@@ -41,7 +41,7 @@ private[spark] object Kryo {
   val KRYO_USE_UNSAFE = ConfigBuilder("spark.kryo.unsafe")
     .version("2.1.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val KRYO_USE_POOL = ConfigBuilder("spark.kryo.pool")
     .version("3.0.0")

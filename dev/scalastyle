@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-SPARK_PROFILES=${1:-"-Pmesos -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
+SPARK_PROFILES=${1:-"-Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive -Pvolcano -Pjvm-profiler -Phadoop-cloud"}
 
 # NOTE: echo "q" is needed because SBT prompts the user for input on encountering a build file
 # with failure (either resolution or compilation); the "q" makes SBT quit.

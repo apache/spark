@@ -22,7 +22,11 @@ import unittest
 from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.profiler import has_memory_profiler
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf
+from pyspark.errors import PythonException, PySparkRuntimeError
+from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
 class ProfilerTests(PySparkTestCase):
@@ -50,9 +54,9 @@ class ProfilerTests(PySparkTestCase):
         self.assertTrue("heavy_foo" in io.getvalue())
         sys.stdout = old_stdout
 
-        d = tempfile.gettempdir()
-        self.sc.dump_profiles(d)
-        self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+        with tempfile.TemporaryDirectory(prefix="test_profiler") as d:
+            self.sc.dump_profiles(d)
+            self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
     def test_custom_profiler(self):
         class TestCustomProfiler(BasicProfiler):
@@ -74,25 +78,84 @@ class ProfilerTests(PySparkTestCase):
     def do_computation(self):
         def heavy_foo(x):
             for i in range(1 << 18):
-                x = 1
+                x = 1  # noqa: F841
 
         rdd = self.sc.parallelize(range(100))
         rdd.foreach(heavy_foo)
 
 
-class ProfilerTests2(unittest.TestCase):
+class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
     def test_profiler_disabled(self):
-        sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
+        sc = SparkContext(
+            conf=SparkConf()
+            .set("spark.python.profile", "false")
+            .set("spark.python.profile.memory", "false")
+        )
+        try:
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                sc.show_profiles()
+            self.check_error(
+                exception=pe.exception,
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
+            )
+
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                sc.dump_profiles("/tmp/abc")
+            self.check_error(
+                exception=pe.exception,
+                error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
+            )
+        finally:
+            sc.stop()
+
+    def test_profiler_all_enabled(self):
+        sc = SparkContext(
+            conf=SparkConf()
+            .set("spark.python.profile", "true")
+            .set("spark.python.profile.memory", "true")
+        )
+        spark = SparkSession(sparkContext=sc)
+
+        @udf("int")
+        def plus_one(v):
+            return v + 1
+
+        try:
+            with self.assertRaises(PySparkRuntimeError) as pe:
+                spark.range(10).select(plus_one("id")).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_SET_TOGETHER",
+                message_parameters={
+                    "arg_list": "'spark.python.profile' and "
+                    "'spark.python.profile.memory' configuration"
+                },
+            )
+        finally:
+            sc.stop()
+
+    @unittest.skipIf(has_memory_profiler, "Test when memory-profiler is not installed.")
+    def test_no_memory_profile_installed(self):
+        sc = SparkContext(
+            conf=SparkConf()
+            .set("spark.python.profile", "false")
+            .set("spark.python.profile.memory", "true")
+        )
+        spark = SparkSession(sparkContext=sc)
+
+        @udf("int")
+        def plus_one(v):
+            return v + 1
+
         try:
             self.assertRaisesRegex(
-                RuntimeError,
-                "'spark.python.profile' configuration must be set",
-                lambda: sc.show_profiles(),
-            )
-            self.assertRaisesRegex(
-                RuntimeError,
-                "'spark.python.profile' configuration must be set",
-                lambda: sc.dump_profiles("/tmp/abc"),
+                PythonException,
+                "Install the 'memory_profiler' library in the cluster to enable memory "
+                "profiling",
+                lambda: spark.range(10).select(plus_one("id")).collect(),
             )
         finally:
             sc.stop()
@@ -102,7 +165,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_profiler import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

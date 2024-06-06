@@ -13,6 +13,7 @@
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+--ONLY_IF spark
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
   (100, "emp 1", date "2005-01-01", 100.00D, 10),
@@ -238,3 +239,83 @@ WHERE  EXISTS (SELECT *
                  WHERE  dept_id >= 30 
                         AND dept_id <= 50);
 
+-- Correlated predicates under set ops - unsupported
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               UNION
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               UNION
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               INTERSECT ALL
+               SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "TX");
+
+SELECT *
+FROM   emp
+WHERE NOT EXISTS (SELECT *
+               FROM   dept
+               WHERE  dept_id = emp.dept_id and state = "CA"
+               EXCEPT DISTINCT
+               SELECT * 
+               FROM   dept 
+               WHERE  dept_id = emp.dept_id and state = "TX");

@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
-import com.google.common.io.Files;
-
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -51,7 +49,7 @@ class StreamTestHelper {
   }
 
   StreamTestHelper() throws Exception {
-    tempDir = Files.createTempDir();
+    tempDir = JavaUtils.createDirectory(System.getProperty("java.io.tmpdir"), "spark");
     emptyBuffer = createBuffer(0);
     smallBuffer = createBuffer(100);
     largeBuffer = createBuffer(100000);
@@ -68,25 +66,19 @@ class StreamTestHelper {
   }
 
   public ByteBuffer srcBuffer(String name) {
-    switch (name) {
-      case "largeBuffer":
-        return largeBuffer;
-      case "smallBuffer":
-        return smallBuffer;
-      case "emptyBuffer":
-        return emptyBuffer;
-      default:
-        throw new IllegalArgumentException("Invalid stream: " + name);
-    }
+    return switch (name) {
+      case "largeBuffer" -> largeBuffer;
+      case "smallBuffer" -> smallBuffer;
+      case "emptyBuffer" -> emptyBuffer;
+      default -> throw new IllegalArgumentException("Invalid stream: " + name);
+    };
   }
 
   public ManagedBuffer openStream(TransportConf conf, String streamId) {
-    switch (streamId) {
-      case "file":
-        return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
-      default:
-        return new NioManagedBuffer(srcBuffer(streamId));
+    if ("file".equals(streamId)) {
+      return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
     }
+    return new NioManagedBuffer(srcBuffer(streamId));
   }
 
   void cleanup() {

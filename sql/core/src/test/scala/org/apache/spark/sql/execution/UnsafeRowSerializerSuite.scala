@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
-import java.util.Properties
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.util.{HashMap, Properties}
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.sql.{LocalSparkSession, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
@@ -104,15 +104,20 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
       .set(TEST_MEMORY, 80000L)
 
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
-    val outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
-    outputFile.deleteOnExit()
     // prepare data
     val converter = unsafeRowConverter(Array(IntegerType))
     val data = (1 to 10000).iterator.map { i =>
       (i, converter(Row(i)))
     }
+
+    val shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(conf)
+    shuffleExecutorComponents.initializeExecutor(
+      spark.sparkContext.applicationId, "0", new HashMap[String, String])
+    val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
+      0, 0, 10)
+
     val taskMemoryManager = new TaskMemoryManager(spark.sparkContext.env.memoryManager, 0)
-    val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, taskMemoryManager, new Properties, null)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, 0, 1, taskMemoryManager, new Properties, null)
 
     val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
       taskContext,
@@ -125,7 +130,8 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
     assert(sorter.numSpills > 0)
 
     // Merging spilled files should not throw assertion error
-    sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
+    sorter.writePartitionedMapOutput(0, 0, mapOutputWriter,
+      taskContext.taskMetrics.shuffleWriteMetrics)
   }
 
   test("SPARK-10403: unsafe row serializer with SortShuffleManager") {

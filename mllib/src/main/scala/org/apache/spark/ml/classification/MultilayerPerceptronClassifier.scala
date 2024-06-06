@@ -26,6 +26,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql._
 import org.apache.spark.util.VersionUtils.majorMinorVersion
@@ -192,18 +193,22 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     instr.logNumClasses(labels)
     instr.logNumFeatures(myLayers.head)
 
+    val validated = dataset.select(
+      checkClassificationLabels($(labelCol), Some(labels)).as("_validated_label_"),
+      checkNonNanVectors($(featuresCol)).as("_validated_features_")
+    )
+
     // One-hot encoding for labels using OneHotEncoderModel.
     // As we already know the length of encoding, we skip fitting and directly create
     // the model.
     val encodedLabelCol = "_encoded" + $(labelCol)
     val encodeModel = new OneHotEncoderModel(uid, Array(labels))
-      .setInputCols(Array($(labelCol)))
+      .setInputCols(Array("_validated_label_"))
       .setOutputCols(Array(encodedLabelCol))
       .setDropLast(false)
-    val encodedDataset = encodeModel.transform(dataset)
-    val data = encodedDataset.select($(featuresCol), encodedLabelCol).rdd.map {
-      case Row(features: Vector, encodedLabel: Vector) => (features, encodedLabel)
-    }
+    val encodedDataset = encodeModel.transform(validated)
+    val data = encodedDataset.select("_validated_features_", encodedLabelCol)
+      .rdd.map { case Row(features: Vector, encodedLabel: Vector) => (features, encodedLabel) }
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, softmaxOnTop = true)
     val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
     if (isDefined(initialWeights)) {

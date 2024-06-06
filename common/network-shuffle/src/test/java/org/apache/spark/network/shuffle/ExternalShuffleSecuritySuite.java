@@ -21,11 +21,11 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import com.google.common.collect.ImmutableMap;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -39,11 +39,20 @@ import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleSecuritySuite {
 
-  TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+  TransportConf conf = createTransportConf(false);
   TransportServer server;
   TransportContext transportContext;
 
-  @Before
+  protected TransportConf createTransportConf(boolean encrypt) {
+    if (encrypt) {
+      return new TransportConf("shuffle", new MapConfigProvider(
+        ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
+    } else {
+      return new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    }
+  }
+
+  @BeforeEach
   public void beforeEach() throws IOException {
     transportContext = new TransportContext(conf, new ExternalBlockHandler(conf, null));
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf,
@@ -51,7 +60,7 @@ public class ExternalShuffleSecuritySuite {
     this.server = transportContext.createServer(Arrays.asList(bootstrap));
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     if (server != null) {
       server.close();
@@ -70,20 +79,16 @@ public class ExternalShuffleSecuritySuite {
 
   @Test
   public void testBadAppId() {
-    try {
-      validate("wrong-app-id", "secret", false);
-    } catch (Exception e) {
-      assertTrue(e.getMessage(), e.getMessage().contains("Wrong appId!"));
-    }
+    Exception e = assertThrows(Exception.class,
+      () -> validate("wrong-app-id", "secret", false));
+    assertTrue(e.getMessage().contains("Wrong appId!"), e.getMessage());
   }
 
   @Test
   public void testBadSecret() {
-    try {
-      validate("my-app-id", "bad-secret", false);
-    } catch (Exception e) {
-      assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
-    }
+    Exception e = assertThrows(Exception.class,
+      () -> validate("my-app-id", "bad-secret", false));
+    assertTrue(e.getMessage().contains("Mismatched response"), e.getMessage());
   }
 
   @Test
@@ -96,8 +101,7 @@ public class ExternalShuffleSecuritySuite {
         throws IOException, InterruptedException {
     TransportConf testConf = conf;
     if (encrypt) {
-      testConf = new TransportConf("shuffle", new MapConfigProvider(
-        ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
+      testConf = createTransportConf(encrypt);
     }
 
     try (ExternalBlockStoreClient client =

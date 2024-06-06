@@ -20,14 +20,12 @@ package org.apache.spark.ml.stat
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
-
-class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
+class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val xData = Array(1.0, 0.0, -2.0)
   val yData = Array(4.0, 5.0, 3.0)

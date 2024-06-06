@@ -31,6 +31,11 @@ ExpressionInfo = namedtuple("ExpressionInfo", "name usage examples group")
 groups = {
     "agg_funcs", "array_funcs", "datetime_funcs",
     "json_funcs", "map_funcs", "window_funcs",
+    "math_funcs", "conditional_funcs", "generator_funcs",
+    "predicate_funcs", "string_funcs", "misc_funcs",
+    "bitwise_funcs", "conversion_funcs", "csv_funcs",
+    "xml_funcs", "lambda_funcs", "collection_funcs",
+    "url_funcs", "hash_funcs", "struct_funcs",
 }
 
 
@@ -45,13 +50,21 @@ def _list_grouped_function_infos(jvm):
 
     for jinfo in filter(lambda x: x.getGroup() in groups, jinfos):
         name = jinfo.getName()
+        if (name == "raise_error"):
+            continue
+
+        # SPARK-45232: convert lambda_funcs to collection_funcs in doc generation
+        group = jinfo.getGroup()
+        if group == "lambda_funcs":
+            group = "collection_funcs"
+
         usage = jinfo.getUsage()
         usage = usage.replace("_FUNC_", name) if usage is not None else usage
         infos.append(ExpressionInfo(
             name=name,
             usage=usage,
             examples=jinfo.getExamples().replace("_FUNC_", name),
-            group=jinfo.getGroup()))
+            group=group))
 
     # Groups expression info by each group value
     grouped_infos = itertools.groupby(sorted(infos, key=lambda x: x.group), key=lambda x: x.group)
@@ -108,7 +121,12 @@ def _make_pretty_usage(infos):
         # Expected formats are as follows;
         #  - `_FUNC_(...) - description`, or
         #  - `_FUNC_ - description`
-        usages = iter(re.split(r"(%s.*) - " % info.name, info.usage.strip())[1:])
+        func_name = info.name
+        if (info.name == "*" or info.name == "+"):
+            func_name = "\\" + func_name
+        elif (info.name == "when"):
+            func_name = "CASE WHEN"
+        usages = iter(re.split(r"(.*%s.*) - " % func_name, info.usage.strip())[1:])
         for (sig, description) in zip(usages, usages):
             result.append("    <tr>")
             result.append("      <td>%s</td>" % sig)

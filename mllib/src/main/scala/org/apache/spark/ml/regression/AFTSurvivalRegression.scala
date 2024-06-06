@@ -23,9 +23,8 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
@@ -35,6 +34,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -206,18 +206,27 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
-    val instances = dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType),
-      col($(censorCol)).cast(DoubleType))
-      .rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
-        require(censor == 1.0 || censor == 0.0, "censor must be 1.0 or 0.0")
-        // AFT does not support instance weighting,
-        // here use Instance.weight to store censor for convenience
-        Instance(label, censor, features)
-      }.setName("training instances")
+    val validatedCensorCol = {
+      val casted = col($(censorCol)).cast(DoubleType)
+      when(casted.isNull || casted.isNaN, raise_error(lit("Censors MUST NOT be Null or NaN")))
+        .when(casted =!= 0 && casted =!= 1,
+          raise_error(concat(lit("Censors MUST be in {0, 1}, but got "), casted)))
+        .otherwise(casted)
+    }
+
+    val instances = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      validatedCensorCol,
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, c: Double, v: Vector) =>
+      // AFT does not support instance weighting,
+      // here use Instance.weight to store censor for convenience
+      Instance(l, c, v)
+    }.setName("training instances")
 
     val summarizer = instances.treeAggregate(
       Summarizer.createSummarizerBuffer("mean", "std", "count"))(
@@ -261,9 +270,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         optimizer, initialSolution)
 
     if (rawCoefficients == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val coefficientArray = Array.tabulate(numFeatures) { i =>
@@ -302,7 +309,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc, None, $(aggregationDepth))
 
     if ($(fitIntercept)) {
-      // orginal `initialSolution` is for problem:
+      // original `initialSolution` is for problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
@@ -333,7 +340,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
       solution(numFeatures) -= adapt
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   @Since("1.6.0")
@@ -369,25 +376,29 @@ class AFTSurvivalRegressionModel private[ml] (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = {
-    set(quantileProbabilities, value)
-    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
-    this
-  }
+  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
-  private lazy val _quantiles = {
-    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  private var _quantiles: Vector = _
+
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (param.name == "quantileProbabilities") {
+      if (isDefined(quantileProbabilities)) {
+        _quantiles = Vectors.dense(
+          $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+      } else {
+        _quantiles = null
+      }
+    }
   }
 
   private def lambda2Quantiles(lambda: Double): Vector = {
-    val quantiles = _quantiles(0).clone()
-    var i = 0
-    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
-    Vectors.dense(quantiles)
+    val quantiles = _quantiles.copy
+    BLAS.scal(lambda, quantiles)
+    quantiles
   }
 
   @Since("2.0.0")
@@ -430,8 +441,8 @@ class AFTSurvivalRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: AFTSurvivalRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: AFTSurvivalRegressionModel.transform() " +
+        log"does nothing because no output columns were set.")
       dataset.toDF()
     }
   }

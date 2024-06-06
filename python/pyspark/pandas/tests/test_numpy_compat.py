@@ -15,39 +15,28 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
+class NumPyCompatTestsMixin:
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property
@@ -65,10 +54,7 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = self.psdf
         pdf = self.pdf
 
-        if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b).rename())
-        else:
-            self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b))
+        self.assert_eq(np.add(psdf.a, psdf.b), np.add(pdf.a, pdf.b))
 
         psdf = self.psdf
         pdf = self.pdf
@@ -89,7 +75,14 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
             np.sqrt(psdf, psdf)
 
+        psdf1 = ps.DataFrame({"A": [1, 2, 3]})
+        psdf2 = ps.DataFrame({("A", "B"): [4, 5, 6]})
+        with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
+            np.left_shift(psdf1, psdf2)
+
     def test_np_spark_compat_series(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -114,12 +107,7 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
             if np_name not in self.blacklist:
                 try:
                     # binary ufunc
-                    if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                        self.assert_eq(
-                            np_func(pdf.a, pdf.b).rename(), np_func(psdf.a, psdf.b), almost=True
-                        )
-                    else:
-                        self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
+                    self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
                     self.assert_eq(np_func(pdf.a, 1), np_func(psdf.a, 1), almost=True)
                 except Exception as e:
                     raise AssertionError("Test in '%s' function was failed." % np_name) from e
@@ -132,24 +120,19 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
                 if np_name not in self.blacklist:
                     try:
                         # binary ufunc
-                        if LooseVersion(pd.__version__) < LooseVersion("0.25"):
-                            self.assert_eq(
-                                np_func(pdf.a, pdf2.b).sort_index().rename(),
-                                np_func(psdf.a, psdf2.b).sort_index(),
-                                almost=True,
-                            )
-                        else:
-                            self.assert_eq(
-                                np_func(pdf.a, pdf2.b).sort_index(),
-                                np_func(psdf.a, psdf2.b).sort_index(),
-                                almost=True,
-                            )
+                        self.assert_eq(
+                            np_func(pdf.a, pdf2.b).sort_index(),
+                            np_func(psdf.a, psdf2.b).sort_index(),
+                            almost=True,
+                        )
                     except Exception as e:
                         raise AssertionError("Test in '%s' function was failed." % np_name) from e
         finally:
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -199,12 +182,20 @@ class NumPyCompatTest(PandasOnSparkTestCase, SQLTestUtils):
             reset_option("compute.ops_on_diff_frames")
 
 
+class NumPyCompatTests(
+    NumPyCompatTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

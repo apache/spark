@@ -20,16 +20,25 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkContext
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
+
+import org.apache.spark.{ErrorMessageFormat, JobArtifactSet, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT_ON_CANCEL}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
 import org.apache.spark.util.Utils
 
-object SQLExecution {
+object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
+  val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -51,7 +60,7 @@ object SQLExecution {
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
-      throw new IllegalStateException("Execution ID should be set")
+      throw SparkException.internalError("Execution ID should be set")
     }
   }
 
@@ -59,15 +68,28 @@ object SQLExecution {
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
    */
-  def withNewExecutionId[T](
+  private def withNewExecutionId0[T](
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+      name: Option[String] = None)(
+      body: Either[Throwable, () => T]): T = queryExecution.sparkSession.withActive {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
+    // root execution if the root execution ID is null.
+    // And for the root execution, rootExecutionId == executionId.
+    if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == null) {
+      sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, executionId.toString)
+    }
+    val rootExecutionId = sc.getLocalProperty(EXECUTION_ROOT_ID_KEY).toLong
     executionIdToQueryExecution.put(executionId, queryExecution)
+    val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
+    if (originalInterruptOnCancel == null) {
+      val interruptOnCancel = sparkSession.conf.get(SQLConf.INTERRUPT_ON_CANCEL)
+      sc.setInterruptOnCancel(interruptOnCancel)
+    }
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -76,7 +98,7 @@ object SQLExecution {
 
       val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
 
-      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
           val redactedStr = Utils
@@ -84,30 +106,89 @@ object SQLExecution {
           redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
         }.getOrElse(callSite.shortForm)
 
-      val planDescriptionMode =
-        ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+      val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
+      val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
+        .filterNot { case (key, value) =>
+          key.startsWith(SPARK_DRIVER_PREFIX) ||
+            key.startsWith(SPARK_EXECUTOR_PREFIX) ||
+            globalConfigs.get(key).contains(value)
+        }
+      val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Throwable] = None
+        var isExecutedPlanAvailable = false
         val startTime = System.nanoTime()
+        val startEvent = SparkListenerSQLExecutionStart(
+          executionId = executionId,
+          rootExecutionId = Some(rootExecutionId),
+          description = desc,
+          details = callSite.longForm,
+          physicalPlanDescription = "",
+          sparkPlanInfo = SparkPlanInfo.EMPTY,
+          time = System.currentTimeMillis(),
+          modifiedConfigs = redactedConfigs,
+          jobTags = sc.getJobTags()
+        )
         try {
-          sc.listenerBus.post(SparkListenerSQLExecutionStart(
-            executionId = executionId,
-            description = desc,
-            details = callSite.longForm,
-            physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
-            // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
-            // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
-            time = System.currentTimeMillis()))
-          body
+          body match {
+            case Left(e) =>
+              sc.listenerBus.post(startEvent)
+              throw e
+            case Right(f) =>
+              val planDescriptionMode =
+                ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+              val planDesc = queryExecution.explainString(planDescriptionMode)
+              val planInfo = try {
+                SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+              } catch {
+                case NonFatal(e) =>
+                  logDebug("Failed to generate SparkPlanInfo", e)
+                  // If the queryExecution already failed before this, we are not able to generate
+                  // the the plan info, so we use and empty graphviz node to make the UI happy
+                  SparkPlanInfo.EMPTY
+              }
+              sc.listenerBus.post(
+                startEvent.copy(physicalPlanDescription = planDesc, sparkPlanInfo = planInfo))
+              isExecutedPlanAvailable = true
+              f()
+          }
         } catch {
           case e: Throwable =>
             ex = Some(e)
             throw e
         } finally {
           val endTime = System.nanoTime()
-          val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
+          val errorMessage = ex.map {
+            case e: SparkThrowable =>
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
+            case e =>
+              Utils.exceptionString(e)
+          }
+          if (queryExecution.shuffleCleanupMode != DoNotCleanup
+            && isExecutedPlanAvailable) {
+            val shuffleIds = queryExecution.executedPlan match {
+              case ae: AdaptiveSparkPlanExec =>
+                ae.context.shuffleIds.asScala.keys
+              case _ =>
+                Iterable.empty
+            }
+            shuffleIds.foreach { shuffleId =>
+              queryExecution.shuffleCleanupMode match {
+                case RemoveShuffleFiles =>
+                  SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+                case SkipMigration =>
+                  SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
+                case _ => // this should not happen
+              }
+            }
+          }
+          val event = SparkListenerSQLExecutionEnd(
+            executionId,
+            System.currentTimeMillis(),
+            // Use empty string to indicate no error, as None may mean events generated by old
+            // versions of Spark.
+            errorMessage.orElse(Some("")))
           // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the `name`
           // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
           // can specify the execution name in more places in the future, so that
@@ -122,8 +203,27 @@ object SQLExecution {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+      // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
+      // The current execution is the root execution if rootExecutionId == executionId.
+      if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
+        sc.setLocalProperty(EXECUTION_ROOT_ID_KEY, null)
+      }
+      sc.setLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, originalInterruptOnCancel)
     }
   }
+
+  def withNewExecutionId[T](
+      queryExecution: QueryExecution,
+      name: Option[String] = None)(body: => T): T = {
+    withNewExecutionId0(queryExecution, name)(Right(() => body))
+  }
+
+  def withNewExecutionIdOnError(
+      queryExecution: QueryExecution,
+      name: Option[String] = None)(t: Throwable): Unit = {
+    withNewExecutionId0(queryExecution, name)(Left(t))
+  }
+
 
   /**
    * Wrap an action with a known executionId. When running a different action in a different
@@ -177,7 +277,8 @@ object SQLExecution {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    exec.submit(() => {
+    val artifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
+    exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)

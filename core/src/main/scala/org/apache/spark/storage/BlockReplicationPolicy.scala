@@ -21,7 +21,8 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * ::DeveloperApi::
@@ -67,7 +68,7 @@ object BlockReplicationUtils {
   private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
     val indices = (n - m + 1 to n).foldLeft(mutable.LinkedHashSet.empty[Int]) {case (set, i) =>
       val t = r.nextInt(i) + 1
-      if (set.contains(t)) set + i else set + t
+      if (set.contains(t)) set.union(Set(i)) else set.union(Set(t))
     }
     indices.map(_ - 1).toList
   }
@@ -120,7 +121,8 @@ class RandomBlockReplicationPolicy
       BlockReplicationUtils.getRandomSample(peers, numReplicas, random)
     } else {
       if (peers.size < numReplicas) {
-        logWarning(s"Expecting ${numReplicas} replicas with only ${peers.size} peer/s.")
+        logWarning(log"Expecting ${MDC(NUM_REPLICAS, numReplicas)} " +
+          log"replicas with only ${MDC(NUM_PEERS, peers.size)} peer/s.")
       }
       random.shuffle(peers).toList
     }

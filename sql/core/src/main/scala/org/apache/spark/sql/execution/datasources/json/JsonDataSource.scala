@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.InputStream
-import java.net.URI
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
@@ -211,7 +210,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
+        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
       } { inputStream =>
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
@@ -227,6 +226,6 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser.options.columnNameOfCorruptRecord)
 
     safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
+      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath))
   }
 }

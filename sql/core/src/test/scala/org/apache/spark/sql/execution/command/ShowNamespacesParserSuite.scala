@@ -19,52 +19,48 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowNamespaces
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ShowNamespacesParserSuite extends AnalysisTest with SharedSparkSession {
-  test("all namespaces") {
-    Seq("SHOW NAMESPACES", "SHOW DATABASES").foreach { sqlCmd =>
+  private val keywords = Seq("NAMESPACES", "DATABASES", "SCHEMAS")
+
+  test("show namespaces in the current catalog") {
+    keywords.foreach { keyword =>
       comparePlans(
-        parsePlan(sqlCmd),
+        parsePlan(s"SHOW $keyword"),
         ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
     }
   }
 
-  test("basic pattern") {
-    Seq(
-      "SHOW DATABASES LIKE 'defau*'",
-      "SHOW NAMESPACES LIKE 'defau*'").foreach { sqlCmd =>
+  test("show namespaces with a pattern") {
+    keywords.foreach { keyword =>
       comparePlans(
-        parsePlan(sqlCmd),
+        parsePlan(s"SHOW $keyword LIKE 'defau*'"),
+        ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
+      // LIKE can be omitted.
+      comparePlans(
+        parsePlan(s"SHOW $keyword 'defau*'"),
         ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
     }
   }
 
-  test("FROM/IN operator is not allowed by SHOW DATABASES") {
-    Seq(
-      "SHOW DATABASES FROM testcat.ns1.ns2",
-      "SHOW DATABASES IN testcat.ns1.ns2").foreach { sqlCmd =>
-      val errMsg = intercept[ParseException] {
-        parsePlan(sqlCmd)
-      }.getMessage
-      assert(errMsg.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
+  test("show namespaces in/from a namespace") {
+    keywords.foreach { keyword =>
+      comparePlans(
+        parsePlan(s"SHOW $keyword FROM testcat.ns1.ns2"),
+        ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
+      comparePlans(
+        parsePlan(s"SHOW $keyword IN testcat.ns1.ns2"),
+        ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
     }
   }
 
-  test("show namespaces in/from a namespace") {
-    comparePlans(
-      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-  }
-
   test("namespaces by a pattern from another namespace") {
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
+    keywords.foreach { keyword =>
+      comparePlans(
+        parsePlan(s"SHOW $keyword IN testcat.ns1 LIKE '*pattern*'"),
+        ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
+    }
   }
 }

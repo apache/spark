@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -52,9 +53,8 @@ class RateStreamMicroBatchStream(
   private val maxSeconds = Long.MaxValue / rowsPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
-    throw QueryExecutionErrors.integerOverflowError(
-      s"Max offset with $rowsPerSecond rowsPerSecond" +
-        s" is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
+    throw QueryExecutionErrors.incorrectRampUpRate(
+      rowsPerSecond, maxSeconds, rampUpTimeSeconds)
   }
 
   private[sources] val creationTimeMs = {
@@ -93,7 +93,7 @@ class RateStreamMicroBatchStream(
     metadataLog.get(0).getOrElse {
       val offset = LongOffset(clock.getTimeMillis())
       metadataLog.add(0, offset)
-      logInfo(s"Start time: $offset")
+      logInfo(log"Start time: ${MDC(TIME_UNITS, offset)}")
       offset
     }.offset
   }
@@ -120,8 +120,7 @@ class RateStreamMicroBatchStream(
     val endSeconds = end.asInstanceOf[LongOffset].offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
-      throw QueryExecutionErrors.integerOverflowError("Max offset with " +
-        s"$rowsPerSecond rowsPerSecond is $maxSeconds, but it's $endSeconds now.")
+      throw QueryExecutionErrors.incorrectEndOffset(rowsPerSecond, maxSeconds, endSeconds)
     }
     // Fix "lastTimeMs" for recovery
     if (lastTimeMs < TimeUnit.SECONDS.toMillis(endSeconds) + creationTimeMs) {

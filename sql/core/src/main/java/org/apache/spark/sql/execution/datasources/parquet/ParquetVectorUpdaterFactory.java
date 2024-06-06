@@ -22,10 +22,12 @@ import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
@@ -33,7 +35,9 @@ import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupporte
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.*;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -45,29 +49,35 @@ public class ParquetVectorUpdaterFactory {
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private final String datetimeRebaseMode;
+  private final String datetimeRebaseTz;
   private final String int96RebaseMode;
+  private final String int96RebaseTz;
 
   ParquetVectorUpdaterFactory(
       LogicalTypeAnnotation logicalTypeAnnotation,
       ZoneId convertTz,
       String datetimeRebaseMode,
-      String int96RebaseMode) {
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz) {
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
+    this.datetimeRebaseTz = datetimeRebaseTz;
     this.int96RebaseMode = int96RebaseMode;
+    this.int96RebaseTz = int96RebaseTz;
   }
 
   public ParquetVectorUpdater getUpdater(ColumnDescriptor descriptor, DataType sparkType) {
     PrimitiveType.PrimitiveTypeName typeName = descriptor.getPrimitiveType().getPrimitiveTypeName();
 
     switch (typeName) {
-      case BOOLEAN:
+      case BOOLEAN -> {
         if (sparkType == DataTypes.BooleanType) {
           return new BooleanUpdater();
         }
-        break;
-      case INT32:
+      }
+      case INT32 -> {
         if (sparkType == DataTypes.IntegerType || canReadAsIntDecimal(descriptor, sparkType)) {
           return new IntegerUpdater();
         } else if (sparkType == DataTypes.LongType && isUnsignedIntTypeMatched(32)) {
@@ -75,10 +85,16 @@ public class ParquetVectorUpdaterFactory {
           // For unsigned int32, it stores as plain signed int32 in Parquet when dictionary
           // fallbacks. We read them as long values.
           return new UnsignedIntegerUpdater();
+        } else if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
+          return new IntegerToLongUpdater();
+        } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
+          return new IntegerToBinaryUpdater();
         } else if (sparkType == DataTypes.ByteType) {
           return new ByteUpdater();
         } else if (sparkType == DataTypes.ShortType) {
           return new ShortUpdater();
+        } else if (sparkType == DataTypes.DoubleType) {
+          return new IntegerToDoubleUpdater();
         } else if (sparkType == DataTypes.DateType) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new IntegerUpdater();
@@ -86,11 +102,20 @@ public class ParquetVectorUpdaterFactory {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
             return new IntegerWithRebaseUpdater(failIfRebase);
           }
+        } else if (sparkType == DataTypes.TimestampNTZType && isDateTypeMatched(descriptor)) {
+          if ("CORRECTED".equals(datetimeRebaseMode)) {
+            return new DateToTimestampNTZUpdater();
+          } else {
+            boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
+            return new DateToTimestampNTZWithRebaseUpdater(failIfRebase);
+          }
         } else if (sparkType instanceof YearMonthIntervalType) {
           return new IntegerUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new IntegerToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
-        break;
-      case INT64:
+      }
+      case INT64 -> {
         // This is where we implement support for the valid type conversions.
         if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
           if (DecimalType.is32BitDecimalType(sparkType)) {
@@ -98,68 +123,88 @@ public class ParquetVectorUpdaterFactory {
           } else {
             return new LongUpdater();
           }
+        } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
+          return new LongToBinaryUpdater();
         } else if (isLongDecimal(sparkType) && isUnsignedIntTypeMatched(64)) {
           // In `ParquetToSparkSchemaConverter`, we map parquet UINT64 to our Decimal(20, 0).
           // For unsigned int64, it stores as plain signed int64 in Parquet when dictionary
           // fallbacks. We read them as decimal values.
           return new UnsignedLongUpdater();
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          validateTimestampType(sparkType);
+        } else if (sparkType == DataTypes.TimestampType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongUpdater();
           } else {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
-            return new LongWithRebaseUpdater(failIfRebase);
+            return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
-        } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
-          validateTimestampType(sparkType);
+        } else if (sparkType == DataTypes.TimestampType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           if ("CORRECTED".equals(datetimeRebaseMode)) {
             return new LongAsMicrosUpdater();
           } else {
             final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
-            return new LongAsMicrosRebaseUpdater(failIfRebase);
+            return new LongAsMicrosRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
+        } else if (sparkType == DataTypes.TimestampNTZType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
+          // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
+          return new LongUpdater();
+        } else if (sparkType == DataTypes.TimestampNTZType &&
+          isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
+          // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
+          return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
-        break;
-      case FLOAT:
+      }
+      case FLOAT -> {
         if (sparkType == DataTypes.FloatType) {
           return new FloatUpdater();
+        } else if (sparkType == DataTypes.DoubleType) {
+          return new FloatToDoubleUpdater();
         }
-        break;
-      case DOUBLE:
+      }
+      case DOUBLE -> {
         if (sparkType == DataTypes.DoubleType) {
           return new DoubleUpdater();
         }
-        break;
-      case INT96:
+      }
+      case INT96 -> {
         if (sparkType == DataTypes.TimestampNTZType) {
-          convertErrorForTimestampNTZ(typeName.name());
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          return new BinaryToSQLTimestampUpdater();
         } else if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           if (!shouldConvertTimestamps()) {
             if ("CORRECTED".equals(int96RebaseMode)) {
               return new BinaryToSQLTimestampUpdater();
             } else {
-              return new BinaryToSQLTimestampRebaseUpdater(failIfRebase);
+              return new BinaryToSQLTimestampRebaseUpdater(failIfRebase, int96RebaseTz);
             }
           } else {
             if ("CORRECTED".equals(int96RebaseMode)) {
               return new BinaryToSQLTimestampConvertTzUpdater(convertTz);
             } else {
-              return new BinaryToSQLTimestampConvertTzRebaseUpdater(failIfRebase, convertTz);
+              return new BinaryToSQLTimestampConvertTzRebaseUpdater(
+                failIfRebase,
+                convertTz,
+                int96RebaseTz);
             }
           }
         }
-        break;
-      case BINARY:
-        if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
+      }
+      case BINARY -> {
+        if (sparkType instanceof  StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new BinaryToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
-        break;
-      case FIXED_LEN_BYTE_ARRAY:
+      }
+      case FIXED_LEN_BYTE_ARRAY -> {
         int arrayLen = descriptor.getPrimitiveType().getTypeLength();
         if (canReadAsIntDecimal(descriptor, sparkType)) {
           return new FixedLenByteArrayAsIntUpdater(arrayLen);
@@ -167,10 +212,13 @@ public class ParquetVectorUpdaterFactory {
           return new FixedLenByteArrayAsLongUpdater(arrayLen);
         } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new FixedLenByteArrayUpdater(arrayLen);
+        } else if (sparkType == DataTypes.BinaryType) {
+          return new FixedLenByteArrayUpdater(arrayLen);
+        } else if (canReadAsDecimal(descriptor, sparkType)) {
+          return new FixedLenByteArrayToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
-        break;
-      default:
-        break;
+      }
+      default -> {}
     }
 
     // If we get here, it means the combination of Spark and Parquet type is invalid or not
@@ -179,29 +227,13 @@ public class ParquetVectorUpdaterFactory {
   }
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
-      ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
-  }
-
-  void validateTimestampType(DataType sparkType) {
-    assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
-    // Throw an exception if the Parquet type is TimestampLTZ and the Catalyst type is TimestampNTZ.
-    // This is to avoid mistakes in reading the timestamp values.
-    if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC() &&
-      sparkType == DataTypes.TimestampNTZType) {
-      convertErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
-    }
-  }
-
-  void convertErrorForTimestampNTZ(String parquetType) {
-    throw new RuntimeException("Unable to create Parquet converter for data type " +
-      DataTypes.TimestampNTZType.json() + " whose Parquet type is " + parquetType);
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
+      annotation.getUnit() == unit;
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
-    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation &&
-      !((IntLogicalTypeAnnotation) logicalTypeAnnotation).isSigned() &&
-      ((IntLogicalTypeAnnotation) logicalTypeAnnotation).getBitWidth() == bitWidth;
+    return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation annotation &&
+      !annotation.isSigned() && annotation.getBitWidth() == bitWidth;
   }
 
   private static class BooleanUpdater implements ParquetVectorUpdater {
@@ -233,7 +265,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      throw new UnsupportedOperationException("Boolean is not supported");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3186");
     }
   }
 
@@ -267,6 +299,157 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       values.putInt(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class IntegerToLongUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putLong(offset + i, valuesReader.readInteger());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putLong(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putLong(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class IntegerToDoubleUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putDouble(offset + i, valuesReader.readInteger());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putDouble(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putDouble(offset, dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+  static class DateToTimestampNTZUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      long days = DateTimeUtils.daysToMicros(valuesReader.readInteger(), ZoneOffset.UTC);
+      values.putLong(offset, days);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      int days = dictionary.decodeToInt(dictionaryIds.getDictId(offset));
+      values.putLong(offset, DateTimeUtils.daysToMicros(days, ZoneOffset.UTC));
+    }
+  }
+
+  private static class DateToTimestampNTZWithRebaseUpdater implements ParquetVectorUpdater {
+    private final boolean failIfRebase;
+
+    DateToTimestampNTZWithRebaseUpdater(boolean failIfRebase) {
+      this.failIfRebase = failIfRebase;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      int rebasedDays = rebaseDays(valuesReader.readInteger(), failIfRebase);
+      values.putLong(offset, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      int rebasedDays =
+        rebaseDays(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), failIfRebase);
+      values.putLong(offset, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
     }
   }
 
@@ -517,9 +700,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongWithRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    LongWithRebaseUpdater(boolean failIfRebase) {
+    LongWithRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -528,7 +713,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readLongsWithRebase(total, values, offset, failIfRebase);
+      valuesReader.readLongsWithRebase(total, values, offset, failIfRebase, timeZone);
     }
 
     @Override
@@ -542,7 +727,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       long julianMicros = valuesReader.readLong();
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
 
     @Override
@@ -552,7 +737,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long julianMicros = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
   }
 
@@ -594,9 +779,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongAsMicrosRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    LongAsMicrosRebaseUpdater(boolean failIfRebase) {
+    LongAsMicrosRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -621,7 +808,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       long julianMicros = DateTimeUtils.millisToMicros(valuesReader.readLong());
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
 
     @Override
@@ -632,7 +819,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
       long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
   }
 
@@ -666,6 +853,41 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       values.putFloat(offset, dictionary.decodeToFloat(dictionaryIds.getDictId(offset)));
+    }
+  }
+
+    static class FloatToDoubleUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; ++i) {
+        values.putDouble(offset + i, valuesReader.readFloat());
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFloats(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      values.putDouble(offset, valuesReader.readFloat());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      values.putDouble(offset, dictionary.decodeToFloat(dictionaryIds.getDictId(offset)));
     }
   }
 
@@ -733,6 +955,84 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       values.putByteArray(offset, v.getBytes());
+    }
+  }
+
+  private static class IntegerToBinaryUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = BigInteger.valueOf(valuesReader.readInteger());
+      values.putByteArray(offset, value.toByteArray());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        BigInteger.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)));
+      values.putByteArray(offset, value.toByteArray());
+    }
+  }
+
+  private static class LongToBinaryUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = BigInteger.valueOf(valuesReader.readLong());
+      values.putByteArray(offset, value.toByteArray());
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        BigInteger.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      values.putByteArray(offset, value.toByteArray());
     }
   }
 
@@ -823,9 +1123,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class BinaryToSQLTimestampRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    BinaryToSQLTimestampRebaseUpdater(boolean failIfRebase) {
+    BinaryToSQLTimestampRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -851,7 +1153,7 @@ public class ParquetVectorUpdaterFactory {
         VectorizedValuesReader valuesReader) {
       // Read 12 bytes for INT96
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(valuesReader.readBinary(12));
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       values.putLong(offset, gregorianMicros);
     }
 
@@ -863,7 +1165,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(v);
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       values.putLong(offset, gregorianMicros);
     }
   }
@@ -871,10 +1173,15 @@ public class ParquetVectorUpdaterFactory {
   private static class BinaryToSQLTimestampConvertTzRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
     private final ZoneId convertTz;
+    private final String timeZone;
 
-    BinaryToSQLTimestampConvertTzRebaseUpdater(boolean failIfRebase, ZoneId convertTz) {
+    BinaryToSQLTimestampConvertTzRebaseUpdater(
+        boolean failIfRebase,
+        ZoneId convertTz,
+        String timeZone) {
       this.failIfRebase = failIfRebase;
       this.convertTz = convertTz;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -900,7 +1207,7 @@ public class ParquetVectorUpdaterFactory {
         VectorizedValuesReader valuesReader) {
       // Read 12 bytes for INT96
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(valuesReader.readBinary(12));
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       long adjTime = DateTimeUtils.convertTz(gregorianMicros, convertTz, UTC);
       values.putLong(offset, adjTime);
     }
@@ -913,7 +1220,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(v);
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       long adjTime = DateTimeUtils.convertTz(gregorianMicros, convertTz, UTC);
       values.putLong(offset, adjTime);
     }
@@ -947,7 +1254,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putByteArray(offset, valuesReader.readBinary(arrayLen).getBytes());
+      values.putByteArray(offset, valuesReader.readBinary(arrayLen).getBytesUnsafe());
     }
 
     @Override
@@ -1047,6 +1354,196 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
+  private abstract static class DecimalUpdater implements ParquetVectorUpdater {
+
+    private final DecimalType sparkType;
+
+    DecimalUpdater(DecimalType sparkType) {
+      this.sparkType = sparkType;
+    }
+
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      for (int i = 0; i < total; i++) {
+        readValue(offset + i, values, valuesReader);
+      }
+    }
+
+    protected void writeDecimal(int offset, WritableColumnVector values, BigDecimal decimal) {
+      BigDecimal scaledDecimal = decimal.setScale(sparkType.scale(), RoundingMode.UNNECESSARY);
+      if (DecimalType.is32BitDecimalType(sparkType)) {
+        values.putInt(offset, scaledDecimal.unscaledValue().intValue());
+      } else if (DecimalType.is64BitDecimalType(sparkType)) {
+        values.putLong(offset, scaledDecimal.unscaledValue().longValue());
+      } else {
+        values.putByteArray(offset, scaledDecimal.unscaledValue().toByteArray());
+      }
+    }
+  }
+
+  private static class IntegerToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+    IntegerToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigDecimal decimal = BigDecimal.valueOf(valuesReader.readInteger(), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToInt(dictionaryIds.getDictId(offset)), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+  private static class LongToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+    LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigDecimal decimal = BigDecimal.valueOf(valuesReader.readLong(), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigDecimal decimal =
+        BigDecimal.valueOf(dictionary.decodeToLong(dictionaryIds.getDictId(offset)), parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+private static class BinaryToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+
+  BinaryToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipBinary(total);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      valuesReader.readBinary(1, values, offset);
+      BigInteger value = new BigInteger(values.getBinary(offset));
+      BigDecimal decimal = new BigDecimal(value, parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigDecimal decimal = new BigDecimal(value, parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
+private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
+    private final int parquetScale;
+    private final int arrayLen;
+
+   FixedLenByteArrayToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+      super(sparkType);
+      LogicalTypeAnnotation typeAnnotation =
+        descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      this.arrayLen = descriptor.getPrimitiveType().getTypeLength();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+        valuesReader.skipFixedLenByteArray(total, arrayLen);
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      BigInteger value = new BigInteger(valuesReader.readBinary(arrayLen).getBytes());
+      BigDecimal decimal = new BigDecimal(value, this.parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      BigInteger value =
+        new BigInteger(dictionary.decodeToBinary(dictionaryIds.getDictId(offset)).getBytes());
+      BigDecimal decimal = new BigDecimal(value, this.parquetScale);
+      writeDecimal(offset, values, decimal);
+    }
+  }
+
   private static int rebaseDays(int julianDays, final boolean failIfRebase) {
     if (failIfRebase) {
       if (julianDays < RebaseDateTime.lastSwitchJulianDay()) {
@@ -1062,7 +1559,8 @@ public class ParquetVectorUpdaterFactory {
   private static long rebaseTimestamp(
       long julianMicros,
       final boolean failIfRebase,
-      final String format) {
+      final String format,
+      final String timeZone) {
     if (failIfRebase) {
       if (julianMicros < RebaseDateTime.lastSwitchJulianTs()) {
         throw DataSourceUtils.newRebaseExceptionInRead(format);
@@ -1070,16 +1568,22 @@ public class ParquetVectorUpdaterFactory {
         return julianMicros;
       }
     } else {
-      return RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+      return RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, julianMicros);
     }
   }
 
-  private static long rebaseMicros(long julianMicros, final boolean failIfRebase) {
-    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet");
+  private static long rebaseMicros(
+      long julianMicros,
+      final boolean failIfRebase,
+      final String timeZone) {
+    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet", timeZone);
   }
 
-  private static long rebaseInt96(long julianMicros, final boolean failIfRebase) {
-    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet INT96");
+  private static long rebaseInt96(
+      long julianMicros,
+      final boolean failIfRebase,
+      final String timeZone) {
+    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet INT96", timeZone);
   }
 
   private boolean shouldConvertTimestamps() {
@@ -1100,37 +1604,83 @@ public class ParquetVectorUpdaterFactory {
 
   private static boolean canReadAsIntDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.is32BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(descriptor, dt);
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
   }
 
   private static boolean canReadAsLongDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.is64BitDecimalType(dt)) return false;
-    return isDecimalTypeMatched(descriptor, dt);
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
   }
 
   private static boolean canReadAsBinaryDecimal(ColumnDescriptor descriptor, DataType dt) {
     if (!DecimalType.isByteArrayDecimalType(dt)) return false;
+    return isDecimalTypeMatched(descriptor, dt) && isSameDecimalScale(descriptor, dt);
+  }
+
+  private static boolean canReadAsDecimal(ColumnDescriptor descriptor, DataType dt) {
+    if (!(dt instanceof DecimalType)) return false;
     return isDecimalTypeMatched(descriptor, dt);
   }
 
   private static boolean isLongDecimal(DataType dt) {
-    if (dt instanceof DecimalType) {
-      DecimalType d = (DecimalType) dt;
+    if (dt instanceof DecimalType d) {
       return d.precision() == 20 && d.scale() == 0;
     }
     return false;
   }
 
+  private static boolean isDateTypeMatched(ColumnDescriptor descriptor) {
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    return typeAnnotation instanceof DateLogicalTypeAnnotation;
+  }
+
+  private static boolean isSignedIntAnnotation(LogicalTypeAnnotation typeAnnotation) {
+    if (!(typeAnnotation instanceof IntLogicalTypeAnnotation)) return false;
+    IntLogicalTypeAnnotation intAnnotation = (IntLogicalTypeAnnotation) typeAnnotation;
+    return intAnnotation.isSigned();
+  }
+
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
+    DecimalType requestedType = (DecimalType) dt;
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation parquetType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      // If the required scale is larger than or equal to the physical decimal scale in the Parquet
+      // metadata, we can upscale the value as long as the precision also increases by as much so
+      // that there is no loss of precision.
+      int scaleIncrease = requestedType.scale() - parquetType.getScale();
+      int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
+      return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Allow reading signed integers (which may be un-annotated) as decimal as long as the
+      // requested decimal type is large enough to represent all possible values.
+      PrimitiveType.PrimitiveTypeName typeName =
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
+      int integerPrecision = requestedType.precision() - requestedType.scale();
+      switch (typeName) {
+        case INT32:
+          return integerPrecision >= DecimalType$.MODULE$.IntDecimal().precision();
+        case INT64:
+          return integerPrecision >= DecimalType$.MODULE$.LongDecimal().precision();
+        default:
+          return false;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isSameDecimalScale(ColumnDescriptor descriptor, DataType dt) {
     DecimalType d = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
       DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
-      // It's OK if the required decimal precision is larger than or equal to the physical decimal
-      // precision in the Parquet metadata, as long as the decimal scale is the same.
-      return decimalType.getPrecision() <= d.precision() && decimalType.getScale() == d.scale();
+      return decimalType.getScale() == d.scale();
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Consider signed integers (which may be un-annotated) as having scale 0.
+      return d.scale() == 0;
     }
     return false;
   }
+
 }
 

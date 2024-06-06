@@ -25,14 +25,14 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.NextIterator
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index: Int = idx
 }
 
-// TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
  * An RDD that executes a SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.
@@ -94,7 +94,7 @@ class JdbcRDD[T: ClassTag](
       stmt.setFetchSize(100)
     }
 
-    logInfo(s"statement fetch size set to: ${stmt.getFetchSize}")
+    logInfo(log"statement fetch size set to: ${MDC(FETCH_SIZE, stmt.getFetchSize)}")
 
     stmt.setLong(1, part.lower)
     stmt.setLong(2, part.upper)

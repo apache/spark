@@ -85,7 +85,7 @@ private[spark] class SystemClock extends Clock {
       return currentTime
     }
 
-    val pollTime = math.max(waitTime / 10.0, minPollTime).toLong
+    val pollTime = math.max(waitTime / 10.0, minPollTime.toDouble).toLong
 
     while (true) {
       currentTime = System.currentTimeMillis()

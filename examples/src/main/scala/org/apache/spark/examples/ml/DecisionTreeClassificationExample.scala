@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
 object DecisionTreeClassificationExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("DecisionTreeClassificationExample")
       .getOrCreate()
     // $example on$

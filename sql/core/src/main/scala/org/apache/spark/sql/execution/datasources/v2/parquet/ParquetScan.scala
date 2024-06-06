@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class ParquetScan(
@@ -78,8 +79,6 @@ case class ParquetScan(
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    ParquetWriteSupport.setSchema(readDataSchema, hadoopConf)
-
     // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
@@ -87,6 +86,12 @@ case class ParquetScan(
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
 
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))
@@ -117,20 +122,14 @@ case class ParquetScan(
   override def hashCode(): Int = getClass.hashCode()
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
-    (seqToString(pushedAggregate.get.aggregateExpressions),
-      seqToString(pushedAggregate.get.groupByColumns))
+    (seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
+      seqToString(pushedAggregate.get.groupByExpressions.toImmutableArraySeq))
   } else {
     ("[]", "[]")
   }
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
-      ", PushedAggregation: " + pushedAggregationsStr +
-      ", PushedGroupBy: " + pushedGroupByStr
-  }
-
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
   }

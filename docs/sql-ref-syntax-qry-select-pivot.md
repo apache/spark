@@ -97,5 +97,7 @@ SELECT * FROM person
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

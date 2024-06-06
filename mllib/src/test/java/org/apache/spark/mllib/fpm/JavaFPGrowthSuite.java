@@ -21,9 +21,9 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -34,7 +34,6 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
   @Test
   public void runFPGrowth() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> rdd = jsc.parallelize(Arrays.asList(
       Arrays.asList("r z h k p".split(" ")),
       Arrays.asList("z y x w v u t s".split(" ")),
@@ -61,7 +60,6 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
   @Test
   public void runFPGrowthSaveLoad() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> rdd = jsc.parallelize(Arrays.asList(
       Arrays.asList("r z h k p".split(" ")),
       Arrays.asList("z y x w v u t s".split(" ")),

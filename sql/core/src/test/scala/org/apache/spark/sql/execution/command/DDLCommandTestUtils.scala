@@ -173,3 +173,8 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     part1Loc
   }
 }
+
+object DDLCommandTestUtils {
+  val V1_COMMAND_VERSION = "V1"
+  val V2_COMMAND_VERSION = "V2"
+}

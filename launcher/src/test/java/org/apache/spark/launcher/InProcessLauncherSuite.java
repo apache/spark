@@ -23,9 +23,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class InProcessLauncherSuite extends BaseSuite {
 
@@ -38,7 +38,7 @@ public class InProcessLauncherSuite extends BaseSuite {
 
   private static Throwable lastError;
 
-  @Before
+  @BeforeEach
   public void testSetup() {
     lastError = null;
   }
@@ -94,16 +94,11 @@ public class InProcessLauncherSuite extends BaseSuite {
           if (opt == CONF) {
             String[] conf = value.split("=");
             switch(conf[0]) {
-              case LauncherProtocol.CONF_LAUNCHER_PORT:
-                port.set(conf[1]);
-                break;
-
-              case LauncherProtocol.CONF_LAUNCHER_SECRET:
-                secret.set(conf[1]);
-                break;
-
-              default:
+              case LauncherProtocol.CONF_LAUNCHER_PORT -> port.set(conf[1]);
+              case LauncherProtocol.CONF_LAUNCHER_SECRET -> secret.set(conf[1]);
+              default -> {
                 // no op
+              }
             }
           }
 
@@ -128,25 +123,19 @@ public class InProcessLauncherSuite extends BaseSuite {
 
       String test = args[args.length - 1];
       switch (test) {
-      case TEST_SUCCESS:
-        break;
-
-      case TEST_FAILURE:
-        throw new IllegalStateException(TEST_FAILURE_MESSAGE);
-
-      case TEST_KILL:
-        try {
-          // Wait for a reasonable amount of time to avoid the test hanging forever on failure,
-          // but still allowing for time outs to hopefully not occur on busy machines.
-          Thread.sleep(10000);
-          fail("Did not get expected interrupt after 10s.");
-        } catch (InterruptedException ie) {
-          // Expected.
+        case TEST_SUCCESS -> {}
+        case TEST_FAILURE -> throw new IllegalStateException(TEST_FAILURE_MESSAGE);
+        case TEST_KILL -> {
+          try {
+            // Wait for a reasonable amount of time to avoid the test hanging forever on failure,
+            // but still allowing for time outs to hopefully not occur on busy machines.
+            Thread.sleep(10000);
+            fail("Did not get expected interrupt after 10s.");
+          } catch (InterruptedException ie) {
+            // Expected.
+          }
         }
-        break;
-
-      default:
-        fail("Unknown test " + test);
+        default -> fail("Unknown test " + test);
       }
     } catch (Throwable t) {
       lastError = t;

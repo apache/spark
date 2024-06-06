@@ -28,12 +28,10 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
-class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
-  with ResetSystemProperties {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with ResetSystemProperties {
 
   val hasBash =
     try {

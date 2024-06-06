@@ -49,6 +49,15 @@ we provide the flexibility to calculate pairwise correlations among many series.
 correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+[`Correlation`](api/python/reference/api/pyspark.ml.stat.Correlation.html)
+computes the correlation matrix for the input Dataset of Vectors using the specified method.
+The output will be a DataFrame that contains the correlation matrix of the column of vectors.
+
+{% include_example python/ml/correlation_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 [`Correlation`](api/scala/org/apache/spark/ml/stat/Correlation$.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
@@ -63,14 +72,6 @@ computes the correlation matrix for the input Dataset of Vectors using the speci
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
 {% include_example java/org/apache/spark/examples/ml/JavaCorrelationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-[`Correlation`](api/python/reference/api/pyspark.ml.stat.Correlation.html)
-computes the correlation matrix for the input Dataset of Vectors using the specified method.
-The output will be a DataFrame that contains the correlation matrix of the column of vectors.
-
-{% include_example python/ml/correlation_example.py %}
 </div>
 
 </div>
@@ -88,6 +89,13 @@ For each feature, the (feature, label) pairs are converted into a contingency ma
 the Chi-squared statistic is computed. All label and feature values must be categorical.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`ChiSquareTest` Python docs](api/python/reference/api/pyspark.ml.stat.ChiSquareTest.html) for details on the API.
+
+{% include_example python/ml/chi_square_test_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`ChiSquareTest` Scala docs](api/scala/org/apache/spark/ml/stat/ChiSquareTest$.html) for details on the API.
 
@@ -100,12 +108,6 @@ Refer to the [`ChiSquareTest` Java docs](api/java/org/apache/spark/ml/stat/ChiSq
 {% include_example java/org/apache/spark/examples/ml/JavaChiSquareTestExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`ChiSquareTest` Python docs](api/python/reference/api/pyspark.ml.stat.ChiSquareTest.html) for details on the API.
-
-{% include_example python/ml/chi_square_test_example.py %}
-</div>
-
 </div>
 
 ## Summarizer
@@ -115,6 +117,13 @@ Available metrics are the column-wise max, min, mean, sum, variance, std, and nu
 as well as the total count.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+Refer to the [`Summarizer` Python docs](api/python/reference/api/pyspark.ml.stat.Summarizer.html) for details on the API.
+
+{% include_example python/ml/summarizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 The following example demonstrates using [`Summarizer`](api/scala/org/apache/spark/ml/stat/Summarizer$.html)
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
@@ -127,12 +136,6 @@ The following example demonstrates using [`Summarizer`](api/java/org/apache/spar
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example java/org/apache/spark/examples/ml/JavaSummarizerExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`Summarizer` Python docs](api/python/reference/api/pyspark.ml.stat.Summarizer.html) for details on the API.
-
-{% include_example python/ml/summarizer_example.py %}
 </div>
 
 </div>

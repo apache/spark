@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
 import org.apache.spark.streaming.api.python.PythonDStream
@@ -123,7 +124,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         val diff = TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - timeWhenStopStarted))
         val timedOut = diff > stopTimeoutMs
         if (timedOut) {
-          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
+          logWarning(log"Timed out while stopping the job generator " +
+            log"(timeout = ${MDC(TIMEOUT, stopTimeoutMs)})")
         }
         timedOut
       }
@@ -204,10 +206,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
     // or if the property is defined set it to that time
-    if (clock.isInstanceOf[ManualClock]) {
-      val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
-      val jumpTime = ssc.sc.conf.get(StreamingConf.MANUAL_CLOCK_JUMP)
-      clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
+    clock match {
+      case manualClock: ManualClock =>
+        val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
+        val jumpTime = ssc.sc.conf.get(StreamingConf.MANUAL_CLOCK_JUMP)
+        manualClock.setTime(lastTime + jumpTime)
+      case _ => // do nothing
     }
 
     val batchDuration = ssc.graph.batchDuration

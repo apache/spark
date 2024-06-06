@@ -1,0 +1,2 @@
+--SET spark.sql.ansi.enabled = true
+--IMPORT datetime-special.sql

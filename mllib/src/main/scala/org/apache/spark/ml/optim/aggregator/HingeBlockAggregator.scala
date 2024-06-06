@@ -68,6 +68,8 @@ private[ml] class HingeBlockAggregator(
     Double.NaN
   }
 
+  @transient private var buffer: Array[Double] = _
+
   /**
    * Add a new training instance block to this HingeBlockAggregator, and update the loss
    * and gradient of the objective function.
@@ -85,10 +87,18 @@ private[ml] class HingeBlockAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
+    if (buffer == null || buffer.length < size) {
+      buffer = Array.ofDim[Double](size)
+    }
+
     // arr here represents margins
-    val arr = Array.ofDim[Double](size)
-    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
-    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
+    val arr = buffer
+    if (fitIntercept) {
+      java.util.Arrays.fill(arr, 0, size, marginOffset)
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
+    } else {
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 0.0, arr)
+    }
 
     // in-place convert margins to multiplier
     // then, arr represents multiplier

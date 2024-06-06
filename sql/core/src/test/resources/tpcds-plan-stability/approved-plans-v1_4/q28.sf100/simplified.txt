@@ -18,7 +18,7 @@ WholeStageCodegen (18)
                                   Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                        Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
             InputAdapter
               BroadcastExchange #3
                 WholeStageCodegen (5)
@@ -36,7 +36,7 @@ WholeStageCodegen (18)
                                         Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                              Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
           InputAdapter
             BroadcastExchange #6
               WholeStageCodegen (8)
@@ -54,7 +54,7 @@ WholeStageCodegen (18)
                                       Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                            Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
         InputAdapter
           BroadcastExchange #9
             WholeStageCodegen (11)
@@ -72,7 +72,7 @@ WholeStageCodegen (18)
                                     Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                          Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
       InputAdapter
         BroadcastExchange #12
           WholeStageCodegen (14)
@@ -90,7 +90,7 @@ WholeStageCodegen (18)
                                   Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                        Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
     InputAdapter
       BroadcastExchange #15
         WholeStageCodegen (17)
@@ -108,4 +108,4 @@ WholeStageCodegen (18)
                                 Filter [ss_quantity,ss_list_price,ss_coupon_amt,ss_wholesale_cost]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
+                                      Scan parquet spark_catalog.default.store_sales [ss_quantity,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]

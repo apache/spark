@@ -22,11 +22,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import scala.Tuple2;
 import scala.Tuple3;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -36,7 +37,9 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaLDASuite extends SharedSparkSession {
+
   @Override
+  @BeforeEach
   public void setUp() throws IOException {
     super.setUp();
     List<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();

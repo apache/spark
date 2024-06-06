@@ -27,7 +27,6 @@ import pandas as pd
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
-
 from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
     InternalField,
@@ -52,7 +51,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-class PandasOnSparkFrameMethods(object):
+class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
@@ -60,10 +59,10 @@ class PandasOnSparkFrameMethods(object):
 
     def attach_id_column(self, id_type: str, column: Name) -> "DataFrame":
         """
-        Attach a column to be used as identifier of rows similar to the default index.
+        Attach a column to be used as an identifier of rows similar to the default index.
 
         See also `Default Index type
-        <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -73,9 +72,9 @@ class PandasOnSparkFrameMethods(object):
             - 'sequence' : a sequence that increases one by one.
 
               .. note:: this uses Spark's Window without specifying partition specification.
-                  This leads to move all data into single partition in single machine and
+                  This leads to moving all data into a single partition in a single machine and
                   could cause serious performance degradation.
-                  Avoid this method against very large dataset.
+                  Avoid this method with very large datasets.
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.
@@ -204,9 +203,9 @@ class PandasOnSparkFrameMethods(object):
         DataFrame given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -335,14 +334,19 @@ class PandasOnSparkFrameMethods(object):
         if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
         original_func = func
-        func = lambda o: original_func(o, *args, **kwds)
+
+        def new_func(o: Any) -> pd.DataFrame:
+            return original_func(o, *args, **kwds)
 
         self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
@@ -355,7 +359,7 @@ class PandasOnSparkFrameMethods(object):
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = func(pdf)
+            applied = new_func(pdf)
             if not isinstance(applied, pd.DataFrame):
                 raise ValueError(
                     "The given function should return a frame; however, "
@@ -371,7 +375,7 @@ class PandasOnSparkFrameMethods(object):
             return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=True
+                self_applied, new_func, return_schema, retain_index=True
             )
             sdf = self_applied._internal.spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -394,7 +398,7 @@ class PandasOnSparkFrameMethods(object):
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=should_retain_index
+                self_applied, new_func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -433,9 +437,9 @@ class PandasOnSparkFrameMethods(object):
         each input and output should be the same.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -570,10 +574,12 @@ class PandasOnSparkFrameMethods(object):
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
         original_func = func
-        func = lambda o: original_func(o, *args, **kwargs)
+
+        def new_func(o: Any) -> Union[pd.DataFrame, pd.Series]:
+            return original_func(o, *args, **kwargs)
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            return func(pdf).to_frame()
+            return new_func(pdf).to_frame()
 
         def pandas_series_func(
             f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
@@ -595,7 +601,7 @@ class PandasOnSparkFrameMethods(object):
             )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
-            transformed = func(pdf)
+            transformed = new_func(pdf)
             if not isinstance(transformed, (pd.DataFrame, pd.Series)):
                 raise ValueError(
                     "The given function should return a frame; however, "
@@ -606,7 +612,7 @@ class PandasOnSparkFrameMethods(object):
             psdf_or_psser = ps.from_pandas(transformed)
 
             if isinstance(psdf_or_psser, ps.Series):
-                psser = cast(ps.Series, psdf_or_psser)
+                psser = psdf_or_psser
 
                 field = psser._internal.data_fields[0].normalize_spark_type()
 
@@ -644,7 +650,10 @@ class PandasOnSparkFrameMethods(object):
                 self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=True,
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -709,7 +718,10 @@ class PandasOnSparkFrameMethods(object):
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=should_retain_index
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=should_retain_index,
                 )
                 columns = self_applied._internal.spark_columns
 
@@ -750,7 +762,7 @@ class PandasOnSparkFrameMethods(object):
                 return DataFrame(internal)
 
 
-class PandasOnSparkSeriesMethods(object):
+class PandasOnSparkSeriesMethods:
     """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):
@@ -764,9 +776,9 @@ class PandasOnSparkSeriesMethods(object):
         The pandas Series given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input series. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input series. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -879,7 +891,7 @@ class PandasOnSparkSeriesMethods(object):
                     "Expected the return type of this function to be of type column,"
                     " but found type {}".format(sig_return)
                 )
-            return_type = cast(SeriesType, sig_return)
+            return_type = sig_return
 
         return self._transform_batch(lambda c: func(c, *args, **kwargs), return_type)
 
@@ -892,7 +904,10 @@ class PandasOnSparkSeriesMethods(object):
 
         if not isinstance(func, FunctionType):
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         if return_type is None:
             # TODO: In this case, it avoids the shortcut for now (but only infers schema)
@@ -921,7 +936,7 @@ class PandasOnSparkSeriesMethods(object):
 
         def pandas_concat(*series: pd.Series) -> pd.DataFrame:
             # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around to make the input as a frame. See SPARK-27240
+            # This works around makeing the input as a frame. See SPARK-27240
             pdf = pd.concat(series, axis=1)
             pdf.columns = columns
             return pdf

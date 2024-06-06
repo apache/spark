@@ -18,10 +18,11 @@
 package org.apache.spark.streaming.ui
 
 import java.util.concurrent.TimeUnit
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
@@ -64,7 +65,7 @@ private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
-  val formattedAvg: String = avg.map(_.formatted("%.2f")).getOrElse("-")
+  val formattedAvg: String = avg.map("%.2f".format(_)).getOrElse("-")
 
   val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }
@@ -82,12 +83,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
-    val onClickTimelineFunc = generateOnClickTimelineFunction()
+    val onClickTimelineFunc = generateOnClickTimelineFunction(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
-        generateStatTable() ++
+        generateStatTable(request) ++
           generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
@@ -100,14 +101,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
   }
 
   /** Generate html that will set onClickTimeline declared in streaming-page.js */
-  private def generateOnClickTimelineFunction(): Seq[Node] = {
-    val js = "onClickTimeline = getOnClickTimelineFunction();"
-    <script>{Unparsed(js)}</script>
+  private def generateOnClickTimelineFunction(request: HttpServletRequest): Seq[Node] = {
+    val imported = SparkUIUtils.formatImportJavaScript(
+      request,
+      "/static/streaming-page.js",
+      "getOnClickTimelineFunction")
+    val js =
+      s"""
+         |$imported
+         |
+         |onClickTimeline = getOnClickTimelineFunction();
+         |""".stripMargin
+    <script type="module">{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -159,7 +169,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <script>{Unparsed(js)}</script>
   }
 
-  private def generateStatTable(): Seq[Node] = {
+  private def generateStatTable(request: HttpServletRequest): Seq[Node] = {
     val batches = listener.retainedBatches
 
     val batchTimes = batches.map(_.batchTime.milliseconds)
@@ -197,7 +207,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
 
     val graphUIDataForRecordRateOfAllStreams =
       new GraphUIData(
@@ -206,8 +216,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         recordRateForAllStreams.data,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
-        maxRecordRate,
+        minRecordRate.toDouble,
+        maxRecordRate.toDouble,
         "records/sec")
     graphUIDataForRecordRateOfAllStreams.generateDataJs(jsCollector)
 
@@ -218,7 +228,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         schedulingDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForSchedulingDelay.generateDataJs(jsCollector)
@@ -230,7 +240,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         processingTime.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit, Some(batchInterval))
     graphUIDataForProcessingTime.generateDataJs(jsCollector)
@@ -242,7 +252,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         totalDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForTotalDelay.generateDataJs(jsCollector)
@@ -294,7 +304,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       {if (hasStream) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate, maxRecordRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate.toDouble)}
           </td>
         </tr>
       }}
@@ -340,8 +350,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       jsCollector: JsCollector,
       minX: Long,
       maxX: Long,
-      minY: Double,
-      maxY: Double): Seq[Node] = {
+      minY: Double): Seq[Node] = {
     val maxYCalculated = listener.receivedRecordRateWithBatchTime.values
       .flatMap { case streamAndRates => streamAndRates.map { case (_, recordRate) => recordRate } }
       .reduceOption[Double](math.max)
@@ -351,7 +360,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val content: Seq[Node] = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).flatMap {
       case (streamId, recordRates) =>
         generateInputDStreamRow(
-          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated)
+          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated.toDouble)
     }
 
     // scalastyle:off

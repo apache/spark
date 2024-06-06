@@ -21,8 +21,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -100,17 +100,12 @@ public class CommandBuilderUtilsSuite {
   }
 
   private static void testOpt(String opts, List<String> expected) {
-    assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
-        expected, parseOptionString(opts));
+    assertEquals(expected, parseOptionString(opts),
+      String.format("test string failed to parse: [[ %s ]]", opts));
   }
 
   private static void testInvalidOpt(String opts) {
-    try {
-      parseOptionString(opts);
-      fail("Expected exception for invalid option string.");
-    } catch (IllegalArgumentException e) {
-      // pass.
-    }
+    assertThrows(IllegalArgumentException.class, () -> parseOptionString(opts));
   }
 
 }

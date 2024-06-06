@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.java;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests {@link Optional}.
@@ -27,68 +27,71 @@ public class OptionalSuite {
 
   @Test
   public void testEmpty() {
-    Assert.assertFalse(Optional.empty().isPresent());
-    Assert.assertNull(Optional.empty().orNull());
-    Assert.assertEquals("foo", Optional.empty().or("foo"));
-    Assert.assertEquals("foo", Optional.empty().orElse("foo"));
+    Assertions.assertFalse(Optional.empty().isPresent());
+    Assertions.assertNull(Optional.empty().orNull());
+    Assertions.assertEquals("foo", Optional.empty().or("foo"));
+    Assertions.assertEquals("foo", Optional.empty().orElse("foo"));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testEmptyGet() {
-    Optional.empty().get();
+    Assertions.assertThrows(NullPointerException.class,
+      () -> Optional.empty().get());
   }
 
   @Test
   public void testAbsent() {
-    Assert.assertFalse(Optional.absent().isPresent());
-    Assert.assertNull(Optional.absent().orNull());
-    Assert.assertEquals("foo", Optional.absent().or("foo"));
-    Assert.assertEquals("foo", Optional.absent().orElse("foo"));
+    Assertions.assertFalse(Optional.absent().isPresent());
+    Assertions.assertNull(Optional.absent().orNull());
+    Assertions.assertEquals("foo", Optional.absent().or("foo"));
+    Assertions.assertEquals("foo", Optional.absent().orElse("foo"));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testAbsentGet() {
-    Optional.absent().get();
+    Assertions.assertThrows(NullPointerException.class,
+      () -> Optional.absent().get());
   }
 
   @Test
   public void testOf() {
-    Assert.assertTrue(Optional.of(1).isPresent());
-    Assert.assertNotNull(Optional.of(1).orNull());
-    Assert.assertEquals(Integer.valueOf(1), Optional.of(1).get());
-    Assert.assertEquals(Integer.valueOf(1), Optional.of(1).or(2));
-    Assert.assertEquals(Integer.valueOf(1), Optional.of(1).orElse(2));
+    Assertions.assertTrue(Optional.of(1).isPresent());
+    Assertions.assertNotNull(Optional.of(1).orNull());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.of(1).get());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.of(1).or(2));
+    Assertions.assertEquals(Integer.valueOf(1), Optional.of(1).orElse(2));
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void testOfWithNull() {
-    Optional.of(null);
+    Assertions.assertThrows(NullPointerException.class,
+      () -> Optional.of(null));
   }
 
   @Test
   public void testOfNullable() {
-    Assert.assertTrue(Optional.ofNullable(1).isPresent());
-    Assert.assertNotNull(Optional.ofNullable(1).orNull());
-    Assert.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).get());
-    Assert.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).or(2));
-    Assert.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).orElse(2));
-    Assert.assertFalse(Optional.ofNullable(null).isPresent());
-    Assert.assertNull(Optional.ofNullable(null).orNull());
-    Assert.assertEquals(Integer.valueOf(2), Optional.<Integer>ofNullable(null).or(2));
-    Assert.assertEquals(Integer.valueOf(2), Optional.<Integer>ofNullable(null).orElse(2));
+    Assertions.assertTrue(Optional.ofNullable(1).isPresent());
+    Assertions.assertNotNull(Optional.ofNullable(1).orNull());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).get());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).or(2));
+    Assertions.assertEquals(Integer.valueOf(1), Optional.ofNullable(1).orElse(2));
+    Assertions.assertFalse(Optional.ofNullable(null).isPresent());
+    Assertions.assertNull(Optional.ofNullable(null).orNull());
+    Assertions.assertEquals(Integer.valueOf(2), Optional.<Integer>ofNullable(null).or(2));
+    Assertions.assertEquals(Integer.valueOf(2), Optional.<Integer>ofNullable(null).orElse(2));
   }
 
   @Test
   public void testFromNullable() {
-    Assert.assertTrue(Optional.fromNullable(1).isPresent());
-    Assert.assertNotNull(Optional.fromNullable(1).orNull());
-    Assert.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).get());
-    Assert.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).or(2));
-    Assert.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).orElse(2));
-    Assert.assertFalse(Optional.fromNullable(null).isPresent());
-    Assert.assertNull(Optional.fromNullable(null).orNull());
-    Assert.assertEquals(Integer.valueOf(2), Optional.<Integer>fromNullable(null).or(2));
-    Assert.assertEquals(Integer.valueOf(2), Optional.<Integer>fromNullable(null).orElse(2));
+    Assertions.assertTrue(Optional.fromNullable(1).isPresent());
+    Assertions.assertNotNull(Optional.fromNullable(1).orNull());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).get());
+    Assertions.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).or(2));
+    Assertions.assertEquals(Integer.valueOf(1), Optional.fromNullable(1).orElse(2));
+    Assertions.assertFalse(Optional.fromNullable(null).isPresent());
+    Assertions.assertNull(Optional.fromNullable(null).orNull());
+    Assertions.assertEquals(Integer.valueOf(2), Optional.<Integer>fromNullable(null).or(2));
+    Assertions.assertEquals(Integer.valueOf(2), Optional.<Integer>fromNullable(null).orElse(2));
   }
 
 }

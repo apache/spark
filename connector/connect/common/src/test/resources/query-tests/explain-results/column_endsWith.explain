@@ -1,0 +1,2 @@
+Project [EndsWith(g#0, suffix_) AS endswith(g, suffix_)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

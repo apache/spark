@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.util.Utils
 
@@ -41,7 +41,9 @@ object DriverSubmissionTest {
     env.asScala.filter { case (k, _) => k.contains("SPARK_TEST")}.foreach(println)
 
     println("System properties containing spark.test:")
-    properties.filter { case (k, _) => k.toString.contains("spark.test") }.foreach(println)
+    properties.filter { case (k, _) => k.contains("spark.test") }.foreach(println)
+
+    println("JVM G1GC Flag: " + Utils.isG1GC)
 
     for (i <- 1 until numSecondsToSleep) {
       println(s"Alive for $i out of $numSecondsToSleep seconds")

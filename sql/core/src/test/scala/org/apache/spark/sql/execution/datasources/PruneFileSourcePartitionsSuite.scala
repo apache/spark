@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +35,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
 
   override def format: String = "parquet"
 
@@ -60,8 +65,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         options = Map.empty)(sparkSession = spark)
 
       val logicalRelation = LogicalRelation(relation, tableMeta)
-      val query = Project(Seq(Symbol("id"), Symbol("p")),
-        Filter(Symbol("p") === 1, logicalRelation)).analyze
+      val query = Project(Seq($"id", $"p"),
+        Filter($"p" === 1, logicalRelation)).analyze
 
       val optimized = Optimize.execute(query)
       assert(optimized.missingInput.isEmpty)
@@ -118,14 +123,55 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
+  test("SPARK-38357: data + partition filters with OR") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
+            2,
+            "((tmp.p = 0) || (tmp.p = 1))")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND id > 0",
+            1,
+            "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0",
+            1,
+            "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
+  test("SPARK-40565: don't push down non-deterministic filters for V2 file sources") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE rand() > 0.5", 3, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p > rand()", 3, "")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND rand() > 0.5",
+            1,
+            "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
   protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
     case scan: FileSourceScanExec => scan.partitionFilters
   }
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
-      case p: FileSourceScanExec => p.selectedPartitions.length
-      case b: BatchScanExec => b.partitions.size
+      case p: FileSourceScanExec => p.selectedPartitions.partitionCount
+      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
+        scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }
 }

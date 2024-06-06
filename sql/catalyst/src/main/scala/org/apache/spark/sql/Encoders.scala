@@ -118,7 +118,7 @@ object Encoders {
    * Creates an encoder that serializes instances of the `java.time.LocalDateTime` class
    * to the internal representation of nullable Catalyst's TimestampNTZType.
    *
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def LOCALDATETIME: Encoder[java.time.LocalDateTime] = ExpressionEncoder()
 
@@ -177,6 +177,13 @@ object Encoders {
    * @since 1.6.0
    */
   def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
+
+  /**
+   * Creates a [[Row]] encoder for schema `schema`.
+   *
+   * @since 3.5.0
+   */
+  def row(schema: StructType): Encoder[Row] = ExpressionEncoder(schema)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.

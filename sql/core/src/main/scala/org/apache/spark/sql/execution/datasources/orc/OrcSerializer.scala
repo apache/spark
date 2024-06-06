@@ -98,7 +98,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType | _: DayTimeIntervalType =>
+    case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>
@@ -130,7 +130,7 @@ class OrcSerializer(dataSchema: StructType) {
 
 
     // Don't reuse the result object for string and binary as it would cause extra data copy.
-    case StringType => (getter, ordinal) =>
+    case _: StringType => (getter, ordinal) =>
       new Text(getter.getUTF8String(ordinal).getBytes)
 
     case BinaryType => (getter, ordinal) =>
@@ -147,14 +147,12 @@ class OrcSerializer(dataSchema: StructType) {
       result.setNanos(ts.getNanos)
       result
 
-    case TimestampNTZType => (getter, ordinal) => OrcUtils.toOrcNTZ(getter.getLong(ordinal))
-
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
 
     case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]
-      val fieldConverters = st.map(_.dataType).map(newConverter(_))
+      val fieldConverters = st.map(_.dataType).map(newConverter(_)).toArray
       val numFields = st.length
       val struct = getter.getStruct(ordinal, numFields)
       var i = 0

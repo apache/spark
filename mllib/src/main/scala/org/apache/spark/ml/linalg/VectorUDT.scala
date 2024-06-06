@@ -92,7 +92,7 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
     // vectors. The "values" field is nullable because we might want to add binary vectors later,
     // which uses "size" and "indices", but not "values".
-    StructType(Seq(
+    StructType(Array(
       StructField("type", ByteType, nullable = false),
       StructField("size", IntegerType, nullable = true),
       StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),

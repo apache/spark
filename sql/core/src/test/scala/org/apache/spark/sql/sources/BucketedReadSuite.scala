@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
-import java.net.URI
-
 import scala.util.Random
 
 import org.apache.spark.sql._
@@ -27,8 +24,9 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -36,9 +34,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.collection.BitSet
 
+@SlowSQLTest
 class BucketedReadWithoutHiveSupportSuite
   extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
@@ -53,7 +52,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
   }
 
   protected override def afterAll(): Unit = {
@@ -127,7 +126,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       // Limit: bucket pruning only works when the bucket column has one and only one column
       assert(bucketColumnNames.length == 1)
       val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
-      val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
+      val bucketColumn = DataTypeUtils.toAttribute(bucketedDataFrame.schema(bucketColumnIndex))
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
@@ -282,7 +281,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     withTable("bucketed_table") {
       val numBuckets = NumBucketsForPruningNullDf
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
-      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      val naNDF = nullDF.selectExpr("i", "try_cast(if(isnull(j), 'NaN', j) as double) as j", "k")
       // json does not support predicate push-down, and thus json is used here
       naNDF.write
         .format("json")
@@ -450,7 +449,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2), joinType).sort("df1.k", "df2.k"))
 
-        val joinOperator = if (joined.sqlContext.conf.adaptiveExecutionEnabled) {
+        val joinOperator = if (joined.sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
           val executedPlan =
             joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
           assert(executedPlan.isInstanceOf[SortMergeJoinExec])
@@ -463,18 +462,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
         // check existence of shuffle
         assert(
-          joinOperator.left.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleLeft,
+          joinOperator.left.exists(_.isInstanceOf[ShuffleExchangeExec]) == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleRight,
+          joinOperator.right.exists(_.isInstanceOf[ShuffleExchangeExec]) == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
 
         // check existence of sort
         assert(
-          joinOperator.left.find(_.isInstanceOf[SortExec]).isDefined == sortLeft,
+          joinOperator.left.exists(_.isInstanceOf[SortExec]) == sortLeft,
           s"expected sort in the left child to be $sortLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
+          joinOperator.right.exists(_.isInstanceOf[SortExec]) == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
 
         // check the output partitioning
@@ -678,7 +677,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
       assert(
-        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+        !aggregated.queryExecution.executedPlan.exists(_.isInstanceOf[ShuffleExchangeExec]))
     }
   }
 
@@ -719,7 +718,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
       assert(
-        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+        !aggregated.queryExecution.executedPlan.exists(_.isInstanceOf[ShuffleExchangeExec]))
     }
   }
 
@@ -829,23 +828,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
                 |ON a.i = c.i
               """.stripMargin))
       }
-    }
-  }
-
-  test("error if there exists any malformed bucket files") {
-    withTable("bucketed_table") {
-      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
-      val warehouseFilePath = new URI(spark.sessionState.conf.warehousePath).getPath
-      val tableDir = new File(warehouseFilePath, "bucketed_table")
-      Utils.deleteRecursively(tableDir)
-      df1.write.parquet(tableDir.getAbsolutePath)
-
-      val aggregated = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[Exception] {
-        aggregated.count()
-      }
-
-      assert(error.toString contains "Invalid bucket file")
     }
   }
 
@@ -1031,11 +1013,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     }
   }
 
-  test("bucket coalescing is applied when join expressions match with partitioning expressions",
-    DisableAdaptiveExecution("Expected shuffle num mismatched")) {
-    withTable("t1", "t2") {
+  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
+    withTable("t1", "t2", "t3") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
+      df2.write.format("parquet").saveAsTable("t3")
 
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
@@ -1044,18 +1026,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
             query: String,
             expectedNumShuffles: Int,
             expectedCoalescedNumBuckets: Option[Int]): Unit = {
-          val plan = sql(query).queryExecution.executedPlan
-          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
-          assert(shuffles.length == expectedNumShuffles)
+          Seq(true, false).foreach { aqeEnabled =>
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+              val plan = sql(query).queryExecution.executedPlan
+              val shuffles = collect(plan) { case s: ShuffleExchangeExec => s }
+              assert(shuffles.length == expectedNumShuffles)
 
-          val scans = plan.collect {
-            case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
-          }
-          if (expectedCoalescedNumBuckets.isDefined) {
-            assert(scans.length == 1)
-            assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
-          } else {
-            assert(scans.isEmpty)
+              val scans = collect(plan) {
+                case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
+              }
+              if (expectedCoalescedNumBuckets.isDefined) {
+                assert(scans.length == 1)
+                assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+              } else {
+                assert(scans.isEmpty)
+              }
+            }
           }
         }
 
@@ -1068,6 +1054,37 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           Some(4))
         // Coalescing is not applied when join expressions do not match with bucket columns.
         verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
+        // Coalescing applied on broadcast join stream side.
+        verify(
+          """
+            |SELECT *
+            |FROM   (SELECT /*+ BROADCAST(t3) */ t1.i, t1.j
+            |        FROM   t1 LEFT JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
+            |       LEFT JOIN t2 ON t.i = t2.i AND t.j = t2.j
+            |""".stripMargin, 0, Some(4))
+        verify(
+          """
+            |SELECT *
+            |FROM   (SELECT /*+ BROADCAST(t3) */ t1.i, t1.j
+            |        FROM   t1 JOIN t3 ON t1.i > t3.i AND t1.j < t3.j) t
+            |       JOIN t2 ON t.i = t2.i AND t.j = t2.j
+            |""".stripMargin, 0, Some(4))
+        // Coalescing is not applied on broadcast join build side.
+        verify(
+          """
+            |SELECT *
+            |FROM   (SELECT /*+ BROADCAST(t1) */ t1.i, t1.j
+            |        FROM   t1 LEFT JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
+            |       LEFT JOIN t2 ON t.i = t2.i AND t.j = t2.j
+            |""".stripMargin, 2, None)
+        // join keys also match PartitioningCollection
+        verify(
+          """
+            |SELECT *
+            |FROM   (SELECT /*+ BROADCAST(t3) */ t1.i AS t1i, t1.j AS t1j, t3.*
+            |        FROM   t1 JOIN t3 ON t1.i = t3.i AND t1.j = t3.j) t
+            |       JOIN t2 ON t.t1i = t2.i AND t.t1j = t2.j
+            |""".stripMargin, 0, Some(4))
       }
     }
   }

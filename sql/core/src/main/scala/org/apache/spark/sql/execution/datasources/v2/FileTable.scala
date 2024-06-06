@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFile
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -79,16 +80,14 @@ abstract class FileTable(
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
-      "in the data schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
-      "in the partition schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema, caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
 
@@ -101,7 +100,8 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] =
+    fileIndex.partitionSchema.names.toImmutableArraySeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 

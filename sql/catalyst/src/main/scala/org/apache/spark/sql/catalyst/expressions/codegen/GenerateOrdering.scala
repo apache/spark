@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -57,7 +58,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with
   def genComparisons(ctx: CodegenContext, schema: StructType): String = {
     val ordering = schema.fields.map(_.dataType).zipWithIndex.map {
       case(dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
-    }
+    }.toImmutableArraySeq
     genComparisons(ctx, ordering)
   }
 
@@ -202,7 +203,8 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    generatedOrdering = GenerateOrdering.generate(kryo.readObject(in, classOf[Array[SortOrder]]))
+    generatedOrdering = GenerateOrdering
+      .generate(kryo.readObject(in, classOf[Array[SortOrder]]).toImmutableArraySeq)
   }
 }
 

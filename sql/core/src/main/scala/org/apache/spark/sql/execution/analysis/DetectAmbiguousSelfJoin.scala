@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
@@ -64,6 +65,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
   }
 
   object AttrWithCast {
+    @scala.annotation.tailrec
     def unapply(expr: Expression): Option[AttributeReference] = expr match {
       case Cast(child, _, _, _) => unapply(child)
       case a: AttributeReference => Some(a)
@@ -77,7 +79,7 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
     // We always remove the special metadata from `AttributeReference` at the end of this rule, so
     // Dataset column reference only exists in the root node via Dataset transformations like
     // `Dataset#select`.
-    if (plan.find(_.isInstanceOf[Join]).isEmpty) return stripColumnReferenceMetadataInPlan(plan)
+    if (!plan.exists(_.isInstanceOf[Join])) return stripColumnReferenceMetadataInPlan(plan)
 
     val colRefAttrs = plan.expressions.flatMap(_.collect {
       case a: AttributeReference if isColumnReference(a) => a
@@ -94,7 +96,8 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
           colRefs.foreach { ref =>
             if (ids.contains(ref.datasetId)) {
               if (ref.colPos < 0 || ref.colPos >= p.output.length) {
-                throw new IllegalStateException("[BUG] Hit an invalid Dataset column reference: " +
+                throw SparkException.internalError(
+                  "Hit an invalid Dataset column reference: " +
                   s"$ref. Please open a JIRA ticket to report it.")
               } else {
                 // When self-join happens, the analyzer asks the right side plan to generate

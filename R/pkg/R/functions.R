@@ -258,24 +258,33 @@ NULL
 #'          into accumulator (the first argument).
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
+#' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
+#'          which is used to compare the elements of the array.
+#'          The comparator will take two
+#'          arguments representing two elements of the array. It returns a negative integer,
+#'          0, or a positive integer as the first element is less than, equal to,
+#'          or greater than the second element.
+#'          If the comparator function returns null, the function will fail and raise an error.
 #' @param ... additional argument(s).
 #'          \itemize{
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
 #'              You can find the JSON-specific options for reading/writing JSON files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'              You can find the CSV-specific options for reading/writing CSV files in
-#'              \url{
-#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
-#'              Data Source Option} in the version you use.
+# nolint start
+#'              \url{https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{Data Source Option}
+# nolint end
+#'              in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -290,6 +299,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
+#' head(select(tmp, array_sort(tmp$v1, function(x, y) coalesce(cast(y - x, "integer"), lit(0L)))))
 #' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' head(select(tmp, array_transform("v1", function(x) x * 10)))
 #' head(select(tmp, array_exists("v1", function(x) x > 120)))
@@ -443,7 +453,7 @@ setMethod("lit", signature("ANY"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lit",
-                              if (class(x) == "Column") { x@jc } else { x })
+                              if (inherits(x, "Column")) { x@jc } else { x })
             column(jc)
           })
 
@@ -964,7 +974,7 @@ setMethod("hash",
 #' @details
 #' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
 #' variant of the xxHash algorithm, and returns the result as a long
-#' column.
+#' column. The hash computation uses an initial seed of 42.
 #'
 #' @rdname column_misc_functions
 #' @aliases xxhash64 xxhash64,Column-method
@@ -1078,6 +1088,34 @@ setMethod("dayofyear",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "dayofyear", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{monthname}: Extracts the three-letter abbreviated month name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases monthname monthname,Column-method
+#' @note monthname since 4.0.0
+setMethod("monthname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "monthname", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayname}: Extracts the three-letter abbreviated day name from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayname dayname,Column-method
+#' @note dayname since 4.0.0
+setMethod("dayname",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayname", x@jc)
             column(jc)
           })
 
@@ -1380,6 +1418,18 @@ setMethod("log",
           })
 
 #' @details
+#' \code{ln}: Alias for \code{log}.
+#'
+#' @rdname column_math_functions
+#' @aliases ln ln,Column-method
+#' @note ln since 3.5.0
+setMethod("ln",
+          signature(x = "Column"),
+          function(x) {
+            log(x)
+          })
+
+#' @details
 #' \code{log10}: Computes the logarithm of the given value in base 10.
 #'
 #' @rdname column_math_functions
@@ -1664,6 +1714,54 @@ setMethod("negate",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{negative}: Alias for \code{negate}.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases negative negative,Column-method
+#' @note negative since 3.5.0
+setMethod("negative",
+          signature(x = "Column"),
+          function(x) {
+            negate(x)
+          })
+
+#' @details
+#' \code{positive}: Unary plus, i.e. return the expression.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases positive positive,Column-method
+#' @note positive since 3.5.0
+setMethod("positive",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "positive", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{width_bucket} Returns the bucket number into which the value of this expression would
+#' fall after being evaluated. Note that input arguments must follow conditions listed below;
+#' otherwise, the method will return null.
+#'
+#' @param v value to compute a bucket number in the histogram.
+#' @param min minimum value of the histogram
+#' @param max maximum value of the histogram
+#' @param numBucket the number of buckets
+#'
+#' @rdname column_math_functions
+#' @aliases width_bucket width_bucket,Column-method
+#' @note width_bucket since 3.5.0
+setMethod("width_bucket",
+          signature(v = "Column", min = "Column", max = "Column", numBucket = "Column"),
+          function(v, min, max, numBucket) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "width_bucket",
+              v@jc, min@jc, max@jc, numBucket@jc
+            )
             column(jc)
           })
 
@@ -2019,6 +2117,18 @@ setMethod("stddev",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{std}: Alias for \code{stddev}.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases std std,Column-method
+#' @note std since 3.5.0
+setMethod("std",
+          signature(x = "Column"),
+          function(x) {
+            stddev(x)
           })
 
 #' @details
@@ -2403,6 +2513,35 @@ setMethod("upper",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "upper", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{collate}: Marks a given column with specified collation.
+#'
+#' @param x a Column on which to perform collate.
+#' @param collation specified collation name.
+#' @rdname column_string_functions
+#' @aliases collate collate,Column-method
+#' @note collate since 4.0.0
+setMethod("collate",
+          signature(x = "Column", collation = "character"),
+          function(x, collation) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collate", x@jc, collation)
+            column(jc)
+          })
+
+#' @details
+#' \code{collation}: Returns the collation name of a given column.
+#'
+#' @param x a Column on which to return collation name.
+#' @rdname column_string_functions
+#' @aliases collation collation,Column-method
+#' @note collation since 4.0.0
+setMethod("collation",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collation", x@jc)
             column(jc)
           })
 
@@ -2812,6 +2951,8 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOr
               # treated as struct or element type of array in order to make it more
               # R-friendly.
               if (class(schema) == "Column") {
+                df <- createDataFrame(list(list(0)))
+                jschema <- collect(select(df, schema))[[1]][[1]]
                 jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                        "createArrayType",
                                        jschema)
@@ -3254,7 +3395,8 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' tmp <- mutate(df, to_unix = unix_timestamp(df$time),
 #'                   to_unix2 = unix_timestamp(df$time, 'yyyy-MM-dd HH'),
 #'                   from_unix = from_unixtime(unix_timestamp(df$time)),
-#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'))
+#'                   from_unix2 = from_unixtime(unix_timestamp(df$time), 'yyyy-MM-dd HH:mm'),
+#'                   timestamp_from_unix = timestamp_seconds(unix_timestamp(df$time)))
 #' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
@@ -3584,7 +3726,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
-              value <- if (class(value) == "Column") { value@jc } else { value }
+              value <- if (inherits(value, "Column")) { value@jc } else { value }
               jc <- callJStatic("org.apache.spark.sql.functions", "when", condition, value)
               column(jc)
           })
@@ -3603,8 +3745,8 @@ setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
               test <- test@jc
-              yes <- if (class(yes) == "Column") { yes@jc } else { yes }
-              no <- if (class(no) == "Column") { no@jc } else { no }
+              yes <- if (inherits(yes, "Column")) { yes@jc } else { yes }
+              no <- if (inherits(no, "Column")) { no@jc } else { no }
               jc <- callJMethod(callJStatic("org.apache.spark.sql.functions",
                                             "when",
                                             test, yes),
@@ -3816,6 +3958,7 @@ setMethod("row_number",
 #'        Column, for example \code{unresolved_named_lambda_var("a", "b", "c")}
 #'        yields unresolved \code{a.b.c}
 #' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
+#' @keywords internal
 unresolved_named_lambda_var <- function(...) {
   jc <- newJObject(
     "org.apache.spark.sql.Column",
@@ -3839,6 +3982,7 @@ unresolved_named_lambda_var <- function(...) {
 #' @param fun R \code{function} (unary, binary or ternary)
 #'        that transforms \code{Columns} into a \code{Column}
 #' @return JVM \code{LambdaFunction} object
+#' @keywords internal
 create_lambda <- function(fun) {
   as_jexpr <- function(x) callJMethod(x@jc, "expr")
 
@@ -3887,6 +4031,7 @@ create_lambda <- function(fun) {
 #' @param cols list of character or Column objects
 #' @param funs list of named list(fun = ..., expected_narg = ...)
 #' @return a \code{Column} representing name applied to cols with funs
+#' @keywords internal
 invoke_higher_order_function <- function(name, cols, funs) {
   as_jexpr <- function(x) {
     if (class(x) == "character") {
@@ -4135,9 +4280,16 @@ setMethod("array_repeat",
 #' @note array_sort since 2.4.0
 setMethod("array_sort",
           signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc)
-            column(jc)
+          function(x, comparator = NULL) {
+            if (is.null(comparator)) {
+               column(callJStatic("org.apache.spark.sql.functions", "array_sort", x@jc))
+            } else {
+              invoke_higher_order_function(
+                "ArraySort",
+                cols = list(x),
+                funs = list(comparator)
+              )
+            }
           })
 
 #' @details
@@ -4849,7 +5001,8 @@ setMethod("current_timestamp",
           })
 
 #' @details
-#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#' \code{timestamp_seconds}: Converts the number of seconds from the Unix epoch
+#' (1970-01-01T00:00:00Z) to a timestamp.
 #'
 #' @rdname column_datetime_functions
 #' @aliases timestamp_seconds timestamp_seconds,Column-method

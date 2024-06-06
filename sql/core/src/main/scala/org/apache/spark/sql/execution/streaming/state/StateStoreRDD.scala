@@ -74,9 +74,10 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     storeVersion: Long,
     keySchema: StructType,
     valueSchema: StructType,
-    numColsPrefixKey: Int,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+    useColumnFamilies: Boolean = false,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -86,10 +87,10 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
 
-    val store = StateStore.getReadOnly(
-      storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
     val inputIter = dataRDD.iterator(partition, ctxt)
+    val store = StateStore.getReadOnly(
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
     storeReadFunction(store, inputIter)
   }
 }
@@ -108,10 +109,12 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     storeVersion: Long,
     keySchema: StructType,
     valueSchema: StructType,
-    numColsPrefixKey: Int,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    extraOptions: Map[String, String] = Map.empty)
+    useColumnFamilies: Boolean = false,
+    extraOptions: Map[String, String] = Map.empty,
+    useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
 
@@ -120,10 +123,11 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
 
-    val store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeVersion,
-      storeConf, hadoopConfBroadcast.value.value)
     val inputIter = dataRDD.iterator(partition, ctxt)
+    val store = StateStore.get(
+      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+      useMultipleValuesPerKey)
     storeUpdateFunction(store, inputIter)
   }
 }

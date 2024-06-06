@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 
@@ -42,7 +44,7 @@ case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
     provider: String,
     query: LogicalPlan,
-    overwrite: Boolean) extends LeafRunnableCommand {
+    overwrite: Boolean) extends LeafRunnableCommand with CTEInChildren {
 
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -70,10 +72,14 @@ case class InsertIntoDataSourceDirCommand(
       sparkSession.sessionState.executePlan(dataSource.planForWriting(saveMode, query)).toRdd
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to directory " + storage.locationUri.toString, ex)
+        logError(log"Failed to write to directory ${MDC(URI, storage.locationUri.toString)}", ex)
         throw ex
     }
 
     Seq.empty[Row]
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

@@ -22,7 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
@@ -55,6 +55,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -90,12 +91,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      if (model.isInstanceOf[LogisticRegressionModel]) {
-        val lrModel = model.asInstanceOf[LogisticRegressionModel]
-        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
-          .map(_.asInstanceOf[Object]).asJava
-      } else {
-        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      model match {
+        case lrModel: LogisticRegressionModel =>
+          List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+            .map(_.asInstanceOf[Object]).asJava
+        case _ =>
+          List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
       data.rdd.unpersist()
@@ -1316,7 +1317,7 @@ private[spark] abstract class SerDeBase {
     obj match {
       // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
       case array: Array[_] => new Pickler(/* useMemo = */ true,
-        /* valueCompare = */ false).dumps(array.toSeq.asJava)
+        /* valueCompare = */ false).dumps(array.toImmutableArraySeq.asJava)
       case _ => new Pickler(/* useMemo = */ true,
         /* valueCompare = */ false).dumps(obj)
     }

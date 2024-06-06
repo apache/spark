@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.TestRelations.testRelation2
+import org.apache.spark.sql.catalyst.analysis.TestRelations.{testRelation, testRelation2}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 
 class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
@@ -52,10 +53,10 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
 
   test("group by ordinal") {
     // Tests group by ordinal, apply single rule.
-    val plan2 = testRelation2.groupBy(Literal(1), Literal(2))('a, 'b)
+    val plan2 = testRelation2.groupBy(Literal(1), Literal(2))($"a", $"b")
     comparePlans(
       SubstituteUnresolvedOrdinals.apply(plan2),
-      testRelation2.groupBy(UnresolvedOrdinal(1), UnresolvedOrdinal(2))('a, 'b))
+      testRelation2.groupBy(UnresolvedOrdinal(1), UnresolvedOrdinal(2))($"a", $"b"))
 
     // Tests group by ordinal, do full analysis
     checkAnalysis(plan2, testRelation2.groupBy(a, b)(a, b))
@@ -64,7 +65,43 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
     withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       comparePlans(
         SubstituteUnresolvedOrdinals.apply(plan2),
-        testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
+        testRelation2.groupBy(Literal(1), Literal(2))($"a", $"b"))
     }
+  }
+
+  test("SPARK-45920: group by ordinal repeated analysis") {
+    val plan = testRelation.groupBy(Literal(1))(Literal(100).as("a")).analyze
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("a"))
+    )
+
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
+    }
+    comparePlans(
+      copiedPlan.analyze, // repeated analysis
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a"))
+    )
+  }
+
+  test("SPARK-47895: group by all repeated analysis") {
+    val plan = testRelation.groupBy($"all")(Literal(100).as("a")).analyze
+    comparePlans(
+      plan,
+      testRelation.groupBy(Literal(1))(Literal(100).as("a"))
+    )
+
+    val testRelationWithData = testRelation.copy(data = Seq(new GenericInternalRow(Array(1: Any))))
+    // Copy the plan to reset its `analyzed` flag, so that analyzer rules will re-apply.
+    val copiedPlan = plan.transform {
+      case _: LocalRelation => testRelationWithData
+    }
+    comparePlans(
+      copiedPlan.analyze, // repeated analysis
+      testRelationWithData.groupBy(Literal(1))(Literal(100).as("a"))
+    )
   }
 }

@@ -18,10 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,11 +41,19 @@ abstract class XPathExtract
   /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
-      TypeCheckFailure("path should be a string literal")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("path"),
+          "inputType" -> toSQLType(StringTypeAnyCollation),
+          "inputExpr" -> toSQLExpr(path)
+        )
+      )
     } else {
       super.checkInputDataTypes()
     }
@@ -67,10 +78,9 @@ abstract class XPathExtract
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
+case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract with Predicate {
 
   override def prettyName: String = "xpath_boolean"
-  override def dataType: DataType = BooleanType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     xpathUtil.evalBoolean(xml.asInstanceOf[UTF8String].toString, pathString)
@@ -214,7 +224,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_string"
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val ret = xpathUtil.evalString(xml.asInstanceOf[UTF8String].toString, pathString)
@@ -238,7 +248,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"
-  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType, containsNull = false)
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)

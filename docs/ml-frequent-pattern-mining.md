@@ -82,6 +82,12 @@ The `FPGrowthModel` provides:
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.html) for more details.
+
+{% include_example python/ml/fpgrowth_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/FPGrowth.html) for more details.
 
@@ -94,15 +100,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for
 {% include_example java/org/apache/spark/examples/ml/JavaFPGrowthExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.html) for more details.
-
-{% include_example python/ml/fpgrowth_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.fpGrowth.html) for more details.
 
 {% include_example r/ml/fpm.R %}
 </div>
@@ -135,6 +135,12 @@ pattern mining problem.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpan) for more details.
+
+{% include_example python/ml/prefixspan_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
 
@@ -147,15 +153,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) f
 {% include_example java/org/apache/spark/examples/ml/JavaPrefixSpanExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpan) for more details.
-
-{% include_example python/ml/prefixspan_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.prefixSpan.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.prefixSpan.html) for more details.
 
 {% include_example r/ml/prefixSpan.R %}
 </div>

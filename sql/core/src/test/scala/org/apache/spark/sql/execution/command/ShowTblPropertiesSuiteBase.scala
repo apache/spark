@@ -41,13 +41,15 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
       val user = "andrew"
       val status = "new"
       spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
-
-      val properties = sql(s"SHOW TBLPROPERTIES $tbl").filter("key != 'transient_lastDdlTime'")
+        s"TBLPROPERTIES ('user'='$user', 'status'='$status', 'password' = 'password')")
+      val properties = sql(s"SHOW TBLPROPERTIES $tbl")
+        .filter("key != 'transient_lastDdlTime'")
+        .filter("key != 'option.serialization.format'")
       val schema = new StructType()
         .add("key", StringType, nullable = false)
         .add("value", StringType, nullable = false)
       val expected = Seq(
+        Row("password", "*********(redacted)"),
         Row("status", status),
         Row("user", user))
 
@@ -70,10 +72,11 @@ trait ShowTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("SHOW TBLPROPERTIES WITH TABLE NOT EXIST") {
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES BADTABLE")
-    }.getMessage
-    assert(message.contains("Table or view not found: BADTABLE"))
+    }
+    checkErrorTableNotFound(e, "`BADTABLE`",
+      ExpectedContext("BADTABLE", 19, 18 + "BADTABLE".length))
   }
 
   test("SHOW TBLPROPERTIES(KEY) KEY NOT FOUND") {

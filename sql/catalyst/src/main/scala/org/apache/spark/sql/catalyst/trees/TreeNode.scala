@@ -20,19 +20,22 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.UUID
 
 import scala.collection.{mutable, Map}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.hashing.MurmurHash3
 
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, IdentifierWithDatabase}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.{AliasIdentifier, CatalystIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.TableSpec
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
@@ -45,46 +48,16 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
-case class Origin(
-  line: Option[Int] = None,
-  startPosition: Option[Int] = None)
-
-/**
- * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
- * line of code is currently being parsed.
- */
-object CurrentOrigin {
-  private val value = new ThreadLocal[Origin]() {
-    override def initialValue: Origin = Origin()
-  }
-
-  def get: Origin = value.get()
-  def set(o: Origin): Unit = value.set(o)
-
-  def reset(): Unit = value.set(Origin())
-
-  def setPosition(line: Int, start: Int): Unit = {
-    value.set(
-      value.get.copy(line = Some(line), startPosition = Some(start)))
-  }
-
-  def withOrigin[A](o: Origin)(f: => A): A = {
-    // remember the previous one so it can be reset to this
-    // this way withOrigin can be recursive
-    val previous = get
-    set(o)
-    val ret = try f finally { set(previous) }
-    ret
-  }
-}
-
 // A tag of a `TreeNode`, which defines name and type
+// Note: In general, if developers only care about its tagging capabilities,
+// then Unit should be considered first before using Boolean.
 case class TreeNodeTag[T](name: String)
 
 // A functor that always returns true.
@@ -93,17 +66,28 @@ object AlwaysProcess {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with TreePatternBits {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]]
+  extends Product
+  with TreePatternBits
+  with WithOrigin {
 // scalastyle:on
   self: BaseType =>
 
-  val origin: Origin = CurrentOrigin.get
+  override val origin: Origin = CurrentOrigin.get
 
   /**
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
+   * We lazily evaluate the `tags` since the default size of a `mutable.Map` is nonzero. This
+   * will reduce unnecessary memory pressure.
    */
-  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
+  private[this] var _tags: mutable.Map[TreeNodeTag[_], Any] = null
+  private def tags: mutable.Map[TreeNodeTag[_], Any] = {
+    if (_tags eq null) {
+      _tags = mutable.Map.empty
+    }
+    _tags
+  }
 
   /**
    * Default tree pattern [[BitSet] for a [[TreeNode]].
@@ -171,11 +155,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     ineffectiveRules.get(ruleId.id)
   }
 
+  def isTagsEmpty: Boolean = (_tags eq null) || _tags.isEmpty
+
   def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
-    if (tags.isEmpty) {
+    if (isTagsEmpty && !other.isTagsEmpty) {
       tags ++= other.tags
     }
   }
@@ -185,11 +171,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    tags.get(tag).map(_.asInstanceOf[T])
+    if (isTagsEmpty) {
+      None
+    } else {
+      tags.get(tag).map(_.asInstanceOf[T])
+    }
   }
 
   def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
-    tags -= tag
+    if (!isTagsEmpty) {
+      tags -= tag
+    }
   }
 
   /**
@@ -200,30 +192,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
 
-  // Copied from Scala 2.13.1
-  // github.com/scala/scala/blob/v2.13.1/src/library/scala/util/hashing/MurmurHash3.scala#L56-L73
-  // to prevent the issue https://github.com/scala/bug/issues/10495
-  // TODO(SPARK-30848): Remove this once we drop Scala 2.12.
-  private final def productHash(x: Product, seed: Int, ignorePrefix: Boolean = false): Int = {
-    val arr = x.productArity
-    // Case objects have the hashCode inlined directly into the
-    // synthetic hashCode method, but this method should still give
-    // a correct result if passed a case object.
-    if (arr == 0) {
-      x.productPrefix.hashCode
-    } else {
-      var h = seed
-      if (!ignorePrefix) h = scala.util.hashing.MurmurHash3.mix(h, x.productPrefix.hashCode)
-      var i = 0
-      while (i < arr) {
-        h = scala.util.hashing.MurmurHash3.mix(h, x.productElement(i).##)
-        i += 1
-      }
-      scala.util.hashing.MurmurHash3.finalizeHash(h, arr)
-    }
-  }
+  lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
 
-  private lazy val _hashCode: Int = productHash(this, scala.util.hashing.MurmurHash3.productSeed)
+  private lazy val _hashCode: Int = MurmurHash3.productHash(this)
   override def hashCode(): Int = _hashCode
 
   /**
@@ -243,6 +214,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     Some(this)
   } else {
     children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+  }
+
+  /**
+   * Test whether there is [[TreeNode]] satisfies the conditions specified in `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def exists(f: BaseType => Boolean): Boolean = if (f(this)) {
+    true
+  } else {
+    children.exists(_.exists(f))
   }
 
   /**
@@ -278,7 +259,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
    */
-  def flatMap[A](f: BaseType => TraversableOnce[A]): Seq[A] = {
+  def flatMap[A](f: BaseType => IterableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(ret ++= f(_))
     ret.toSeq
@@ -340,10 +321,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   // This is a temporary solution, we will change the type of children to IndexedSeq in a
   // followup PR
   private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
-    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
-      seq.asInstanceOf[IndexedSeq[BaseType]]
-    } else {
-      seq.toIndexedSeq
+    seq match {
+      case types: IndexedSeq[BaseType] => types
+      case other => other.toIndexedSeq
     }
   }
 
@@ -394,16 +374,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: Stream[_] =>
-        // Stream is lazy so we need to force materialization
+      case s: LazyList[_] =>
+        // LazyList is lazy so we need to force materialization
         s.map(mapChild).force
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
-        // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-        // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-        // `mapValues` is lazy and we need to force it to materialize
-        m.mapValues(mapChild).view.force.toMap
+        m.toMap.transform((_, v) => mapChild(v))
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case Some(child) => Some(mapChild(child))
       case nonChild: AnyRef => nonChild
@@ -605,6 +582,130 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * @param rule a function used to generate alternatives for a node
+   * @return     the stream of alternatives
+   */
+  def multiTransformDown(
+      rule: PartialFunction[BaseType, Seq[BaseType]]): LazyList[BaseType] = {
+    multiTransformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * As it is very easy to generate enormous number of alternatives when the input tree is huge or
+   * when the rule returns many alternatives for many nodes, this function returns the alternatives
+   * as a lazy `LazyList` to be able to limit the number of alternatives generated at the caller
+   * side as needed.
+   *
+   * The purpose of this function to access the returned alternatives by the rule only if they are
+   * needed so the rule can return a `LazyList` whose elements are also lazily calculated.
+   * E.g. `multiTransform*` calls can be nested with the help of
+   * `MultiTransform.generateCartesianProduct()`.
+   *
+   * The rule should not apply or can return a one element `Seq` of original node to indicate that
+   * the original node without any transformation is a valid alternative.
+   *
+   * The rule can return `Seq.empty` to indicate that the original node should be pruned. In this
+   * case `multiTransform()` returns an empty `LazyList`.
+   *
+   * Please consider the following examples of `input.multiTransformDown(rule)`:
+   *
+   * We have an input expression:
+   *    `Add(a, b)`
+   *
+   * 1.
+   * We have a simple rule:
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22)`
+   *
+   * The output is:
+   *   `LazyList(11, 12, 21, 22)`
+   *
+   * 2.
+   * In the previous example if we want to generate alternatives of `a` and `b` too then we need to
+   * explicitly add the original `Add(a, b)` expression to the rule:
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22, Add(a, b))`
+   *
+   * The output is:
+   *   `LazyList(11, 12, 21, 22, Add(1, 10), Add(2, 10), Add(1, 20), Add(2, 20))`
+   *
+   * @param rule   a function used to generate alternatives for a node
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   * @return       the stream of alternatives
+   */
+  def multiTransformDownWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId
+    )(rule: PartialFunction[BaseType, Seq[BaseType]]): LazyList[BaseType] = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return LazyList(this)
+    }
+
+    // We could return `Seq(this)` if the `rule` doesn't apply and handle both
+    // - the doesn't apply
+    // - and the rule returns a one element `Seq(originalNode)`
+    // cases together. The returned `Seq` can be a `LazyList` and unfortunately it doesn't seem like
+    // there is a way to match on a one element stream without eagerly computing the tail's head.
+    // This contradicts with the purpose of only taking the necessary elements from the
+    // alternatives. I.e. the "multiTransformDown is lazy" test case in `TreeNodeSuite` would fail.
+    // Please note that this behaviour has a downside as well that we can only mark the rule on the
+    // original node ineffective if the rule didn't match.
+    var ruleApplied = true
+    val afterRules = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, (_: BaseType) => {
+        ruleApplied = false
+        Seq.empty
+      })
+    }
+
+    val afterRulesLazyList = if (afterRules.isEmpty) {
+      if (ruleApplied) {
+        // If the rule returned with empty alternatives then prune
+        LazyList.empty
+      } else {
+        // If the rule was not applied then keep the original node
+        this.markRuleAsIneffective(ruleId)
+        LazyList(this)
+      }
+    } else {
+      // If the rule was applied then use the returned alternatives
+      afterRules.to(LazyList).map { afterRule =>
+        if (this fastEquals afterRule) {
+          this
+        } else {
+          afterRule.copyTagsFrom(this)
+          afterRule
+        }
+      }
+    }
+
+    afterRulesLazyList.flatMap { afterRule =>
+      if (afterRule.containsChild.nonEmpty) {
+        MultiTransform.generateCartesianProduct(
+            afterRule.children.map(c => () => c.multiTransformDownWithPruning(cond, ruleId)(rule)))
+          .map(afterRule.withNewChildren)
+      } else {
+        LazyList(afterRule)
+      }
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
@@ -613,86 +714,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     } else {
       this
     }
-  }
-
-  /**
-   * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
-   * @param f The transform function to be applied on applicable `TreeNode` elements.
-   * @param forceCopy Whether to force making a copy of the nodes even if no child has been changed.
-   */
-  private def mapChildren(
-      f: BaseType => BaseType,
-      forceCopy: Boolean): BaseType = {
-    var changed = false
-
-    def mapChild(child: Any): Any = child match {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
-        val newChild1 = if (containsChild(arg1)) {
-          f(arg1.asInstanceOf[BaseType])
-        } else {
-          arg1.asInstanceOf[BaseType]
-        }
-
-        val newChild2 = if (containsChild(arg2)) {
-          f(arg2.asInstanceOf[BaseType])
-        } else {
-          arg2.asInstanceOf[BaseType]
-        }
-
-        if (forceCopy || !(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-          changed = true
-          (newChild1, newChild2)
-        } else {
-          tuple
-        }
-      case other => other
-    }
-
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          Some(newChild)
-        } else {
-          Some(arg)
-        }
-      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-      case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (forceCopy || !(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
-        case other => other
-      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
-      case d: DataType => d // Avoid unpacking Structs
-      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-      case args: Iterable[_] => args.map(mapChild)
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }
-    if (forceCopy || changed) makeCopy(newArgs, forceCopy) else this
   }
 
   /**
@@ -728,7 +749,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
 
     // Skip no-arg constructors that are just there for kryo.
-    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
+    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterCount != 0)
     if (ctors.isEmpty) {
       throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
@@ -738,7 +759,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       newArgs ++ otherCopyArgs
     }
     val defaultCtor = ctors.find { ctor =>
-      if (ctor.getParameterTypes.length != allArgs.length) {
+      if (ctor.getParameterCount != allArgs.length) {
         false
       } else if (allArgs.contains(null)) {
         // if there is a `null`, we can't figure out the class, therefore we should just fallback
@@ -748,7 +769,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
         ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
       }
-    }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
+    }.getOrElse(ctors.maxBy(_.getParameterCount)) // fall back to older heuristic
 
     try {
       CurrentOrigin.withOrigin(origin) {
@@ -758,7 +779,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
@@ -771,7 +792,43 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   override def clone(): BaseType = {
-    mapChildren(_.clone(), forceCopy = true)
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+        val newChild1 = if (containsChild(arg1)) {
+          arg1.asInstanceOf[BaseType].clone()
+        } else {
+          arg1.asInstanceOf[BaseType]
+        }
+
+        val newChild2 = if (containsChild(arg2)) {
+          arg2.asInstanceOf[BaseType].clone()
+        } else {
+          arg2.asInstanceOf[BaseType]
+        }
+        (newChild1, newChild2)
+      case other => other
+    }
+
+    val newArgs = mapProductIterator {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case Some(arg: TreeNode[_]) if containsChild(arg) =>
+        Some(arg.asInstanceOf[BaseType].clone())
+      // `mapValues` is lazy and we need to force it to materialize by converting to Map
+      case m: Map[_, _] => m.toMap.transform {
+        case (_, arg: TreeNode[_]) if containsChild(arg) =>
+          arg.asInstanceOf[BaseType].clone()
+        case (_, other) => other
+      }
+      case d: DataType => d // Avoid unpacking Structs
+      case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Iterable[_] => args.map(mapChild)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
+    makeCopy(newArgs, allowEmptyArgs = true)
   }
 
   private def simpleClassName: String = Utils.getSimpleName(this.getClass)
@@ -790,11 +847,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
-    // For security reason, redact the map value if the key is in centain patterns
+    // For security reason, redact the map value if the key is in certain patterns
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>
-      item._1 + "=" + item._2
+      s"${item._1}=${item._2}"
     }
     truncatedString(keyValuePairs, "[", ", ", "]", maxFields) :: Nil
   }
@@ -804,9 +861,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
     case set: Set[_] =>
       // Sort elements for deterministic behaviours
-      truncatedString(set.toSeq.map(formatArg(_, maxFields).sorted), "{", ", ", "}", maxFields)
+      truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
+      truncatedString(
+        array.map(formatArg(_, maxFields)).toImmutableArraySeq, "[", ", ", "]", maxFields)
     case other =>
       other.toString
   }
@@ -819,30 +877,38 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] =>
-      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
-    case set: Set[_] =>
-      // Sort elements for deterministic behaviours
-      val sortedSeq = set.toSeq.map(formatArg(_, maxFields).sorted)
-      truncatedString(sortedSeq, "{", ", ", "}", maxFields) :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
+    case xs @ (_: Seq[_] | _: Set[_] | _: Array[_]) =>
+      formatArg(xs, maxFields) :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil
+    case Some(table: CatalogTable) =>
+      stringArgsForCatalogTable(table)
     case Some(any) => any :: Nil
     case map: CaseInsensitiveStringMap =>
       redactMapString(map.asCaseSensitiveMap().asScala, maxFields)
     case map: Map[_, _] =>
       redactMapString(map, maxFields)
+    case t: TableSpec =>
+      t.copy(properties = Utils.redact(t.properties).toMap,
+        options = Utils.redact(t.options).toMap) :: Nil
     case table: CatalogTable =>
-      table.storage.serde match {
-        case Some(serde) => table.identifier :: serde :: Nil
-        case _ => table.identifier :: Nil
-      }
+      stringArgsForCatalogTable(table)
+
     case other => other :: Nil
   }.mkString(", ")
+
+  private def stringArgsForCatalogTable(table: CatalogTable): Seq[Any] = {
+    table.storage.serde match {
+      case Some(serde)
+        // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
+        // regex magic.
+        if !SQLConf.get.getConfString("spark.test.noSerdeInExplain", "false").toBoolean =>
+        table.identifier :: serde :: Nil
+      case _ => table.identifier :: Nil
+    }
+  }
 
   /**
    * ONE line description of this node.
@@ -884,7 +950,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       addSuffix: Boolean,
       maxFields: Int,
       printOperatorId: Boolean): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId, 0)
+    generateTreeString(0, new java.util.ArrayList(), append, verbose, "", addSuffix, maxFields,
+      printOperatorId, 0)
   }
 
   /**
@@ -946,7 +1013,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    */
   def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -954,44 +1021,59 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       maxFields: Int,
       printNodeId: Boolean,
       indent: Int = 0): Unit = {
-    append("   " * indent)
+    (0 until indent).foreach(_ => append("   "))
     if (depth > 0) {
-      lastChildren.init.foreach { isLast =>
+      val iter = lastChildren.iterator
+      (0 until lastChildren.size - 1).foreach { i =>
+        val isLast = iter.next
         append(if (isLast) "   " else ":  ")
       }
-      append(if (lastChildren.last) "+- " else ":- ")
+      append(if (lastChildren.get(lastChildren.size() - 1)) "+- " else ":- ")
     }
 
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
+    } else if (printNodeId) {
+      simpleStringWithNodeId()
     } else {
-      if (printNodeId) {
-        simpleStringWithNodeId()
-      } else {
-        simpleString(maxFields)
-      }
+      simpleString(maxFields)
     }
     append(prefix)
     append(str)
     append("\n")
 
-    if (innerChildren.nonEmpty) {
-      innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
+    val innerChildrenLocal = innerChildren
+    if (innerChildrenLocal.nonEmpty) {
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(false)
+      innerChildrenLocal.init.foreach(_.generateTreeString(
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
-      innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
+
+      lastChildren.add(children.isEmpty)
+      lastChildren.add(true)
+      innerChildrenLocal.last.generateTreeString(
+        depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.remove(lastChildren.size() - 1)
+      lastChildren.remove(lastChildren.size() - 1)
     }
 
     if (children.nonEmpty) {
+      lastChildren.add(false)
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
+        depth + 1, lastChildren, append, verbose, prefix, addSuffix,
         maxFields, printNodeId = printNodeId, indent = indent)
       )
+      lastChildren.remove(lastChildren.size() - 1)
+
+      lastChildren.add(true)
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, append, verbose, prefix,
+        depth + 1, lastChildren, append, verbose, prefix,
         addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
+      lastChildren.remove(lastChildren.size() - 1)
     }
   }
 
@@ -1039,7 +1121,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       // this child in all children.
       case (name, value: TreeNode[_]) if containsChild(value) =>
         name -> JInt(children.indexOf(value))
-      case (name, value: Seq[BaseType]) if value.forall(containsChild) =>
+      case (name, value: Seq[BaseType @unchecked]) if value.forall(containsChild) =>
         name -> JArray(
           value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
         )
@@ -1114,7 +1196,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private def shouldConvertToJson(product: Product): Boolean = product match {
     case exprId: ExprId => true
     case field: StructField => true
-    case id: IdentifierWithDatabase => true
+    case id: CatalystIdentifier => true
     case alias: AliasIdentifier => true
     case join: JoinType => true
     case spec: BucketSpec => true
@@ -1134,7 +1216,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
   override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
-  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
+  // Stateful expressions should override this method to return a new instance.
+  override def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -1259,4 +1342,22 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   }
 
   protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
+}
+
+object MultiTransform {
+
+  /**
+   * Returns the stream of `Seq` elements by generating the cartesian product of sequences.
+   *
+   * @param elementSeqs a list of sequences to build the cartesian product from
+   * @return            the stream of generated `Seq` elements
+   */
+  def generateCartesianProduct[T](elementSeqs: Seq[() => Seq[T]]): LazyList[Seq[T]] = {
+    elementSeqs.foldRight(LazyList(Seq.empty[T]))((elements, elementTails) =>
+      for {
+        elementTail <- elementTails
+        element <- elements()
+      } yield element +: elementTail
+    )
+  }
 }

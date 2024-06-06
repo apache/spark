@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.UUID
 
 import scala.collection.mutable.HashMap
@@ -26,15 +27,17 @@ import scala.collection.mutable.HashMap
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{MERGE_DIR_NAME, PATH}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -77,9 +80,18 @@ private[spark] class DiskBlockManager(
 
   private val shutdownHook = addShutdownHook()
 
+  // If either of these features are enabled, we must change permissions on block manager
+  // directories and files to accommodate the shuffle service deleting files in a secure
+  // environment. Parent directories are assumed to be restrictive to prevent unauthorized users
+  // from accessing or modifying world readable files.
+  private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
+    conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED) ||
+    conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+  )
+
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
+  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFilePath().
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
@@ -94,7 +106,16 @@ private[spark] class DiskBlockManager(
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
         if (!newDir.exists()) {
-          Files.createDirectory(newDir.toPath)
+          val path = newDir.toPath
+          Files.createDirectory(path)
+          if (permissionChangingRequired) {
+            // SPARK-37618: Create dir as group writable so files within can be deleted by the
+            // shuffle service in a secure setup. This will remove the setgid bit so files created
+            // within won't be created with the parent folder group.
+            val currentPerms = Files.getPosixFilePermissions(path)
+            currentPerms.add(PosixFilePermission.GROUP_WRITE)
+            Files.setPosixFilePermissions(path, currentPerms)
+          }
         }
         subDirs(dirId)(subDirId) = newDir
         newDir
@@ -120,17 +141,17 @@ private[spark] class DiskBlockManager(
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
         getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got $blockId")
+        throw SparkException.internalError(
+          s"Only merged block ID is supported, but got $blockId", category = "STORAGE")
     }
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
     if (!dirs.exists(_.nonEmpty)) {
-      throw new IllegalArgumentException(
-        s"Cannot read $filename because merged shuffle dirs is empty")
+      throw SparkException.internalError(
+        s"Cannot read $filename because merged shuffle dirs is empty", category = "STORAGE")
     }
-    ExecutorDiskUtils.getFile(dirs.get, subDirsPerLocalDir, filename)
+    new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }
 
   /** Check if disk block manager has a block. */
@@ -148,8 +169,8 @@ private[spark] class DiskBlockManager(
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files.toSeq else Seq.empty
-    }
+      if (files != null) files.toImmutableArraySeq else Seq.empty
+    }.toImmutableArraySeq
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */
@@ -166,22 +187,60 @@ private[spark] class DiskBlockManager(
     }
   }
 
+  /**
+   * SPARK-37618: Makes sure that the file is created as world readable. This is to get
+   * around the fact that making the block manager sub dirs group writable removes
+   * the setgid bit in secure Yarn environments, which prevents the shuffle service
+   * from being able to read shuffle files. The outer directories will still not be
+   * world executable, so this doesn't allow access to these files except for the
+   * running user and shuffle service.
+   */
+  def createWorldReadableFile(file: File): Unit = {
+    val path = file.toPath
+    Files.createFile(path)
+    val currentPerms = Files.getPosixFilePermissions(path)
+    currentPerms.add(PosixFilePermission.OTHERS_READ)
+    Files.setPosixFilePermissions(path, currentPerms)
+  }
+
+  /**
+   * Creates a temporary version of the given file with world readable permissions (if required).
+   * Used to create block files that will be renamed to the final version of the file.
+   */
+  def createTempFileWith(file: File): File = {
+    val tmpFile = Utils.tempFileWith(file)
+    if (permissionChangingRequired) {
+      // SPARK-37618: we need to make the file world readable because the parent will
+      // lose the setgid bit when making it group writable. Without this the shuffle
+      // service can't read the shuffle files in a secure setup.
+      createWorldReadableFile(tmpFile)
+    }
+    tmpFile
+  }
+
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+      blockId = TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+      blockId = TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, getFile(blockId))
+    val tmpFile = getFile(blockId)
+    if (permissionChangingRequired) {
+      // SPARK-37618: we need to make the file world readable because the parent will
+      // lose the setgid bit when making it group writable. Without this the shuffle
+      // service can't read the shuffle files in a secure setup.
+      createWorldReadableFile(tmpFile)
+    }
+    (blockId, tmpFile)
   }
 
   /**
@@ -193,11 +252,12 @@ private[spark] class DiskBlockManager(
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        logInfo(s"Created local directory at $localDir")
+        logInfo(log"Created local directory at ${MDC(PATH, localDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>
-          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+          logError(
+            log"Failed to create local dir in ${MDC(PATH, rootDir)}. Ignoring this directory.", e)
           None
       }
     }
@@ -216,7 +276,7 @@ private[spark] class DiskBlockManager(
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, mergeDirName)
-          if (!mergeDir.exists()) {
+          if (!mergeDir.exists() || mergeDir.listFiles().length < subDirsPerLocalDir) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +
@@ -230,11 +290,12 @@ private[spark] class DiskBlockManager(
               }
             }
           }
-          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+          logInfo(log"Merge directory and its sub dirs get created at ${MDC(PATH, mergeDir)}")
         } catch {
           case e: IOException =>
             logError(
-              s"Failed to create $mergeDirName dir in $rootDir. Ignoring this directory.", e)
+              log"Failed to create ${MDC(MERGE_DIR_NAME, mergeDirName)} dir in " +
+                log"${MDC(PATH, rootDir)}. Ignoring this directory.", e)
         }
       }
     }
@@ -244,9 +305,6 @@ private[spark] class DiskBlockManager(
    * Create a directory that is writable by the group.
    * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
    * create subdirs/files within the merge folder.
-   * TODO: Find out why can't we create a dir using java api with permission 770
-   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
-   *  PosixFilePermissions.fromString("rwxrwx---")))
    */
   def createDirWithPermission770(dirToCreate: File): Unit = {
     var attempts = 0
@@ -258,20 +316,17 @@ private[spark] class DiskBlockManager(
         throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
-        val builder = new ProcessBuilder().command(
-          "mkdir", "-p", "-m770", dirToCreate.getAbsolutePath)
-        val proc = builder.start()
-        val exitCode = proc.waitFor()
+        dirToCreate.mkdirs()
+        Files.setPosixFilePermissions(
+          dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {
           created = dirToCreate
         }
-        logDebug(
-          s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
-            s"770 and exitCode $exitCode")
+        logDebug(s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
       } catch {
         case e: SecurityException =>
-          logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
-            s"with permission 770", e)
+          logWarning(log"Failed to create directory ${MDC(PATH, dirToCreate.getAbsolutePath)} " +
+            log"with permission 770", e)
           created = null;
       }
     }
@@ -318,7 +373,7 @@ private[spark] class DiskBlockManager(
             }
           } catch {
             case e: Exception =>
-              logError(s"Exception while deleting local spark dir: $localDir", e)
+              logError(log"Exception while deleting local spark dir: ${MDC(PATH, localDir)}", e)
           }
         }
       }

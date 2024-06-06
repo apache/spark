@@ -24,7 +24,8 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ERROR, MESSAGE, RECEIVER_ID, RECEIVER_IDS, STREAM_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
@@ -32,6 +33,7 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /** Enumeration to identify current state of a Receiver */
@@ -108,7 +110,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   private val receivedBlockTracker = new ReceivedBlockTracker(
     ssc.sparkContext.conf,
     ssc.sparkContext.hadoopConfiguration,
-    receiverInputStreamIds,
+    receiverInputStreamIds.toImmutableArraySeq,
     ssc.scheduler.clock,
     ssc.isCheckpointPresent,
     Option(ssc.checkpointDir)
@@ -184,7 +186,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         // Check if all the receivers have been deregistered or not
         val receivers = endpoint.askSync[Seq[Int]](AllReceiverIds)
         if (receivers.nonEmpty) {
-          logWarning("Not all of the receivers have deregistered, " + receivers)
+          logWarning(log"Not all of the receivers have deregistered, " +
+            log"${MDC(RECEIVER_IDS, receivers)}")
         } else {
           logInfo("All of the receivers have deregistered successfully")
         }
@@ -244,11 +247,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
     if (isTrackerStarted) {
-      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
-        _.runningExecutor.map {
+      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).transform { (_, v) =>
+        v.runningExecutor.map {
           _.executorId
         }
-      }.toMap
+      }
     } else {
       Map.empty
     }
@@ -329,7 +332,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     } else {
       s"$message"
     }
-    logError(s"Deregistered receiver for stream $streamId: $messageWithError")
+    logError(log"Deregistered receiver for stream ${MDC(STREAM_ID, streamId)}: " +
+      log"${MDC(ERROR, messageWithError)}")
   }
 
   /** Update a receiver's maximum ingestion rate */
@@ -362,11 +366,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receiverTrackingInfos(streamId) = newReceiverTrackingInfo
     listenerBus.post(StreamingListenerReceiverError(newReceiverTrackingInfo.toReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
-      s"$message - $error"
+      log"${MDC(MESSAGE, message)} - ${MDC(ERROR, error)}"
     } else {
-      s"$message"
+      log"${MDC(MESSAGE, message)}"
     }
-    logWarning(s"Error reported by receiver for stream $streamId: $messageWithError")
+    logWarning(log"Error reported by receiver for stream ${MDC(STREAM_ID, streamId)}: " +
+      messageWithError)
   }
 
   private def scheduleReceiver(receiverId: Int): Seq[TaskLocation] = {
@@ -443,7 +448,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     runDummySparkJob()
 
     logInfo("Starting " + receivers.length + " receivers")
-    endpoint.send(StartAllReceivers(receivers))
+    endpoint.send(StartAllReceivers(receivers.toImmutableArraySeq))
   }
 
   /** Check if tracker has been marked for starting */
@@ -647,7 +652,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverJobExitLatch.countDown()
       receiverTrackingInfos.remove(receiverId).foreach { receiverTrackingInfo =>
         if (receiverTrackingInfo.state == ReceiverState.ACTIVE) {
-          logWarning(s"Receiver $receiverId exited but didn't deregister")
+          logWarning(log"Receiver ${MDC(RECEIVER_ID, receiverId)} exited but didn't deregister")
         }
       }
     }

@@ -40,4 +40,7 @@ public interface SortOrder extends Expression {
    * Returns the null ordering.
    */
   NullOrdering nullOrdering();
+
+  @Override
+  default Expression[] children() { return new Expression[]{ expression() }; }
 }

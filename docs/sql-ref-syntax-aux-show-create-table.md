@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-SHOW CREATE TABLE table_identifier
+SHOW CREATE TABLE table_identifier [ AS SERDE ]
 ```
 
 ### Parameters
@@ -36,6 +36,10 @@ SHOW CREATE TABLE table_identifier
     Specifies a table or view name, which may be optionally qualified with a database name.
 
     **Syntax:** `[ database_name. ] table_name`
+
+* **AS SERDE**
+
+    Generates Hive DDL for a Hive SerDe table.
 
 ### Examples
 
@@ -55,6 +59,25 @@ SHOW CREATE TABLE test;
    'prop1' = 'value1',
    'prop2' = 'value2')
 +----------------------------------------------------+
+
+SHOW CREATE TABLE test AS SERDE;
++------------------------------------------------------------------------------+
+|                                                                createtab_stmt|
++------------------------------------------------------------------------------+
+|CREATE TABLE `default`.`test`(
+  `c` INT)
+ ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+ WITH SERDEPROPERTIES (
+   'serialization.format' = ',',
+   'field.delim' = ',')
+ STORED AS
+   INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+   OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+ TBLPROPERTIES (
+   'prop1' = 'value1',
+   'prop2' = 'value2',
+   'transient_lastDdlTime' = '1641800515')
++------------------------------------------------------------------------------+
 ```
 
 ### Related Statements

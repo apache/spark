@@ -19,12 +19,12 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
-import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.AccumulatorContext.internOption
 
@@ -277,7 +277,8 @@ private[spark] object AccumulatorContext extends Logging {
       // Since we are storing weak references, warn when the underlying data is not valid.
       val acc = ref.get
       if (acc eq null) {
-        logWarning(s"Attempted to access garbage collected accumulator $id")
+        logWarning(log"Attempted to access garbage collected accumulator " +
+          log"${MDC(ACCUMULATOR_ID, id)}")
       }
       Option(acc)
     }
@@ -505,7 +506,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   }
 
   override def value: java.util.List[T] = this.synchronized {
-    java.util.Collections.unmodifiableList(new ArrayList[T](getOrCreate))
+    java.util.List.copyOf(getOrCreate)
   }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = this.synchronized {

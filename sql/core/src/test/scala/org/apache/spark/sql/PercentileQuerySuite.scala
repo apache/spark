@@ -29,7 +29,7 @@ class PercentileQuerySuite extends QueryTest with SharedSparkSession {
 
   private val table = "percentile_test"
 
-  test("SPARK-37138: Support Ansi Interval type in Percentile") {
+  test("SPARK-39567: Support Ansi Interval type in Percentile") {
     withTempView(table) {
       Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
         (Period.ofMonths(200), Duration.ofSeconds(200L)),
@@ -38,12 +38,12 @@ class PercentileQuerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         spark.sql(
           s"""SELECT
-             |  CAST(percentile(col1, 0.5) AS STRING),
-             |  SUM(null),
-             |  CAST(percentile(col2, 0.5) AS STRING)
-             |FROM $table
-           """.stripMargin),
-        Row("200.0", null, "2.0E8"))
+            |  CAST(percentile(col1, 0.5) AS STRING),
+            |  SUM(null),
+            |  CAST(percentile(col2, 0.5) AS STRING)
+            |FROM $table
+          """.stripMargin),
+        Row("INTERVAL '16-8' YEAR TO MONTH", null, "INTERVAL '0 00:03:20' DAY TO SECOND"))
     }
   }
 }

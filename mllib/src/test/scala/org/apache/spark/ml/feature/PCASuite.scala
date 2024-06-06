@@ -24,6 +24,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.sql.Row
+import org.apache.spark.util.ArrayImplicits._
 
 class PCASuite extends MLTest with DefaultReadWriteTest {
 
@@ -44,7 +45,7 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
     )
 
-    val dataRDD = sc.parallelize(data, 2)
+    val dataRDD = sc.parallelize(data.toImmutableArraySeq, 2)
 
     val mat = new RowMatrix(dataRDD.map(OldVectors.fromML))
     val pc = mat.computePrincipalComponents(3)
@@ -83,10 +84,10 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
     val data3 = data1.map(_.toSparse)
     val data4 = data1.map(_.toDense)
 
-    val df1 = spark.createDataFrame(data1.map(Tuple1.apply)).toDF("features")
-    val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("features")
-    val df3 = spark.createDataFrame(data3.map(Tuple1.apply)).toDF("features")
-    val df4 = spark.createDataFrame(data4.map(Tuple1.apply)).toDF("features")
+    val df1 = spark.createDataFrame(data1.map(Tuple1.apply).toImmutableArraySeq).toDF("features")
+    val df2 = spark.createDataFrame(data2.map(Tuple1.apply).toImmutableArraySeq).toDF("features")
+    val df3 = spark.createDataFrame(data3.map(Tuple1.apply).toImmutableArraySeq).toDF("features")
+    val df4 = spark.createDataFrame(data4.map(Tuple1.apply).toImmutableArraySeq).toDF("features")
 
     val pca = new PCA()
       .setInputCol("features")

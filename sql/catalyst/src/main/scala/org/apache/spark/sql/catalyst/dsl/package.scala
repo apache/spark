@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -55,7 +57,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
  *  scala> import org.apache.spark.sql.catalyst.dsl.plans._
- *  scala> LocalRelation('key.int, 'value.string).where('key === 1).select('value).analyze
+ *  scala> LocalRelation($"key".int, $"value".string).where('key === 1).select('value).analyze
  *  res3: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
  *  Project [value#3]
  *   Filter (key#2 = 1)
@@ -92,7 +94,7 @@ package object dsl {
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
     def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
-    def in(list: Expression*): Expression = list match {
+    def in(list: Expression*): Predicate = list match {
       case Seq(l: ListQuery) => expr match {
           case c: CreateNamedStruct => InSubquery(c.valExprs, l)
           case other => InSubquery(Seq(other), l)
@@ -100,22 +102,22 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: Char = '\\'): Expression =
+    def like(other: Expression, escapeChar: Char = '\\'): Predicate =
       Like(expr, other, escapeChar)
     def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
       new ILike(expr, other, escapeChar)
-    def rlike(other: Expression): Expression = RLike(expr, other)
-    def likeAll(others: Expression*): Expression =
+    def rlike(other: Expression): Predicate = RLike(expr, other)
+    def likeAll(others: Expression*): Predicate =
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAll(others: Expression*): Expression =
+    def notLikeAll(others: Expression*): Predicate =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def likeAny(others: Expression*): Expression =
+    def likeAny(others: Expression*): Predicate =
       LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAny(others: Expression*): Expression =
+    def notLikeAny(others: Expression*): Predicate =
       NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def contains(other: Expression): Expression = Contains(expr, other)
-    def startsWith(other: Expression): Expression = StartsWith(expr, other)
-    def endsWith(other: Expression): Expression = EndsWith(expr, other)
+    def contains(other: Expression): Predicate = Contains(expr, other)
+    def startsWith(other: Expression): Predicate = StartsWith(expr, other)
+    def endsWith(other: Expression): Predicate = EndsWith(expr, other)
     def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
@@ -129,12 +131,20 @@ package object dsl {
       UnresolvedExtractValue(expr, Literal(fieldName))
 
     def cast(to: DataType): Expression = {
-      if (expr.resolved && expr.dataType.sameType(to)) {
+      if (expr.resolved && DataTypeUtils.sameType(expr.dataType, to)) {
         expr
       } else {
         val cast = Cast(expr, to)
-        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
         cast
+      }
+    }
+
+    def castNullable(): Expression = {
+      if (expr.resolved && expr.nullable) {
+        expr
+      } else {
+        KnownNullable(expr)
       }
     }
 
@@ -143,7 +153,6 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
-    def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {
@@ -260,8 +269,8 @@ package object dsl {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
-    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
-      def s: String = attr.name
+    implicit class DslAttr(override val attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = attr.sql
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
@@ -269,90 +278,87 @@ package object dsl {
       def expr: UnresolvedAttribute = attr
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
 
+      private def attrRef(dataType: DataType): AttributeReference =
+        AttributeReference(attr.nameParts.last, dataType)(qualifier = attr.nameParts.init)
+
       /** Creates a new AttributeReference of type boolean */
-      def boolean: AttributeReference = AttributeReference(s, BooleanType, nullable = true)()
+      def boolean: AttributeReference = attrRef(BooleanType)
 
       /** Creates a new AttributeReference of type byte */
-      def byte: AttributeReference = AttributeReference(s, ByteType, nullable = true)()
+      def byte: AttributeReference = attrRef(ByteType)
 
       /** Creates a new AttributeReference of type short */
-      def short: AttributeReference = AttributeReference(s, ShortType, nullable = true)()
+      def short: AttributeReference = attrRef(ShortType)
 
       /** Creates a new AttributeReference of type int */
-      def int: AttributeReference = AttributeReference(s, IntegerType, nullable = true)()
+      def int: AttributeReference = attrRef(IntegerType)
 
       /** Creates a new AttributeReference of type long */
-      def long: AttributeReference = AttributeReference(s, LongType, nullable = true)()
+      def long: AttributeReference = attrRef(LongType)
 
       /** Creates a new AttributeReference of type float */
-      def float: AttributeReference = AttributeReference(s, FloatType, nullable = true)()
+      def float: AttributeReference = attrRef(FloatType)
 
       /** Creates a new AttributeReference of type double */
-      def double: AttributeReference = AttributeReference(s, DoubleType, nullable = true)()
+      def double: AttributeReference = attrRef(DoubleType)
 
-      /** Creates a new AttributeReference of type string */
-      def string: AttributeReference = AttributeReference(s, StringType, nullable = true)()
+      /** Creates a new AttributeReference of type string with default collation */
+      def string: AttributeReference = attrRef(StringType)
+
+      /** Creates a new AttributeReference of type string with specified collation */
+      def string(collation: String): AttributeReference =
+        attrRef(StringType(CollationFactory.collationNameToId(collation)))
 
       /** Creates a new AttributeReference of type date */
-      def date: AttributeReference = AttributeReference(s, DateType, nullable = true)()
+      def date: AttributeReference = attrRef(DateType)
 
       /** Creates a new AttributeReference of type decimal */
-      def decimal: AttributeReference =
-        AttributeReference(s, DecimalType.SYSTEM_DEFAULT, nullable = true)()
+      def decimal: AttributeReference = attrRef(DecimalType.SYSTEM_DEFAULT)
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int): AttributeReference =
-        AttributeReference(s, DecimalType(precision, scale), nullable = true)()
+        attrRef(DecimalType(precision, scale))
 
       /** Creates a new AttributeReference of type timestamp */
-      def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
+      def timestamp: AttributeReference = attrRef(TimestampType)
 
       /** Creates a new AttributeReference of type timestamp without time zone */
-      def timestampNTZ: AttributeReference =
-        AttributeReference(s, TimestampNTZType, nullable = true)()
+      def timestampNTZ: AttributeReference = attrRef(TimestampNTZType)
 
       /** Creates a new AttributeReference of the day-time interval type */
-      def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference = {
-        AttributeReference(s, DayTimeIntervalType(startField, endField), nullable = true)()
-      }
-      def dayTimeInterval(): AttributeReference = {
-        AttributeReference(s, DayTimeIntervalType(), nullable = true)()
-      }
+      def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference =
+        attrRef(DayTimeIntervalType(startField, endField))
+
+      def dayTimeInterval(): AttributeReference = attrRef(DayTimeIntervalType())
 
       /** Creates a new AttributeReference of the year-month interval type */
-      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference = {
-        AttributeReference(s, YearMonthIntervalType(startField, endField), nullable = true)()
-      }
-      def yearMonthInterval(): AttributeReference = {
-        AttributeReference(s, YearMonthIntervalType(), nullable = true)()
-      }
+      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference =
+        attrRef(YearMonthIntervalType(startField, endField))
+
+      def yearMonthInterval(): AttributeReference = attrRef(YearMonthIntervalType())
 
       /** Creates a new AttributeReference of type binary */
-      def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
+      def binary: AttributeReference = attrRef(BinaryType)
 
       /** Creates a new AttributeReference of type array */
-      def array(dataType: DataType): AttributeReference =
-        AttributeReference(s, ArrayType(dataType), nullable = true)()
+      def array(dataType: DataType): AttributeReference = attrRef(ArrayType(dataType))
 
-      def array(arrayType: ArrayType): AttributeReference =
-        AttributeReference(s, arrayType)()
+      def array(arrayType: ArrayType): AttributeReference = attrRef(arrayType)
 
       /** Creates a new AttributeReference of type map */
       def map(keyType: DataType, valueType: DataType): AttributeReference =
         map(MapType(keyType, valueType))
 
-      def map(mapType: MapType): AttributeReference =
-        AttributeReference(s, mapType, nullable = true)()
+      def map(mapType: MapType): AttributeReference = attrRef(mapType)
 
       /** Creates a new AttributeReference of type struct */
-      def struct(structType: StructType): AttributeReference =
-        AttributeReference(s, structType, nullable = true)()
+      def struct(structType: StructType): AttributeReference = attrRef(structType)
+
       def struct(attrs: AttributeReference*): AttributeReference =
-        struct(StructType.fromAttributes(attrs))
+        struct(DataTypeUtils.fromAttributes(attrs))
 
       /** Creates a new AttributeReference of object type */
-      def obj(cls: Class[_]): AttributeReference =
-        AttributeReference(s, ObjectType(cls), nullable = true)()
+      def obj(cls: Class[_]): AttributeReference = attrRef(ObjectType(cls))
 
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
@@ -394,6 +400,10 @@ package object dsl {
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
+      def localLimit(limitExpr: Expression): LogicalPlan = LocalLimit(limitExpr, logicalPlan)
+
+      def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
+
       def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
@@ -409,11 +419,13 @@ package object dsl {
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
-          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          func: (Key, Iterator[Left], Iterator[Right]) => IterableOnce[Result],
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
-          rightAttr: Seq[Attribute]
+          rightAttr: Seq[Attribute],
+          leftOrder: Seq[SortOrder] = Nil,
+          rightOrder: Seq[SortOrder] = Nil
         ): LogicalPlan = {
         CoGroup.apply[Key, Left, Right, Result](
           func,
@@ -421,6 +433,8 @@ package object dsl {
           rightGroup,
           leftAttr,
           rightAttr,
+          leftOrder,
+          rightOrder,
           logicalPlan,
           otherPlan)
       }
@@ -432,7 +446,7 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
-          case e => Alias(e, e.toString)()
+          case e => UnresolvedAlias(e)
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
@@ -451,7 +465,15 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
+      def windowGroupLimit(
+          partitionSpec: Seq[Expression],
+          orderSpec: Seq[SortOrder],
+          rankLikeFunction: Expression,
+          limit: Int): LogicalPlan =
+        WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, logicalPlan)
+
+      def subquery(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
       def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
         Except(logicalPlan, otherPlan, isAll)
@@ -479,16 +501,20 @@ package object dsl {
           ifPartitionNotExists: Boolean = false): LogicalPlan =
         InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
-      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
-
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
+      def repartition(): LogicalPlan =
+        RepartitionByExpression(Seq.empty, logicalPlan, None)
+
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
+
+      def rebalance(exprs: Expression*): LogicalPlan =
+        RebalancePartitions(exprs, logicalPlan)
 
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)
@@ -496,8 +522,9 @@ package object dsl {
         EliminateSubqueryAliases(analyzed)
       }
 
-      def hint(name: String, parameters: Any*): LogicalPlan =
+      def hint(name: String, parameters: Expression*): LogicalPlan = {
         UnresolvedHint(name, parameters, logicalPlan)
+      }
 
       def sample(
           lowerBound: Double,

@@ -164,7 +164,8 @@ class FPGrowth @Since("2.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
@@ -179,7 +180,7 @@ class FPGrowth @Since("2.2.0") (
     instr.logNumExamples(inputRowCount)
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
-    val schema = StructType(Seq(
+    val schema = StructType(Array(
       StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
@@ -350,7 +351,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-      val numTrainingRecords = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 4)) {
+      val numTrainingRecords = if (major < 2 || (major == 2 && minor < 4)) {
         // 2.3 and before don't store the count
         0L
       } else {
@@ -405,7 +406,7 @@ private[fpm] object AssociationRules {
         r.freqUnion / numTrainingRecords))
 
     val dt = dataset.schema(itemsCol).dataType
-    val schema = StructType(Seq(
+    val schema = StructType(Array(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
       StructField("confidence", DoubleType, nullable = false),

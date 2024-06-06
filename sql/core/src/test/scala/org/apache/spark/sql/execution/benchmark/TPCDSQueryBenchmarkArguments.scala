@@ -21,7 +21,7 @@ import java.util.Locale
 
 
 class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
-  var dataLocation: String = null
+  var dataLocation: String = sys.env.getOrElse("SPARK_TPCDS_DATA", null)
   var queryFilter: Set[String] = Set.empty
   var cboEnabled: Boolean = false
 

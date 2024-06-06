@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.Properties
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -39,8 +39,9 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource}
+import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource, TestLocalScanTable}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
@@ -55,12 +56,12 @@ import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration}
+import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
-class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
+abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   with BeforeAndAfter {
 
   import testImplicits._
@@ -69,7 +70,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
   }
 
-  private var kvstore: ElementTrackingStore = _
+  protected var kvstore: ElementTrackingStore = _
 
   after {
     if (kvstore != null) {
@@ -111,6 +112,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       taskId = taskId,
       attemptNumber = attemptNumber,
       index = taskId.toInt,
+      partitionId = taskId.toInt,
       // The following fields are not used in tests
       launchTime = 0,
       executorId = "",
@@ -153,12 +155,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(actualFailed.sorted === failed)
   }
 
-  private def createStatusStore(): SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
-    new SQLAppStatusStore(kvstore, Some(listener))
-  }
+  protected def createStatusStore(): SQLAppStatusStore
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
@@ -194,11 +191,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -221,23 +220,23 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Driver accumulator updates don't belong to this execution should be filtered and no
     // exception will be thrown.
     listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createAccumulatorInfos(accumulatorUpdates)),
-      (1L, 0, 0, createAccumulatorInfos(accumulatorUpdates.mapValues(_ * 2).toMap))
+      (1L, 0, 0, createAccumulatorInfos(accumulatorUpdates.transform((_, v) => v * 2)))
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 3).toMap)
+      accumulatorUpdates.transform((_, v) => v * 3))
 
     // Retrying a stage should reset the metrics
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 1)))
@@ -251,7 +250,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Ignore the task end for the first attempt
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -259,12 +258,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 100).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 100)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 2).toMap)
+      accumulatorUpdates.transform((_, v) => v * 2))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -272,7 +271,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       stageAttemptId = 1,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 2).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 2)),
       new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -280,12 +279,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       stageAttemptId = 1,
       taskType = "",
       reason = null,
-      createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(1, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 5).toMap)
+      accumulatorUpdates.transform((_, v) => v * 5))
 
     // Summit a new stage
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
@@ -299,7 +298,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     )))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 7).toMap)
+      accumulatorUpdates.transform((_, v) => v * 7))
 
     // Finish two tasks
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -307,7 +306,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(0, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(0, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -315,12 +314,12 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       stageAttemptId = 0,
       taskType = "",
       reason = null,
-      createTaskInfo(1, 0, accums = accumulatorUpdates.mapValues(_ * 3).toMap),
+      createTaskInfo(1, 0, accums = accumulatorUpdates.transform((_, v) => v * 3)),
       new ExecutorMetrics,
       null))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 11).toMap)
+      accumulatorUpdates.transform((_, v) => v * 11))
 
     assertJobs(statusStore.execution(executionId), running = Seq(0))
 
@@ -335,7 +334,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assertJobs(statusStore.execution(executionId), completed = Seq(0))
 
     checkAnswer(statusStore.executionMetrics(executionId),
-      accumulatorUpdates.mapValues(_ * 11).toMap)
+      accumulatorUpdates.transform((_, v) => v * 11))
   }
 
   test("control a plan explain mode in listeners via SQLConf") {
@@ -345,7 +344,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -383,11 +382,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -412,11 +413,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -452,11 +455,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -481,11 +486,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
@@ -511,11 +518,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     var stageId = 0
     def twoStageJob(jobId: Int): Unit = {
@@ -601,8 +610,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
-    val json = JsonProtocol.sparkEventToJson(event)
-    assertValidDataInJson(json,
+    val json = JsonProtocol.sparkEventToJsonString(event)
+    assertValidDataInJson(parse(json),
       parse("""
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
@@ -620,14 +629,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     }
 
     // Test a case where the numbers in the JSON can only fit in longs:
-    val longJson = parse(
+    val longJson =
       """
         |{
         |  "Event": "org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates",
         |  "executionId": 4294967294,
         |  "accumUpdates": [[4294967294,3]]
         |}
-      """.stripMargin)
+      """.stripMargin
     JsonProtocol.sparkEventFromJson(longJson) match {
       case SparkListenerDriverAccumUpdates(executionId, accums) =>
         assert(executionId == 4294967294L)
@@ -650,19 +659,23 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
+      Some(1),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      Map.empty))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
+      Some(2),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      Map.empty))
 
     // Stop execution 2 before execution 1
     time += 1
@@ -674,12 +687,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       3,
+      Some(3),
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
-    assert(statusStore.executionsCount === 2)
+      time,
+      Map.empty))
+    assert(statusStore.executionsCount() === 2)
     assert(statusStore.execution(2) === None)
   }
 
@@ -709,11 +724,13 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
       oldPlan,
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -829,7 +846,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
-    val physicalPlan = BatchScanExec(schema.toAttributes, new CustomMetricScanBuilder(), Seq.empty)
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
+      table = new TestLocalScanTable("fake"))
     val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
@@ -862,13 +880,49 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics(innerMetric.id) === expectedInnerValue)
   }
 
+  test("SPARK-39635: Report driver metrics from Datasource v2 scan") {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    val schema = new StructType().add("i", "int").add("j", "int")
+    val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
+      Seq.empty, table = new TestLocalScanTable("fake"))
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    // Wait until the new execution is started and being tracked.
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    while (statusStore.executionsList().isEmpty ||
+      statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val expectedMetric = physicalPlan.metrics("custom_driver_metric_partition_count")
+    val expectedValue = "2"
+    assert(metrics.contains(expectedMetric.id))
+    assert(metrics(expectedMetric.id) === expectedValue)
+  }
+
   test("SPARK-36030: Report metrics from Datasource v2 write") {
     withTempDir { dir =>
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
 
       val cls = classOf[CustomMetricsDataSource].getName
-      spark.range(10).select('id as 'i, -'id as 'j).write.format(cls)
+      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+        .write.format(cls)
         .option("path", dir.getCanonicalPath).mode("append").save()
 
       // Wait until the new execution is started and being tracked.
@@ -890,8 +944,115 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       assert(innerMetric.isDefined)
     }
   }
+
+  test("SPARK-37578: Update output metrics from Datasource v2") {
+    withTempDir { dir =>
+      val statusStore = spark.sharedState.statusStore
+      val oldCount = statusStore.executionsCount()
+
+      val bytesWritten = new ArrayBuffer[Long]()
+      val recordsWritten = new ArrayBuffer[Long]()
+
+      val bytesWrittenListener = new SparkListener() {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          bytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
+          recordsWritten += taskEnd.taskMetrics.outputMetrics.recordsWritten
+        }
+      }
+      spark.sparkContext.addSparkListener(bytesWrittenListener)
+
+      try {
+        val cls = classOf[CustomMetricsDataSource].getName
+        spark.range(0, 10, 1, 2).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls)
+          .option("path", dir.getCanonicalPath).mode("append").save()
+
+        // Wait until the new execution is started and being tracked.
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(statusStore.executionsCount() > oldCount)
+        }
+
+        // Wait for listener to finish computing the metrics for the execution.
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(statusStore.executionsList().nonEmpty &&
+            statusStore.executionsList().last.metricValues != null)
+        }
+
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        assert(bytesWritten.sum == 246)
+        assert(recordsWritten.sum == 20)
+      } finally {
+        spark.sparkContext.removeSparkListener(bytesWrittenListener)
+      }
+    }
+  }
+
+  test("SPARK-40834: Use SparkListenerSQLExecutionEnd to track final SQL status in UI") {
+    var received = false
+    val e = new Exception("test")
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage)) =>
+            received = errorMessage == Utils.exceptionString(e)
+          case _ =>
+        }
+      }
+    })
+
+    intercept[Exception] {
+      SQLExecution.withNewExecutionId(spark.range(1).queryExecution) {
+        throw e
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+    assert(received)
+  }
+
+  test("SPARK-42100: onJobStart handle event with unregistered executionId shouldn't throw NPE") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 5
+    // Using protobuf serialization will throw npe before SPARK-42100
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+
+    assertJobs(statusStore.execution(executionId), running = Seq(0))
+  }
 }
 
+class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+
+class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
+  private val storePath = Utils.createTempDir()
+
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+    val appStatusStore = AppStatusStore.createLiveStore(conf)
+    kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  protected override def afterAll(): Unit = {
+    if (storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+    super.afterAll()
+  }
+}
 
 /**
  * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
@@ -983,6 +1144,35 @@ class SimpleCustomMetric extends CustomMetric {
   }
 }
 
+class SimpleCustomDriverMetric extends CustomMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def description(): String = "Simple custom driver metrics - partition count"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    taskMetrics.sum.toString
+  }
+}
+
+class SimpleCustomDriverTaskMetric(value : Long) extends CustomTaskMetric {
+  override def name(): String = "custom_driver_metric_partition_count"
+  override def value(): Long = value
+}
+
+class BytesWrittenCustomMetric extends CustomMetric {
+  override def name(): String = "bytesWritten"
+  override def description(): String = "bytesWritten metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"bytesWritten: ${taskMetrics.mkString(", ")}"
+  }
+}
+
+class RecordsWrittenCustomMetric extends CustomMetric {
+  override def name(): String = "recordsWritten"
+  override def description(): String = "recordsWritten metric"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"recordsWritten: ${taskMetrics.mkString(", ")}"
+  }
+}
+
 // The followings are for custom metrics of V2 data source.
 object CustomMetricReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -1026,6 +1216,28 @@ class CustomMetricScanBuilder extends SimpleScanBuilder {
   override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
 }
 
+class CustomDriverMetricScanBuilder extends SimpleScanBuilder {
+
+  var partitionCount: Long = 0L
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val partitions: Array[InputPartition] = Array(RangeInputPartition(0, 5),
+      RangeInputPartition(5, 10))
+    partitionCount = partitions.length
+    partitions
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+
+  override def supportedCustomMetrics(): Array[CustomMetric] = {
+    Array(new SimpleCustomDriverMetric)
+  }
+
+  override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+    Array(new SimpleCustomDriverTaskMetric(partitionCount))
+  }
+}
+
 class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWriter(fs, file) {
   override def currentMetricsValues(): Array[CustomTaskMetric] = {
     val metric = new CustomTaskMetric {
@@ -1036,7 +1248,15 @@ class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWrit
       override def name(): String = "inner_metric"
       override def value(): Long = 54321;
     }
-    Array(metric, innerMetric)
+    val bytesWrittenMetric = new CustomTaskMetric {
+      override def name(): String = "bytesWritten"
+      override def value(): Long = 123;
+    }
+    val recordsWrittenMetric = new CustomTaskMetric {
+      override def name(): String = "recordsWritten"
+      override def value(): Long = 10;
+    }
+    Array(metric, innerMetric, bytesWrittenMetric, recordsWrittenMetric)
   }
 }
 
@@ -1078,7 +1298,8 @@ class CustomMetricsDataSource extends SimpleWritableDataSource {
         }
 
         override def supportedCustomMetrics(): Array[CustomMetric] = {
-          Array(new SimpleCustomMetric, new Outer.InnerCustomMetric)
+          Array(new SimpleCustomMetric, new Outer.InnerCustomMetric,
+            new BytesWrittenCustomMetric, new RecordsWrittenCustomMetric)
         }
       }
     }

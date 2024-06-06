@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import java.util.UUID
 
-import scala.collection.JavaConverters
-
+import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -45,9 +45,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * @param name name of the metric
  * @since 3.3.0
  */
-class Observation(name: String) {
-
-  if (name.isEmpty) throw new IllegalArgumentException("Name must not be empty")
+class Observation(name: String) extends ObservationBase(name) {
 
   /**
    * Create an Observation instance without providing a name. This generates a random name.
@@ -56,9 +54,7 @@ class Observation(name: String) {
 
   private val listener: ObservationListener = ObservationListener(this)
 
-  @volatile private var sparkSession: Option[SparkSession] = None
-
-  @volatile private var metrics: Option[Map[String, Any]] = None
+  @volatile private var dataframeId: Option[(SparkSession, Long)] = None
 
   /**
    * Attach this observation to the given [[Dataset]] to observe aggregation expressions.
@@ -72,73 +68,43 @@ class Observation(name: String) {
    */
   private[spark] def on[T](ds: Dataset[T], expr: Column, exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
-      throw new IllegalArgumentException("Observation does not support streaming Datasets")
+      throw new IllegalArgumentException("Observation does not support streaming Datasets." +
+        "This is because there will be multiple observed metrics as microbatches are constructed" +
+        ". Please register a StreamingQueryListener and get the metric for each microbatch in " +
+        "QueryProgressEvent.progress, or use query.lastProgress or query.recentProgress.")
     }
-    register(ds.sparkSession)
+    register(ds.sparkSession, ds.id)
     ds.observe(name, expr, exprs: _*)
   }
 
-  /**
-   * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish
-   * its first action. Only the result of the first action is available. Subsequent actions do not
-   * modify the result.
-   *
-   * @return the observed metrics as a `Map[String, Any]`
-   * @throws InterruptedException interrupted while waiting
-   */
-  @throws[InterruptedException]
-  def get: Map[String, _] = {
-    synchronized {
-      // we need to loop as wait might return without us calling notify
-      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
-      while (this.metrics.isEmpty) {
-        wait()
-      }
-    }
-
-    this.metrics.get
-  }
-
-  /**
-   * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish
-   * its first action. Only the result of the first action is available. Subsequent actions do not
-   * modify the result.
-   *
-   * @return the observed metrics as a `java.util.Map[String, Object]`
-   * @throws InterruptedException interrupted while waiting
-   */
-  @throws[InterruptedException]
-  def getAsJava: java.util.Map[String, AnyRef] = {
-    JavaConverters.mapAsJavaMap(
-      get.map { case (key, value) => (key, value.asInstanceOf[Object])}
-    )
-  }
-
-  private def register(sparkSession: SparkSession): Unit = {
+  private[sql] def register(sparkSession: SparkSession, dataframeId: Long): Unit = {
     // makes this class thread-safe:
     // only the first thread entering this block can set sparkSession
     // all other threads will see the exception, as it is only allowed to do this once
     synchronized {
-      if (this.sparkSession.isDefined) {
+      if (this.dataframeId.isDefined) {
         throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
       }
-      this.sparkSession = Some(sparkSession)
+      this.dataframeId = Some((sparkSession, dataframeId))
     }
 
     sparkSession.listenerManager.register(this.listener)
   }
 
   private def unregister(): Unit = {
-    this.sparkSession.foreach(_.listenerManager.unregister(this.listener))
+    this.dataframeId.foreach(_._1.listenerManager.unregister(this.listener))
   }
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
     synchronized {
-      if (this.metrics.isEmpty) {
+      if (this.metrics.isEmpty && qe.logical.exists {
+        case CollectMetrics(name, _, _, dataframeId) =>
+          name == this.name && dataframeId == this.dataframeId.get._2
+        case _ => false
+      }) {
         val row = qe.observedMetrics.get(name)
-        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
-        if (metrics.isDefined) {
-          notifyAll()
+        val metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames.toImmutableArraySeq))
+        if (setMetricsAndNotify(metrics)) {
           unregister()
         }
       }

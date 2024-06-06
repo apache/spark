@@ -17,17 +17,93 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs._
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
+
+/**
+ * A file status augmented with optional metadata, which tasks and file readers can use however they
+ * see fit. For example, a custom [[FileIndex]] and [[FileFormat]] working together could expose
+ * this extra metadata as file-constant fields of the file source metadata column.
+ */
+case class FileStatusWithMetadata(fileStatus: FileStatus, metadata: Map[String, Any] = Map.empty) {
+  // Wrapper methods to improve source compatibility in code that still expects a [[FileStatus]].
+  // NOTE: getPath() is very expensive, so we only want to call it once (if accessed at all).
+  lazy val getPath: Path = fileStatus.getPath
+  def getLen: Long = fileStatus.getLen
+  def getModificationTime: Long = fileStatus.getModificationTime
+  def isDirectory: Boolean = fileStatus.isDirectory
+}
 
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
  * form of an [[InternalRow]].
  */
-case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
+case class PartitionDirectory(values: InternalRow, files: Seq[FileStatusWithMetadata])
+
+/**
+ * A runner that extracts file metadata filters from the given `filters` and use it to prune files
+ * in `PartitionDirectory`.
+ */
+class FilePruningRunner(filters: Seq[Expression]) {
+  // retrieve the file constant metadata filters and reduce to a final filter expression that can
+  // be applied to files.
+  val fileMetadataFilterOpt = filters.filter { f =>
+    f.references.nonEmpty && f.references.forall {
+      case FileSourceConstantMetadataAttribute(metadataAttr) =>
+        // we only know block start and length after splitting files, so skip it here
+        metadataAttr.name != FileFormat.FILE_BLOCK_START &&
+          metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
+      case _ => false
+    }
+  }.reduceOption(And)
+
+  // - Retrieve all required metadata attributes and put them into a sequence
+  // - Bind all file constant metadata attribute references to their respective index
+  val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
+  val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
+    Predicate.createInterpreted(fileMetadataFilter.transform {
+      case attr: AttributeReference =>
+        val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
+        val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
+          existingMetadataColumnIndex
+        } else {
+          requiredMetadataColumnNames += attr.name
+          requiredMetadataColumnNames.length - 1
+        }
+        BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
+    })
+  }
+
+  private def matchFileMetadataPredicate(partitionValues: InternalRow, f: FileStatus): Boolean = {
+    // use option.forall, so if there is no filter no metadata struct, return true
+    boundedFilterMetadataStructOpt.forall { boundedFilter =>
+      val row =
+        FileFormat.createMetadataInternalRow(partitionValues, requiredMetadataColumnNames.toSeq,
+          SparkPath.fromFileStatus(f), f.getLen, f.getModificationTime)
+      boundedFilter.eval(row)
+    }
+  }
+
+  def prune(pd: PartitionDirectory): PartitionDirectory = {
+    val prunedFiles = pd.files.filter { f =>
+      matchFileMetadataPredicate(InternalRow.empty, f.fileStatus)
+    }
+    pd.copy(files = prunedFiles)
+  }
+}
+
+object PartitionDirectory {
+  // For backward compat with code that does not know about extra file metadata
+  def apply(values: InternalRow, files: Array[FileStatus]): PartitionDirectory =
+    PartitionDirectory(values, files.map(FileStatusWithMetadata(_)).toImmutableArraySeq)
+}
 
 /**
  * An interface for objects capable of enumerating the root paths of a relation as well as the
@@ -61,6 +137,7 @@ trait FileIndex {
   /**
    * Returns the list of files that will be read when scanning this relation. This call may be
    * very expensive for large tables.
+   * The strings returned are expected to be url-encoded paths.
    */
   def inputFiles: Array[String]
 
@@ -82,4 +159,6 @@ trait FileIndex {
    * to update the metrics.
    */
   def metadataOpsTimeNs: Option[Long] = None
+
+  override def toString: String = s"${getClass.getName}(${rootPaths.mkString(",")})"
 }

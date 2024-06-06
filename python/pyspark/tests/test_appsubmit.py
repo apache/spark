@@ -23,13 +23,15 @@ import tempfile
 import unittest
 import zipfile
 
+from pyspark.testing.utils import SPARK_HOME
+
 
 class SparkSubmitTests(unittest.TestCase):
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
         tmp_dir = tempfile.gettempdir()
         self.sparkSubmit = [
-            os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit"),
+            os.path.join(SPARK_HOME, "bin", "spark-submit"),
             "--conf",
             "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
             "--conf",
@@ -296,7 +298,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_appsubmit import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

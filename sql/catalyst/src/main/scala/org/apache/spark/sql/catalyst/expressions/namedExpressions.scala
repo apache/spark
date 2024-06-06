@@ -19,14 +19,15 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.{Objects, UUID}
 
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -72,11 +73,11 @@ trait NamedExpression extends Expression {
   def exprId: ExprId
 
   /**
-   * Returns a dot separated fully qualified name for this attribute.  Given that there can be
-   * multiple qualifiers, it is possible that there are other possible way to refer to this
-   * attribute.
+   * Returns a dot separated fully qualified name for this attribute.  If the name or any qualifier
+   * contains `dots`, it is quoted to avoid confusion.  Given that there can be multiple qualifiers,
+   * it is possible that there are other possible way to refer to this attribute.
    */
-  def qualifiedName: String = (qualifier :+ name).mkString(".")
+  def qualifiedName: String = (qualifier :+ name).map(quoteIfNeeded).mkString(".")
 
   /**
    * Optional qualifier for the expression.
@@ -101,16 +102,6 @@ trait NamedExpression extends Expression {
 
   /** Returns a copy of this expression with a new `exprId`. */
   def newInstance(): NamedExpression
-
-  protected def typeSuffix =
-    if (resolved) {
-      dataType match {
-        case LongType => "L"
-        case _ => ""
-      }
-    } else {
-      ""
-    }
 }
 
 abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
@@ -170,7 +161,7 @@ case class Alias(child: Expression, name: String)(
   /** Just a simple passthrough for code generation. */
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    throw QueryExecutionErrors.doGenCodeOfAliasShouldNotBeCalledError
+    throw SparkException.internalError("Alias.doGenCode should not be called.")
   }
 
   override def dataType: DataType = child.dataType
@@ -178,11 +169,8 @@ case class Alias(child: Expression, name: String)(
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
       child match {
-        case named: NamedExpression =>
-          val builder = new MetadataBuilder().withMetadata(named.metadata)
-          nonInheritableMetadataKeys.foreach(builder.remove)
-          builder.build()
-
+        case named: NamedExpression => removeNonInheritableMetadata(named.metadata)
+        case structField: GetStructField => removeNonInheritableMetadata(structField.metadata)
         case _ => Metadata.empty
       }
     }
@@ -206,7 +194,7 @@ case class Alias(child: Expression, name: String)(
     if (resolved) {
       AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
     } else {
-      UnresolvedAttribute(name)
+      UnresolvedAttribute.quoted(name)
     }
   }
 
@@ -215,6 +203,20 @@ case class Alias(child: Expression, name: String)(
     s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
   } else {
     ""
+  }
+
+  /**
+   * This function is performance-sensitive, so we should avoid `MetadataBuilder` manipulation,
+   * because it performs heavy operations on maps
+   */
+  private def removeNonInheritableMetadata(metadata: Metadata): Metadata = {
+    if (metadata.isEmpty || nonInheritableMetadataKeys.forall(!metadata.contains(_))) {
+      metadata
+    } else {
+      val builder = new MetadataBuilder().withMetadata(metadata)
+      nonInheritableMetadataKeys.foreach(builder.remove)
+      builder.build()
+    }
   }
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
@@ -303,6 +305,10 @@ case class AttributeReference(
     h
   }
 
+  override lazy val canonicalized: Expression = {
+    AttributeReference("none", dataType)(exprId)
+  }
+
   override def newInstance(): AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
 
@@ -348,7 +354,7 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
-  override def withDataType(newType: DataType): Attribute = {
+  override def withDataType(newType: DataType): AttributeReference = {
     AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
   }
 
@@ -397,19 +403,23 @@ case class PrettyAttribute(
   override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
-    throw new UnsupportedOperationException
-  override def newInstance(): Attribute = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def newInstance(): Attribute =
+    throw SparkUnsupportedOperationException()
   override def withQualifier(newQualifier: Seq[String]): Attribute =
-    throw new UnsupportedOperationException
-  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def withName(newName: String): Attribute =
+    throw SparkUnsupportedOperationException()
   override def withMetadata(newMetadata: Metadata): Attribute =
-    throw new UnsupportedOperationException
-  override def qualifier: Seq[String] = throw new UnsupportedOperationException
-  override def exprId: ExprId = throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
+  override def qualifier: Seq[String] =
+    throw SparkUnsupportedOperationException()
+  override def exprId: ExprId =
+    throw SparkUnsupportedOperationException()
   override def withExprId(newExprId: ExprId): Attribute =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   override def withDataType(newType: DataType): Attribute =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   override def nullable: Boolean = true
 }
 
@@ -432,9 +442,263 @@ case class OuterReference(e: NamedExpression)
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
 }
 
+/**
+ * A placeholder used to hold a [[NamedExpression]] that has been temporarily resolved as the
+ * reference to a lateral column alias. It will be restored back to [[UnresolvedAttribute]] if
+ * the lateral column alias can't be resolved, or become a normal resolved column in the rewritten
+ * plan after lateral column resolution. There should be no [[LateralColumnAliasReference]] beyond
+ * analyzer: if the plan passes all analysis check, then all [[LateralColumnAliasReference]] should
+ * already be removed.
+ *
+ * @param ne the [[NamedExpression]] produced by column resolution. Can be [[UnresolvedAttribute]]
+ *           if the referenced lateral column alias is not resolved yet.
+ * @param nameParts the name parts of the original [[UnresolvedAttribute]]. Used to restore back
+ *                  to [[UnresolvedAttribute]] when needed
+ * @param a the attribute of referenced lateral column alias. Used to match alias when unwrapping
+ *          and resolving lateral column aliases and rewriting the query plan.
+ */
+case class LateralColumnAliasReference(ne: NamedExpression, nameParts: Seq[String], a: Attribute)
+  extends LeafExpression with NamedExpression with Unevaluable {
+  assert(ne.resolved || ne.isInstanceOf[UnresolvedAttribute])
+  override def name: String = ne.name
+  override def exprId: ExprId = ne.exprId
+  override def qualifier: Seq[String] = ne.qualifier
+  override def toAttribute: Attribute = ne.toAttribute
+  override lazy val resolved = ne.resolved
+  override def newInstance(): NamedExpression =
+    LateralColumnAliasReference(ne.newInstance(), nameParts, a)
+
+  override def nullable: Boolean = ne.nullable
+  override def dataType: DataType = ne.dataType
+  override def prettyName: String = "lateralAliasReference"
+  override def sql: String = s"$prettyName($name)"
+  override def toString: String = sql
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LATERAL_COLUMN_ALIAS_REFERENCE)
+}
+
 object VirtualColumn {
   // The attribute name used by Hive, which has different result than Spark, deprecated.
   val hiveGroupingIdName: String = "grouping__id"
   val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
+}
+
+/**
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
+ * - apply() will create a metadata attribute reference
+ * - unapply() will check if an attribute reference is the metadata attribute reference
+ */
+object MetadataAttribute {
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable, metadata(name))()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    if (isValid(attr.metadata)) Some(attr) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .putString(METADATA_COL_ATTR_KEY, name)
+    .build()
+
+  def isValid(metadata: Metadata): Boolean =
+    metadata.contains(METADATA_COL_ATTR_KEY)
+}
+
+/**
+ * A [[MetadataAttribute]] that works even if the attribute was renamed to avoid a conflict with
+ * some column name in the schema. See also [[LogicalPlan.getMetadataAttributeByName]].
+ *
+ * - apply() creates a logically-named attribute with the given physical name.
+ * - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
+ */
+object MetadataAttributeWithLogicalName {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = attr match {
+    case MetadataAttribute(a) => Some(a -> a.metadata.getString(METADATA_COL_ATTR_KEY))
+    case _ => None
+  }
+}
+
+object MetadataStructFieldWithLogicalName {
+  def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
+    .unapply(DataTypeUtils.toAttribute(field))
+    .map { case (_, name) => field -> name }
+}
+
+/**
+ * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
+ * and `__file_source_metadata_col` to `true` in AttributeReference's metadata.
+ * This is a super type of [[FileSourceConstantMetadataAttribute]] and
+ * [[FileSourceGeneratedMetadataAttribute]].
+ *
+ * - apply() will create a file source metadata attribute reference
+ * - unapply() will check if an attribute reference is any file source metadata attribute reference
+ */
+object FileSourceMetadataAttribute {
+
+  val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
+
+  /**
+   * Removes the internal field metadata.
+   */
+  def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute =
+    attr.withMetadata(removeInternalMetadata(attr.metadata))
+
+  /**
+   * Removes the internal field metadata.
+   */
+  def cleanupFileSourceMetadataInformation(field: StructField): StructField =
+    field.copy(metadata = removeInternalMetadata(field.metadata))
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+    AttributeReference(name, dataType, nullable = nullable, metadata(name))()
+
+  /** Matches if attr is any File source metadata attribute (including constant and generated). */
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    if (isValid(attr.metadata)) Some(attr) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(MetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
+    .build()
+
+  def isValid(metadata: Metadata): Boolean = {
+    MetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY) &&
+    metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+  }
+
+  /**
+   * True if the given data type is supported in file source metadata attributes.
+   *
+   * The set of supported types is limited by [[ColumnVectorUtils.populate]], which the constant
+   * file metadata implementation relies on. In general, types that can be partition columns are
+   * supported (including most primitive types). Notably unsupported types include [[ObjectType]],
+   * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
+   */
+  def isSupportedType(dataType: DataType): Boolean = PhysicalDataType(dataType) match {
+    // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
+    case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
+    case PhysicalBinaryType | PhysicalStringType(_) | PhysicalCalendarIntervalType => true
+    case _ => false
+  }
+
+  /** Returns the type unchanged if valid; otherwise throws [[IllegalArgumentException]]. */
+  def validateType(dataType: DataType): DataType = {
+    require(isSupportedType(dataType), s"Unsupported data type: $dataType")
+    dataType
+  }
+
+  private def removeInternalMetadata(metadata: Metadata) = new MetadataBuilder()
+    .withMetadata(metadata)
+    .remove(METADATA_COL_ATTR_KEY)
+    .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+    .remove(FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
+    .remove(FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
+    .build()
+}
+
+/**
+ * A [[StructField]] that describes a file source constant metadata struct field -- a member of the
+ * `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are usually
+ * appended to the output and not generated per row.
+ */
+object FileSourceConstantMetadataStructField {
+
+  val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
+
+  /** Constructs a new metadata struct field of the given type; nullable by default */
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): StructField =
+    StructField(name, FileSourceMetadataAttribute.validateType(dataType), nullable, metadata(name))
+
+  def unapply(field: StructField): Option[StructField] =
+    if (isValid(field.dataType, field.metadata)) Some(field) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true)
+    .build()
+
+  def isValid(dataType: DataType, metadata: Metadata): Boolean = {
+    FileSourceMetadataAttribute.isSupportedType(dataType) &&
+    FileSourceMetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY) &&
+    metadata.getBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
+  }
+}
+
+/**
+ * Matches the internal representation of a file source constant metadata attribute -- a member of
+ * the `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are
+ * usually appended to the output and not generated per row.
+ */
+object FileSourceConstantMetadataAttribute {
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    val valid = FileSourceConstantMetadataStructField.isValid(attr.dataType, attr.metadata)
+    if (valid) Some(attr) else None
+  }
+}
+
+/**
+ * A [[StructField]] that describes a file source generated metadata struct field -- a member of the
+ * `metadata` struct that maps to some internal column the scanner returns.
+ *
+ * - apply() wil create a file source generated metadata struct field
+ * - unapply() matches a file source generated metadata struct field, and returns its internal name
+ */
+object FileSourceGeneratedMetadataStructField {
+
+  val FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY = "__file_source_generated_metadata_col"
+
+  /**
+   * We keep generated metadata attributes nullability configurable here:
+   * 1. Before passing to readers, we create generated metadata attributes as nullable;
+   *    Because, for row_index, the readers do not consider the column required.
+   *    row_index can be generated with null in the process by readers.
+   * 2. When applying the projection, we restore the nullability specified here;
+   *    For row_index, it is generated with nulls which are then replaced,
+   *    so it will not be null in the returned output.
+   *    See `FileSourceStrategy` for more information
+   */
+  def apply(
+      name: String,
+      internalName: String,
+      dataType: DataType,
+      nullable: Boolean = true): StructField = {
+    val dt = FileSourceMetadataAttribute.validateType(dataType)
+    StructField(name, dt, nullable, metadata(name, internalName))
+  }
+
+  def unapply(field: StructField): Option[(StructField, String)] =
+    getInternalNameIfValid(field.dataType, field.metadata).map(field -> _)
+
+  def metadata(name: String, internalName: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
+    .putString(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, internalName)
+    .build()
+
+  def isValid(dataType: DataType, metadata: Metadata): Boolean = {
+    FileSourceMetadataAttribute.isSupportedType(dataType) &&
+    FileSourceMetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
+  }
+
+  def getInternalNameIfValid(dataType: DataType, metadata: Metadata): Option[String] = {
+    if (isValid(dataType, metadata)) {
+      Some(metadata.getString(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY))
+    } else None
+  }
+}
+
+/**
+ * Matches the internal representation of a file source generated metadata attribute -- a member of
+ * the `metadata` struct that maps to some internal column the scanner returns.
+ */
+object FileSourceGeneratedMetadataAttribute {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = {
+    FileSourceGeneratedMetadataStructField
+      .getInternalNameIfValid(attr.dataType, attr.metadata)
+      .map(attr -> _)
+  }
 }

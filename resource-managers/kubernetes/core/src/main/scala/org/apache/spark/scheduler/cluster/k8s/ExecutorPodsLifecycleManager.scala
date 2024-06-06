@@ -17,18 +17,21 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
+import java.util.function.UnaryOperator
+
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXECUTOR_ID
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
@@ -56,6 +59,8 @@ private[spark] class ExecutorPodsLifecycleManager(
   // Keep track of which pods are inactive to avoid contacting the API server multiple times.
   // This set is cleaned up when a snapshot containing the updated pod is processed.
   private val inactivatedPods = mutable.HashSet.empty[Long]
+
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
@@ -95,8 +100,9 @@ private[spark] class ExecutorPodsLifecycleManager(
             if (onFinalNonDeletedState(succeeded, execId, schedulerBackend, deleteFromK8s)) {
               execIdsRemovedInThisRound += execId
               if (schedulerBackend.isExecutorActive(execId.toString)) {
-                logInfo(s"Snapshot reported succeeded executor with id $execId, " +
-                  "even though the application has not requested for it to be removed.")
+                logInfo(log"Snapshot reported succeeded executor with id " +
+                  log"${MDC(EXECUTOR_ID, execId)}, even though the application has not " +
+                  log"requested for it to be removed.")
               } else {
                 logDebug(s"Snapshot reported succeeded executor with id $execId," +
                   s" pod name ${state.pod.getMetadata.getName}.")
@@ -112,7 +118,7 @@ private[spark] class ExecutorPodsLifecycleManager(
     // This makes sure that we don't keep growing that set indefinitely, in case we end up missing
     // an update for some pod.
     if (inactivatedPods.nonEmpty && snapshots.nonEmpty) {
-      inactivatedPods.retain(snapshots.last.executorPods.contains(_))
+      inactivatedPods.filterInPlace(snapshots.last.executorPods.contains(_))
     }
 
     // Reconcile the case where Spark claims to know about an executor but the corresponding pod
@@ -162,29 +168,29 @@ private[spark] class ExecutorPodsLifecycleManager(
   private def removeExecutorFromK8s(execId: Long, updatedPod: Pod): Unit = {
     Utils.tryLogNonFatalError {
       if (shouldDeleteExecutors) {
+        // Get pod before deleting it, we can skip deleting if pod is already deleted so that
+        // we do not send too many requests to api server.
         // If deletion failed on a previous try, we can try again if resync informs us the pod
         // is still around.
         // Delete as best attempt - duplicate deletes will throw an exception but the end state
         // of getting rid of the pod is what matters.
-        kubernetesClient
+        val podToDelete = kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-          .delete()
+        if (podToDelete.get() != null) {
+          podToDelete.delete()
+        }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
         // If the config is set to keep the executor  around, mark the pod as "inactive" so it
         // can be ignored in future updates from the API server.
         logDebug(s"Marking executor ${updatedPod.getMetadata.getName} as inactive since " +
           "deletion is disabled.")
-        val inactivatedPod = new PodBuilder(updatedPod)
-          .editMetadata()
-            .addToLabels(Map(SPARK_EXECUTOR_INACTIVE_LABEL -> "true").asJava)
-            .endMetadata()
-          .build()
-
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-          .patch(inactivatedPod)
+          .edit(executorInactivationFn)
 
         inactivatedPods += execId
       }
@@ -274,4 +280,9 @@ private object ExecutorPodsLifecycleManager {
     s"${code}${humanStr}"
   }
 
+  def executorInactivationFn: UnaryOperator[Pod] = (p: Pod) => new PodBuilder(p)
+    .editOrNewMetadata()
+    .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
+    .endMetadata()
+    .build()
 }

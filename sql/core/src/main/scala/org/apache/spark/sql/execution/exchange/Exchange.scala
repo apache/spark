@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,10 +36,21 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
  */
 abstract class Exchange extends UnaryExecNode {
+  /**
+   * This flag aims to detect if the stage materialization is started. This helps
+   * to avoid unnecessary AQE stage materialization when the stage is canceled.
+   */
+  protected val materializationStarted = new AtomicBoolean()
+
+  /**
+   * Exposes status if the materialization is started
+   */
+  def isMaterializationStarted(): Boolean = materializationStarted.get()
+
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(EXCHANGE)
 
-  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
+  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[plan_id=$id]")
 }
 
 /**

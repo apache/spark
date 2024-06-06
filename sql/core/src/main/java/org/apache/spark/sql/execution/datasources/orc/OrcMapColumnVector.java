@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.datasources.orc;
 
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.MapColumnVector;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.MapType;
@@ -32,87 +34,83 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class OrcMapColumnVector extends OrcColumnVector {
   private final OrcColumnVector keys;
   private final OrcColumnVector values;
-  private final long[] offsets;
-  private final long[] lengths;
 
   OrcMapColumnVector(
       DataType type,
       ColumnVector vector,
       OrcColumnVector keys,
-      OrcColumnVector values,
-      long[] offsets,
-      long[] lengths) {
+      OrcColumnVector values) {
 
     super(type, vector);
 
     this.keys = keys;
     this.values = values;
-    this.offsets = offsets;
-    this.lengths = lengths;
   }
 
   @Override
   public ColumnarMap getMap(int ordinal) {
-    return new ColumnarMap(keys, values, (int) offsets[ordinal], (int) lengths[ordinal]);
+    int offsets = (int) ((MapColumnVector) baseData).offsets[ordinal];
+    int lengths = (int) ((MapColumnVector) baseData).lengths[ordinal];
+    return new ColumnarMap(keys, values, offsets, lengths);
   }
 
   @Override
   public boolean getBoolean(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public byte getByte(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public short getShort(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public int getInt(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public long getLong(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public float getFloat(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public double getDouble(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public UTF8String getUTF8String(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public byte[] getBinary(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public ColumnarArray getArray(int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public org.apache.spark.sql.vectorized.ColumnVector getChild(int ordinal) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 }

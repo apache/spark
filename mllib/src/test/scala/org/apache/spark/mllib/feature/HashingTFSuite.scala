@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -43,9 +44,9 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("hashing tf on an RDD") {
     val hashingTF = new HashingTF
     val localDocs: Seq[Seq[String]] = Seq(
-      "a a b b b c d".split(" "),
-      "a b c d a b c".split(" "),
-      "c b a c b a a".split(" "))
+      "a a b b b c d".split(" ").toImmutableArraySeq,
+      "a b c d a b c".split(" ").toImmutableArraySeq,
+      "c b a c b a a".split(" ").toImmutableArraySeq)
     val docs = sc.parallelize(localDocs, 2)
     assert(hashingTF.transform(docs).collect().toSet === localDocs.map(hashingTF.transform).toSet)
   }

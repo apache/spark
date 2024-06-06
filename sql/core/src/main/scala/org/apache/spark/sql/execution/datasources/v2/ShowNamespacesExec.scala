@@ -42,8 +42,17 @@ case class ShowNamespacesExec(
       catalog.listNamespaces()
     }
 
+    // Please refer to the rule `KeepLegacyOutputs` for details about legacy command.
+    // The legacy SHOW DATABASES command does not quote the database names.
+    val isLegacy = output.head.name == "databaseName"
+    val namespaceNames = if (isLegacy && namespaces.forall(_.length == 1)) {
+      namespaces.map(_.head)
+    } else {
+      namespaces.map(_.quoted)
+    }
+
     val rows = new ArrayBuffer[InternalRow]()
-    namespaces.map(_.quoted).map { ns =>
+    namespaceNames.map { ns =>
       if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
         rows += toCatalystRow(ns)
       }

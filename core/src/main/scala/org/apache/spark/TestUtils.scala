@@ -18,30 +18,31 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale, Properties}
+import java.util.{EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
 import javax.net.ssl._
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
-import scala.sys.process.{Process, ProcessLogger}
+import scala.sys.process.Process
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
-import org.apache.log4j.PropertyConfigurator
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
+import org.apache.logging.log4j.core.appender.ConsoleAppender
+import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
 import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
@@ -52,7 +53,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkTestUtils, Utils}
 
 /**
  * Utilities for tests. Included in main codebase since it's used by multiple
@@ -61,7 +62,7 @@ import org.apache.spark.util.Utils
  * TODO: See if we can move this to the test codebase by specifying
  * test dependencies between projects.
  */
-private[spark] object TestUtils {
+private[spark] object TestUtils extends SparkTestUtils {
 
   /**
    * Create a jar that defines classes with the given names.
@@ -141,70 +142,6 @@ private[spark] object TestUtils {
     jarFile.toURI.toURL
   }
 
-  // Adapted from the JavaCompiler.java doc examples
-  private val SOURCE = JavaFileObject.Kind.SOURCE
-  private def createURI(name: String) = {
-    URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
-  }
-
-  private[spark] class JavaSourceFromString(val name: String, val code: String)
-    extends SimpleJavaFileObject(createURI(name), SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean): String = code
-  }
-
-  /** Creates a compiled class with the source file. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      sourceFile: JavaSourceFromString,
-      classpathUrls: Seq[URL]): File = {
-    val compiler = ToolProvider.getSystemJavaCompiler
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the files than
-    // build a custom FileManager that controls the output location.
-    val options = if (classpathUrls.nonEmpty) {
-      Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
-    } else {
-      Seq.empty
-    }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
-
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, fileName)
-
-    // renameTo cannot handle in and out files in different filesystems
-    // use google's Files.move instead
-    Files.move(result, out)
-
-    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
-    out
-  }
-
-  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      toStringValue: String = "",
-      baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty,
-      implementsClasses: Seq[String] = Seq.empty,
-      extraCodeBody: String = ""): File = {
-    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
-    val implementsText =
-      "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
-    val sourceFile = new JavaSourceFromString(className,
-      s"""
-         |public class $className $extendsText $implementsText {
-         |  @Override public String toString() { return "$toStringValue"; }
-         |
-         |  $extraCodeBody
-         |}
-        """.stripMargin)
-    createCompiledClass(className, destDir, sourceFile, classpathUrls)
-  }
-
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
@@ -260,26 +197,28 @@ private[spark] object TestUtils {
       contains = contain(e, msg)
     }
     assert(contains,
-      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg")
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg\n" +
+        Utils.exceptionString(e))
   }
 
   /**
    * Test if a command is available.
    */
-  def testCommandAvailable(command: String): Boolean = {
-    val attempt = if (Utils.isWindows) {
-      Try(Process(Seq(
-        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
-    } else {
-      Try(Process(Seq(
-        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
-    }
-    attempt.isSuccess && attempt.get == 0
+  def testCommandAvailable(command: String): Boolean = Utils.checkCommandAvailable(command)
+
+  // SPARK-40053: This string needs to be updated when the
+  // minimum python supported version changes.
+  val minimumPythonSupportedVersion: String = "3.7.0"
+
+  def isPythonVersionAvailable: Boolean = {
+    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
+    assert(version.length == 3)
+    isPythonVersionAtLeast(version(0), version(1), version(2))
   }
 
-  def isPythonVersionAtLeast38(): Boolean = {
+  private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
-    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
     Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
@@ -314,6 +253,19 @@ private[spark] object TestUtils {
   }
 
   /**
+   * Returns the Location header from an HTTP(S) URL.
+   */
+  def redirectUrl(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      connection.getHeaderField("Location");
+    }
+  }
+
+
+  /**
    * Returns the response message from an HTTP(S) URL.
    */
   def httpResponseMessage(
@@ -334,22 +286,26 @@ private[spark] object TestUtils {
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
 
-    // Disable cert and host name validation for HTTPS tests.
-    if (connection.isInstanceOf[HttpsURLConnection]) {
-      val sslCtx = SSLContext.getInstance("SSL")
-      val trustManager = new X509TrustManager {
-        override def getAcceptedIssuers(): Array[X509Certificate] = null
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate],
-            s: String): Unit = {}
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate],
-            s: String): Unit = {}
-      }
-      val verifier = new HostnameVerifier() {
-        override def verify(hostname: String, session: SSLSession): Boolean = true
-      }
-      sslCtx.init(null, Array(trustManager), new SecureRandom())
-      connection.asInstanceOf[HttpsURLConnection].setSSLSocketFactory(sslCtx.getSocketFactory())
-      connection.asInstanceOf[HttpsURLConnection].setHostnameVerifier(verifier)
+    connection match {
+      // Disable cert and host name validation for HTTPS tests.
+      case httpConnection: HttpsURLConnection =>
+        val sslCtx = SSLContext.getInstance("SSL")
+        val trustManager = new X509TrustManager {
+          override def getAcceptedIssuers: Array[X509Certificate] = null
+
+          override def checkClientTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+
+          override def checkServerTrusted(x509Certificates: Array[X509Certificate],
+              s: String): Unit = {}
+        }
+        val verifier = new HostnameVerifier() {
+          override def verify(hostname: String, session: SSLSession): Boolean = true
+        }
+        sslCtx.init(null, Array(trustManager), new SecureRandom())
+        httpConnection.setSSLSocketFactory(sslCtx.getSocketFactory)
+        httpConnection.setHostnameVerifier(verifier)
+      case _ => // do nothing
     }
 
     try {
@@ -377,7 +333,7 @@ private[spark] object TestUtils {
 
   def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
     // 0 as port means choosing randomly from the available ports
-    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName(), 0))
     val resHandler = new ResourceHandler()
     resHandler.setResourceBase(resBaseDir)
     val handlers = new HandlerList()
@@ -416,17 +372,18 @@ private[spark] object TestUtils {
   }
 
   /**
-   * config a log4j properties used for testsuite
+   * config a log4j2 properties used for testsuite
    */
-  def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
+  def configTestLog4j2(level: String): Unit = {
+    val builder = ConfigurationBuilderFactory.newConfigurationBuilder()
+    val appenderBuilder = builder.newAppender("console", "CONSOLE")
+      .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
+    appenderBuilder.add(builder.newLayout("PatternLayout")
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex"))
+    builder.add(appenderBuilder)
+    builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
+    val configuration = builder.build()
+    LogManager.getContext(false).asInstanceOf[LoggerContext].reconfigure(configuration)
   }
 
   /**
@@ -436,6 +393,21 @@ private[spark] object TestUtils {
     require(f.isDirectory)
     val current = f.listFiles
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+  }
+
+  /**
+   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
+   * by MapReduce.
+   */
+  def listDirectory(path: File): Array[String] = {
+    val result = ArrayBuffer.empty[String]
+    if (path.isDirectory) {
+      path.listFiles.foreach(f => result.appendAll(listDirectory(f)))
+    } else {
+      val c = path.getName.charAt(0)
+      if (c != '.' && c != '_') result.append(path.getAbsolutePath)
+    }
+    result.toArray
   }
 
   /** Creates a temp JSON file that contains the input JSON record. */

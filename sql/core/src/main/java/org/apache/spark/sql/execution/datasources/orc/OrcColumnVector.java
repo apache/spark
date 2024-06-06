@@ -29,7 +29,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * this column vector is used to adapt Hive ColumnVector with Spark ColumnarVector.
  */
 public abstract class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVector {
-  private final ColumnVector baseData;
+  protected final ColumnVector baseData;
   private int batchSize;
 
   OrcColumnVector(DataType type, ColumnVector vector) {

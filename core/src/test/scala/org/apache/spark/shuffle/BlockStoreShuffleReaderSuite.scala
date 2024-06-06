@@ -43,6 +43,7 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
   override def nioByteBuffer(): ByteBuffer = underlyingBuffer.nioByteBuffer()
   override def createInputStream(): InputStream = underlyingBuffer.createInputStream()
   override def convertToNetty(): AnyRef = underlyingBuffer.convertToNetty()
+  override def convertToNettyForSsl(): AnyRef = underlyingBuffer.convertToNettyForSsl()
 
   override def retain(): ManagedBuffer = {
     callsToRetain += 1
@@ -111,7 +112,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
         val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
         (shuffleBlockId, byteOutputStream.size().toLong, mapId)
       }
-      Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).toIterator
+      Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).iterator
     }
 
     // Create a mocked shuffle handle to pass into HashShuffleReader.

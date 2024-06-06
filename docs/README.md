@@ -28,53 +28,45 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
-Python, R and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
 
-You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
-[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
-installed. Make sure the `bundle` command is available, if not install the Gem containing it:
+You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
+
+[ruby]: https://www.ruby-lang.org/en/documentation/installation/
+[python]: https://www.python.org/downloads/
 
 ```sh
-$ sudo gem install bundler
+$ gem install bundler -v 2.4.22
 ```
 
-After this all the required ruby dependencies can be installed from the `docs/` directory via the Bundler:
+After this all the required Ruby dependencies can be installed from the `docs/` directory via Bundler:
 
 ```sh
-$ cd docs
+$ cd "$SPARK_HOME"/docs
 $ bundle install
 ```
 
-Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
+And the required Python dependencies can be installed using pip:
 
-### R Documentation
+```sh
+$ cd "$SPARK_HOME"
+$ pip install --upgrade -r dev/requirements.txt
+```
 
-If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
-and install these libraries:
+To generate the Python or R API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).
+
+### R API Documentation (Optional)
+
+If you'd like to generate R API documentation, install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.1", repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
+$ sudo Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 ```
 
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.1, which is updated if the version is mismatched.
-
-### API Documentation
-
-To generate API docs for any language, you'll need to install these libraries:
-
-<!--
-TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
-See also https://github.com/sphinx-doc/sphinx/issues/7551.
-
-TODO(SPARK-35375): Jinja2 3.0.0+ causes error when building with Sphinx.
-See also https://issues.apache.org/jira/browse/SPARK-35375.
--->
-
-```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc sphinx-plotly-directive 'jinja2<3.0.0'
-```
+Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.2, which is updated if the version is mismatched.
 
 ## Generating the Documentation HTML
 
@@ -87,20 +79,20 @@ you have checked out or downloaded.
 In this directory you will find text files formatted using Markdown, with an ".md" suffix. You can
 read those text files directly if you want. Start with `index.md`.
 
-Execute `bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
+Execute `SKIP_API=1 bundle exec jekyll build` from the `docs/` directory to compile the site. Compiling the site with
 Jekyll will create a directory called `_site` containing `index.html` as well as the rest of the
 compiled files.
 
 ```sh
 $ cd docs
-$ bundle exec jekyll build
-```
-
-You can modify the default Jekyll build as follows:
-
-```sh
 # Skip generating API docs (which takes a while)
 $ SKIP_API=1 bundle exec jekyll build
+```
+
+You can also generate the default Jekyll build with API Docs as follows:
+
+```sh
+$ bundle exec jekyll build
 
 # Serve content locally on port 4000
 $ bundle exec jekyll serve --watch
@@ -127,6 +119,10 @@ The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-d
 using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
-bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
-to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
+To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
+* `SKIP_API=1`: Skip building all the API docs.
+* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
+* `SKIP_PYTHONDOC=1`: Skip the Python API docs.
+* `SKIP_RDOC=1`: Skip the R API docs.
+* `SKIP_SQLDOC=1`: Skip the SQL API docs.
+

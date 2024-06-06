@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Column, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{LocalScan, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.LocalTableScanExec
@@ -59,9 +57,9 @@ class LocalScanSuite extends QueryTest with SharedSparkSession {
 class TestLocalScanCatalog extends BasicInMemoryTableCatalog {
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     val table = new TestLocalScanTable(ident.toString)
     tables.put(ident, table)
     table
@@ -76,8 +74,8 @@ object TestLocalScanTable {
 class TestLocalScanTable(override val name: String) extends Table with SupportsRead {
   override def schema(): StructType = TestLocalScanTable.schema
 
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.BATCH_READ)
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new TestLocalScanBuilder

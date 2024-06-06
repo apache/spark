@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.scalatest.funsuite.AnyFunSuite
+import java.io.{ByteArrayOutputStream, File, FileOutputStream}
+import java.util.zip.GZIPOutputStream
+
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -27,7 +30,8 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
  * The tests that are not applicable to all file-based data sources should be placed to
  * [[org.apache.spark.sql.FileBasedDataSourceSuite]].
  */
-trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
+trait CommonFileDataSourceSuite extends SQLHelper {
+    self: AnyFunSuite => // scalastyle:ignore funsuite
 
   protected def spark: SparkSession
   protected def dataSourceFormat: String
@@ -57,6 +61,31 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
           }
         }
       }
+    }
+  }
+
+  protected def withCorruptFile(f: File => Unit): Unit = {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      f(inputFile)
+    } finally {
+      inputFile.delete()
     }
   }
 }

@@ -20,20 +20,18 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A filter that evaluates to {@code true} iff at least one of {@code left} or {@code right}
+ * A predicate that evaluates to {@code true} iff at least one of {@code left} or {@code right}
  * evaluates to {@code true}.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class Or extends BinaryFilter {
+public final class Or extends Predicate {
 
-  public Or(Filter left, Filter right) {
-    super(left, right);
+  public Or(Predicate left, Predicate right) {
+    super("OR", new Predicate[]{left, right});
   }
 
-  @Override
-  public String toString() {
-    return String.format("(%s) OR (%s)", left.describe(), right.describe());
-  }
+  public Predicate left() { return (Predicate) children()[0]; }
+  public Predicate right() { return (Predicate) children()[1]; }
 }

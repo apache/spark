@@ -20,14 +20,14 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
@@ -42,6 +42,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
@@ -236,14 +237,14 @@ class FileBasedWriteAheadLogSuite
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     class GetMaxCounter {
-      private val value = new AtomicInteger()
-      @volatile private var max: Int = 0
+      private var value = 0
+      private var max: Int = 0
       def increment(): Unit = synchronized {
-        val atInstant = value.incrementAndGet()
-        if (atInstant > max) max = atInstant
+        value = value + 1
+        if (value > max) max = value
       }
-      def decrement(): Unit = synchronized { value.decrementAndGet() }
-      def get(): Int = synchronized { value.get() }
+      def decrement(): Unit = synchronized { value = value - 1 }
+      def get(): Int = synchronized { value }
       def getMax(): Int = synchronized { max }
     }
     try {
@@ -476,7 +477,13 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
     val e = intercept[SparkException] {
-      val buffer = mock[ByteBuffer]
+      val buffer = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+        mock[ByteBuffer]
+      } else {
+        // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+        // for Java 17+ due to mockito 4 can't mock/spy sealed class
+        ByteBuffer.allocate(0)
+      }
       batchedWal.write(buffer, 2L)
     }
     assert(e.getCause.getMessage === "Hello!")
@@ -546,7 +553,14 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     batchedWal.close()
     verify(wal, times(1)).close()
 
-    intercept[IllegalStateException](batchedWal.write(mock[ByteBuffer], 12L))
+    val buffer = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      mock[ByteBuffer]
+    } else {
+      // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
+      // for Java 17+ due to mockito 4 can't mock/spy sealed class
+      ByteBuffer.allocate(0)
+    }
+    intercept[IllegalStateException](batchedWal.write(buffer, 12L))
   }
 
   test("BatchedWriteAheadLog - fail everything in queue during shutdown") {
@@ -600,9 +614,9 @@ object WriteAheadLogSuite {
     val writer = HdfsUtils.getOutputStream(file, hadoopConf)
     def writeToStream(bytes: Array[Byte]): Unit = {
       val offset = writer.getPos
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
-      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.size)
+      segments += FileBasedWriteAheadLogSegment(file, offset, bytes.length)
     }
     if (allowBatching) {
       writeToStream(wrapArrayArrayByte(data.toArray[String]).array())
@@ -704,7 +718,7 @@ object WriteAheadLogSuite {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
     val data = wal.readAll().asScala.map(byteBufferToString).toArray
     wal.close()
-    data
+    data.toImmutableArraySeq
   }
 
   /** Get the log files in a directory. */
@@ -718,7 +732,7 @@ object WriteAheadLogSuite {
         _.getName().split("-")(1).toLong
       }.map {
         _.toString.stripPrefix("file:")
-      }
+      }.toImmutableArraySeq
     } else {
       Seq.empty
     }

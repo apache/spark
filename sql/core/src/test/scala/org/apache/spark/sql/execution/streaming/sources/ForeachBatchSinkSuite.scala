@@ -20,10 +20,14 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.collection.mutable
 import scala.language.implicitConversions
 
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.SerializeFromObjectExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
+import org.apache.spark.util.ArrayImplicits._
 
 case class KV(key: Int, value: Long)
 
@@ -32,7 +36,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("foreachBatch with non-stateful query") {
     val mem = MemoryStream[Int]
-    val ds = mem.toDS.map(_ + 1)
+    val ds = mem.toDS().map(_ + 1)
 
     val tester = new ForeachBatchTester[Int](mem)
     val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
@@ -43,13 +47,28 @@ class ForeachBatchSinkSuite extends StreamTest {
       check(in = 5, 6, 7)(out = 7, 8, 9))
   }
 
+  test("foreachBatch with non-stateful query - untyped Dataset") {
+    val mem = MemoryStream[Int]
+    val ds = mem.toDF().selectExpr("value + 1 as value")
+
+    val tester = new ForeachBatchTester[Row](mem)(ExpressionEncoder(ds.schema))
+    val writer = (df: DataFrame, batchId: Long) =>
+      tester.record(batchId, df.selectExpr("value + 1"))
+
+    import tester._
+    testWriter(ds, writer)(
+      // out = in + 2 (i.e. 1 in query, 1 in writer)
+      check(in = 1, 2, 3)(out = Row(3), Row(4), Row(5)),
+      check(in = 5, 6, 7)(out = Row(7), Row(8), Row(9)))
+  }
+
   test("foreachBatch with stateful query in update mode") {
     val mem = MemoryStream[Int]
     val ds = mem.toDF()
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF.as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -67,7 +86,7 @@ class ForeachBatchSinkSuite extends StreamTest {
       .select($"value" % 2 as "key")
       .groupBy("key")
       .agg(count("*") as "value")
-      .toDF.as[KV]
+      .toDF().as[KV]
 
     val tester = new ForeachBatchTester[KV](mem)
     val writer = (batchDS: Dataset[KV], batchId: Long) => tester.record(batchId, batchDS)
@@ -79,9 +98,38 @@ class ForeachBatchSinkSuite extends StreamTest {
       check(in = 2)(out = (0, 2L), (1, 1L)))
   }
 
+  test("foreachBatch with batch specific operations") {
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+
+    val tester = new ForeachBatchTester[Int](mem)
+    val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
+      df.persist()
+
+      val newDF = df
+        .map(_ + 1)
+        .repartition(1)
+        .sort(Column("value").desc)
+      tester.record(batchId, newDF)
+
+      // just run another simple query against cached DF to confirm they don't conflict each other
+      val curValues = df.collect()
+      val newValues = df.map(_ + 2).collect()
+      assert(curValues.map(_ + 2) === newValues)
+
+      df.unpersist()
+    }
+
+    import tester._
+    testWriter(ds, writer)(
+      // out = in + 2 (i.e. 1 in query, 1 in writer), with sorted
+      check(in = 1, 2, 3)(out = 5, 4, 3),
+      check(in = 5, 6, 7)(out = 9, 8, 7))
+  }
+
   test("foreachBatchSink does not affect metric generation") {
     val mem = MemoryStream[Int]
-    val ds = mem.toDS.map(_ + 1)
+    val ds = mem.toDS().map(_ + 1)
 
     val tester = new ForeachBatchTester[Int](mem)
     val writer = (ds: Dataset[Int], batchId: Long) => tester.record(batchId, ds.map(_ + 1))
@@ -93,7 +141,7 @@ class ForeachBatchSinkSuite extends StreamTest {
   }
 
   test("throws errors in invalid situations") {
-    val ds = MemoryStream[Int].toDS
+    val ds = MemoryStream[Int].toDS()
     val ex1 = intercept[IllegalArgumentException] {
       ds.writeStream.foreachBatch(null.asInstanceOf[(Dataset[Int], Long) => Unit]).start()
     }
@@ -107,6 +155,64 @@ class ForeachBatchSinkSuite extends StreamTest {
       ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => {}).partitionBy("value").start()
     }
     assert(ex3.getMessage.contains("'foreachBatch' does not support partitioning"))
+  }
+
+  test("foreachBatch should not introduce object serialization") {
+    def assertPlan[T](stream: MemoryStream[Int], ds: Dataset[T]): Unit = {
+      var planAsserted = false
+
+      val writer: (Dataset[T], Long) => Unit = { case (df, _) =>
+        assert(!df.queryExecution.executedPlan.exists { p =>
+          p.isInstanceOf[SerializeFromObjectExec]
+        }, "Untyped Dataset should not introduce serialization on object!")
+        planAsserted = true
+      }
+
+      stream.addData(1, 2, 3, 4, 5)
+
+      val query = ds.writeStream.trigger(Trigger.AvailableNow()).foreachBatch(writer).start()
+      query.awaitTermination()
+
+      assert(planAsserted, "ForeachBatch writer should be called!")
+    }
+
+    // typed
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+    assertPlan(mem, ds)
+
+    // untyped
+    val mem2 = MemoryStream[Int]
+    val dsUntyped = mem2.toDF().selectExpr("value + 1 as value")
+    assertPlan(mem2, dsUntyped)
+  }
+
+  test("foreachBatch user function error is classified") {
+    val mem = MemoryStream[Int]
+    val ds = mem.toDS().map(_ + 1)
+    mem.addData(1, 2, 3, 4, 5)
+
+    val funcEx = new IllegalAccessException("access error")
+    val queryEx = intercept[StreamingQueryException] {
+      val query = ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => throw funcEx).start()
+      query.awaitTermination()
+    }
+
+    val errClass = "FOREACH_BATCH_USER_FUNCTION_ERROR"
+
+    // verify that we classified the exception
+    assert(queryEx.getMessage.contains(errClass))
+    assert(queryEx.getCause == funcEx)
+
+    val sparkEx = ExecutorDeadException("network error")
+    val ex = intercept[StreamingQueryException] {
+      val query = ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => throw sparkEx).start()
+      query.awaitTermination()
+    }
+
+    // we didn't wrap the spark exception
+    assert(!ex.getMessage.contains(errClass))
+    assert(ex.getCause == sparkEx)
   }
 
   // ============== Helper classes and methods =================
@@ -144,7 +250,8 @@ class ForeachBatchSinkSuite extends StreamTest {
 
     def check(in: Int*)(out: T*): Test = Check(in, out)
     def checkMetrics: Test = CheckMetrics
-    def record(batchId: Long, ds: Dataset[T]): Unit = recordedOutput.put(batchId, ds.collect())
+    def record(batchId: Long, ds: Dataset[T]): Unit =
+      recordedOutput.put(batchId, ds.collect().toImmutableArraySeq)
     implicit def conv(x: (Int, Long)): KV = KV(x._1, x._2)
   }
 }

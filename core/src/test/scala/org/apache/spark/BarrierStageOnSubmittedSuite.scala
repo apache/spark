@@ -48,7 +48,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     val futureAction = sc.submitJob(
       rdd,
       (iter: Iterator[Int]) => iter.toArray,
-      partitions.getOrElse(0 until rdd.partitions.length),
+      partitions.getOrElse(rdd.partitions.indices),
       { case (_, _) => return }: (Int, Array[Int]) => Unit,
       { return }
     )

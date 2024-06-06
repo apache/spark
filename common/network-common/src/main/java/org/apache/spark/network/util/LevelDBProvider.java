@@ -19,23 +19,25 @@ package org.apache.spark.network.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.network.shuffledb.StoreVersion;
 
 /**
  * LevelDB utility class available in the network package.
  */
 public class LevelDBProvider {
-  private static final Logger logger = LoggerFactory.getLogger(LevelDBProvider.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(LevelDBProvider.class);
 
   public static DB initLevelDB(File dbFile, StoreVersion version, ObjectMapper mapper) throws
       IOException {
@@ -48,7 +50,7 @@ public class LevelDBProvider {
         tmpDb = JniDBFactory.factory.open(dbFile, options);
       } catch (NativeDB.DBException e) {
         if (e.isNotFound() || e.getMessage().contains(" does not exist ")) {
-          logger.info("Creating state database at " + dbFile);
+          logger.info("Creating state database at {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile));
           options.createIfMissing(true);
           try {
             tmpDb = JniDBFactory.factory.open(dbFile, options);
@@ -58,17 +60,17 @@ public class LevelDBProvider {
         } else {
           // the leveldb file seems to be corrupt somehow.  Lets just blow it away and create a new
           // one, so we can keep processing new apps
-          logger.error("error opening leveldb file {}.  Creating new file, will not be able to " +
-              "recover state for existing applications", dbFile, e);
+          logger.error("error opening leveldb file {}. Creating new file, will not be able to " +
+              "recover state for existing applications", e, MDC.of(LogKeys.PATH$.MODULE$, dbFile));
           if (dbFile.isDirectory()) {
             for (File f : dbFile.listFiles()) {
               if (!f.delete()) {
-                logger.warn("error deleting {}", f.getPath());
+                logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, f.getPath()));
               }
             }
           }
           if (!dbFile.delete()) {
-            logger.warn("error deleting {}", dbFile.getPath());
+            logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile.getPath()));
           }
           options.createIfMissing(true);
           try {
@@ -80,13 +82,26 @@ public class LevelDBProvider {
         }
       }
       // if there is a version mismatch, we throw an exception, which means the service is unusable
-      checkVersion(tmpDb, version, mapper);
+      try {
+        checkVersion(tmpDb, version, mapper);
+      } catch (IOException ioe) {
+        tmpDb.close();
+        throw ioe;
+      }
     }
     return tmpDb;
   }
 
+  @VisibleForTesting
+  static DB initLevelDB(File file) throws IOException {
+    Options options = new Options();
+    options.createIfMissing(true);
+    JniDBFactory factory = new JniDBFactory();
+    return factory.open(file, options);
+  }
+
   private static class LevelDBLogger implements org.iq80.leveldb.Logger {
-    private static final Logger LOG = LoggerFactory.getLogger(LevelDBLogger.class);
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(LevelDBLogger.class);
 
     @Override
     public void log(String message) {
@@ -117,36 +132,5 @@ public class LevelDBProvider {
   public static void storeVersion(DB db, StoreVersion version, ObjectMapper mapper)
       throws IOException {
     db.put(StoreVersion.KEY, mapper.writeValueAsBytes(version));
-  }
-
-  public static class StoreVersion {
-
-    static final byte[] KEY = "StoreVersion".getBytes(StandardCharsets.UTF_8);
-
-    public final int major;
-    public final int minor;
-
-    @JsonCreator
-    public StoreVersion(@JsonProperty("major") int major, @JsonProperty("minor") int minor) {
-      this.major = major;
-      this.minor = minor;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-
-      StoreVersion that = (StoreVersion) o;
-
-      return major == that.major && minor == that.minor;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = major;
-      result = 31 * result + minor;
-      return result;
-    }
   }
 }

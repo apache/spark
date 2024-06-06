@@ -23,7 +23,6 @@ import json
 from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
 
 from pyspark._globals import _NoValue, _NoValueType
-
 from pyspark.pandas.utils import default_session
 
 
@@ -51,7 +50,7 @@ class Option:
         default is str. It defines the expected types for this option. It is
         used with `isinstance` to validate the given value to this option.
     check_func: Tuple[Callable[[Any], bool], str], keyword-only argument
-        default is a function that always returns `True` with a empty string.
+        default is a function that always returns `True` with an empty string.
         It defines:
           - a function to check the given value to this option
           - the error message to show when this check is failed
@@ -112,7 +111,8 @@ class Option:
 # Available options.
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
-#     copy & paste the results into show_options 'docs/source/user_guide/options.rst' as well.
+#     copy & paste the results into show_options
+#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
@@ -151,7 +151,7 @@ _options: List[Option] = [
         key="compute.shortcut_limit",
         doc=(
             "'compute.shortcut_limit' sets the limit for a shortcut. "
-            "It computes specified number of rows and use its schema. When the dataframe "
+            "It computes the specified number of rows and uses its schema. When the dataframe "
             "length is larger than this limit, pandas-on-Spark uses PySpark to compute."
         ),
         default=1000,
@@ -169,17 +169,54 @@ _options: List[Option] = [
             "can be expensive in general. So, if `compute.ops_on_diff_frames` variable is not "
             "True, that method throws an exception."
         ),
-        default=False,
+        default=True,
         types=bool,
     ),
     Option(
         key="compute.default_index_type",
         doc=("This sets the default index type: sequence, distributed and distributed-sequence."),
-        default="sequence",
+        default="distributed-sequence",
         types=str,
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
             "Index type should be one of 'sequence', 'distributed', 'distributed-sequence'.",
+        ),
+    ),
+    Option(
+        key="compute.default_index_cache",
+        doc=(
+            "This sets the default storage level for temporary RDDs cached in "
+            "distributed-sequence indexing: 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'."
+        ),
+        default="MEMORY_AND_DISK_SER",
+        types=str,
+        check_func=(
+            lambda v: v
+            in (
+                "NONE",
+                "DISK_ONLY",
+                "DISK_ONLY_2",
+                "DISK_ONLY_3",
+                "MEMORY_ONLY",
+                "MEMORY_ONLY_2",
+                "MEMORY_ONLY_SER",
+                "MEMORY_ONLY_SER_2",
+                "MEMORY_AND_DISK",
+                "MEMORY_AND_DISK_2",
+                "MEMORY_AND_DISK_SER",
+                "MEMORY_AND_DISK_SER_2",
+                "OFF_HEAP",
+                "LOCAL_CHECKPOINT",
+            ),
+            "Index type should be one of 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'.",
         ),
     ),
     Option(
@@ -201,7 +238,9 @@ _options: List[Option] = [
             "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
             "validation beforehand, but it will cause a performance overhead. Otherwise, "
             "pandas-on-Spark skip the validation and will be slightly different from pandas. "
-            "Affected APIs: `Series.dot`."
+            "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
+            "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
+            "`FractionalOps.astype`, `DecimalOps.astype`, `skipna of statistical functions`."
         ),
         default=True,
         types=bool,
@@ -221,6 +260,15 @@ _options: List[Option] = [
         ),
     ),
     Option(
+        key="compute.pandas_fallback",
+        doc=(
+            "'compute.pandas_fallback' sets whether or not to fallback automatically "
+            "to Pandas' implementation."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -230,7 +278,7 @@ _options: List[Option] = [
         default=1000,
         types=int,
         check_func=(
-            lambda v: v is v >= 0,
+            lambda v: v >= 0,
             "'plotting.max_rows' should be greater than or equal to 0.",
         ),
     ),
@@ -288,18 +336,18 @@ def show_options() -> None:
     import textwrap
 
     header = ["Option", "Default", "Description"]
-    row_format = "{:<31} {:<14} {:<53}"
+    row_format = "{:<31} {:<23} {:<53}"
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
     print(row_format.format(*header))
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
     for option in _options:
         doc = textwrap.fill(option.doc, 53)
-        formatted = "".join([line + "\n" + (" " * 47) for line in doc.split("\n")]).rstrip()
+        formatted = "".join([line + "\n" + (" " * 56) for line in doc.split("\n")]).rstrip()
         print(row_format.format(option.key, repr(option.default), formatted))
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
 def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
@@ -325,8 +373,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
+    spark_session = default_session()
 
-    return json.loads(default_session().conf.get(_key_format(key), default=json.dumps(default)))
+    return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
 def set_option(key: str, value: Any) -> None:
@@ -346,15 +395,16 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
+    spark_session = default_session()
 
-    default_session().conf.set(_key_format(key), json.dumps(value))
+    spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
 def reset_option(key: str) -> None:
     """
     Reset one option to their default value.
 
-    Pass "all" as argument to reset all options.
+    Pass "all" as an argument to reset all options.
 
     Parameters
     ----------
@@ -374,7 +424,7 @@ def option_context(*args: Any) -> Iterator[None]:
     """
     Context manager to temporarily set options in the `with` statement context.
 
-    You need to invoke as ``option_context(pat, val, [(pat, val), ...])``.
+    You need to invoke ``option_context(pat, val, [(pat, val), ...])``.
 
     Examples
     --------

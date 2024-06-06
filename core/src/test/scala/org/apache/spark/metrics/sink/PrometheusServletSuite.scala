@@ -19,7 +19,7 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 import org.scalatest.PrivateMethodTester
@@ -63,7 +63,7 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
     val key = "local-1592132938718.driver.LiveListenerBus." +
       "listenerProcessingTime.org.apache.spark.HeartbeatReceiver"
     val sink = createPrometheusServlet()
-    val suffix = sink invokePrivate PrivateMethod[String]('normalizeKey)(key)
+    val suffix = sink invokePrivate PrivateMethod[String](Symbol("normalizeKey"))(key)
     assert(suffix == "metrics_local_1592132938718_driver_LiveListenerBus_" +
       "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
   }

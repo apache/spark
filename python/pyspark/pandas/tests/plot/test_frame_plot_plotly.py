@@ -16,7 +16,6 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import pprint
 
 import pandas as pd
@@ -38,11 +37,7 @@ if have_plotly:
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
-@unittest.skipIf(
-    LooseVersion(pd.__version__) < "1.0.0",
-    "pandas<1.0; pandas<1.0 does not support latest plotly and/or 'plotting.backend' option.",
-)
-class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotPlotlyTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -162,7 +157,7 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     def test_pie_plot(self):
         def check_pie_plot(psdf):
-            pdf = psdf.to_pandas()
+            pdf = psdf._to_pandas()
             self.assertEqual(
                 psdf.plot(kind="pie", y=psdf.columns[0]),
                 express.pie(pdf, values="a", names=pdf.index),
@@ -190,6 +185,13 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         #     index=pd.MultiIndex.from_tuples([("x", "y")] * 11),
         # )
         # check_pie_plot(psdf1)
+
+    def test_hist_layout_kwargs(self):
+        s = ps.Series([1, 3, 2])
+        plt = s.plot.hist(title="Title", foo="xxx")
+        self.assertEqual(plt.layout.barmode, "stack")
+        self.assertEqual(plt.layout.title.text, "Title")
+        self.assertFalse(hasattr(plt.layout, "foo"))
 
     def test_hist_plot(self):
         def check_hist_plot(psdf):
@@ -267,11 +269,15 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(pprint.pformat(actual.to_dict()), pprint.pformat(expected.to_dict()))
 
 
+class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_frame_plot_plotly import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

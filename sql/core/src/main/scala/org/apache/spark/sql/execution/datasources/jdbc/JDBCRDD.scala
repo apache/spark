@@ -19,16 +19,19 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
@@ -53,29 +56,22 @@ object JDBCRDD extends Logging {
    */
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
+    val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
-    getQueryOutputSchema(dialect.getSchemaQuery(table), options, dialect)
+    getQueryOutputSchema(prepareQuery + dialect.getSchemaQuery(table), options, dialect)
   }
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
-    try {
-      val statement = conn.prepareStatement(query)
-      try {
+    Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
+      Using.resource(conn.prepareStatement(query)) { statement =>
         statement.setQueryTimeout(options.queryTimeout)
-        val rs = statement.executeQuery()
-        try {
-          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
-        } finally {
-          rs.close()
+        Using.resource(statement.executeQuery()) { rs =>
+          JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
+            isTimestampNTZ = options.preferTimestampNTZ)
         }
-      } finally {
-        statement.close()
       }
-    } finally {
-      conn.close()
     }
   }
 
@@ -88,84 +84,8 @@ object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
+    val fieldMap = schema.fields.map(x => x.name -> x).toMap
     new StructType(columns.map(name => fieldMap(name)))
-  }
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns None for an unhandled filter.
-   */
-  def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
-
-    Option(f match {
-      case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
-      case EqualNullSafe(attr, value) =>
-        val col = quote(attr)
-        s"(NOT ($col != ${dialect.compileValue(value)} OR $col IS NULL OR " +
-          s"${dialect.compileValue(value)} IS NULL) OR " +
-          s"($col IS NULL AND ${dialect.compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"${quote(attr)} < ${dialect.compileValue(value)}"
-      case GreaterThan(attr, value) => s"${quote(attr)} > ${dialect.compileValue(value)}"
-      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${dialect.compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${dialect.compileValue(value)}"
-      case IsNull(attr) => s"${quote(attr)} IS NULL"
-      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
-      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
-      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
-      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
-      case In(attr, value) if value.isEmpty =>
-        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
-      case In(attr, value) => s"${quote(attr)} IN (${dialect.compileValue(value)})"
-      case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
-      case Or(f1, f2) =>
-        // We can't compile Or filter unless both sub-filters are compiled successfully.
-        // It applies too for the following And filter.
-        // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (or.size == 2) {
-          or.map(p => s"($p)").mkString(" OR ")
-        } else {
-          null
-        }
-      case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (and.size == 2) {
-          and.map(p => s"($p)").mkString(" AND ")
-        } else {
-          null
-        }
-      case _ => null
-    })
-  }
-
-  def compileAggregates(
-      aggregates: Seq[AggregateFunc],
-      dialect: JdbcDialect): Option[Seq[String]] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
-
-    Some(aggregates.map {
-      case min: Min =>
-        if (min.column.fieldNames.length != 1) return None
-        s"MIN(${quote(min.column.fieldNames.head)})"
-      case max: Max =>
-        if (max.column.fieldNames.length != 1) return None
-        s"MAX(${quote(max.column.fieldNames.head)})"
-      case count: Count =>
-        if (count.column.fieldNames.length != 1) return None
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val column = quote(count.column.fieldNames.head)
-        s"COUNT($distinct$column)"
-      case sum: Sum =>
-        if (sum.column.fieldNames.length != 1) return None
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val column = quote(sum.column.fieldNames.head)
-        s"SUM($distinct$column)"
-      case _: CountStar =>
-        s"COUNT(*)"
-      case _ => return None
-    })
   }
 
   /**
@@ -174,29 +94,33 @@ object JDBCRDD extends Logging {
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
    * @param requiredColumns - The names of the columns or aggregate columns to SELECT.
-   * @param filters - The filters to include in all WHERE clauses.
+   * @param predicates - The predicates to include in all WHERE clauses.
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
+   * @param sample - The pushed down tableSample.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
-   * @param sample - The pushed down tableSample.
+   * @param sortOrders - The sort orders cooperates with limit to realize top N.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
+  // scalastyle:off argcount
   def scanTable(
       sc: SparkContext,
       schema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      predicates: Array[Predicate],
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
       sample: Option[TableSampleInfo] = None,
-      limit: Int = 0): RDD[InternalRow] = {
+      limit: Int = 0,
+      sortOrders: Array[String] = Array.empty[String],
+      offset: Int = 0): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -207,17 +131,20 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
-      filters,
+      predicates,
       parts,
       url,
       options,
       groupByColumns,
       sample,
-      limit)
+      limit,
+      sortOrders,
+      offset)
   }
+  // scalastyle:on argcount
 }
 
 /**
@@ -225,63 +152,61 @@ object JDBCRDD extends Logging {
  * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[jdbc] class JDBCRDD(
+class JDBCRDD(
     sc: SparkContext,
-    getConnection: () => Connection,
+    getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
-    filters: Array[Filter],
+    predicates: Array[Predicate],
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
-    limit: Int)
-  extends RDD[InternalRow](sc, Nil) {
+    limit: Int,
+    sortOrders: Array[String],
+    offset: Int)
+  extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
+
+  /**
+   * Execution time of the query issued to JDBC connection
+   */
+  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    name = "JDBC query execution time")
+
+  private lazy val dialect = JdbcDialects.get(url)
+
+  def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
+    // H2's JDBC driver does not support the setSchema() method.  We pass a
+    // fully-qualified table name in the SELECT statement.  I don't know how to
+    // talk about a table in a completely portable way.
+    var builder = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+      .withColumns(columns)
+      .withSortOrders(sortOrders)
+      .withLimit(limit)
+      .withOffset(offset)
+
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
+    }
+
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
+
+    builder.build()
+  }
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */
   override def getPartitions: Array[Partition] = partitions
 
-  /**
-   * `columns`, but as a String suitable for injection into a SQL query.
-   */
-  private val columnList: String = if (columns.isEmpty) "1" else columns.mkString(",")
-
-  /**
-   * `filters`, but as a WHERE clause suitable for injection into a SQL query.
-   */
-  private val filterWhereClause: String =
-    filters
-      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
-      .map(p => s"($p)").mkString(" AND ")
-
-  /**
-   * A WHERE clause representing both `filters`, if any, and the current partition.
-   */
-  private def getWhereClause(part: JDBCPartition): String = {
-    if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
-    } else if (part.whereClause != null) {
-      "WHERE " + part.whereClause
-    } else if (filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause
-    } else {
-      ""
-    }
-  }
-
-  /**
-   * A GROUP BY clause representing pushed-down grouping columns.
-   */
-  private def getGroupByClause: String = {
-    if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
-      // The GROUP BY columns should already be quoted by the caller side.
-      s"GROUP BY ${groupByColumns.get.mkString(", ")}"
-    } else {
-      ""
-    }
+  override def getExternalEngineQuery: String = {
+    generateJdbcQuery(partition = None)
   }
 
   /**
@@ -332,9 +257,8 @@ private[jdbc] class JDBCRDD(
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
-    conn = getConnection()
-    val dialect = JdbcDialects.get(url)
-    import scala.collection.JavaConverters._
+    conn = getConnection(part.idx)
+    import scala.jdk.CollectionConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
@@ -343,7 +267,7 @@ private[jdbc] class JDBCRDD(
     options.sessionInitStatement match {
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
-        logInfo(s"Executing sessionInitStatement: $sql")
+        logInfo(log"Executing sessionInitStatement: ${MDC(SQL_TEXT, sql)}")
         try {
           statement.setQueryTimeout(options.queryTimeout)
           statement.execute()
@@ -353,30 +277,29 @@ private[jdbc] class JDBCRDD(
       case None =>
     }
 
-    // H2's JDBC driver does not support the setSchema() method.  We pass a
-    // fully-qualified table name in the SELECT statement.  I don't know how to
-    // talk about a table in a completely portable way.
-
-    val myWhereClause = getWhereClause(part)
-
-    val myTableSampleClause: String = if (sample.nonEmpty) {
-      JdbcDialects.get(url).getTableSample(sample.get)
-    } else {
-      ""
-    }
-
-    val myLimitClause: String = dialect.getLimitClause(limit)
-
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myTableSampleClause" +
-      s" $myWhereClause $getGroupByClause $myLimitClause"
+    val sqlText = generateJdbcQuery(Some(part))
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
+
+    val startTime = System.nanoTime
     rs = stmt.executeQuery()
-    val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
+    val endTime = System.nanoTime
+
+    val executionTime = endTime - startTime
+    queryExecutionTimeMetric.add(executionTime)
+
+    val rowsIterator =
+      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
+  }
+
+  override def getMetrics: Seq[(String, SQLMetric)] = {
+    Seq(
+      "queryExecutionTime" -> queryExecutionTimeMetric
+    )
   }
 }

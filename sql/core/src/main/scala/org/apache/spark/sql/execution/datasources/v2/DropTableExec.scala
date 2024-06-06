@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for dropping a table.
@@ -37,7 +38,8 @@ case class DropTableExec(
       invalidateCache()
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
-      throw QueryCompilationErrors.noSuchTableError(ident)
+      throw QueryCompilationErrors.noSuchTableError(
+        (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq)
     }
 
     Seq.empty

@@ -40,7 +40,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                               Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
+                                                                                    Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
                                                                                       SubqueryBroadcast [d_date_sk] #1
                                                                                         BroadcastExchange #5
                                                                                           WholeStageCodegen (1)
@@ -48,7 +48,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                                               Filter [d_year,d_moy,d_date_sk]
                                                                                                 ColumnarToRow
                                                                                                   InputAdapter
-                                                                                                    Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                                                                    Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                                                             InputAdapter
                                                                               ReusedExchange [d_date_sk] #5
                                                             InputAdapter
@@ -61,7 +61,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                           Filter [wr_return_amt,wr_order_number,wr_item_sk]
                                                                             ColumnarToRow
                                                                               InputAdapter
-                                                                                Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
+                                                                                Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
                   WholeStageCodegen (20)
                     Project [item,return_ratio,return_rank,currency_rank]
                       Filter [return_rank,currency_rank]
@@ -95,7 +95,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                               Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
+                                                                                    Scan parquet spark_catalog.default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
                                                                                       ReusedSubquery [d_date_sk] #1
                                                                             InputAdapter
                                                                               ReusedExchange [d_date_sk] #5
@@ -109,7 +109,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                           Filter [cr_return_amount,cr_order_number,cr_item_sk]
                                                                             ColumnarToRow
                                                                               InputAdapter
-                                                                                Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
+                                                                                Scan parquet spark_catalog.default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
                   WholeStageCodegen (30)
                     Project [item,return_ratio,return_rank,currency_rank]
                       Filter [return_rank,currency_rank]
@@ -143,7 +143,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                               Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
-                                                                                    Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]
+                                                                                    Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]
                                                                                       ReusedSubquery [d_date_sk] #1
                                                                             InputAdapter
                                                                               ReusedExchange [d_date_sk] #5
@@ -157,4 +157,4 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                           Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
                                                                             ColumnarToRow
                                                                               InputAdapter
-                                                                                Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]
+                                                                                Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]

@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
@@ -57,7 +57,6 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   private val existingSecretItemKey = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
   private val krb5File = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
   private val krb5CMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf)
 
   KubernetesUtils.requireNandDefined(
     krb5File,

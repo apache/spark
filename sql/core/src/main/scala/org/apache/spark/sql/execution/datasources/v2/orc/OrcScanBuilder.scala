@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates}
+import org.apache.spark.sql.connector.read.SupportsPushDownAggregates
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 case class OrcScanBuilder(
     sparkSession: SparkSession,
@@ -51,7 +52,7 @@ case class OrcScanBuilder(
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
-  override def build(): Scan = {
+  override def build(): OrcScan = {
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in readDataSchema() (in regular column pruning). These
     // two are mutual exclusive.
@@ -67,7 +68,7 @@ case class OrcScanBuilder(
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
+      OrcFilters.convertibleFilters(dataTypeMap, dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
     }

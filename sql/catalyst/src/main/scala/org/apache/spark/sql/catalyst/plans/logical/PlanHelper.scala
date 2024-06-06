@@ -48,7 +48,8 @@ object PlanHelper {
                plan.isInstanceOf[CollectMetrics] ||
                onlyInLateralSubquery(plan)) => e
         case e: Generator
-          if !plan.isInstanceOf[Generate] => e
+          if !(plan.isInstanceOf[Generate] ||
+               plan.isInstanceOf[BaseEvalPythonUDTF]) => e
       }
     }
     invalidExpressions

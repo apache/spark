@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{FROM_TIME, SLIDE_DURATION, TO_TIME}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
@@ -311,7 +312,7 @@ abstract class DStream[T: ClassTag] (
   /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
   private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
-      throw new SparkException (this + " has not been initialized")
+      throw new SparkException (this.toString + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
       logInfo(s"Time $time is invalid as zeroTime is $zeroTime" +
         s" , slideDuration is $slideDuration and difference is ${time - zeroTime}")
@@ -552,7 +553,7 @@ abstract class DStream[T: ClassTag] (
    * Return a new DStream by applying a function to all elements of this DStream,
    * and then flattening the results
    */
-  def flatMap[U: ClassTag](flatMapFunc: T => TraversableOnce[U]): DStream[U] = ssc.withScope {
+  def flatMap[U: ClassTag](flatMapFunc: T => IterableOnce[U]): DStream[U] = ssc.withScope {
     new FlatMappedDStream(this, context.sparkContext.clean(flatMapFunc))
   }
 
@@ -878,20 +879,22 @@ abstract class DStream[T: ClassTag] (
    */
   def slice(fromTime: Time, toTime: Time): Seq[RDD[T]] = ssc.withScope {
     if (!isInitialized) {
-      throw new SparkException(this + " has not been initialized")
+      throw new SparkException(this.toString + " has not been initialized")
     }
 
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {
-      logWarning(s"toTime ($toTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"toTime (${MDC(TO_TIME, toTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       toTime.floor(slideDuration, zeroTime)
     }
 
     val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
       fromTime
     } else {
-      logWarning(s"fromTime ($fromTime) is not a multiple of slideDuration ($slideDuration)")
+      logWarning(log"fromTime (${MDC(FROM_TIME, fromTime)}) is not a multiple of slideDuration " +
+        log"(${MDC(SLIDE_DURATION, slideDuration)})")
       fromTime.floor(slideDuration, zeroTime)
     }
 

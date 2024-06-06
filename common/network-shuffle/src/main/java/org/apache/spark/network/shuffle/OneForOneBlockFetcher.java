@@ -26,9 +26,9 @@ import java.util.Map;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -53,7 +53,8 @@ import org.apache.spark.network.util.TransportConf;
  * {@link org.apache.spark.network.server.OneForOneStreamManager} on the server side.
  */
 public class OneForOneBlockFetcher {
-  private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(OneForOneBlockFetcher.class);
   private static final String SHUFFLE_BLOCK_PREFIX = "shuffle_";
   private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk_";
   private static final String SHUFFLE_BLOCK_SPLIT = "shuffle";
@@ -113,10 +114,30 @@ public class OneForOneBlockFetcher {
    * @return whether the array contains only shuffle block IDs
    */
   private boolean areShuffleBlocksOrChunks(String[] blockIds) {
-    if (Arrays.stream(blockIds).anyMatch(blockId -> !blockId.startsWith(SHUFFLE_BLOCK_PREFIX))) {
+    if (isAnyBlockNotStartWithShuffleBlockPrefix(blockIds)) {
       // It comes here because there is a blockId which doesn't have "shuffle_" prefix so we
       // check if all the block ids are shuffle chunk Ids.
-      return Arrays.stream(blockIds).allMatch(blockId -> blockId.startsWith(SHUFFLE_CHUNK_PREFIX));
+      return isAllBlocksStartWithShuffleChunkPrefix(blockIds);
+    }
+    return true;
+  }
+
+  // SPARK-40398: Replace `Arrays.stream().anyMatch()` with this method due to perf gain.
+  private static boolean isAnyBlockNotStartWithShuffleBlockPrefix(String[] blockIds) {
+    for (String blockId : blockIds) {
+      if (!blockId.startsWith(SHUFFLE_BLOCK_PREFIX)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // SPARK-40398: Replace `Arrays.stream().allMatch()` with this method due to perf gain.
+  private static boolean isAllBlocksStartWithShuffleChunkPrefix(String[] blockIds) {
+    for (String blockId : blockIds) {
+      if (!blockId.startsWith(SHUFFLE_CHUNK_PREFIX)) {
+        return false;
+      }
     }
     return true;
   }

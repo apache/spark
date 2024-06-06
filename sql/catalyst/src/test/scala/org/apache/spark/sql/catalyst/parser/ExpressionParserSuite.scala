@@ -22,10 +22,12 @@ import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
@@ -57,8 +59,9 @@ class ExpressionParserSuite extends AnalysisTest {
     compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(defaultParser.parseExpression)(sqlCommand, messages: _*)
+  private def parseException(sqlText: String): SparkThrowable = {
+    super.parseException(defaultParser.parseExpression)(sqlText)
+  }
 
   def assertEval(
       sqlCommand: String,
@@ -78,41 +81,42 @@ class ExpressionParserSuite extends AnalysisTest {
   // NamedExpression (Alias/Multialias)
   test("named expressions") {
     // No Alias
-    val r0 = 'a
+    val r0 = $"a"
     assertEqual("a", r0)
 
     // Single Alias.
-    val r1 = 'a as "b"
+    val r1 = $"a" as "b"
     assertEqual("a as b", r1)
     assertEqual("a b", r1)
 
     // Multi-Alias
-    assertEqual("a as (b, c)", MultiAlias('a, Seq("b", "c")))
-    assertEqual("a() (b, c)", MultiAlias('a.function(), Seq("b", "c")))
+    assertEqual("a as (b, c)", MultiAlias($"a", Seq("b", "c")))
+    assertEqual("a() (b, c)", MultiAlias($"a".function(), Seq("b", "c")))
 
     // Numeric literals without a space between the literal qualifier and the alias, should not be
     // interpreted as such. An unresolved reference should be returned instead.
     // TODO add the JIRA-ticket number.
-    assertEqual("1SL", Symbol("1SL"))
+    assertEqual("1SL", $"1SL")
 
     // Aliased star is allowed.
-    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)
+    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as "b")
   }
 
   test("binary logical expressions") {
     // And
-    assertEqual("a and b", 'a && 'b)
+    assertEqual("a and b", $"a" && $"b")
 
     // Or
-    assertEqual("a or b", 'a || 'b)
+    assertEqual("a or b", $"a" || $"b")
 
     // Combination And/Or check precedence
-    assertEqual("a and b or c and d", ('a && 'b) || ('c && 'd))
-    assertEqual("a or b or c and d", 'a || 'b || ('c && 'd))
+    assertEqual("a and b or c and d", ($"a" && $"b") || ($"c" && $"d"))
+    assertEqual("a or b or c and d", $"a" || $"b" || ($"c" && $"d"))
 
     // Multiple AND/OR get converted into a balanced tree
-    assertEqual("a or b or c or d or e or f", (('a || 'b) || 'c) || (('d || 'e) || 'f))
-    assertEqual("a and b and c and d and e and f", (('a && 'b) && 'c) && (('d && 'e) && 'f))
+    assertEqual("a or b or c or d or e or f", (($"a" || $"b") || $"c") || (($"d" || $"e") || $"f"))
+    assertEqual("a and b and c and d and e and f", (($"a" && $"b") && $"c")
+      && (($"d" && $"e") && $"f"))
   }
 
   test("long binary logical expressions") {
@@ -127,172 +131,234 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("not expressions") {
-    assertEqual("not a", !'a)
-    assertEqual("!a", !'a)
+    assertEqual("not a", !$"a")
+    assertEqual("!a", !$"a")
     assertEqual("not true > true", Not(GreaterThan(true, true)))
   }
 
   test("exists expression") {
     assertEqual(
       "exists (select 1 from b where b.x = a.x)",
-      Exists(table("b").where(Symbol("b.x") === Symbol("a.x")).select(1)))
+      Exists(table("b").where($"b.x" === $"a.x").select(1)))
   }
 
   test("comparison expressions") {
-    assertEqual("a = b", 'a === 'b)
-    assertEqual("a == b", 'a === 'b)
-    assertEqual("a <=> b", 'a <=> 'b)
-    assertEqual("a <> b", 'a =!= 'b)
-    assertEqual("a != b", 'a =!= 'b)
-    assertEqual("a < b", 'a < 'b)
-    assertEqual("a <= b", 'a <= 'b)
-    assertEqual("a !> b", 'a <= 'b)
-    assertEqual("a > b", 'a > 'b)
-    assertEqual("a >= b", 'a >= 'b)
-    assertEqual("a !< b", 'a >= 'b)
+    assertEqual("a = b", $"a" === $"b")
+    assertEqual("a == b", $"a" === $"b")
+    assertEqual("a <=> b", $"a" <=> $"b")
+    assertEqual("a <> b", $"a" =!= $"b")
+    assertEqual("a != b", $"a" =!= $"b")
+    assertEqual("a < b", $"a" < $"b")
+    assertEqual("a <= b", $"a" <= $"b")
+    assertEqual("a !> b", $"a" <= $"b")
+    assertEqual("a > b", $"a" > $"b")
+    assertEqual("a >= b", $"a" >= $"b")
+    assertEqual("a !< b", $"a" >= $"b")
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", 'a >= 'b && 'a <= 'c)
-    assertEqual("a not between b and c", !('a >= 'b && 'a <= 'c))
+    assertEqual("a between b and c",
+      UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
+    assertEqual("a not between b and c",
+      !UnresolvedFunction("between", Seq($"a", $"b", $"c"), isDistinct = false))
   }
 
   test("in expressions") {
-    assertEqual("a in (b, c, d)", 'a in ('b, 'c, 'd))
-    assertEqual("a not in (b, c, d)", !('a in ('b, 'c, 'd)))
+    assertEqual("a in (b, c, d)", $"a" in ($"b", $"c", $"d"))
+    assertEqual("a not in (b, c, d)", !($"a" in ($"b", $"c", $"d")))
   }
 
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq($"a"), ListQuery(table("c").select($"b"))))
 
     assertEqual(
       "(a, b, c) in (select d, e, f from g)",
-      InSubquery(Seq('a, 'b, 'c), ListQuery(table("g").select('d, 'e, 'f))))
+      InSubquery(Seq($"a", $"b", $"c"), ListQuery(table("g").select($"d", $"e", $"f"))))
 
     assertEqual(
       "(a, b) in (select c from d)",
-      InSubquery(Seq('a, 'b), ListQuery(table("d").select('c))))
+      InSubquery(Seq($"a", $"b"), ListQuery(table("d").select($"c"))))
 
     assertEqual(
       "(a) in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq($"a"), ListQuery(table("c").select($"b"))))
   }
 
   test("like expressions") {
-    assertEqual("a like 'pattern%'", 'a like "pattern%")
-    assertEqual("a not like 'pattern%'", !('a like "pattern%"))
-    assertEqual("a rlike 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
-    assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+    assertEqual("a like 'pattern%'", $"a" like "pattern%")
+    assertEqual("a not like 'pattern%'", !($"a" like "pattern%"))
+    assertEqual("a rlike 'pattern%'", $"a" rlike "pattern%")
+    assertEqual("a not rlike 'pattern%'", !($"a" rlike "pattern%"))
+    assertEqual("a regexp 'pattern%'", $"a" rlike "pattern%")
+    assertEqual("a not regexp 'pattern%'", !($"a" rlike "pattern%"))
   }
 
   test("like escape expressions") {
-    val message = "Escape string must contain only one character."
-    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
-    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
-    intercept("a like 'pattern%' escape '##'", message)
-    intercept("a like 'pattern%' escape ''", message)
-    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", '#')))
-    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
-    intercept("a not like 'pattern%' escape '\"/'", message)
-    intercept("a not like 'pattern%' escape ''", message)
+    assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
+    assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
+
+    checkError(
+      exception = parseException("a like 'pattern%' escape '##'"),
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'##'"),
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape '##'",
+        start = 2,
+        stop = 28))
+
+    checkError(
+      exception = parseException("a like 'pattern%' escape ''"),
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
+      context = ExpectedContext(
+        fragment = "like 'pattern%' escape ''",
+        start = 2,
+        stop = 26))
+
+    assertEqual("a not like 'pattern%' escape '#'", !($"a".like("pattern%", '#')))
+    assertEqual("a not like 'pattern%' escape '\"'", !($"a".like("pattern%", '\"')))
+
+    checkError(
+      exception = parseException("a not like 'pattern%' escape '\"/'"),
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "'\"/'"),
+      context = ExpectedContext(
+        fragment = "not like 'pattern%' escape '\"/'",
+        start = 2,
+        stop = 32))
+
+    checkError(
+      exception = parseException("a not like 'pattern%' escape ''"),
+      errorClass = "INVALID_ESC",
+      parameters = Map("invalidEscape" -> "''"),
+      context = ExpectedContext(
+        fragment = "not like 'pattern%' escape ''",
+        start = 2,
+        stop = 30))
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       val parser = new CatalystSqlParser()
-      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
-      assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
-      assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", $"a" rlike "^\\x20[\\x20-\\x23]+$", parser)
+      assertEqual("a rlike 'pattern\\\\'", $"a" rlike "pattern\\\\", parser)
+      assertEqual("a rlike 'pattern\\t\\n'", $"a" rlike "pattern\\t\\n", parser)
     }
   }
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a likeAny("foo%", "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a notLikeAny("foo%", "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a likeAny("foo%", "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", $"a" likeAny("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", $"a" notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !($"a" likeAny("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", 'a likeAll("foo%", "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", 'a notLikeAll("foo%", "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !('a likeAll("foo%", "b%")))
+    assertEqual("a like all ('foo%', 'b%')", $"a" likeAll("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
-      intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
+      checkError(
+        exception = parseException(s"a like $quantifier()"),
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        context = ExpectedContext(
+          fragment = s"like $quantifier()",
+          start = 2,
+          stop = 8 + quantifier.length))
     }
   }
 
   test("is null expressions") {
-    assertEqual("a is null", 'a.isNull)
-    assertEqual("a is not null", 'a.isNotNull)
-    assertEqual("a = b is null", ('a === 'b).isNull)
-    assertEqual("a = b is not null", ('a === 'b).isNotNull)
+    assertEqual("a is null", $"a".isNull)
+    assertEqual("a is not null", $"a".isNotNull)
+    assertEqual("a = b is null", ($"a" === $"b").isNull)
+    assertEqual("a = b is not null", ($"a" === $"b").isNotNull)
   }
 
   test("is distinct expressions") {
-    assertEqual("a is distinct from b", !('a <=> 'b))
-    assertEqual("a is not distinct from b", 'a <=> 'b)
+    assertEqual("a is distinct from b", !($"a" <=> $"b"))
+    assertEqual("a is not distinct from b", $"a" <=> $"b")
   }
 
   test("binary arithmetic expressions") {
     // Simple operations
-    assertEqual("a * b", 'a * 'b)
-    assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", 'a div 'b)
-    assertEqual("a % b", 'a % 'b)
-    assertEqual("a + b", 'a + 'b)
-    assertEqual("a - b", 'a - 'b)
-    assertEqual("a & b", 'a & 'b)
-    assertEqual("a ^ b", 'a ^ 'b)
-    assertEqual("a | b", 'a | 'b)
+    assertEqual("a * b", $"a" * $"b")
+    assertEqual("a / b", $"a" / $"b")
+    assertEqual("a DIV b", $"a" div $"b")
+    assertEqual("a % b", $"a" % $"b")
+    assertEqual("a + b", $"a" + $"b")
+    assertEqual("a - b", $"a" - $"b")
+    assertEqual("a & b", $"a" & $"b")
+    assertEqual("a ^ b", $"a" ^ $"b")
+    assertEqual("a | b", $"a" | $"b")
 
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
+      $"a" * $"t" | ($"b" ^ ($"c" & ($"d" - $"e" + (($"f" % $"g" div $"h") / $"i" * $"k")))))
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", +'a)
-    assertEqual("-a", -'a)
-    assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -( +(~(~'a))))
+    assertEqual("+a", +$"a")
+    assertEqual("-a", -$"a")
+    assertEqual("~a", ~$"a")
+    assertEqual("-+~~a", -( +(~(~$"a"))))
   }
 
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
-    assertEqual("cast(a as int)", 'a.cast(IntegerType))
-    assertEqual("cast(a as timestamp)", 'a.cast(TimestampType))
-    assertEqual("cast(a as array<int>)", 'a.cast(ArrayType(IntegerType)))
-    assertEqual("cast(cast(a as int) as long)", 'a.cast(IntegerType).cast(LongType))
+    assertEqual("cast(a as int)", $"a".cast(IntegerType))
+    assertEqual("cast(a as timestamp)", $"a".cast(TimestampType))
+    assertEqual("cast(a as array<int>)", $"a".cast(ArrayType(IntegerType)))
+    assertEqual("cast(cast(a as int) as long)", $"a".cast(IntegerType).cast(LongType))
   }
 
   test("function expressions") {
-    assertEqual("foo()", 'foo.function())
+    assertEqual("foo()", $"foo".function())
     assertEqual("foo.bar()",
       UnresolvedFunction(FunctionIdentifier("bar", Some("foo")), Seq.empty, isDistinct = false))
-    assertEqual("foo(*)", 'foo.function(star()))
-    assertEqual("count(*)", 'count.function(1))
-    assertEqual("foo(a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(all a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
-    assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
-    assertEqual("`select`(all a, b)", 'select.function('a, 'b))
-    intercept("foo(a x)", "extraneous input 'x'")
+    assertEqual("foo(*)", $"foo".function(star()))
+    assertEqual("count(*)", $"count".function(1))
+    assertEqual("foo(a, b)", $"foo".function($"a", $"b"))
+    assertEqual("foo(all a, b)", $"foo".function($"a", $"b"))
+    assertEqual("foo(distinct a, b)", $"foo".distinctFunction($"a", $"b"))
+    assertEqual("grouping(distinct a, b)", $"grouping".distinctFunction($"a", $"b"))
+    assertEqual("`select`(all a, b)", $"select".function($"a", $"b"))
+    checkError(
+      exception = parseException("foo(a x)"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'x'", "hint" -> ": extra input 'x'"))
+  }
+
+  test("function expressions with named arguments") {
+    assertEqual("encode(value => 'abc', charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", Literal("abc")),
+      NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode('abc', charset => 'utf-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset", Literal("utf-8"))))
+    assertEqual("encode(charset => 'utf-8', 'abc')",
+      $"encode".function(NamedArgumentExpression("charset", Literal("utf-8")), Literal("abc")))
+    assertEqual("encode('abc', charset => 'utf' || '-8')",
+      $"encode".function(Literal("abc"), NamedArgumentExpression("charset",
+        Concat(Literal("utf") :: Literal("-8") :: Nil))))
+    val unresolvedAlias = Project(Seq(UnresolvedAlias(Literal("1"))), OneRowRelation())
+    assertEqual("encode(value => ((select '1')), charset => 'utf-8')",
+      $"encode".function(NamedArgumentExpression("value", ScalarSubquery(plan = unresolvedAlias)),
+        NamedArgumentExpression("charset", Literal("utf-8"))))
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+    assertEqual("x -> x + 1", LambdaFunction(lv(Symbol("x")) + 1, Seq(lv(Symbol("x")))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")),
+      Seq(lv(Symbol("x")), lv(Symbol("y")))))
   }
 
   test("window function expressions") {
-    val func = 'foo.function(star())
+    val func = $"foo".function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -303,27 +369,31 @@ class ExpressionParserSuite extends AnalysisTest {
     // Basic window testing.
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
-    assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (partition by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (order by a desc, b asc)",
+      windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)",
+      windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (partition by a, b order by c)",
+      windowed(Seq($"a", $"b"), Seq($"c".asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)",
+      windowed(Seq($"a", $"b"), Seq($"c".asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression($"sum".function($"product" + 1),
+        WindowSpecDefinition(Seq($"product" + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression($"sum".function($"product" + 1),
+        WindowSpecDefinition(Seq($"product" / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
   test("range/rows window function expressions") {
-    val func = 'foo.function(star())
+    val func = $"foo".function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -382,77 +452,85 @@ class ExpressionParserSuite extends AnalysisTest {
         boundaries.foreach {
           case (boundarySql, begin, end) =>
             val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq('a), Seq('b.asc), SpecifiedWindowFrame(frameType, begin, end))
+            val expr = windowed(Seq($"a"), Seq($"b".asc),
+              SpecifiedWindowFrame(frameType, begin, end))
             assertEqual(query, expr)
         }
     }
 
     // We cannot use an arbitrary expression.
-    intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a literal.")
+    checkError(
+      exception = parseException("foo(*) over (partition by a order by b rows exp(b) preceding)"),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      context = ExpectedContext(
+        fragment = "exp(b) preceding",
+        start = 44,
+        stop = 59))
   }
 
   test("row constructor") {
     // Note that '(a)' will be interpreted as a nested expression.
-    assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
-    assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
-    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
+    assertEqual("(a, b)", CreateStruct(Seq($"a", $"b")))
+    assertEqual("(a, b, c)", CreateStruct(Seq($"a", $"b", $"c")))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq($"a" as "b", $"b" as "c")))
   }
 
   test("scalar sub-query") {
     assertEqual(
       "(select max(val) from tbl) > current",
-      ScalarSubquery(table("tbl").select('max.function('val))) > 'current)
+      ScalarSubquery(table("tbl").select($"max".function($"val"))) > $"current")
     assertEqual(
       "a = (select b from s)",
-      'a === ScalarSubquery(table("s").select('b)))
+      $"a" === ScalarSubquery(table("s").select($"b")))
   }
 
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
-      CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+      CaseKeyWhen($"a", Seq(1, $"b", 2, $"c", $"d")))
     assertEqual("case (a or b) when true then c when false then d else e end",
-      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+      CaseKeyWhen($"a" || $"b", Seq(true, $"c", false, $"d", $"e")))
     assertEqual("case 'a'='a' when true then 1 end",
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
-      CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+      CaseWhen(Seq(($"a" === 1, $"b".expr), ($"a" === 2, $"c".expr)), $"d"))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
+      CaseWhen(Seq((Literal(1)
+        + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr), $"f".expr)), $"g"))
   }
 
   test("dereference") {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
-    assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
+    assertEqual("(a + b).b", ($"a" + $"b").getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
-      namedStruct(Literal("a"), 'a, Literal("b"), 'b).getField("b"))
+      namedStruct(Literal("a"), $"a", Literal("b"), $"b").getField("b"))
   }
 
   test("reference") {
     // Regular
-    assertEqual("a", 'a)
+    assertEqual("a", $"a")
 
     // Starting with a digit.
-    assertEqual("1a", Symbol("1a"))
+    assertEqual("1a", $"1a")
 
     // Quoted using a keyword.
-    assertEqual("`select`", 'select)
+    assertEqual("`select`", $"select")
 
     // Unquoted using an unreserved keyword.
-    assertEqual("columns", 'columns)
+    assertEqual("columns", $"columns")
   }
 
   test("subscript") {
-    assertEqual("a[b]", 'a.getItem('b))
-    assertEqual("a[1 + 1]", 'a.getItem(Literal(1) + 1))
-    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem('b))
+    assertEqual("a[b]", $"a".getItem($"b"))
+    assertEqual("a[1 + 1]", $"a".getItem(Literal(1) + 1))
+    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
   }
 
   test("parenthesis") {
-    assertEqual("(a)", 'a)
-    assertEqual("r * (a + b)", 'r * ('a + 'b))
+    assertEqual("(a)", $"a")
+    assertEqual("r * (a + b)", $"r" * ($"a" + $"b"))
   }
 
   test("type constructors") {
@@ -460,28 +538,75 @@ class ExpressionParserSuite extends AnalysisTest {
       // Timestamp with local time zone
       assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
         Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      checkError(
+        exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map(
+          "valueType" -> "\"TIMESTAMP_LTZ\"",
+          "value" -> "'2016-33-11 20:54:00.000'"
+        ),
+        context = ExpectedContext(
+          fragment = "timestamP_LTZ '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 38))
+
       // Timestamp without time zone
       assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
-      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+      checkError(
+        exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map(
+          "valueType" -> "\"TIMESTAMP_NTZ\"",
+          "value" -> "'2016-33-11 20:54:00.000'"
+        ),
+        context = ExpectedContext(
+          fragment = "tImEstAmp_Ntz '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 38))
     }
 
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
-    intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
+    checkError(
+      exception = parseException("DAtE 'mar 11 2016'"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"DATE\"", "value" -> "'mar 11 2016'"),
+      context = ExpectedContext(
+        fragment = "DAtE 'mar 11 2016'",
+        start = 0,
+        stop = 17))
 
     // Timestamps.
     assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
-    intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+    checkError(
+      exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
+      context = ExpectedContext(
+        fragment = "timestamP '2016-33-11 20:54:00.000'",
+        start = 0,
+        stop = 34))
 
     checkTimestampNTZAndLTZ()
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
       assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
 
-      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+      checkError(
+        exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        sqlState = "42604",
+        parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
+        context = ExpectedContext(
+          fragment = "timestamP '2016-33-11 20:54:00.000'",
+          start = 0,
+          stop = 34))
 
       // If the timestamp string contains time zone, return a timestamp with local time zone literal
       assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
@@ -494,24 +619,60 @@ class ExpressionParserSuite extends AnalysisTest {
     val ymIntervalLiteral = Literal.create(Period.of(1, 2, 0), YearMonthIntervalType())
     assertEqual("InterVal 'interval 1 year 2 month'", ymIntervalLiteral)
     assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
-    intercept("Interval 'interval 1 yearsss 2 monthsss'",
-      "Cannot parse the INTERVAL value: interval 1 yearsss 2 monthsss")
+    checkError(
+      exception = parseException("Interval 'interval 1 yearsss 2 monthsss'"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 yearsss 2 monthsss'"
+      ),
+      context = ExpectedContext(
+        fragment = "Interval 'interval 1 yearsss 2 monthsss'",
+        start = 0,
+        stop = 39))
+
     assertEqual("-interval '1 year 2 month'", UnaryMinus(ymIntervalLiteral))
     val dtIntervalLiteral = Literal.create(
       Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4).plusMillis(5).plusNanos(6000))
     assertEqual("InterVal 'interval 1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
     assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
-    intercept("Interval 'interval 1 daysss 2 hoursss'",
-      "Cannot parse the INTERVAL value: interval 1 daysss 2 hoursss")
+    checkError(
+      exception = parseException("Interval 'interval 1 daysss 2 hoursss'"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      parameters = Map(
+        "valueType" -> "\"INTERVAL\"",
+        "value" -> "'interval 1 daysss 2 hoursss'"
+      ),
+      context = ExpectedContext(
+        fragment = "Interval 'interval 1 daysss 2 hoursss'",
+        start = 0,
+        stop = 37))
+
     assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
-    intercept("INTERVAL '1 year 2 second'",
-      "Cannot mix year-month and day-time fields: INTERVAL '1 year 2 second'")
+    checkError(
+      exception = parseException("INTERVAL '1 year 2 second'"),
+      errorClass = "_LEGACY_ERROR_TEMP_0029",
+      parameters = Map("literal" -> "INTERVAL '1 year 2 second'"),
+      context = ExpectedContext(
+        fragment = "INTERVAL '1 year 2 second'",
+        start = 0,
+        stop = 25))
 
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
       assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
       assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-      intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+      checkError(
+        exception = parseException("Interval 'interval 3 monthsss 1 hoursss'"),
+        errorClass = "INVALID_TYPED_LITERAL",
+        parameters = Map(
+          "valueType" -> "\"INTERVAL\"",
+          "value" -> "'interval 3 monthsss 1 hoursss'"
+        ),
+        context = ExpectedContext(
+          fragment = "Interval 'interval 3 monthsss 1 hoursss'",
+          start = 0,
+          stop = 39))
       assertEqual(
         "-interval '3 month 1 hour'",
         UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
@@ -525,10 +686,30 @@ class ExpressionParserSuite extends AnalysisTest {
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
-    intercept("x'A1OC'")
+    checkError(
+      exception = parseException("x'A1OC'"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map(
+        "valueType" -> "\"X\"",
+        "value" -> "'A1OC'"
+      ),
+      context = ExpectedContext(
+        fragment = "x'A1OC'",
+        start = 0,
+        stop = 6))
 
-    // Unsupported datatype.
-    intercept("GEO '(10,-6)'", "Literals of type 'GEO' are currently not supported.")
+    checkError(
+      exception = parseException("GEO '(10,-6)'"),
+      errorClass = "UNSUPPORTED_TYPED_LITERAL",
+      parameters = Map(
+        "unsupportedType" -> "\"GEO\"",
+        "supportedTypes" ->
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
+      context = ExpectedContext(
+        fragment = "GEO '(10,-6)'",
+        start = 0,
+        stop = 12))
   }
 
   test("literals") {
@@ -560,32 +741,98 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("900e-1BD", Literal(BigDecimal("900e-1").underlying()))
     assertEqual("900.0E-1BD", Literal(BigDecimal("900.0E-1").underlying()))
     assertEqual("9.e+1BD", Literal(BigDecimal("9.e+1").underlying()))
-    intercept(".e3")
+    checkError(
+      exception = parseException(".e3"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))
-    intercept("-1000Y", s"does not fit in range [${Byte.MinValue}, ${Byte.MaxValue}]")
+    checkError(
+      exception = parseException("1000Y"),
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
+      parameters = Map(
+        "rawStrippedQualifier" -> "1000",
+        "minValue" -> Byte.MinValue.toString,
+        "maxValue" -> Byte.MaxValue.toString,
+        "typeName" -> "tinyint"),
+      context = ExpectedContext(
+        fragment = "1000Y",
+        start = 0,
+        stop = 4))
 
     // Small Int Literal
     assertEqual("10S", Literal(10.toShort))
-    intercept("40000S", s"does not fit in range [${Short.MinValue}, ${Short.MaxValue}]")
+    checkError(
+      exception = parseException("40000S"),
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
+      parameters = Map(
+        "rawStrippedQualifier" -> "40000",
+        "minValue" -> Short.MinValue.toString,
+        "maxValue" -> Short.MaxValue.toString,
+        "typeName" -> "smallint"),
+      context = ExpectedContext(
+        fragment = "40000S",
+        start = 0,
+        stop = 5))
 
     // Long Int Literal
     assertEqual("10L", Literal(10L))
-    intercept("78732472347982492793712334L",
-        s"does not fit in range [${Long.MinValue}, ${Long.MaxValue}]")
+    checkError(
+      exception = parseException("78732472347982492793712334L"),
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
+      parameters = Map(
+        "rawStrippedQualifier" -> "78732472347982492793712334",
+        "minValue" -> Long.MinValue.toString,
+        "maxValue" -> Long.MaxValue.toString,
+        "typeName" -> "bigint"),
+      context = ExpectedContext(
+        fragment = "78732472347982492793712334L",
+        start = 0,
+        stop = 26))
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
-    intercept("-1.8E308D", s"does not fit in range")
-    intercept("1.8E308D", s"does not fit in range")
+    checkError(
+      exception = parseException("-1.8E308D"),
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
+      parameters = Map(
+        "rawStrippedQualifier" -> "-1.8E308",
+        "minValue" -> BigDecimal(Double.MinValue).toString,
+        "maxValue" -> BigDecimal(Double.MaxValue).toString,
+        "typeName" -> "double"),
+      context = ExpectedContext(
+        fragment = "-1.8E308D",
+        start = 0,
+        stop = 8))
+    checkError(
+      exception = parseException("1.8E308D"),
+      errorClass = "INVALID_NUMERIC_LITERAL_RANGE",
+      parameters = Map(
+        "rawStrippedQualifier" -> "1.8E308",
+        "minValue" -> BigDecimal(Double.MinValue).toString,
+        "maxValue" -> BigDecimal(Double.MaxValue).toString,
+        "typeName" -> "double"),
+      context = ExpectedContext(
+        fragment = "1.8E308D",
+        start = 0,
+        stop = 7))
 
     // BigDecimal Literal
     assertEqual("90912830918230182310293801923652346786BD",
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
-    intercept("1.20E-38BD", "decimal can only support precision up to 38")
+    checkError(
+      exception = parseException("1.20E-38BD"),
+      errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map(
+        "precision" -> "40",
+        "maxPrecision" -> "38"),
+      context = ExpectedContext(
+        fragment = "1.20E-38BD",
+        start = 0,
+        stop = 9))
   }
 
   test("SPARK-30252: Decimal should set zero scale rather than negative scale by default") {
@@ -650,8 +897,10 @@ class ExpressionParserSuite extends AnalysisTest {
 
           // Note: Single quote follows 1.6 parsing behavior
           // when ESCAPED_STRING_LITERALS is enabled.
-          val e = intercept[ParseException](parser.parseExpression("'\''"))
-          assert(e.message.contains("extraneous input '''"))
+          checkError(
+            exception = parseException("'\''"),
+            errorClass = "PARSE_SYNTAX_ERROR",
+            parameters = Map("error" -> "'''", "hint" -> ": extra input '''"))
 
           // The unescape special characters (e.g., "\\t") for 2.0+ don't work
           // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
@@ -741,9 +990,6 @@ class ExpressionParserSuite extends AnalysisTest {
       }
     }
 
-    // Empty interval statement
-    intercept("interval", "at least one time unit should be given for interval literal")
-
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
@@ -797,9 +1043,6 @@ class ExpressionParserSuite extends AnalysisTest {
         Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
     }
 
-    // Non Existing unit
-    intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
-
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       // Year-Month intervals.
       val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
@@ -837,8 +1080,14 @@ class ExpressionParserSuite extends AnalysisTest {
     }
 
     // Unknown FROM TO intervals
-    intercept("interval '10' month to second",
-      "Intervals FROM month TO second are not supported.")
+    checkError(
+      exception = parseException("interval '10' month to second"),
+      errorClass = "_LEGACY_ERROR_TEMP_0028",
+      parameters = Map("from" -> "month", "to" -> "second"),
+      context = ExpectedContext(
+        fragment = "'10' month to second",
+        start = 9,
+        stop = 28))
 
     // Composed intervals.
     checkIntervals(
@@ -853,8 +1102,14 @@ class ExpressionParserSuite extends AnalysisTest {
         if (legacyEnabled) {
           checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
         } else {
-          intercept(s"interval $intervalStr",
-            s"Cannot mix year-month and day-time fields: interval $intervalStr")
+          checkError(
+            exception = parseException(s"interval $intervalStr"),
+            errorClass = "_LEGACY_ERROR_TEMP_0029",
+            parameters = Map("literal" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
+            context = ExpectedContext(
+              fragment = s"interval $intervalStr",
+              start = 0,
+              stop = 47))
         }
       }
     }
@@ -862,8 +1117,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
-    assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
-    intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
+    assertEqual("1 - f('o', o(bar))", Literal(1) - $"f".function("o", $"o".function($"bar")))
+    checkError(
+      exception = parseException("1 - f('o', o(bar)) hello * world"),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'*'", "hint" -> ""))
   }
 
   test("SPARK-17364, fully qualified column name which starts with number") {
@@ -882,17 +1140,21 @@ class ExpressionParserSuite extends AnalysisTest {
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
-    intercept(complexName.unquotedString, "mismatched input")
+    checkError(
+      exception = parseException(complexName.unquotedString),
+      errorClass = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
+
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
-    assertEqual("first(a)", First('a, false).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
-    assertEqual("last(a)", Last('a, false).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First($"a", true).toAggregateExpression())
+    assertEqual("first(a)", First($"a", false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last($"a", true).toAggregateExpression())
+    assertEqual("last(a)", Last($"a", false).toAggregateExpression())
   }
 
   test("timestamp literals") {
@@ -928,7 +1190,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("current date/timestamp braceless expressions") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
     }
@@ -960,7 +1223,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("not (a ilike all ('foO%', 'b%'))", !(lower($"a") likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
-      intercept(s"a ilike $quantifier()", "Expected something between '(' and ')'")
+      checkError(
+        exception = parseException(s"a ilike $quantifier()"),
+        errorClass = "_LEGACY_ERROR_TEMP_0064",
+        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        context = ExpectedContext(
+          fragment = s"ilike $quantifier()",
+          start = 2,
+          stop = 9 + quantifier.length))
     }
   }
 }

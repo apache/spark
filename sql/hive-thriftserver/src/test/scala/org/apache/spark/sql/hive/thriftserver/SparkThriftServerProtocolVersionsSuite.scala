@@ -30,6 +30,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
@@ -39,8 +40,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
   def testExecuteStatementWithProtocolVersion(
       version: TProtocolVersion,
       sql: String)(f: HiveQueryResultSet => Unit): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val user = System.getProperty("user.name")
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
@@ -76,8 +77,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
   }
 
   def testGetInfoWithProtocolVersion(version: TProtocolVersion): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
     transport.open()
@@ -106,8 +107,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
       schema: String,
       tableNamePattern: String,
       tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+    val rawTransport = new TSocket(localhost, serverPort)
+    val connection = new HiveConnection(s"jdbc:hive2://$localhost:$serverPort", new Properties)
     val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
     val client = new Client(new TBinaryProtocol(transport))
     transport.open()
@@ -298,9 +299,11 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
         assert(metaData.getPrecision(1) === Int.MaxValue)
         assert(metaData.getScale(1) === 0)
       }
-      testExecuteStatementWithProtocolVersion(version, "SELECT cast(49960 as binary)") { rs =>
-        assert(rs.next())
-        assert(rs.getString(1) === UTF8String.fromBytes(NumberConverter.toBinary(49960)).toString)
+      if (!SQLConf.get.ansiEnabled) {
+        testExecuteStatementWithProtocolVersion(version, "SELECT cast(49960 as binary)") { rs =>
+          assert(rs.next())
+          assert(rs.getString(1) === UTF8String.fromBytes(NumberConverter.toBinary(49960)).toString)
+        }
       }
       testExecuteStatementWithProtocolVersion(version, "SELECT cast(null as binary)") { rs =>
         assert(rs.next())

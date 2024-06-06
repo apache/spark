@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 object TestConstants {
   val BACKEND_MINIKUBE = "minikube"
-  val BACKEND_DOCKER_FOR_DESKTOP = "docker-for-desktop"
+  val BACKEND_DOCKER_DESKTOP = "docker-desktop"
   val BACKEND_CLOUD = "cloud"
 
   val CONFIG_KEY_DEPLOY_MODE = "spark.kubernetes.test.deployMode"
@@ -33,4 +33,8 @@ object TestConstants {
   val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
   val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"
   val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
+  val CONFIG_DRIVER_REQUEST_CORES = "spark.kubernetes.test.driverRequestCores"
+  val CONFIG_EXECUTOR_REQUEST_CORES = "spark.kubernetes.test.executorRequestCores"
+
+  val CONFIG_KEY_VOLCANO_MAX_JOB_NUM = "spark.kubernetes.test.volcanoMaxConcurrencyJobNum"
 }

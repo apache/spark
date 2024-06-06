@@ -24,9 +24,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECK
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
+
 from pyspark._globals import _NoValue, _NoValueType
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, Window
+from pyspark.sql import (
+    functions as F,
+    Column as PySparkColumn,
+    DataFrame as PySparkDataFrame,
+    Window,
+)
 from pyspark.sql.types import (  # noqa: F401
+    _drop_metadata,
     BooleanType,
     DataType,
     LongType,
@@ -34,15 +41,9 @@ from pyspark.sql.types import (  # noqa: F401
     StructType,
     StringType,
 )
-from pyspark.sql.utils import is_timestamp_ntz_preferred
-
-# For running doctests and reference resolution in PyCharm.
+from pyspark.sql.utils import is_timestamp_ntz_preferred, is_remote
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
-
-if TYPE_CHECKING:
-    # This is required in old Python 3.5 to prevent circular reference.
-    from pyspark.pandas.series import Series
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
@@ -63,6 +64,8 @@ from pyspark.pandas.utils import (
     spark_column_equals,
 )
 
+if TYPE_CHECKING:
+    from pyspark.pandas.series import Series
 
 # A function to turn given numbers to Spark columns that represent pandas-on-Spark index.
 SPARK_INDEX_NAME_FORMAT = "__index_level_{}__".format
@@ -206,12 +209,12 @@ class InternalField:
         )
 
     def __repr__(self) -> str:
-        return "InternalField(dtype={dtype},struct_field={struct_field})".format(
+        return "InternalField(dtype={dtype}, struct_field={struct_field})".format(
             dtype=self.dtype, struct_field=self.struct_field
         )
 
 
-class InternalFrame(object):
+class InternalFrame:
     """
     The internal immutable DataFrame which manages Spark DataFrame and column names and index
     information.
@@ -249,7 +252,7 @@ class InternalFrame(object):
     |                3|  4|  8| 12| 16| 20|
     +-----------------+---+---+---+---+---+
 
-    In order to fill this gap, the current metadata is used by mapping Spark's internal column
+    To fill this gap, the current metadata is used by mapping Spark's internal column
     to pandas-on-Spark's index. See the method below:
 
     * `spark_frame` represents the internal Spark DataFrame
@@ -293,13 +296,13 @@ class InternalFrame(object):
     >>> internal.index_names
     [None]
     >>> internal.data_fields    # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('__index_level_0__', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------------+---+---+---+---+---+
     |__index_level_0__|  A|  B|  C|  D|  E|
@@ -316,7 +319,7 @@ class InternalFrame(object):
     2  3  7  11  15  19
     3  4  8  12  16  20
 
-    In case that index is set to one of the existing column as below:
+    In case that index is set to one of the existing columns as below:
 
     >>> psdf1 = psdf.set_index("A")
     >>> psdf1  # doctest: +NORMALIZE_WHITESPACE
@@ -355,13 +358,13 @@ class InternalFrame(object):
     ['A', 'B', 'C', 'D', 'E']
     >>> internal.index_names
     [('A',)]
-    >>> internal.data_fields
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +---+---+---+---+---+
     |  A|  B|  C|  D|  E|
@@ -419,13 +422,13 @@ class InternalFrame(object):
     >>> internal.index_names
     [None, ('A',)]
     >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields  # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('__index_level_0__', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------------+---+---+---+---+---+
     |__index_level_0__|  A|  B|  C|  D|  E|
@@ -508,9 +511,9 @@ class InternalFrame(object):
     >>> internal.index_names
     [('A',)]
     >>> internal.data_fields
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +---+---+
     |  A|  B|
@@ -531,12 +534,12 @@ class InternalFrame(object):
 
     def __init__(
         self,
-        spark_frame: SparkDataFrame,
-        index_spark_columns: Optional[List[Column]],
+        spark_frame: PySparkDataFrame,
+        index_spark_columns: Optional[List[PySparkColumn]],
         index_names: Optional[List[Optional[Label]]] = None,
         index_fields: Optional[List[InternalField]] = None,
         column_labels: Optional[List[Label]] = None,
-        data_spark_columns: Optional[List[Column]] = None,
+        data_spark_columns: Optional[List[PySparkColumn]] = None,
         data_fields: Optional[List[InternalField]] = None,
         column_label_names: Optional[List[Optional[Label]]] = None,
     ):
@@ -596,9 +599,12 @@ class InternalFrame(object):
         [('row_index_a',), ('row_index_b',), ('a', 'x')]
 
         >>> internal.index_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=object,struct_field=StructField(__index_level_0__,StringType,false)),
-         InternalField(dtype=object,struct_field=StructField(__index_level_1__,StringType,false)),
-         InternalField(dtype=int64,struct_field=StructField((a, x),LongType,false))]
+        [InternalField(dtype=object,
+            struct_field=StructField('__index_level_0__', StringType(), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('__index_level_1__', StringType(), False)),
+         InternalField(dtype=int64,
+            struct_field=StructField('(a, x)', LongType(), False))]
 
         >>> internal.column_labels
         [('a', 'y'), ('b', 'z')]
@@ -607,14 +613,13 @@ class InternalFrame(object):
         [Column<'(a, y)'>, Column<'(b, z)'>]
 
         >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=int64,struct_field=StructField((a, y),LongType,false)),
-         InternalField(dtype=int64,struct_field=StructField((b, z),LongType,false))]
+        [InternalField(dtype=int64, struct_field=StructField('(a, y)', LongType(), False)),
+         InternalField(dtype=int64, struct_field=StructField('(b, z)', LongType(), False))]
 
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-
-        assert isinstance(spark_frame, SparkDataFrame)
+        assert isinstance(spark_frame, PySparkDataFrame)
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
@@ -663,14 +668,15 @@ class InternalFrame(object):
                 NATURAL_ORDER_COLUMN_NAME, F.monotonically_increasing_id()
             )
 
-        self._sdf: SparkDataFrame = spark_frame
+        self._sdf = spark_frame
 
         # index_spark_columns
+
         assert all(
-            isinstance(index_scol, Column) for index_scol in index_spark_columns
+            isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns
         ), index_spark_columns
 
-        self._index_spark_columns: List[Column] = index_spark_columns
+        self._index_spark_columns: List[PySparkColumn] = index_spark_columns
 
         # data_spark_columns
         if data_spark_columns is None:
@@ -684,9 +690,9 @@ class InternalFrame(object):
                 and col not in HIDDEN_COLUMNS
             ]
         else:
-            assert all(isinstance(scol, Column) for scol in data_spark_columns)
+            assert all(isinstance(scol, PySparkColumn) for scol in data_spark_columns)
 
-        self._data_spark_columns: List[Column] = data_spark_columns
+        self._data_spark_columns: List[PySparkColumn] = data_spark_columns
 
         # fields
         if index_fields is None:
@@ -749,10 +755,20 @@ class InternalFrame(object):
 
         if is_testing():
             struct_fields = spark_frame.select(index_spark_columns).schema.fields
-            assert all(
-                index_field.struct_field == struct_field
-                for index_field, struct_field in zip(index_fields, struct_fields)
-            ), (index_fields, struct_fields)
+            if is_remote():
+                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
+                # in a few tests when using Spark Connect. However, the function works properly.
+                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
+                # until the issue is resolved.
+                assert all(
+                    _drop_metadata(index_field.struct_field) == _drop_metadata(struct_field)
+                    for index_field, struct_field in zip(index_fields, struct_fields)
+                ), (index_fields, struct_fields)
+            else:
+                assert all(
+                    index_field.struct_field == struct_field
+                    for index_field, struct_field in zip(index_fields, struct_fields)
+                ), (index_fields, struct_fields)
 
         self._index_fields: List[InternalField] = index_fields
 
@@ -767,10 +783,20 @@ class InternalFrame(object):
 
         if is_testing():
             struct_fields = spark_frame.select(data_spark_columns).schema.fields
-            assert all(
-                data_field.struct_field == struct_field
-                for data_field, struct_field in zip(data_fields, struct_fields)
-            ), (data_fields, struct_fields)
+            if is_remote():
+                # TODO(SPARK-42965): For some reason, the metadata of StructField is different
+                # in a few tests when using Spark Connect. However, the function works properly.
+                # Therefore, we temporarily perform Spark Connect tests by excluding metadata
+                # until the issue is resolved.
+                assert all(
+                    _drop_metadata(data_field.struct_field) == _drop_metadata(struct_field)
+                    for data_field, struct_field in zip(data_fields, struct_fields)
+                ), (data_fields, struct_fields)
+            else:
+                assert all(
+                    data_field.struct_field == struct_field
+                    for data_field, struct_field in zip(data_fields, struct_fields)
+                ), (data_fields, struct_fields)
 
         self._data_fields: List[InternalField] = data_fields
 
@@ -828,8 +854,8 @@ class InternalFrame(object):
 
     @staticmethod
     def attach_default_index(
-        sdf: SparkDataFrame, default_index_type: Optional[str] = None
-    ) -> SparkDataFrame:
+        sdf: PySparkDataFrame, default_index_type: Optional[str] = None
+    ) -> PySparkDataFrame:
         """
         This method attaches a default index to Spark DataFrame. Spark does not have the index
         notion so corresponding column should be generated.
@@ -874,7 +900,7 @@ class InternalFrame(object):
             )
 
     @staticmethod
-    def attach_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_sequence_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
@@ -882,12 +908,22 @@ class InternalFrame(object):
         return sdf.select(sequential_index.alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
-        return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
+        # Does not add an alias to avoid having some changes in protobuf definition for now.
+        # The alias is more for query strings in DataFrame.explain, and they are cosmetic changes.
+        if is_remote():
+            return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
+        jvm = sdf.sparkSession._jvm
+        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
+        jexpr = F.monotonically_increasing_id()._jc.expr()
+        jexpr.setTagValue(tag, "distributed_index")
+        return sdf.select(PySparkColumn(jvm.Column(jexpr)).alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_distributed_sequence_column(
+        sdf: PySparkDataFrame, column_name: str
+    ) -> PySparkDataFrame:
         """
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
@@ -904,10 +940,19 @@ class InternalFrame(object):
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
-                sdf.sql_ctx,
-            )
+            if is_remote():
+                from pyspark.sql.connect.column import Column as ConnectColumn
+                from pyspark.sql.connect.expressions import DistributedSequenceID
+
+                return sdf.select(
+                    ConnectColumn(DistributedSequenceID()).alias(column_name),
+                    "*",
+                )
+            else:
+                return PySparkDataFrame(
+                    sdf._jdf.toDF().withSequenceColumn(column_name),
+                    sdf.sparkSession,
+                )
         else:
             cnt = sdf.count()
             if cnt > 0:
@@ -917,7 +962,7 @@ class InternalFrame(object):
                     [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
                 )
 
-    def spark_column_for(self, label: Label) -> Column:
+    def spark_column_for(self, label: Label) -> PySparkColumn:
         """Return Spark Column for the given column label."""
         column_labels_to_scol = dict(zip(self.column_labels, self.data_spark_columns))
         if label in column_labels_to_scol:
@@ -925,23 +970,26 @@ class InternalFrame(object):
         else:
             raise KeyError(name_like_string(label))
 
-    def spark_column_name_for(self, label_or_scol: Union[Label, Column]) -> str:
+    def spark_column_name_for(self, label_or_scol: Union[Label, PySparkColumn]) -> str:
         """Return the actual Spark column name for the given column label."""
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
             return self.field_for(label_or_scol).name
 
-    def spark_type_for(self, label_or_scol: Union[Label, Column]) -> DataType:
+    def spark_type_for(self, label_or_scol: Union[Label, PySparkColumn]) -> DataType:
         """Return DataType for the given column label."""
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
             return self.field_for(label_or_scol).spark_type
 
-    def spark_column_nullable_for(self, label_or_scol: Union[Label, Column]) -> bool:
+    def spark_column_nullable_for(self, label_or_scol: Union[Label, PySparkColumn]) -> bool:
         """Return nullability for the given column label."""
-        if isinstance(label_or_scol, Column):
+
+        if isinstance(label_or_scol, PySparkColumn):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
             return self.field_for(label_or_scol).nullable
@@ -955,7 +1003,7 @@ class InternalFrame(object):
             raise KeyError(name_like_string(label))
 
     @property
-    def spark_frame(self) -> SparkDataFrame:
+    def spark_frame(self) -> PySparkDataFrame:
         """Return the managed Spark DataFrame."""
         return self._sdf
 
@@ -965,7 +1013,7 @@ class InternalFrame(object):
         return [field.name for field in self.data_fields]
 
     @property
-    def data_spark_columns(self) -> List[Column]:
+    def data_spark_columns(self) -> List[PySparkColumn]:
         """Return Spark Columns for the managed data columns."""
         return self._data_spark_columns
 
@@ -975,7 +1023,7 @@ class InternalFrame(object):
         return [field.name for field in self.index_fields]
 
     @property
-    def index_spark_columns(self) -> List[Column]:
+    def index_spark_columns(self) -> List[PySparkColumn]:
         """Return Spark Columns for the managed index columns."""
         return self._index_spark_columns
 
@@ -985,7 +1033,7 @@ class InternalFrame(object):
         return self.spark_frame.select(self.spark_columns).columns
 
     @lazy_property
-    def spark_columns(self) -> List[Column]:
+    def spark_columns(self) -> List[PySparkColumn]:
         """Return Spark Columns for the managed columns including index columns."""
         index_spark_columns = self.index_spark_columns
         return index_spark_columns + [
@@ -1030,7 +1078,7 @@ class InternalFrame(object):
         return self._data_fields
 
     @lazy_property
-    def to_internal_spark_frame(self) -> SparkDataFrame:
+    def to_internal_spark_frame(self) -> PySparkDataFrame:
         """
         Return as Spark DataFrame. This contains index columns as well
         and should be only used for internal purposes.
@@ -1172,7 +1220,7 @@ class InternalFrame(object):
 
     def with_new_sdf(
         self,
-        spark_frame: SparkDataFrame,
+        spark_frame: PySparkDataFrame,
         *,
         index_fields: Optional[List[InternalField]] = None,
         data_columns: Optional[List[str]] = None,
@@ -1223,7 +1271,7 @@ class InternalFrame(object):
 
     def with_new_columns(
         self,
-        scols_or_pssers: Sequence[Union[Column, "Series"]],
+        scols_or_pssers: Sequence[Union[PySparkColumn, "Series"]],
         *,
         column_labels: Optional[List[Label]] = None,
         data_fields: Optional[List[InternalField]] = None,
@@ -1308,7 +1356,7 @@ class InternalFrame(object):
             column_label_names=column_label_names,
         )
 
-    def with_filter(self, pred: Union[Column, "Series"]) -> "InternalFrame":
+    def with_filter(self, pred: Union[PySparkColumn, "Series"]) -> "InternalFrame":
         """
         Copy the immutable InternalFrame with the updates by the predicate.
 
@@ -1330,7 +1378,7 @@ class InternalFrame(object):
     def with_new_spark_column(
         self,
         column_label: Label,
-        scol: Column,
+        scol: PySparkColumn,
         *,
         field: Optional[InternalField] = None,
         keep_order: bool = True,
@@ -1374,12 +1422,12 @@ class InternalFrame(object):
     def copy(
         self,
         *,
-        spark_frame: Union[SparkDataFrame, _NoValueType] = _NoValue,
-        index_spark_columns: Union[List[Column], _NoValueType] = _NoValue,
+        spark_frame: Union[PySparkDataFrame, _NoValueType] = _NoValue,
+        index_spark_columns: Union[List[PySparkColumn], _NoValueType] = _NoValue,
         index_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
         index_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,
         column_labels: Union[Optional[List[Label]], _NoValueType] = _NoValue,
-        data_spark_columns: Union[Optional[List[Column]], _NoValueType] = _NoValue,
+        data_spark_columns: Union[Optional[List[PySparkColumn]], _NoValueType] = _NoValue,
         data_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,
         column_label_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
     ) -> "InternalFrame":
@@ -1418,12 +1466,12 @@ class InternalFrame(object):
         if column_label_names is _NoValue:
             column_label_names = self.column_label_names
         return InternalFrame(
-            spark_frame=cast(SparkDataFrame, spark_frame),
-            index_spark_columns=cast(List[Column], index_spark_columns),
+            spark_frame=cast(PySparkDataFrame, spark_frame),
+            index_spark_columns=cast(List[PySparkColumn], index_spark_columns),
             index_names=cast(Optional[List[Optional[Label]]], index_names),
             index_fields=cast(Optional[List[InternalField]], index_fields),
             column_labels=cast(Optional[List[Label]], column_labels),
-            data_spark_columns=cast(Optional[List[Column]], data_spark_columns),
+            data_spark_columns=cast(Optional[List[PySparkColumn]], data_spark_columns),
             data_fields=cast(Optional[List[InternalField]], data_fields),
             column_label_names=cast(Optional[List[Optional[Label]]], column_label_names),
         )
@@ -1505,13 +1553,14 @@ class InternalFrame(object):
         2                 30      c       1
         >>> index_columns
         ['__index_level_0__']
-        >>> index_fields
-        [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false))]
+        >>> index_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=int64, struct_field=StructField('__index_level_0__',
+                                                            LongType(), False))]
         >>> data_columns
         ['(x, a)', '(y, b)']
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=object,struct_field=StructField((x, a),StringType,false)),
-         InternalField(dtype=category,struct_field=StructField((y, b),ByteType,false))]
+        [InternalField(dtype=object, struct_field=StructField('(x, a)', StringType(), False)),
+         InternalField(dtype=category, struct_field=StructField('(y, b)', ByteType(), False))]
 
         >>> import datetime
         >>> pdf = pd.DataFrame({
@@ -1521,9 +1570,24 @@ class InternalFrame(object):
         >>> _, _, _, _, data_fields = (
         ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
         ... )
-        >>> data_fields
-        [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
-         InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=datetime64[ns],
+            struct_field=StructField('dt', TimestampNTZType(), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('dt_obj', TimestampNTZType(), False))]
+
+        >>> pdf = pd.DataFrame({
+        ...     "td": [datetime.timedelta(0)], "td_obj": [datetime.timedelta(0)]
+        ... })
+        >>> pdf.td_obj = pdf.td_obj.astype("object")
+        >>> _, _, _, _, data_fields = (
+        ...     InternalFrame.prepare_pandas_frame(pdf)
+        ... )
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=timedelta64[ns],
+            struct_field=StructField('td', DayTimeIntervalType(0, 3), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('td_obj', DayTimeIntervalType(0, 3), False))]
         """
         pdf = pdf.copy()
 
@@ -1551,12 +1615,12 @@ class InternalFrame(object):
             InternalField(
                 dtype=dtype,
                 struct_field=StructField(
-                    name=name,
+                    name=str(name),
                     dataType=infer_pd_series_spark_type(col, dtype, prefer_timestamp_ntz),
                     nullable=bool(col.isnull().any()),
                 ),
             )
-            for (name, col), dtype in zip(reset_index.iteritems(), index_dtypes + data_dtypes)
+            for (name, col), dtype in zip(reset_index.items(), index_dtypes + data_dtypes)
         ]
 
         return (

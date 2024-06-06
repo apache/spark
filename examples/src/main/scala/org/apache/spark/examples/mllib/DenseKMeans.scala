@@ -18,7 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -79,7 +80,7 @@ object DenseKMeans {
     val conf = new SparkConf().setAppName(s"DenseKMeans with $params")
     val sc = new SparkContext(conf)
 
-    Logger.getRootLogger.setLevel(Level.WARN)
+    Configurator.setRootLevel(Level.WARN)
 
     val examples = sc.textFile(params.input).map { line =>
       Vectors.dense(line.split(' ').map(_.toDouble))

@@ -19,15 +19,13 @@ package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.net.URI
-import java.util.{Set => JavaSet}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -72,7 +70,9 @@ object TestHive
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
         // ConstantPropagation etc.
-        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)))
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName))) {
+  override def conf: SQLConf = sparkSession.sessionState.conf
+}
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -200,13 +200,13 @@ private[hive] class TestHiveSparkSession(
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       // scratch directory used by Hive's metastore client
-      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      "hive.exec.scratchdir" -> TestHiveContext.makeScratchDir().toURI.toString,
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1") ++
       // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
       existingSharedState.map { state =>
         val connKey =
-          state.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
-        ConfVars.METASTORECONNECTURLKEY.varname -> connKey
+          state.sparkContext.hadoopConfiguration.get("javax.jdo.option.ConnectionURL")
+        "javax.jdo.option.ConnectionURL" -> connKey
       }
 
     metastoreTempConf.foreach { case (k, v) =>
@@ -524,21 +524,16 @@ private[hive] class TestHiveSparkSession(
   }
 
   /**
-   * Records the UDFs present when the server starts, so we can delete ones that are created by
-   * tests.
-   */
-  protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
-
-  /**
    * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
   def reset(): Unit = {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
-        val logger = log.asInstanceOf[org.apache.log4j.Logger]
-        if (!logger.getName.contains("org.apache.spark")) {
-          logger.setLevel(org.apache.log4j.Level.WARN)
+      org.apache.logging.log4j.LogManager.getContext(false)
+        .asInstanceOf[org.apache.logging.log4j.core.LoggerContext].getConfiguration.getLoggers()
+        .asScala.foreach { case (_, log) =>
+        if (!log.getName.contains("org.apache.spark")) {
+          log.setLevel(org.apache.logging.log4j.Level.WARN)
         }
       }
 
@@ -557,7 +552,7 @@ private[hive] class TestHiveSparkSession(
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
       val hadoopConf = sessionState.newHadoopConf()
-      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val location = new Path(hadoopConf.get("hive.exec.scratchdir"))
       val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
@@ -599,7 +594,7 @@ private[hive] class TestHiveQueryExecution(
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     // Make sure any test tables referenced are loaded.
     val referencedTables = logical.collect {
-      case UnresolvedRelation(ident, _, _, _) =>
+      case UnresolvedRelation(ident, _, _) =>
         if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
           ident.tail.asTableIdentifier
         } else ident.asTableIdentifier

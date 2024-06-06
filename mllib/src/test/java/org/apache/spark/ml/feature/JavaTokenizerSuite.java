@@ -20,8 +20,8 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -52,7 +52,7 @@ public class JavaTokenizerSuite extends SharedSparkSession {
       .collectAsList();
 
     for (Row r : pairs) {
-      Assert.assertEquals(r.get(0), r.get(1));
+      Assertions.assertEquals(r.get(0), r.get(1));
     }
   }
 }

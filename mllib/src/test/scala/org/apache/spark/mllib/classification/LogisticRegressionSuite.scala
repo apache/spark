@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -31,6 +31,7 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -143,7 +144,7 @@ object LogisticRegressionSuite {
         for (i <- 0 until nClasses) {
           if (p < probs(i)) {
             y = i
-            break
+            break()
           }
         }
       }
@@ -237,7 +238,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -277,7 +279,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -308,7 +311,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -340,7 +344,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData, 0.8)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq,
+      validationData, 0.8)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData, 0.8)
@@ -371,7 +376,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val validationData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -525,7 +531,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     // The validation accuracy is not good since this model (even the original weights) doesn't have
     // very steep curve in logistic function so that when we draw samples from distribution, it's
     // very easy to assign to another labels. However, this prediction result is consistent to R.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData, 0.47)
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq,
+      validationData, 0.47)
 
   }
 

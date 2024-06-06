@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import overload, Optional, Dict
+from typing import overload, Optional, Dict, TYPE_CHECKING
 
-from py4j.java_gateway import JavaObject, JVMView
+from pyspark.util import _parse_memory
 
-from pyspark.util import _parse_memory  # type: ignore[attr-defined]
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject, JVMView
 
 
-class ExecutorResourceRequest(object):
+class ExecutorResourceRequest:
     """
     An Executor resource request. This is used in conjunction with the ResourceProfile to
     programmatically specify the resources needed for an RDD that will be applied at the
@@ -42,7 +43,7 @@ class ExecutorResourceRequest(object):
 
     See the configuration and cluster specific docs for more details.
 
-    Use :py:class:`pyspark.ExecutorResourceRequests` class as a convenience API.
+    Use :class:`pyspark.ExecutorResourceRequests` class as a convenience API.
 
     .. versionadded:: 3.1.0
 
@@ -59,6 +60,10 @@ class ExecutorResourceRequest(object):
         of the resources available.
     vendor : str, optional
         Vendor, required for some cluster managers
+
+    See Also
+    --------
+    :class:`pyspark.resource.ResourceProfile`
 
     Notes
     -----
@@ -79,22 +84,46 @@ class ExecutorResourceRequest(object):
 
     @property
     def resourceName(self) -> str:
+        """
+        Returns
+        -------
+        str
+            Name of the resource
+        """
         return self._name
 
     @property
     def amount(self) -> int:
+        """
+        Returns
+        -------
+        str
+            Amount requesting
+        """
         return self._amount
 
     @property
     def discoveryScript(self) -> str:
+        """
+        Returns
+        -------
+        str
+            Amount requesting
+        """
         return self._discovery_script
 
     @property
     def vendor(self) -> str:
+        """
+        Returns
+        -------
+        str
+            Vendor, required for some cluster managers
+        """
         return self._vendor
 
 
-class ExecutorResourceRequests(object):
+class ExecutorResourceRequests:
 
     """
     A set of Executor resource requests. This is used in conjunction with the
@@ -102,6 +131,10 @@ class ExecutorResourceRequests(object):
     resources needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
+
+    See Also
+    --------
+    :class:`pyspark.resource.ResourceProfile`
 
     Notes
     -----
@@ -115,7 +148,7 @@ class ExecutorResourceRequests(object):
     _OFFHEAP_MEM = "offHeap"
 
     @overload
-    def __init__(self, _jvm: JVMView):
+    def __init__(self, _jvm: "JVMView"):
         ...
 
     @overload
@@ -128,15 +161,20 @@ class ExecutorResourceRequests(object):
 
     def __init__(
         self,
-        _jvm: Optional[JVMView] = None,
+        _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, ExecutorResourceRequest]] = None,
     ):
-        from pyspark import SparkContext
+        from pyspark.sql import is_remote
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
-        if _jvm is not None:
+        jvm = None
+        if not is_remote():
+            from pyspark.core.context import SparkContext
+
+            jvm = _jvm or SparkContext._jvm
+
+        if jvm is not None:
             self._java_executor_resource_requests = (
-                _jvm.org.apache.spark.resource.ExecutorResourceRequests()
+                jvm.org.apache.spark.resource.ExecutorResourceRequests()
             )
             if _requests is not None:
                 for k, v in _requests.items():
@@ -157,6 +195,20 @@ class ExecutorResourceRequests(object):
             self._executor_resources: Dict[str, ExecutorResourceRequest] = {}
 
     def memory(self, amount: str) -> "ExecutorResourceRequests":
+        """
+        Specify heap memory. The value specified will be converted to MiB.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "memory" resource.
+
+        Parameters
+        ----------
+        amount : str
+            Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+            Default unit is MiB if not specified.
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memory(amount)
         else:
@@ -166,6 +218,21 @@ class ExecutorResourceRequests(object):
         return self
 
     def memoryOverhead(self, amount: str) -> "ExecutorResourceRequests":
+        """
+        Specify overhead memory. The value specified will be converted to MiB.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "memoryOverhead"
+        resource.
+
+        Parameters
+        ----------
+        amount : str
+            Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+            Default unit is MiB if not specified.
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.memoryOverhead(amount)
         else:
@@ -175,6 +242,21 @@ class ExecutorResourceRequests(object):
         return self
 
     def pysparkMemory(self, amount: str) -> "ExecutorResourceRequests":
+        """
+        Specify pyspark memory. The value specified will be converted to MiB.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "pyspark.memory"
+        resource.
+
+        Parameters
+        ----------
+        amount : str
+            Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+            Default unit is MiB if not specified.
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.pysparkMemory(amount)
         else:
@@ -184,6 +266,22 @@ class ExecutorResourceRequests(object):
         return self
 
     def offheapMemory(self, amount: str) -> "ExecutorResourceRequests":
+        """
+        Specify off heap memory. The value specified will be converted to MiB.
+        This value only take effect when MEMORY_OFFHEAP_ENABLED is true.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "offHeap"
+        resource.
+
+        Parameters
+        ----------
+        amount : str
+            Amount of memory. In the same format as JVM memory strings (e.g. 512m, 2g).
+            Default unit is MiB if not specified.
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.offHeapMemory(amount)
         else:
@@ -193,6 +291,19 @@ class ExecutorResourceRequests(object):
         return self
 
     def cores(self, amount: int) -> "ExecutorResourceRequests":
+        """
+        Specify number of cores per Executor.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for "cores" resource.
+
+        Parameters
+        ----------
+        amount : int
+            Number of cores to allocate per Executor.
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.cores(amount)
         else:
@@ -206,6 +317,32 @@ class ExecutorResourceRequests(object):
         discoveryScript: str = "",
         vendor: str = "",
     ) -> "ExecutorResourceRequests":
+        """
+        Amount of a particular custom resource(GPU, FPGA, etc) to use. The resource names supported
+        correspond to the regular Spark configs with the prefix removed. For instance, resources
+        like GPUs are gpu (spark configs `spark.executor.resource.gpu.*`). If you pass in a resource
+        that the cluster manager doesn't support the result is undefined, it may error or may just
+        be ignored.
+        This is a convenient API to add :class:`ExecutorResourceRequest` for custom resources.
+
+        Parameters
+        ----------
+        resourceName : str
+            Name of the resource.
+        amount : str
+            amount of that resource per executor to use.
+        discoveryScript : str, optional
+            Optional script used to discover the resources. This is required on
+            some cluster managers that don't tell Spark the addresses of
+            the resources allocated. The script runs on Executors startup to
+            of the resources available.
+        vendor : str
+            Optional vendor, required for some cluster managers
+
+        Returns
+        -------
+        :class:`ExecutorResourceRequests`
+        """
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.resource(
                 resourceName, amount, discoveryScript, vendor
@@ -218,6 +355,12 @@ class ExecutorResourceRequests(object):
 
     @property
     def requests(self) -> Dict[str, ExecutorResourceRequest]:
+        """
+        Returns
+        -------
+        dict
+            Returns all the resource requests for the executor.
+        """
         if self._java_executor_resource_requests is not None:
             result = {}
             execRes = self._java_executor_resource_requests.requestsJMap()
@@ -230,12 +373,12 @@ class ExecutorResourceRequests(object):
             return self._executor_resources
 
 
-class TaskResourceRequest(object):
+class TaskResourceRequest:
     """
     A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level. The amount is specified
-    as a Double to allow for saying you want more than 1 task per resource. Valid values
+    as a float to allow for saying you want more than 1 task per resource. Valid values
     are less than or equal to 0.5 or whole numbers.
     Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
 
@@ -245,9 +388,15 @@ class TaskResourceRequest(object):
         Name of the resource
     amount : float
         Amount requesting as a float to support fractional resource requests.
-        Valid values are less than or equal to 0.5 or whole numbers.
+        Valid values are less than or equal to 0.5 or whole numbers. This essentially
+        lets you configure X number of tasks to run on a single resource,
+        ie amount equals 0.5 translates into 2 tasks per resource address.
 
     .. versionadded:: 3.1.0
+
+    See Also
+    --------
+    :class:`pyspark.resource.ResourceProfile`
 
     Notes
     -----
@@ -260,14 +409,26 @@ class TaskResourceRequest(object):
 
     @property
     def resourceName(self) -> str:
+        """
+        Returns
+        -------
+        str
+            Name of the resource.
+        """
         return self._name
 
     @property
     def amount(self) -> float:
+        """
+        Returns
+        -------
+        str
+            Amount requesting as a float to support fractional resource requests.
+        """
         return self._amount
 
 
-class TaskResourceRequests(object):
+class TaskResourceRequests:
 
     """
     A set of task resource requests. This is used in conjunction with the
@@ -275,6 +436,10 @@ class TaskResourceRequests(object):
     needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
+
+    See Also
+    --------
+    :class:`pyspark.resource.ResourceProfile`
 
     Notes
     -----
@@ -284,7 +449,7 @@ class TaskResourceRequests(object):
     _CPUS = "cpus"
 
     @overload
-    def __init__(self, _jvm: JVMView):
+    def __init__(self, _jvm: "JVMView"):
         ...
 
     @overload
@@ -297,18 +462,21 @@ class TaskResourceRequests(object):
 
     def __init__(
         self,
-        _jvm: Optional[JVMView] = None,
+        _jvm: Optional["JVMView"] = None,
         _requests: Optional[Dict[str, TaskResourceRequest]] = None,
     ):
-        from pyspark import SparkContext
+        from pyspark.sql import is_remote
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
-        if _jvm is not None:
+        jvm = None
+        if not is_remote():
+            from pyspark.core.context import SparkContext
+
+            jvm = _jvm or SparkContext._jvm
+
+        if jvm is not None:
             self._java_task_resource_requests: Optional[
-                JavaObject
-            ] = (
-                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()  # type: ignore[attr-defined]
-            )
+                "JavaObject"
+            ] = jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:
@@ -320,6 +488,19 @@ class TaskResourceRequests(object):
             self._task_resources: Dict[str, TaskResourceRequest] = {}
 
     def cpus(self, amount: int) -> "TaskResourceRequests":
+        """
+        Specify number of cpus per Task.
+        This is a convenient API to add :class:`TaskResourceRequest` for cpus.
+
+        Parameters
+        ----------
+        amount : int
+            Number of cpus to allocate per Task.
+
+        Returns
+        -------
+        :class:`TaskResourceRequests`
+        """
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.cpus(amount)
         else:
@@ -327,6 +508,24 @@ class TaskResourceRequests(object):
         return self
 
     def resource(self, resourceName: str, amount: float) -> "TaskResourceRequests":
+        """
+        Amount of a particular custom resource(GPU, FPGA, etc) to use.
+        This is a convenient API to add :class:`TaskResourceRequest` for custom resources.
+
+        Parameters
+        ----------
+        resourceName : str
+            Name of the resource.
+        amount : float
+            Amount requesting as a float to support fractional resource requests.
+            Valid values are less than or equal to 0.5 or whole numbers. This essentially
+            lets you configure X number of tasks to run on a single resource,
+            ie amount equals 0.5 translates into 2 tasks per resource address.
+
+        Returns
+        -------
+        :class:`TaskResourceRequests`
+        """
         if self._java_task_resource_requests is not None:
             self._java_task_resource_requests.resource(resourceName, float(amount))
         else:
@@ -335,6 +534,12 @@ class TaskResourceRequests(object):
 
     @property
     def requests(self) -> Dict[str, TaskResourceRequest]:
+        """
+        Returns
+        -------
+        dict
+            Returns all the resource requests for the task.
+        """
         if self._java_task_resource_requests is not None:
             result = {}
             taskRes = self._java_task_resource_requests.requestsJMap()

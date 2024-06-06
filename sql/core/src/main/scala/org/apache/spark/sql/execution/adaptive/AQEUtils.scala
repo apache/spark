@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, HashPartitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.{CollectMetricsExec, DeserializeToObjectExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 
 object AQEUtils {
@@ -30,21 +30,22 @@ object AQEUtils {
     // Project/Filter/LocalSort/CollectMetrics.
     // Note: we only care about `HashPartitioning` as `EnsureRequirements` can only optimize out
     // user-specified repartition with `HashPartitioning`.
-    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin)
+    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin, _)
         if shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM =>
       val numPartitions = if (shuffleOrigin == REPARTITION_BY_NUM) {
         Some(h.numPartitions)
       } else {
         None
       }
-      Some(HashClusteredDistribution(h.expressions, numPartitions))
+      Some(ClusteredDistribution(h.expressions, requiredNumPartitions = numPartitions))
     case f: FilterExec => getRequiredDistribution(f.child)
     case s: SortExec if !s.global => getRequiredDistribution(s.child)
     case c: CollectMetricsExec => getRequiredDistribution(c.child)
+    case d: DeserializeToObjectExec => getRequiredDistribution(d.child)
     case p: ProjectExec =>
       getRequiredDistribution(p.child).flatMap {
-        case h: HashClusteredDistribution =>
-          if (h.expressions.forall(e => p.projectList.exists(_.semanticEquals(e)))) {
+        case h: ClusteredDistribution =>
+          if (h.clustering.forall(e => p.projectList.exists(_.semanticEquals(e)))) {
             Some(h)
           } else {
             // It's possible that the user-specified repartition is effective but the output

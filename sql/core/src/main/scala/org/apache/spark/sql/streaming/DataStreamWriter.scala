@@ -20,16 +20,19 @@ package org.apache.spark.sql.streaming
 import java.util.Locale
 import java.util.concurrent.TimeoutException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.CreateTableStatement
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -37,9 +40,11 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -269,10 +274,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this.tableName = tableName
 
     import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
-      .parseMultipartIdentifier(tableName)
+    val parser = df.sparkSession.sessionState.sqlParser
+    val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
 
     // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
@@ -288,19 +292,20 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
        * Note, currently the new table creation by this API doesn't fully cover the V2 table.
        * TODO (SPARK-33638): Full support of v2 table creation
        */
-      val cmd = CreateTableStatement(
-        originalMultipartIdentifier,
-        df.schema.asNullable,
-        partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
-        None,
+      val tableSpec = UnresolvedTableSpec(
         Map.empty[String, String],
         Some(source),
-        Map.empty[String, String],
+        OptionList(Seq.empty),
         extraOptions.get("path"),
         None,
         None,
-        external = false,
-        ifNotExists = false)
+        false)
+      val cmd = CreateTable(
+        UnresolvedIdentifier(originalMultipartIdentifier),
+        df.schema.asNullable.map(ColumnDefinition.fromV1Column(_, parser)),
+        partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
+        tableSpec,
+        ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)
     }
 
@@ -315,8 +320,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         throw QueryCompilationErrors.inputSourceDiffersFromDataSourceProviderError(
           source, tableName, table)
       }
-      format(table.provider.get)
-        .option("path", new Path(table.location).toString).start()
+      format(table.provider.get).startInternal(
+        Some(new Path(table.location).toString), catalogTable = Some(table))
     }
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -331,7 +336,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def startInternal(path: Option[String]): StreamingQuery = {
+  private def startInternal(
+      path: Option[String],
+      catalogTable: Option[CatalogTable] = None): StreamingQuery = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("write")
     }
@@ -342,26 +349,28 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         throw QueryCompilationErrors.queryNameNotSpecifiedForMemorySinkError()
       }
       val sink = new MemorySink()
-      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
+      val resultDf = Dataset.ofRows(df.sparkSession,
+        MemoryPlan(sink, DataTypeUtils.toAttributes(df.schema)))
       val recoverFromCheckpoint = outputMode == OutputMode.Complete()
-      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromCheckpoint)
+      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromCheckpoint,
+        catalogTable = catalogTable)
       resultDf.createOrReplaceTempView(query.name)
       query
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
-      startQuery(sink, extraOptions)
+      val sink = ForeachWriterTable[Any](foreachWriter, foreachWriterEncoder)
+      startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
       if (trigger.isInstanceOf[ContinuousTrigger]) {
         throw QueryCompilationErrors.sourceNotSupportedWithContinuousTriggerError(source)
       }
       val sink = new ForeachBatchSink[T](foreachBatchWriter, ds.exprEnc)
-      startQuery(sink, extraOptions)
+      startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources =
-        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
+        Utils.stringToSeq(df.sparkSession.sessionState.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
@@ -376,7 +385,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
           optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         // If the source accepts external table metadata, here we pass the schema of input query
@@ -386,6 +395,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           Some(df.schema)
         } else {
           None
+        }
+        provider match {
+          case p: PythonDataSourceV2 => p.setShortName(source)
+          case _ =>
         }
         val table = DataSourceV2Utils.getTableFromProvider(
           provider, dsOptions, userSpecifiedSchema = outputSchema)
@@ -399,7 +412,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         createV1Sink(optionsWithPath)
       }
 
-      startQuery(sink, optionsWithPath)
+      startQuery(sink, optionsWithPath, catalogTable = catalogTable)
     }
   }
 
@@ -407,7 +420,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       sink: Table,
       newOptions: CaseInsensitiveMap[String],
       recoverFromCheckpoint: Boolean = true,
-      catalogAndIdent: Option[(TableCatalog, Identifier)] = None): StreamingQuery = {
+      catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+      catalogTable: Option[CatalogTable] = None): StreamingQuery = {
     val useTempCheckpointLocation = SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     df.sparkSession.sessionState.streamingQueryManager.startQuery(
@@ -420,7 +434,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       useTempCheckpointLocation = useTempCheckpointLocation,
       recoverFromCheckpointLocation = recoverFromCheckpoint,
       trigger = trigger,
-      catalogAndIdent = catalogAndIdent)
+      catalogAndIdent = catalogAndIdent,
+      catalogTable = catalogTable)
   }
 
   private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
@@ -439,12 +454,18 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
+    foreachImplementation(writer.asInstanceOf[ForeachWriter[Any]])
+  }
+
+  private[sql] def foreachImplementation(writer: ForeachWriter[Any],
+      encoder: Option[ExpressionEncoder[Any]] = None): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.foreachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
     } else {
       throw new IllegalArgumentException("foreach writer cannot be null")
     }
+    encoder.foreach(e => this.foreachWriterEncoder = e)
     this
   }
 
@@ -525,7 +546,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
-  private var foreachWriter: ForeachWriter[T] = null
+  private var foreachWriter: ForeachWriter[Any] = null
+
+  private var foreachWriterEncoder: ExpressionEncoder[Any] =
+    ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]]
 
   private var foreachBatchWriter: (Dataset[T], Long) => Unit = null
 

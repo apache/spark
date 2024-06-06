@@ -37,6 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -136,7 +137,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc): Future[Any] = {
     val waiter: JobWaiter[Any] = scheduler.submitJob(rdd, func, partitions.toSeq, CallSite("", ""),
       (index, res) => results(index) = res, new Properties())
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     waiter.completionFuture.recover { case ex =>
       failure = ex
     }
@@ -319,7 +322,8 @@ private[spark] abstract class MockBackend(
   def taskSuccess(task: TaskDescription, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    val directResult = new DirectTaskResult(resultBytes, Seq(), Array()) // no accumulator updates
+    // no accumulator updates
+    val directResult = new DirectTaskResult(resultBytes, Seq(), Array[Long]())
     taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
@@ -428,6 +432,8 @@ private[spark] abstract class MockBackend(
     // And in fact its reasonably simulating a case where a real backend finishes tasks in between
     // the time when the scheduler sends the msg to kill tasks, and the backend receives the msg.
   }
+
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = None
 }
 
 /**
@@ -697,7 +703,9 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       // Submit a job containing an RDD which will hang in getPartitions() until we release
       // the countdown latch:
+      // scalastyle:off executioncontextglobal
       import scala.concurrent.ExecutionContext.Implicits.global
+      // scalastyle:on executioncontextglobal
       val slowJobFuture = Future { submit(rddWithSlowGetPartitions, Array(0)) }.flatten
 
       // Block the current thread until the other thread has started the getPartitions() call:

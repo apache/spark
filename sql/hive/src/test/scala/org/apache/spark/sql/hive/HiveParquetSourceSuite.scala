@@ -207,23 +207,6 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
     }
   }
 
-  test("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
-    withTempDir { tempDir =>
-      val filePath = new File(tempDir, "testParquet").getCanonicalPath
-      val filePath2 = new File(tempDir, "testParquet2").getCanonicalPath
-
-      val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
-      val df2 = df.as("x").join(df.as("y"), $"x.str" === $"y.str").groupBy("y.str").max("y.int")
-      intercept[Throwable](df2.write.parquet(filePath))
-
-      val df3 = df2.toDF("str", "max_int")
-      df3.write.parquet(filePath2)
-      val df4 = read.parquet(filePath2)
-      checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
-      assert(df4.columns === Array("str", "max_int"))
-    }
-  }
-
   test("SPARK-25993 CREATE EXTERNAL TABLE with subdirectories") {
     Seq("true", "false").foreach { parquetConversion =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
@@ -393,6 +376,23 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
       withAllParquetReaders {
         checkAnswer(sql(s"select * from $tableName"), Row(ym, dt))
       }
+    }
+  }
+
+  test("Create view with dashes in column type") {
+    withView("t") {
+      sql("CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      checkAnswer(spark.table("t"), Row(Row("a", 1)))
+    }
+  }
+
+  test("Alter view with nested struct") {
+    withView("t", "t2") {
+      sql("CREATE OR REPLACE VIEW t AS SELECT " +
+        "struct(id AS `$col2`, struct(id AS `$col`) AS s1) AS s2 FROM RANGE(5)")
+      sql("ALTER VIEW t SET TBLPROPERTIES ('x' = 'y')")
+      sql("ALTER VIEW t RENAME TO t2")
+      checkAnswer(sql("show TBLPROPERTIES t2 (x)"), Row("x", "y"))
     }
   }
 }

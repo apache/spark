@@ -69,5 +69,5 @@ private class ContainsPrimitiveClass extends Serializable {
   val floatClass = classOf[Float]
   val booleanClass = classOf[Boolean]
   val byteClass = classOf[Byte]
-  val voidClass = classOf[Void]
+  val voidClass = classOf[Unit]
 }

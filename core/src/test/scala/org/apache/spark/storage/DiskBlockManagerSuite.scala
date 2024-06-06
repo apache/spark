@@ -19,20 +19,19 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
 import java.nio.file.{Files, Paths}
-import java.nio.file.attribute.PosixFilePermissions
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.HashMap
 
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import jnr.posix.{POSIX, POSIXFactory}
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
 
-
-class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
+class DiskBlockManagerSuite extends SparkFunSuite {
   private val testConf = new SparkConf(false)
   private var rootDir0: File = _
   private var rootDir1: File = _
@@ -84,7 +83,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val ids = (1 to 100).map(i => TestBlockId("test_" + i))
     val files = ids.map(id => diskBlockManager.getFile(id))
     files.foreach(file => writeToFile(file, 10))
-    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+    assert(diskBlockManager.getAllBlocks().toSet === ids.toSet)
   }
 
   test("SPARK-22227: non-block files are skipped") {
@@ -109,8 +108,8 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(Utils.getConfiguredLocalDirs(testConf).map(
       rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
-    // mergeDir0 will be skipped as it already exists
-    assert(mergeDir0.list().length === 0)
+    // mergeDir0 can not be skipped even if it already exists
+    assert(mergeDir0.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
     // Sub directories get created under mergeDir1
     assert(mergeDir1.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
   }
@@ -139,6 +138,48 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(mergeDir.equals(DiskBlockManager.MERGE_DIRECTORY + "_1"))
     val attemptId = metaMap.get(DiskBlockManager.ATTEMPT_ID_KEY)
     assert(attemptId.equals("1"))
+  }
+
+  // Use jnr to get and override the current process umask.
+  // Expects the input mask to be an octal number
+  private def getAndSetUmask(posix: POSIX, mask: String): String = {
+    val prev = posix.umask(BigInt(mask, 8).toInt)
+    "0" + "%o".format(prev)
+  }
+
+  test("SPARK-37618: Sub dirs are group writable when removing from shuffle service enabled") {
+    val conf = testConf.clone
+    conf.set("spark.local.dir", rootDirs)
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.shuffle.service.removeShuffle", "false")
+    val posix = POSIXFactory.getPOSIX
+
+    assume(posix.isNative, "Skipping test for SPARK-37618, native posix support not found")
+
+    val oldUmask = getAndSetUmask(posix, "077")
+    try {
+      val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true,
+        isDriver = false)
+      val blockId = new TestBlockId("test")
+      val newFile = diskBlockManager.getFile(blockId)
+      val parentDir = newFile.getParentFile()
+      assert(parentDir.exists && parentDir.isDirectory)
+      val permission = Files.getPosixFilePermissions(parentDir.toPath)
+      assert(!permission.contains(PosixFilePermission.GROUP_WRITE))
+
+      assert(parentDir.delete())
+
+      conf.set("spark.shuffle.service.removeShuffle", "true")
+      val diskBlockManager2 = new DiskBlockManager(conf, deleteFilesOnStop = true,
+        isDriver = false)
+      val newFile2 = diskBlockManager2.getFile(blockId)
+      val parentDir2 = newFile2.getParentFile()
+      assert(parentDir2.exists && parentDir2.isDirectory)
+      val permission2 = Files.getPosixFilePermissions(parentDir2.toPath)
+      assert(permission2.contains(PosixFilePermission.GROUP_WRITE))
+    } finally {
+      getAndSetUmask(posix, oldUmask)
+    }
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {

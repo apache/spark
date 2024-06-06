@@ -20,13 +20,11 @@ package org.apache.spark.scheduler
 import java.io.{File, InputStream}
 import java.util.{Arrays, Properties}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.Set
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.Path
-import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito
 import org.scalatest.BeforeAndAfter
 
@@ -35,13 +33,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{EventLogFileReader, SingleEventLogFileWriter}
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{EVENT_LOG_DIR, EVENT_LOG_ENABLED}
+import org.apache.spark.internal.config.{EVENT_LOG_COMPRESS, EVENT_LOG_DIR, EVENT_LOG_ENABLE_ROLLING, EVENT_LOG_ENABLED}
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -50,8 +48,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
-  with Logging {
+class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
 
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
@@ -78,6 +75,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     testApplicationEventLogging()
   }
 
+  test("End-to-end event logging with exit code") {
+    testEventLogging(exitCode = Some(0))
+  }
+
+  test("End-to-end event logging with exit code being None") {
+    testEventLogging(exitCode = None)
+  }
+
   test("End-to-end event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
@@ -91,7 +96,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .set(key, secretPassword)
     val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val envDetails = SparkEnv.environmentDetails(
-      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty)
+      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty, Map.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = EventLoggingListener
       .redactEvent(conf, event).environmentDetails("Spark Properties").toMap
@@ -140,7 +145,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines(2).contains("SparkListenerJobStart"))
 
       lines.foreach{
-        line => JsonProtocol.sparkEventFromJson(parse(line)) match {
+        line => JsonProtocol.sparkEventFromJson(line) match {
           case logStartEvent: SparkListenerLogStart =>
             assert(logStartEvent == logStart)
 
@@ -167,6 +172,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   test("SPARK-31764: isBarrier should be logged in event log") {
     val conf = new SparkConf()
     conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_ENABLE_ROLLING, false)
+    conf.set(EVENT_LOG_COMPRESS, false)
     conf.set(EVENT_LOG_DIR, testDirPath.toString)
     val sc = new SparkContext("local", "test-SPARK-31764", conf)
     val appId = sc.applicationId
@@ -176,11 +183,11 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .mapPartitions(_.map(elem => (elem, elem)))
       .filter(elem => elem._1 % 2 == 0)
       .reduceByKey(_ + _)
-      .collect
+      .collect()
     sc.stop()
 
     val eventLogStream = EventLogFileReader.openEventLog(new Path(testDirPath, appId), fileSystem)
-    val events = readLines(eventLogStream).map(line => JsonProtocol.sparkEventFromJson(parse(line)))
+    val events = readLines(eventLogStream).map(line => JsonProtocol.sparkEventFromJson(line))
     val jobStartEvents = events
       .filter(event => event.isInstanceOf[SparkListenerJobStart])
       .map(_.asInstanceOf[SparkListenerJobStart])
@@ -219,7 +226,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    */
   private def testEventLogging(
       compressionCodec: Option[String] = None,
-      extraConf: Map[String, String] = Map()): Unit = {
+      extraConf: Map[String, String] = Map(),
+      exitCode: Option[Int] = None): Unit = {
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
@@ -227,7 +235,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val listenerBus = new LiveListenerBus(conf)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
-    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    val applicationEnd = SparkListenerApplicationEnd(1000L, exitCode)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
@@ -248,9 +256,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(lines(2).contains("SparkListenerApplicationEnd"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(1))) === applicationStart)
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(2))) === applicationEnd)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(1)) === applicationStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(2)) === applicationEnd)
     } finally {
       logData.close()
     }
@@ -307,7 +315,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       lines.foreach { line =>
         eventSet.foreach { event =>
           if (line.contains(event)) {
-            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val parsedEvent = JsonProtocol.sparkEventFromJson(line)
             val eventType = Utils.getFormattedClassName(parsedEvent)
             if (eventType == event) {
               eventSet.remove(event)
@@ -315,7 +323,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
           }
         }
       }
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
       assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
     } {
       logData.close()
@@ -337,58 +345,58 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // Executor metrics
     // driver
     val md_1 = Array(4000L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 7500L, 3500L,
-      0L, 0L, 0L, 0L, 10L, 90L, 2L, 20L)
+      0L, 0L, 0L, 0L, 10L, 90L, 2L, 20L, 110L)
     val md_2 = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 8000L, 3500L,
-      0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L)
+      0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L, 110L)
     val md_3 = Array(4200L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 7800L, 3500L,
-      0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L)
+      0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L, 120L)
 
     // executors 1 and 2
     val m1_1 = Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L, 7500L, 3500L,
-      6500L, 2500L, 5500L, 1500L, 10L, 90L, 2L, 20L)
+      6500L, 2500L, 5500L, 1500L, 10L, 90L, 2L, 20L, 110L)
     val m2_1 = Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L, 8500L, 3500L,
-      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L)
+      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L, 110L)
     val m1_2 = Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L, 8000L, 4000L,
-      7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+      7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val m2_2 = Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L, 9000L, 4000L,
-      8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+      8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val m1_3 = Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L, 8000L, 3500L,
-      7000L, 2500L, 6000L, 1500L, 10L, 90L, 2L, 20L)
+      7000L, 2500L, 6000L, 1500L, 10L, 90L, 2L, 20L, 110L)
     val m2_3 = Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L, 8500L, 3500L,
-      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L)
+      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L, 110L)
     val m1_4 = Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L,
-      0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+      0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L, 110L)
     val m2_4 = Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L,
-      40L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+      40L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val m1_5 = Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L, 5000L, 3000L,
-      4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+      4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L, 110L)
     val m2_5 = Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L,
-      20L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+      20L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L, 110L)
     val m1_6 = Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L, 3000L, 2500L,
-      2000L, 1500L, 1000L, 500L, 10L, 90L, 2L, 20L)
+      2000L, 1500L, 1000L, 500L, 10L, 90L, 2L, 20L, 110L)
     val m2_6 = Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L,
-      20L, 7000L, 3000L, 6000L, 2000L, 5000L, 1000L, 10L, 90L, 2L, 20L)
+      20L, 7000L, 3000L, 6000L, 2000L, 5000L, 1000L, 10L, 90L, 2L, 20L, 110L)
     val m1_7 = Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L,
-      0L, 4000L, 2500L, 3000L, 1500L, 2000L, 500L, 10L, 90L, 2L, 20L)
+      0L, 4000L, 2500L, 3000L, 1500L, 2000L, 500L, 10L, 90L, 2L, 20L, 110L)
     val m2_7 = Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L, 7000L,
-      4000L, 6000L, 3000L, 5000L, 2000L, 10L, 90L, 2L, 20L)
+      4000L, 6000L, 3000L, 5000L, 2000L, 10L, 90L, 2L, 20L, 110L)
 
     // tasks
     val t1 = Array(4500L, 60L, 50L, 0L, 50L, 10L, 100L, 10L, 70L, 20L,
-      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val t2 = Array(3500L, 50L, 20L, 0L, 10L, 10L, 35L, 10L, 80L, 0L,
-      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val t3 = Array(5000L, 60L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L,
-      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val t4 = Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L,
-      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val t5 = Array(7000L, 100L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L,
-      5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+      5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L, 110L)
     val t6 = Array(7200L, 70L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L,
-      8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+      8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L, 110L)
 
     def max(a: Array[Long], b: Array[Long]): Array[Long] =
-      (a, b).zipped.map(Math.max).toArray
+      a.lazyZip(b).map(Math.max).toArray
 
     // calculated metric peaks per stage per executor
     // metrics sent during stage 0 for each executor
@@ -402,17 +410,17 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // expected metric peaks per stage per executor
     val p0_1 = Array(5000L, 60L, 50L, 20L, 50L, 10L, 100L, 30L,
-      70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+      70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val p0_2 = Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L,
-      80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+      80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L, 110L)
     val p0_d = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L,
-      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L)
+      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L, 110L)
     val p1_1 = Array(7000L, 100L, 50L, 30L, 60L, 30L, 80L, 55L,
-      50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+      50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L, 110L)
     val p1_2 = Array(7200L, 70L, 50L, 40L, 10L, 30L, 50L, 60L,
-      40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+      40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L, 110L)
     val p1_d = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L,
-      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L)
+      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L, 120L)
 
     assert(Arrays.equals(p0_1, cp0_1))
     assert(Arrays.equals(p0_2, cp0_2))
@@ -518,7 +526,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       assert(lines.size === 25)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
-      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(JsonProtocol.sparkEventFromJson(lines(0)) === logStart)
       var logIdx = 1
       events.foreach { event =>
         event match {
@@ -589,7 +597,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       } else {
         stageIds.map(id => (id, 0) -> executorMetrics).toMap
       }
-    SparkListenerExecutorMetricsUpdate(executorId, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(executorId, accum.toImmutableArraySeq, executorUpdates)
   }
 
   private def createTaskEndEvent(
@@ -599,7 +607,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       stageId: Int,
       taskType: String,
       executorMetrics: ExecutorMetrics): SparkListenerTaskEnd = {
-    val taskInfo = new TaskInfo(taskId, taskIndex, 0, 1553291556000L, executorId, "executor",
+    val taskInfo = new TaskInfo(
+      taskId, taskIndex, 0, partitionId = taskIndex, 1553291556000L, executorId, "executor",
       TaskLocality.NODE_LOCAL, false)
     val taskMetrics = TaskMetrics.empty
     SparkListenerTaskEnd(stageId, 0, taskType, Success, taskInfo, executorMetrics, taskMetrics)
@@ -608,7 +617,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   /** Check that the Spark history log line matches the expected event. */
   private def checkEvent(line: String, event: SparkListenerEvent): Unit = {
     assert(line.contains(event.getClass.toString.split("\\.").last))
-    val parsed = JsonProtocol.sparkEventFromJson(parse(line))
+    val parsed = JsonProtocol.sparkEventFromJson(line)
     assert(parsed.getClass === event.getClass)
     (event, parsed) match {
       case (expected: SparkListenerStageSubmitted, actual: SparkListenerStageSubmitted) =>
@@ -640,7 +649,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       line: String,
       stageId: Int,
       expectedEvents: Map[(Int, String), SparkListenerStageExecutorMetrics]): String = {
-    JsonProtocol.sparkEventFromJson(parse(line)) match {
+    JsonProtocol.sparkEventFromJson(line) match {
       case executorMetrics: SparkListenerStageExecutorMetrics =>
           expectedEvents.get((stageId, executorMetrics.execId)) match {
             case Some(expectedMetrics) =>
@@ -661,7 +670,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   private def readLines(in: InputStream): Seq[String] = {
-    Source.fromInputStream(in).getLines().toSeq
+    Source.fromInputStream(in)(Codec.UTF8).getLines().toSeq
   }
 
   /**

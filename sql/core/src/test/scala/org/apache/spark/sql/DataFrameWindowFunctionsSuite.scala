@@ -20,45 +20,29 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Window function testing for DataFrame API.
  */
+@SlowSQLTest
 class DataFrameWindowFunctionsSuite extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper{
+  with AdaptiveSparkPlanHelper {
 
   import testImplicits._
-
-  test("reuse window partitionBy") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    val w = Window.partitionBy("key").orderBy("value")
-
-    checkAnswer(
-      df.select(
-        lead("key", 1).over(w),
-        lead("value", 1).over(w)),
-      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
-  }
-
-  test("reuse window orderBy") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    val w = Window.orderBy("value").partitionBy("key")
-
-    checkAnswer(
-      df.select(
-        lead("key", 1).over(w),
-        lead("value", 1).over(w)),
-      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
-  }
 
   test("rank functions in unspecific window") {
     withTempView("window_table") {
@@ -94,7 +78,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -147,7 +132,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("SPARK-13860: " +
     "corr, covar_pop, stddev_pop functions in specific window " +
     "LEGACY_STATISTICAL_AGGREGATE off") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -399,27 +385,36 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.getErrorClass == "MISSING_COLUMN")
-    assert(e.messageParameters.sameElements(Array("invalid", "value, key")))
+    checkError(
+      exception = e,
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`invalid`",
+        "proposal" -> "`value`, `key`"),
+      context = ExpectedContext(
+        fragment = "count",
+        callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("numerical aggregate functions on string column") {
-    val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
-    checkAnswer(
-      df.select($"key",
-        var_pop("value1").over(),
-        variance("value1").over(),
-        stddev_pop("value1").over(),
-        stddev("value1").over(),
-        sum("value1").over(),
-        mean("value1").over(),
-        avg("value1").over(),
-        corr("value1", "value2").over(),
-        covar_pop("value1", "value2").over(),
-        covar_samp("value1", "value2").over(),
-        skewness("value1").over(),
-        kurtosis("value1").over()),
-      Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    if (!conf.ansiEnabled) {
+      val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
+      checkAnswer(
+        df.select($"key",
+          var_pop("value1").over(),
+          variance("value1").over(),
+          stddev_pop("value1").over(),
+          stddev("value1").over(),
+          sum("value1").over(),
+          mean("value1").over(),
+          avg("value1").over(),
+          corr("value1", "value2").over(),
+          covar_pop("value1", "value2").over(),
+          covar_samp("value1", "value2").over(),
+          skewness("value1").over(),
+          kurtosis("value1").over()),
+        Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    }
   }
 
   test("statistical functions") {
@@ -703,6 +698,50 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("a", 4, "x", "x", "y", "x", "x", "y"),
         Row("b", 1, null, null, null, null, null, null),
         Row("b", 2, null, null, null, null, null, null)))
+
+    val df2 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df2.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2),
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2),
+        nth_value($"value", 4).over(window1),
+        nth_value($"value", 4, ignoreNulls = true).over(window1),
+        nth_value($"value", 4).over(window2),
+        nth_value($"value", 4, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "y", "y", null, null, "z", "z", null, null, null, null, null, null),
+        Row("a", 2, "y", "y", "y", "y", "z", "z", null, null, null, null, null, null),
+        Row("a", 3, "y", "y", "y", "y", "z", "z", "z", "z", null, null, null, null)))
+
+    val df3 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, nullStr),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df3.select(
+        $"key",
+        $"order",
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "z", null, null, null),
+        Row("a", 2, "z", null, null, null),
+        Row("a", 3, "z", null, "z", null)))
   }
 
   test("nth_value on descending ordered window") {
@@ -761,6 +800,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
         lead($"value", 3, null, true).over(window),
+        // offset > rowCount: SPARK-45430
+        lead($"value", 100, null, true).over(window),
         lead(concat($"value", $"key"), 1, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
@@ -768,27 +809,74 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lag($"value", 1, null, true).over(window),
         lag($"value", 2, null, true).over(window),
         lag($"value", 3, null, true).over(window),
+        // abs(offset) > rowCount: SPARK-45430
+        lag($"value", -100, null, true).over(window),
         lag(concat($"value", $"key"), 1, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
-          null, null, null, null, null, null, null),
-        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
-          null, null, "x", null, null, null, null),
-        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
-          "x", null, null, "x", null, null, "xa"),
-        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
-          null, "x", null, "x", null, null, "xa"),
-        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
-          null, null, "y", "x", null, null, "xa"),
-        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
-          "y", null, null, "y", "x", null, "ya"),
-        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
-          null, "y", "z", "y", "x", null, "ya"),
-        Row("a", 7, "v", null, null, "v", null, null, null, null,
-          "z", null, "v", "z", "y", "x", "za"),
-        Row("a", 8, null, null, null, null, null, null, null, null,
-          "v", "z", null, "v", "z", "y", "va")))
+        Row("a", 0, null, "x", null, null, "x", "y", "z", null, "xa",
+          null, null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", null, "ya",
+          null, null, "x", null, null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", null, "ya",
+          "x", null, null, "x", null, null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", null, "ya",
+          null, "x", null, "x", null, null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, null, "za",
+          null, null, "y", "x", null, null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, null, "za",
+          "y", null, null, "y", "x", null, null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, null, "va",
+          null, "y", "z", "y", "x", null, null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null, null,
+          "z", null, "v", "z", "y", "x", null, "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", null, "va")))
+  }
+
+  test("lag - Offset expression <offset> must be a literal") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(
+          $"key",
+          $"order",
+          $"value",
+          lead($"value", 1).over(window),
+          lead($"value", 2).over(window),
+          lead($"value", 0, null, true).over(window),
+          lead($"value", 1, null, true).over(window),
+          lead($"value", 2, null, true).over(window),
+          lead($"value", 3, null, true).over(window),
+          lead(concat($"value", $"key"), 1, null, true).over(window),
+          Column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
+          lag($"value", 2).over(window),
+          lag($"value", 0, null, true).over(window),
+          lag($"value", 1, null, true).over(window),
+          lag($"value", 2, null, true).over(window),
+          lag($"value", 3, null, true).over(window),
+          lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
+        "inputName" -> "`offset`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"(- nonfoldableliteral())\""
+      )
+    )
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
@@ -1046,29 +1134,489 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
   }
 
-  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
-    // This creates a single partition dataframe with 3 records:
-    //   "a", 0, null
-    //   "a", 1, "x"
-    //   "b", 0, null
-    val df = spark.range(0, 3, 1, 1).select(
-      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
-      ($"id" % 2).cast("int").as("order"),
-      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
+  test("SPARK-38237: require all cluster keys for child required distribution for window query") {
+    def partitionExpressionsColumns(expressions: Seq[Expression]): Seq[String] = {
+      expressions.flatMap {
+        case ref: AttributeReference => Some(ref.name)
+      }
+    }
 
-    val window1 = Window.partitionBy($"key").orderBy($"order")
-      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
-    val window2 = Window.partitionBy($"key").orderBy($"order")
-      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    def isShuffleExecByRequirement(
+        plan: ShuffleExchangeExec,
+        desiredClusterColumns: Seq[String]): Boolean = plan match {
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _) =>
+        partitionExpressionsColumns(op.expressions) === desiredClusterColumns
+      case _ => false
+    }
+
+    val df = Seq(("a", 1, 1), ("a", 2, 2), ("b", 1, 3), ("b", 1, 4)).toDF("key1", "key2", "value")
+    val windowSpec = Window.partitionBy("key1", "key2").orderBy("value")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true") {
+
+      val windowed = df
+        // repartition by subset of window partitionBy keys which satisfies ClusteredDistribution
+        .repartition($"key1")
+        .select(
+          lead($"key1", 1).over(windowSpec),
+          lead($"value", 1).over(windowSpec))
+
+      checkAnswer(windowed, Seq(Row("b", 4), Row(null, null), Row(null, null), Row(null, null)))
+
+      val shuffleByRequirement = windowed.queryExecution.executedPlan.exists {
+        case w: WindowExec =>
+          w.child.exists {
+            case s: ShuffleExchangeExec => isShuffleExecByRequirement(s, Seq("key1", "key2"))
+            case _ => false
+          }
+        case _ => false
+      }
+
+      assert(shuffleByRequirement, "Can't find desired shuffle node from the query plan")
+    }
+  }
+
+  test("SPARK-38308: Properly handle Stream of window expressions") {
+    val df = Seq(
+      (1, 2, 3),
+      (1, 3, 4),
+      (2, 4, 5),
+      (2, 5, 6)
+    ).toDF("a", "b", "c")
+
+    val w = Window.partitionBy("a").orderBy("b")
+    val selectExprs = LazyList(
+      sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
+      avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
+    )
     checkAnswer(
-      df.select(
-        $"key",
-        $"order",
-        nth_value($"value", 1, ignoreNulls = true).over(window1),
-        nth_value($"value", 1, ignoreNulls = true).over(window2)),
+      df.select(selectExprs: _*),
       Seq(
-        Row("a", 0, "x", null),
-        Row("a", 1, "x", "x"),
-        Row("b", 0, null, null)))
+        Row(3, 3),
+        Row(7, 3.5),
+        Row(5, 5),
+        Row(11, 5.5)
+      )
+    )
+  }
+
+  test("SPARK-38614: percent_rank should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", percent_rank().over(w)).limit(3),
+      Seq(
+        Row(0, 0.0d),
+        Row(1, 0.01d),
+        Row(2, 0.02d)
+      )
+    )
+  }
+
+  test("SPARK-40002: ntile should apply before limit") {
+    val df = Seq.tabulate(101)(identity).toDF("id")
+    val w = Window.orderBy("id")
+    checkAnswer(
+      df.select($"id", ntile(10).over(w)).limit(3),
+      Seq(
+        Row(0, 1),
+        Row(1, 1),
+        Row(2, 1)
+      )
+    )
+  }
+
+  test("SPARK-37099: Insert window group limit node for top-k computation") {
+
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, "c", 1.0),
+      ("a", 1, "x", 2.0),
+      ("a", 2, "y", 3.0),
+      ("a", 3, "z", -1.0),
+      ("a", 4, "", 2.0),
+      ("a", 4, "", 2.0),
+      ("b", 1, "h", Double.NaN),
+      ("b", 1, "n", Double.PositiveInfinity),
+      ("c", 1, "z", -2.0),
+      ("c", 1, "a", -4.0),
+      ("c", 2, nullStr, 5.0),
+      ("d", 0, "1", 1.0),
+      ("d", 1, "1", 2.0),
+      ("d", 2, "2", 3.0),
+      ("d", 3, "2", -1.0),
+      ("d", 4, "2", 2.0),
+      ("d", 4, "3", 2.0)).toDF("key", "value", "order", "value2")
+
+    val window = Window.partitionBy($"key").orderBy($"order".asc_nulls_first)
+    val window2 = Window.partitionBy($"key").orderBy($"order".desc_nulls_first)
+    val window3 = Window.orderBy($"order".asc_nulls_first)
+
+    Seq(true, false).foreach { enableEvaluator =>
+      withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enableEvaluator.toString) {
+        Seq(-1, 100).foreach { threshold =>
+          withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+            Seq($"rn" === 0, $"rn" < 1, $"rn" <= 0).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq.empty[Row]
+              )
+            }
+
+            Seq($"rn" === 1, $"rn" < 2, $"rn" <= 1).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+                Seq(
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+            }
+
+            Seq($"rn" < 3, $"rn" <= 2).foreach { condition =>
+              checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 2)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+                Seq(
+                  Row("a", 0, "c", 1.0, 2),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("a", 4, "", 2.0, 1),
+                  Row("b", 1, "h", Double.NaN, 1),
+                  Row("b", 1, "n", Double.PositiveInfinity, 2),
+                  Row("c", 1, "a", -4.0, 2),
+                  Row("c", 2, null, 5.0, 1),
+                  Row("d", 0, "1", 1.0, 1),
+                  Row("d", 1, "1", 2.0, 1),
+                  Row("d", 2, "2", 3.0, 2),
+                  Row("d", 3, "2", -1.0, 2),
+                  Row("d", 4, "2", 2.0, 2)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", row_number().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", rank().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+
+              checkAnswer(df.withColumn("rn", dense_rank().over(window3)).where(condition),
+                Seq(
+                  Row("a", 4, "", 2.0, 2),
+                  Row("a", 4, "", 2.0, 2),
+                  Row("c", 2, null, 5.0, 1)
+                )
+              )
+            }
+
+            val condition = $"rn" === 2 && $"value2" > 0.5
+            checkAnswer(df.withColumn("rn", row_number().over(window)).where(condition),
+              Seq(
+                Row("a", 4, "", 2.0, 2),
+                Row("b", 1, "n", Double.PositiveInfinity, 2),
+                Row("d", 1, "1", 2.0, 2)
+              )
+            )
+
+            checkAnswer(df.withColumn("rn", rank().over(window)).where(condition),
+              Seq(
+                Row("b", 1, "n", Double.PositiveInfinity, 2)
+              )
+            )
+
+            checkAnswer(df.withColumn("rn", dense_rank().over(window)).where(condition),
+              Seq(
+                Row("a", 0, "c", 1.0, 2),
+                Row("b", 1, "n", Double.PositiveInfinity, 2),
+                Row("d", 2, "2", 3.0, 2),
+                Row("d", 4, "2", 2.0, 2)
+              )
+            )
+
+            val multipleRowNumbers = df
+              .withColumn("rn", row_number().over(window))
+              .withColumn("rn2", row_number().over(window))
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
+            checkAnswer(multipleRowNumbers,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1)
+              )
+            )
+
+            val multipleRanks = df
+              .withColumn("rn", rank().over(window))
+              .withColumn("rn2", rank().over(window))
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
+            checkAnswer(multipleRanks,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1),
+                Row("d", 1, "1", 2.0, 1, 1)
+              )
+            )
+
+            val multipleDenseRanks = df
+              .withColumn("rn", dense_rank().over(window))
+              .withColumn("rn2", dense_rank().over(window))
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
+            checkAnswer(multipleDenseRanks,
+              Seq(
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("a", 4, "", 2.0, 1, 1),
+                Row("b", 1, "h", Double.NaN, 1, 1),
+                Row("c", 2, null, 5.0, 1, 1),
+                Row("d", 0, "1", 1.0, 1, 1),
+                Row("d", 1, "1", 2.0, 1, 1)
+              )
+            )
+
+            val multipleWindows = df
+              .withColumn("rn2", row_number().over(window2))
+              .withColumn("rn", row_number().over(window))
+              .where(Symbol("rn") < 2 && Symbol("rn2") < 3)
+            checkAnswer(multipleWindows,
+              Seq(
+                Row("b", 1, "h", Double.NaN, 2, 1),
+                Row("c", 2, null, 5.0, 1, 1)
+              )
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-42525: collapse two adjacent windows with the same partition/order in subquery") {
+    withTempView("t1") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").createOrReplaceTempView("t1")
+      val df = sql(
+        """
+          |SELECT a, b, rk, row_number() OVER (PARTITION BY a ORDER BY b) AS rn
+          |FROM   (SELECT a, b, rank() OVER (PARTITION BY a ORDER BY b) AS rk
+          |        FROM t1) t2
+          |""".stripMargin)
+
+      val windows = df.queryExecution.optimizedPlan.collect { case w: LogicalWindow => w }
+      assert(windows.size === 1)
+    }
+  }
+
+  test("SPARK-45543: InferWindowGroupLimit causes bug " +
+    "if the other window functions haven't the same window frame as the rank-like functions") {
+    val df = Seq(
+      (1, "Dave", 1, 2020),
+      (2, "Dave", 1, 2021),
+      (3, "Dave", 2, 2022),
+      (4, "Dave", 3, 2023),
+      (5, "Dave", 3, 2024),
+      (6, "Mark", 2, 2022),
+      (7, "Mark", 3, 2023),
+      (8, "Mark", 3, 2024),
+      (9, "Amy", 6, 2021),
+      (10, "Amy", 5, 2022),
+      (11, "Amy", 6, 2023),
+      (12, "Amy", 7, 2024),
+      (13, "John", 7, 2024)).toDF("id", "name", "score", "year")
+
+    val window = Window.partitionBy($"year").orderBy($"score".desc)
+    val window2 = window.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    val window3 = window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+        // The other window functions have the same window frame as the rank-like functions.
+        // df2, df3 and df4 can apply InferWindowGroupLimit
+        val df2 = df
+          .withColumn("rn", row_number().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df2.filter("rn=1"), Seq(
+          Row(1, "Dave", 1, 2020, 1, Array(1)),
+          Row(9, "Amy", 6, 2021, 1, Array(6)),
+          Row(10, "Amy", 5, 2022, 1, Array(5)),
+          Row(11, "Amy", 6, 2023, 1, Array(6)),
+          Row(12, "Amy", 7, 2024, 1, Array(7))
+        ))
+
+        val df3 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df3.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3))
+        ))
+
+        val df4 = df
+          .withColumn("rank", dense_rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window2))
+          .sort($"year")
+
+        checkAnswer(df4.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3)),
+          Row(5, "Dave", 3, 2024, 2, Array(7, 7, 3)),
+          Row(8, "Mark", 3, 2024, 2, Array(7, 7, 3, 3))
+        ))
+
+        // The other window functions haven't the same window frame as the rank-like functions.
+        // df5, df6 and df7 cannot apply InferWindowGroupLimit
+        val df5 = df
+          .withColumn("rn", row_number().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df5.filter("rn=1"), Seq(
+          Row(1, "Dave", 1, 2020, 1, Array(1)),
+          Row(9, "Amy", 6, 2021, 1, Array(6, 1)),
+          Row(10, "Amy", 5, 2022, 1, Array(5, 2, 2)),
+          Row(11, "Amy", 6, 2023, 1, Array(6, 3, 3)),
+          Row(12, "Amy", 7, 2024, 1, Array(7, 7, 3, 3))
+        ))
+
+        val df6 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df6.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3))
+        ))
+
+        val df7 = df
+          .withColumn("rank", dense_rank().over(window))
+          .withColumn("all_scores", collect_list($"score").over(window3))
+          .sort($"year")
+
+        checkAnswer(df7.filter("rank=2"), Seq(
+          Row(2, "Dave", 1, 2021, 2, Array(6, 1)),
+          Row(3, "Dave", 2, 2022, 2, Array(5, 2, 2)),
+          Row(6, "Mark", 2, 2022, 2, Array(5, 2, 2)),
+          Row(4, "Dave", 3, 2023, 2, Array(6, 3, 3)),
+          Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3)),
+          Row(5, "Dave", 3, 2024, 2, Array(7, 7, 3, 3)),
+          Row(8, "Mark", 3, 2024, 2, Array(7, 7, 3, 3))
+        ))
+      }
+    }
+  }
+
+  test("SPARK-46941: Can't insert window group limit node for top-k computation if contains " +
+    "SizeBasedWindowFunction") {
+    val df = Seq(
+      (1, "Dave", 1, 2020),
+      (2, "Mark", 2, 2020),
+      (3, "Amy", 3, 2020),
+      (4, "Dave", 1, 2021),
+      (5, "Mark", 2, 2021),
+      (6, "Amy", 3, 2021),
+      (7, "John", 4, 2021)).toDF("id", "name", "score", "year")
+
+    val window = Window.partitionBy($"year").orderBy($"score".desc)
+
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+        val df2 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("percent_rank", percent_rank().over(window))
+          .sort($"year")
+        checkAnswer(df2.filter("rank=2"), Seq(
+          Row(2, "Mark", 2, 2020, 2, 0.5),
+          Row(6, "Amy", 3, 2021, 2, 0.3333333333333333)
+        ))
+      }
+    }
   }
 }

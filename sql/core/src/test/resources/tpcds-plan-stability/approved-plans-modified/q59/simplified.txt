@@ -16,21 +16,21 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                               Filter [ss_store_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                    Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
                                     Filter [d_date_sk,d_week_seq]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
+                                          Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq,d_day_name]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (3)
                       Filter [s_store_sk,s_store_id]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store [s_store_sk,s_store_id,s_store_name]
+                            Scan parquet spark_catalog.default.store [s_store_sk,s_store_id,s_store_name]
             InputAdapter
               BroadcastExchange #4
                 WholeStageCodegen (4)
@@ -38,7 +38,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                     Filter [d_month_seq,d_week_seq]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.date_dim [d_month_seq,d_week_seq]
+                          Scan parquet spark_catalog.default.date_dim [d_month_seq,d_week_seq]
         InputAdapter
           BroadcastExchange #5
             WholeStageCodegen (9)
@@ -56,7 +56,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                     Filter [ss_store_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                                          Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                     InputAdapter
                                       ReusedExchange [d_date_sk,d_week_seq,d_day_name] #2
                       InputAdapter
@@ -65,7 +65,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                             Filter [s_store_sk,s_store_id]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.store [s_store_sk,s_store_id]
+                                  Scan parquet spark_catalog.default.store [s_store_sk,s_store_id]
                   InputAdapter
                     BroadcastExchange #8
                       WholeStageCodegen (8)
@@ -73,4 +73,4 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                           Filter [d_month_seq,d_week_seq]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.date_dim [d_month_seq,d_week_seq]
+                                Scan parquet spark_catalog.default.date_dim [d_month_seq,d_week_seq]

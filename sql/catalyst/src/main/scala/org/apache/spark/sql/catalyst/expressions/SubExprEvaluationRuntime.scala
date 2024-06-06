@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.IdentityHashMap
+import java.util.concurrent.ExecutionException
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
@@ -53,9 +54,9 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
     cache.get(proxy).result
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
-    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
-    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+    case e @ (_: UncheckedExecutionException | _: ExecutionError | _: ExecutionException) =>
       throw e.getCause
   }
 

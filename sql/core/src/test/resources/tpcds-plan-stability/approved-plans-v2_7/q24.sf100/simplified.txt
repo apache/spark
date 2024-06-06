@@ -40,7 +40,7 @@ WholeStageCodegen (12)
                                                                           Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
                                                                             ColumnarToRow
                                                                               InputAdapter
-                                                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
+                                                                                Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                         InputAdapter
                                                           WholeStageCodegen (7)
                                                             Sort [i_item_sk]
@@ -50,7 +50,7 @@ WholeStageCodegen (12)
                                                                     Filter [i_item_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
-                                                                          Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                                          Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
                                         InputAdapter
                                           WholeStageCodegen (11)
                                             Sort [sr_ticket_number,sr_item_sk]
@@ -95,27 +95,27 @@ WholeStageCodegen (12)
                                                                                     Filter [s_market_id,s_store_sk,s_zip]
                                                                                       ColumnarToRow
                                                                                         InputAdapter
-                                                                                          Scan parquet default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
+                                                                                          Scan parquet spark_catalog.default.store [s_store_sk,s_store_name,s_market_id,s_state,s_zip]
                                                                             Filter [ca_address_sk,ca_country,ca_zip]
                                                                               ColumnarToRow
                                                                                 InputAdapter
-                                                                                  Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip,ca_country]
+                                                                                  Scan parquet spark_catalog.default.customer_address [ca_address_sk,ca_state,ca_zip,ca_country]
                                                                   Filter [c_customer_sk,c_current_addr_sk,c_birth_country]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.customer [c_customer_sk,c_current_addr_sk,c_first_name,c_last_name,c_birth_country]
+                                                                        Scan parquet spark_catalog.default.customer [c_customer_sk,c_current_addr_sk,c_first_name,c_last_name,c_birth_country]
                                                         Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
                                                           Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
+                                                                Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                     InputAdapter
                                                       BroadcastExchange #8
                                                         WholeStageCodegen (4)
                                                           Filter [i_color,i_item_sk]
                                                             ColumnarToRow
                                                               InputAdapter
-                                                                Scan parquet default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
+                                                                Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_size,i_color,i_units,i_manager_id]
                                     InputAdapter
                                       WholeStageCodegen (8)
                                         Sort [sr_ticket_number,sr_item_sk]
@@ -126,4 +126,4 @@ WholeStageCodegen (12)
                                                   Filter [sr_ticket_number,sr_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
+                                                        Scan parquet spark_catalog.default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]

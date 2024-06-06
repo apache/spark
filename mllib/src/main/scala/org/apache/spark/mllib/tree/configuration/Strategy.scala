@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.tree.configuration
 
 import scala.beans.BeanProperty
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._

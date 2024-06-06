@@ -20,6 +20,6 @@ import org.apache.spark.deploy.k8s.integrationtest.TestConstants
 import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
 
 private[spark] object DockerForDesktopBackend
-  extends KubeConfigBackend(TestConstants.BACKEND_DOCKER_FOR_DESKTOP) {
+  extends KubeConfigBackend(TestConstants.BACKEND_DOCKER_DESKTOP) {
 
 }

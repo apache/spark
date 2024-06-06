@@ -26,8 +26,9 @@ from py4j.protocol import Py4JJavaError
 from pyspark.mllib.fpm import FPGrowth
 from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.serializers import PickleSerializer
+from pyspark.serializers import CPickleSerializer
 from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.testing.utils import eventually
 
 
 class ListTests(MLlibTestCase):
@@ -96,6 +97,7 @@ class ListTests(MLlibTestCase):
             # TODO: Allow small numeric difference.
             self.assertTrue(array_equal(c1, c2))
 
+    @eventually(timeout=60, catch_assertions=True)
     def test_gmm(self):
         from pyspark.mllib.clustering import GaussianMixture
 
@@ -107,7 +109,13 @@ class ListTests(MLlibTestCase):
                 [-6, -7],
             ]
         )
-        clusters = GaussianMixture.train(data, 2, convergenceTol=0.001, maxIterations=10, seed=1)
+        clusters = GaussianMixture.train(
+            data,
+            2,
+            convergenceTol=0.001,
+            maxIterations=10,
+            seed=1,
+        )
         labels = clusters.predict(data).collect()
         self.assertEqual(labels[0], labels[1])
         self.assertEqual(labels[2], labels[3])
@@ -295,7 +303,7 @@ class ListTests(MLlibTestCase):
         GradientBoostedTrees.trainRegressor(
             rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=32
         )
-        with self.assertRaises(Exception) as cm:
+        with self.assertRaises(Exception):
             GradientBoostedTrees.trainRegressor(
                 rdd, categoricalFeaturesInfo=categoricalFeaturesInfo, numIterations=4, maxBins=1
             )
@@ -303,7 +311,7 @@ class ListTests(MLlibTestCase):
 
 class ALSTests(MLlibTestCase):
     def test_als_ratings_serialize(self):
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         r = Rating(7, 1123, 3.14)
         jr = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(r)))
         nr = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jr)))
@@ -312,7 +320,7 @@ class ALSTests(MLlibTestCase):
         self.assertAlmostEqual(r.rating, nr.rating, 2)
 
     def test_als_ratings_id_long_error(self):
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
         self.assertRaises(
@@ -338,7 +346,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

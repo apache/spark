@@ -20,15 +20,16 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{RMSE, TEST_SIZE, TRAINING_SIZE}
 import org.apache.spark.ml.linalg.{BLAS, Vectors}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -38,10 +39,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
@@ -188,7 +191,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     assert(compressed.size === 5)
     assert(compressed.srcIds.toSeq === Seq(0, 1, 2, 3))
     assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
-    var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
+    val decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
     var i = 0
     while (i < compressed.srcIds.length) {
       var j = compressed.dstPtrs(i)
@@ -204,67 +207,115 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     assert(decompressed.toSet === expected)
   }
 
-  test("CheckedCast") {
-    val checkedCast = new ALS().checkedCast
-    val df = spark.range(1)
+  test("ALS validate input dataset") {
+    import testImplicits._
 
     withClue("Valid Integer Ids") {
-      df.select(checkedCast(lit(123))).collect()
+      val df = sc.parallelize(Seq(
+        (123, 1, 0.5),
+        (111, 2, 1.0)
+      )).toDF("item", "user", "rating")
+      new ALS().setMaxIter(1).fit(df)
     }
 
     withClue("Valid Long Ids") {
-      df.select(checkedCast(lit(1231L))).collect()
-    }
-
-    withClue("Valid Decimal Ids") {
-      df.select(checkedCast(lit(123).cast(DecimalType(15, 2)))).collect()
+      val df = sc.parallelize(Seq(
+        (1231L, 12L, 0.5),
+        (1112L, 21L, 1.0)
+      )).toDF("item", "user", "rating")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        new ALS().setMaxIter(1).fit(df)
+      }
     }
 
     withClue("Valid Double Ids") {
-      df.select(checkedCast(lit(123.0))).collect()
+      val df = sc.parallelize(Seq(
+        (123.0, 12.0, 0.5),
+        (111.0, 21.0, 1.0)
+      )).toDF("item", "user", "rating")
+      new ALS().setMaxIter(1).fit(df)
     }
 
-    val msg = "either out of Integer range or contained a fractional part"
-    withClue("Invalid Long: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000L))).collect()
-      }
-      assert(e.getMessage.contains(msg))
+    withClue("Valid Decimal Ids") {
+      val df = sc.parallelize(Seq(
+        (1231L, 12L, 0.5),
+        (1112L, 21L, 1.0)
+      )).toDF("item", "user", "rating")
+        .select(
+          col("item").cast(DecimalType(15, 2)).as("item"),
+          col("user").cast(DecimalType(15, 2)).as("user"),
+          col("rating")
+        )
+      new ALS().setMaxIter(1).fit(df)
     }
 
-    withClue("Invalid Decimal: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
+    val msg = "ALS only supports non-Null values"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("Invalid Long: out of range") {
+        val df = sc.parallelize(Seq(
+          (1231000000000L, 12L, 0.5),
+          (1112L, 21L, 1.0)
+        )).toDF("item", "user", "rating")
+        val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
+        assert(e.getMessage.contains(msg))
       }
-      assert(e.getMessage.contains(msg))
-    }
 
-    withClue("Invalid Decimal: fractional part") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(123.1).cast(DecimalType(15, 2)))).collect()
+      withClue("Invalid Double: out of range") {
+        val df = sc.parallelize(Seq(
+          (1231000000000.0, 12.0, 0.5),
+          (111.0, 21.0, 1.0)
+        )).toDF("item", "user", "rating")
+        val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
+        assert(e.getMessage.contains(msg))
       }
-      assert(e.getMessage.contains(msg))
-    }
-
-    withClue("Invalid Double: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000.0))).collect()
-      }
-      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Double: fractional part") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(123.1))).collect()
+      val df = sc.parallelize(Seq(
+        (123.1, 12.0, 0.5),
+        (111.0, 21.0, 1.0)
+      )).toDF("item", "user", "rating")
+      val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("Invalid Decimal: out of range") {
+        val df = sc.parallelize(Seq(
+          (1231000000000.0, 12L, 0.5),
+          (1112.0, 21L, 1.0)
+        )).toDF("item", "user", "rating")
+          .select(
+            col("item").cast(DecimalType(15, 2)).as("item"),
+            col("user").cast(DecimalType(15, 2)).as("user"),
+            col("rating")
+          )
+        val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
+        assert(e.getMessage.contains(msg))
       }
+    }
+
+    withClue("Invalid Decimal: fractional part") {
+      val df = sc.parallelize(Seq(
+        (123.1, 12L, 0.5),
+        (1112.0, 21L, 1.0)
+      )).toDF("item", "user", "rating")
+        .select(
+          col("item").cast(DecimalType(15, 2)).as("item"),
+          col("user").cast(DecimalType(15, 2)).as("user"),
+          col("rating")
+        )
+      val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
       assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Type") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit("123.1"))).collect()
-      }
-      assert(e.getMessage.contains("was not numeric"))
+      val df = sc.parallelize(Seq(
+        ("123.0", 12.0, 0.5),
+        ("111", 21.0, 1.0)
+      )).toDF("item", "user", "rating")
+      val e = intercept[Exception] { new ALS().setMaxIter(1).fit(df) }
+      assert(e.getMessage.contains("Column item must be of type numeric"))
     }
   }
 
@@ -303,8 +354,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
         }
       }
     }
-    logInfo(s"Generated an explicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
+    logInfo(log"Generated an explicit feedback dataset with ${MDC(TRAINING_SIZE, training.size)} " +
+      log"ratings for training and ${MDC(TEST_SIZE, test.size)} for test.")
     (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 
@@ -435,7 +486,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
               val mse = errorSquares.sum / errorSquares.length
               math.sqrt(mse)
             }
-          logInfo(s"Test RMSE is $rmse.")
+          logInfo(log"Test RMSE is ${MDC(RMSE, rmse)}.")
           assert(rmse < targetRMSE)
     }
 
@@ -676,46 +727,48 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       (0, big, small, 0, big, small, 2.0),
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
-    val msg = "either out of Integer range or contained a fractional part"
-    withClue("fit should fail when ids exceed integer range. ") {
-      assert(intercept[SparkException] {
-        als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains(msg))
-      assert(intercept[SparkException] {
-        als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains(msg))
-      assert(intercept[SparkException] {
-        als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains(msg))
-      assert(intercept[SparkException] {
-        als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains(msg))
-    }
-    withClue("transform should fail when ids exceed integer range. ") {
-      val model = als.fit(df)
-      def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        val e1 = intercept[SparkException] {
-          model.transform(dataFrame).collect()
-        }
-        TestUtils.assertExceptionMsg(e1, msg)
-        val e2 = intercept[StreamingQueryException] {
-          testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }
-        TestUtils.assertExceptionMsg(e2, msg)
+    val msg = "ALS only supports non-Null values"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("fit should fail when ids exceed integer range. ") {
+        assert(intercept[Exception] {
+          als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
+        }.getMessage.contains(msg))
       }
-      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
-        df("item")))
-      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("user_small").as("user"),
-        df("item")))
-      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("item_big").as("item"),
-        df("user")))
-      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("item_small").as("item"),
-        df("user")))
+      withClue("transform should fail when ids exceed integer range. ") {
+        val model = als.fit(df)
+        def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
+          val e1 = intercept[Exception] {
+            model.transform(dataFrame).collect()
+          }
+          TestUtils.assertExceptionMsg(e1, msg)
+          val e2 = intercept[StreamingQueryException] {
+            testTransformer[A](dataFrame, model, "prediction") { _ => }
+          }
+          TestUtils.assertExceptionMsg(e2, msg)
+        }
+        testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
+          df("item")))
+        testTransformIdExceedsIntRange[(Double, Int)](df.select(df("user_small").as("user"),
+          df("item")))
+        testTransformIdExceedsIntRange[(Long, Int)](df.select(df("item_big").as("item"),
+          df("user")))
+        testTransformIdExceedsIntRange[(Double, Int)](df.select(df("item_small").as("item"),
+          df("user")))
+      }
     }
   }
 
   test("SPARK-18268: ALS with empty RDD should fail with better message") {
-    val ratings = sc.parallelize(Array.empty[Rating[Int]])
+    val ratings = sc.parallelize(Array.empty[Rating[Int]].toImmutableArraySeq)
     intercept[IllegalArgumentException] {
       ALS.train(ratings)
     }
@@ -727,7 +780,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     import org.apache.spark.sql.functions._
 
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val knownUser = data.select(max("user")).as[Int].first()
     val unknownUser = knownUser + 10
     val knownItem = data.select(max("item")).as[Int].first()
@@ -764,7 +817,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val model = new ALS().fit(data)
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
       testTransformer[Rating[Int]](data, model.setColdStartStrategy(s), "prediction") { _ => }
@@ -794,8 +847,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   test("recommendForAllUsers with k <, = and > num_items") {
     val model = getALSModel
-    val numUsers = model.userFactors.count
-    val numItems = model.itemFactors.count
+    val numUsers = model.userFactors.count()
+    val numItems = model.itemFactors.count()
     val expected = Map(
       0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
       1 -> Seq((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
@@ -804,7 +857,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
@@ -814,8 +867,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   test("recommendForAllItems with k <, = and > num_users") {
     val model = getALSModel
-    val numUsers = model.userFactors.count
-    val numItems = model.itemFactors.count
+    val numUsers = model.userFactors.count()
+    val numItems = model.itemFactors.count()
     val expected = Map(
       3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
       4 -> Seq((0, 44f), (2, 30f), (1, 26f)),
@@ -825,7 +878,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
@@ -837,17 +890,17 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
-    val numItems = model.itemFactors.count
+    val numItems = model.itemFactors.count()
     val expected = Map(
       0 -> Seq((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
       2 -> Seq((3, 51f), (5, 45f), (4, 30f), (6, 18f))
     )
     val userSubset = expected.keys.toSeq.toDF("user")
-    val numUsersSubset = userSubset.count
+    val numUsersSubset = userSubset.count()
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
@@ -859,17 +912,17 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val model = getALSModel
-    val numUsers = model.userFactors.count
+    val numUsers = model.userFactors.count()
     val expected = Map(
       3 -> Seq((0, 54f), (2, 51f), (1, 39f)),
       6 -> Seq((0, 28f), (2, 18f), (1, 16f))
     )
     val itemSubset = expected.keys.toSeq.toDF("item")
-    val numItemsSubset = itemSubset.count
+    val numItemsSubset = itemSubset.count()
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))
@@ -888,7 +941,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val singleUserRecs = model.recommendForUserSubset(users, k)
     val dupUserRecs = model.recommendForUserSubset(dupUsers, k)
       .as[(Int, Seq[(Int, Float)])].collect().toMap
-    assert(singleUserRecs.count == dupUserRecs.size)
+    assert(singleUserRecs.count() == dupUserRecs.size)
     checkRecommendations(singleUserRecs, dupUserRecs, "item")
 
     val items = Seq(3, 4, 5).toDF("item")
@@ -896,7 +949,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val singleItemRecs = model.recommendForItemSubset(items, k)
     val dupItemRecs = model.recommendForItemSubset(dupItems, k)
       .as[(Int, Seq[(Int, Float)])].collect().toMap
-    assert(singleItemRecs.count == dupItemRecs.size)
+    assert(singleItemRecs.count() == dupItemRecs.size)
     checkRecommendations(singleItemRecs, dupItemRecs, "user")
   }
 
@@ -930,7 +983,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val spark = this.spark
     import spark.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    val data = ratings.toDF
+    val data = ratings.toDF()
     val model = new ALS()
       .setMaxIter(2)
       .setImplicitPrefs(true)
@@ -961,7 +1014,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       assert(recs === expected(id))
     }
     topK.collect().foreach { row =>
-      val recs = row.getAs[WrappedArray[Row]]("recommendations")
+      val recs = row.getAs[mutable.ArraySeq[Row]]("recommendations")
       assert(recs(0).fieldIndex(dstColName) == 0)
       assert(recs(0).fieldIndex("rating") == 1)
     }
@@ -994,7 +1047,7 @@ class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
-        val spark = SparkSession.builder
+        val spark = SparkSession.builder()
           .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
@@ -1021,8 +1074,7 @@ class ALSCleanerSuite extends SparkFunSuite with LocalRootDirsTest {
   }
 }
 
-class ALSStorageSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
+class ALSStorageSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("invalid storage params") {
     intercept[IllegalArgumentException] {
@@ -1064,8 +1116,8 @@ class ALSStorageSuite
     val nonDefaultListener = new IntermediateRDDStorageListener
     sc.addSparkListener(nonDefaultListener)
     val nonDefaultModel = als
-      .setFinalStorageLevel("MEMORY_ONLY")
-      .setIntermediateStorageLevel("DISK_ONLY")
+      .setFinalStorageLevel(StorageLevelMapper.MEMORY_ONLY.name())
+      .setIntermediateStorageLevel(StorageLevelMapper.DISK_ONLY.name())
       .fit(data)
     // check final factor RDD non-default storage levels
     val levels = sc.getPersistentRDDs.collect {
@@ -1118,8 +1170,8 @@ object ALSSuite extends Logging {
     "alpha" -> 0.9,
     "nonnegative" -> true,
     "checkpointInterval" -> 20,
-    "intermediateStorageLevel" -> "MEMORY_ONLY",
-    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "intermediateStorageLevel" -> StorageLevelMapper.MEMORY_ONLY.name(),
+    "finalStorageLevel" -> StorageLevelMapper.MEMORY_AND_DISK_SER.name()
   )
 
   // Helper functions to generate test data we share between ALS test suites
@@ -1195,8 +1247,8 @@ object ALSSuite extends Logging {
         }
       }
     }
-    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
+    logInfo(log"Generated an implicit feedback dataset with ${MDC(TRAINING_SIZE, training.size)}" +
+      log" ratings for training and ${MDC(TEST_SIZE, test.size)} for test.")
     (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 }

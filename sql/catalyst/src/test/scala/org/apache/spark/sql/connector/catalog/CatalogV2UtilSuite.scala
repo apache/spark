@@ -21,14 +21,14 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.IntegerType
 
 class CatalogV2UtilSuite extends SparkFunSuite {
   test("Load relation should encode the identifiers for V2Relations") {
     val testCatalog = mock(classOf[TableCatalog])
     val ident = mock(classOf[Identifier])
     val table = mock(classOf[Table])
-    when(table.schema()).thenReturn(new StructType().add("i", "int"))
+    when(table.columns()).thenReturn(Array(Column.create("i", IntegerType)))
     when(testCatalog.loadTable(ident)).thenReturn(table)
     val r = CatalogV2Util.loadRelation(testCatalog, ident)
     assert(r.isDefined)

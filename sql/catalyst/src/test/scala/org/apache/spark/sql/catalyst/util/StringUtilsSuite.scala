@@ -129,13 +129,11 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("SPARK-34872: quoteIfNeeded should quote a string which contains non-word characters") {
-    assert(quoteIfNeeded("a b") === "`a b`")
-    assert(quoteIfNeeded("a*b") === "`a*b`")
-    assert(quoteIfNeeded("123") === "`123`")
-    assert(quoteIfNeeded("1a") === "1a")
-    assert(quoteIfNeeded("_ab_") === "_ab_")
-    assert(quoteIfNeeded("_") === "_")
-    assert(quoteIfNeeded("") === "``")
+  test("SPARK-43841: mix of multipart and single-part identifiers") {
+    val baseString = "b"
+    // mix of multipart and single-part
+    val testStrings = Seq(Seq("c1"), Seq("v1", "c2"), Seq("v2.c2"))
+    val expectedOutput = Seq("`c1`", "`v2.c2`", "`v1`.`c2`")
+    assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
   }
 }

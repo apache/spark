@@ -1,0 +1,65 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// To compile and create test class:
+// protoc --java_out=connector/protobuf/src/test/resources/protobuf/ connector/protobuf/src/test/resources/protobuf/serde_suite.proto
+// protoc --descriptor_set_out=connector/protobuf/src/test/resources/protobuf/serde_suite.desc --java_out=connector/protobuf/src/test/resources/protobuf/org/apache/spark/sql/protobuf/ connector/protobuf/src/test/resources/protobuf/serde_suite.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.protobuf.protos;
+option java_outer_classname = "SerdeSuiteProtos";
+
+/* Clean Message*/
+message SerdeBasicMessage {
+  Foo foo = 1;
+}
+
+message Foo {
+   int32 bar = 1;
+}
+
+/* Field Type missMatch in root Message*/
+message MissMatchTypeInRoot {
+  int64 foo = 1;
+}
+
+/* Field bar missing from protobuf and Available in SQL*/
+message FieldMissingInProto {
+  MissingField foo = 1;
+}
+
+message MissingField {
+  int64 barFoo = 1;
+}
+
+/* Deep-nested field bar type missMatch Message*/
+message MissMatchTypeInDeepNested {
+  TypeMissNested top = 1;
+}
+
+message TypeMissNested {
+  TypeMiss foo = 1;
+}
+
+message TypeMiss {
+  int64 bar = 1;
+}
+
+message Baz {
+  int32 bar = 1;
+  int32 baz = 2;
+}

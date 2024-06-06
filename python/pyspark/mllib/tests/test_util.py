@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 
-from pyspark.mllib.common import _to_java_object_rdd  # type: ignore[attr-defined]
+from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
@@ -61,7 +61,7 @@ class MLUtilsTests(MLlibTestCase):
             self.assertEqual(len(ret), 2)
             self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
             self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
-        except:
+        except BaseException:
             self.fail()
         finally:
             shutil.rmtree(load_vectors_path)
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_util import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

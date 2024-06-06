@@ -26,13 +26,14 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -208,15 +209,19 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
-          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
-            s" driver memory (${driverMemory}m)." +
-            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, thisClassName)}.save() was called, " +
+            log"but it may fail because of too little driver memory " +
+            log"(${MDC(LogKeys.DRIVER_MEMORY_SIZE, driverMemory)}m). If failure occurs, " +
+            log"try setting driver-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       } else {
         if (sc.executorMemory <= memThreshold) {
-          logWarning(s"$thisClassName.save() was called, but it may fail because of too little" +
-            s" executor memory (${sc.executorMemory}m)." +
-            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, thisClassName)}.save() was called, " +
+            log"but it may fail because of too little executor memory " +
+            log"(${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
+            log"try setting executor-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       }
 
@@ -244,7 +249,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Build node data into a tree.
       val trees = constructTrees(nodes)
       assert(trees.length == 1,
-        s"Decision tree should contain exactly one tree but got ${trees.size} trees.")
+        s"Decision tree should contain exactly one tree but got ${trees.length} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
       assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $dataPath." +
         s" Expected $numNodes nodes but found ${model.numNodes}")
@@ -260,7 +265,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
           (treeId, constructTree(data))
         }.sortBy(_._1)
       val numTrees = trees.length
-      val treeIndices = trees.map(_._1).toSeq
+      val treeIndices = trees.map(_._1).toImmutableArraySeq
       assert(treeIndices == (0 until numTrees),
         s"Tree indices must start from 0 and increment by 1, but we found $treeIndices.")
       trees.map(_._2)
@@ -312,7 +317,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
    */
   @Since("1.3.0")
   override def load(sc: SparkContext, path: String): DecisionTreeModel = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val (loadedClassName, version, metadata) = Loader.loadMetadata(sc, path)
     val algo = (metadata \ "algo").extract[String]
     val numNodes = (metadata \ "numNodes").extract[Int]

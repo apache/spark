@@ -21,15 +21,15 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.3.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sql_2.12</artifactId>
+  <artifactId>spark-sql_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>sql</sbt.project.name>
   </properties>
@@ -38,7 +38,6 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.20.3</version>
     </dependency>
     <dependency>
       <groupId>com.univocity</groupId>
@@ -90,22 +89,27 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
+    <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-format</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
+      <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-mapreduce</artifactId>
+      <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>
@@ -143,8 +147,16 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.ws.xmlschema</groupId>
+      <artifactId>xmlschema-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm9-shaded</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -154,7 +166,7 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>1.4.195</version>
+      <version>2.2.220</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -173,13 +185,27 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc8</artifactId>
+      <artifactId>ojdbc11</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derby</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derbytools</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -199,7 +225,19 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>htmlunit-driver</artifactId>
+      <artifactId>htmlunit3-driver</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Explicit declaration of bouncy-castle dependencies are
+         needed for maven test builds on later hadoop releases.-->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -241,18 +279,6 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>src/main/scala-${scala.binary.version}</source>
-              </sources>
-            </configuration>
-          </execution>
-          <execution>
             <id>add-scala-test-sources</id>
             <phase>generate-test-sources</phase>
             <goals>
@@ -268,22 +294,4 @@
       </plugin>
     </plugins>
   </build>
-  
-  <profiles>
-    <profile>
-      <id>hadoop-2.7</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 </project>

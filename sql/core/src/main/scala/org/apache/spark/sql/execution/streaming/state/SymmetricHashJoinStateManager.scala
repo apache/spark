@@ -19,12 +19,17 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.Locale
 
+import scala.annotation.tailrec
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -46,6 +51,12 @@ import org.apache.spark.util.NextIterator
  * @param hadoopConf            Hadoop configuration for reading state data from storage
  * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
+ * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null
+ *                              values.
+ * @param useStateStoreCoordinator  Whether to use a state store coordinator to maintain the state
+ *                                  store providers being used in this class. If true, Spark will
+ *                                  take care of management for state store providers, e.g. running
+ *                                  maintenance task for these providers.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -74,7 +85,9 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
-    stateFormatVersion: Int) extends Logging {
+    stateFormatVersion: Int,
+    skippedNullValueCount: Option[SQLMetric] = None,
+    useStateStoreCoordinator: Boolean = true) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -175,10 +188,61 @@ class SymmetricHashJoinStateManager(
 
         // We only reach here if there were no satisfying keys left, which means we're done.
         finished = true
-        return null
+        null
       }
 
       override def close(): Unit = {}
+    }
+  }
+
+  /**
+   * Perform a full scan to provide all available data.
+   *
+   * This produces an iterator over the (key, value, match) tuples. Callers are expected
+   * to consume fully to clean up underlying iterators correctly.
+   */
+  def iterator: Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedRet = new KeyToValuePair()
+
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+
+      @tailrec
+      override def getNext(): KeyToValuePair = {
+        if (currentKey != null) {
+          assert(index < numValues)
+
+          val valueAndMatched = keyWithIndexToValue.get(currentKey, index)
+          index += 1
+
+          reusedRet.withNew(currentKey, valueAndMatched)
+
+          if (index == numValues) {
+            currentKey = null
+            numValues = 0L
+            index = 0L
+          }
+
+          reusedRet
+        } else if (allKeyToNumValues.hasNext) {
+          val newKeyToNumValues = allKeyToNumValues.next()
+          currentKey = newKeyToNumValues.key
+          numValues = newKeyToNumValues.numValue
+          index = 0L
+
+          getNext()
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {}
     }
   }
 
@@ -222,8 +286,12 @@ class SymmetricHashJoinStateManager(
         valueRemoved = false
       }
 
-      // Find the next value satisfying the condition, updating `currentKey` and `numValues` if
-      // needed. Returns null when no value can be found.
+      /**
+       * Find the next value satisfying the condition, updating `currentKey` and `numValues` if
+       * needed. Returns null when no value can be found.
+       * Note that we will skip nulls explicitly if config setting for the same is
+       * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+       */
       private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
         // value satisfying the removal condition.
@@ -233,7 +301,9 @@ class SymmetricHashJoinStateManager(
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
             val valuePair = keyWithIndexToValue.get(currentKey, index)
-            if (removalCondition(valuePair.value)) {
+            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              index += 1
+            } else if (removalCondition(valuePair.value)) {
               return valuePair
             } else {
               index += 1
@@ -253,7 +323,17 @@ class SymmetricHashJoinStateManager(
         }
 
         // We tried and failed to find the next value.
-        return null
+        null
+      }
+
+      /**
+       * Find the first non-null value index starting from end
+       * and going up-to stopIndex.
+       */
+      private def getRightMostNonNullIndex(stopIndex: Long): Option[Long] = {
+        (numValues - 1 to stopIndex by -1).find { idx =>
+          keyWithIndexToValue.get(currentKey, idx) != null
+        }
       }
 
       override def getNext(): KeyToValuePair = {
@@ -272,19 +352,40 @@ class SymmetricHashJoinStateManager(
         if (index != numValues - 1) {
           val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
           if (valuePairAtMaxIndex != null) {
+            // Likely case where last element is non-null and we can simply swap with index.
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
-            val projectedKey = getInternalRowOfKeyWithIndex(currentKey)
-            logWarning(s"`keyWithIndexToValue` returns a null value for index ${numValues - 1} " +
-              s"at current key $projectedKey.")
+            // Find the rightmost non null index and swap values with that index,
+            // if index returned is not the same as the passed one
+            val nonNullIndex = getRightMostNonNullIndex(index + 1).getOrElse(index)
+            if (nonNullIndex != index) {
+              val valuePair = keyWithIndexToValue.get(currentKey, nonNullIndex)
+              keyWithIndexToValue.put(currentKey, index, valuePair.value,
+                valuePair.matched)
+            }
+
+            // If nulls were found at the end, log a warning for the range of null indices.
+            if (nonNullIndex != numValues - 1) {
+              logWarning(log"`keyWithIndexToValue` returns a null value for indices " +
+                log"with range from startIndex=${MDC(START_INDEX, nonNullIndex + 1)} " +
+                log"and endIndex=${MDC(END_INDEX, numValues - 1)}.")
+            }
+
+            // Remove all null values from nonNullIndex + 1 onwards
+            // The nonNullIndex itself will be handled as removing the last entry,
+            // similar to finding the value as the last element
+            (numValues - 1 to nonNullIndex + 1 by -1).foreach { removeIndex =>
+              keyWithIndexToValue.remove(currentKey, removeIndex)
+              numValues -= 1
+            }
           }
         }
         keyWithIndexToValue.remove(currentKey, numValues - 1)
         numValues -= 1
         valueRemoved = true
 
-        return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
+        reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
       override def close(): Unit = {}
@@ -324,6 +425,15 @@ class SymmetricHashJoinStateManager(
     )
   }
 
+  /**
+   * Update number of values for a key.
+   * NOTE: this function is only intended for use in unit tests
+   * to simulate null values.
+   */
+  private[state] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
+    keyToNumValues.put(key, numValues)
+  }
+
   /*
   =====================================================
             Private methods and inner classes
@@ -332,7 +442,7 @@ class SymmetricHashJoinStateManager(
 
   private val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
-  private val keyAttributes = keySchema.toAttributes
+  private val keyAttributes = toAttributes(keySchema)
   private val keyToNumValues = new KeyToNumValuesStore()
   private val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
 
@@ -341,6 +451,7 @@ class SymmetricHashJoinStateManager(
 
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+    private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
     protected def stateStore: StateStore
@@ -352,8 +463,13 @@ class SymmetricHashJoinStateManager(
 
     def abortIfNeeded(): Unit = {
       if (!stateStore.hasCommitted) {
-        logInfo(s"Aborted store ${stateStore.id}")
+        logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
+      }
+      // If this class manages a state store provider by itself, it should take care of closing
+      // provider instance as well.
+      if (stateStoreProvider != null) {
+        stateStoreProvider.close()
       }
     }
 
@@ -363,10 +479,19 @@ class SymmetricHashJoinStateManager(
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
-      val store = StateStore.get(
-        storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
-        stateInfo.get.storeVersion, storeConf, hadoopConf)
-      logInfo(s"Loaded store ${store.id}")
+      val store = if (useStateStoreCoordinator) {
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
+      } else {
+        // This class will manage the state store provider by itself.
+        stateStoreProvider = StateStoreProvider.createAndInit(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          useColumnFamilies = false, storeConf, hadoopConf,
+          useMultipleValuesPerKey = false)
+        stateStoreProvider.getStore(stateInfo.get.storeVersion)
+      }
+      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
       store
     }
   }
@@ -557,22 +682,31 @@ class SymmetricHashJoinStateManager(
     /**
      * Get all values and indices for the provided key.
      * Should not return null.
+     * Note that we will skip nulls explicitly if config setting for the same is
+     * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
-      val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      var index = 0
       new NextIterator[KeyWithIndexAndValue] {
+        private val keyWithIndexAndValue = new KeyWithIndexAndValue()
+        private var index: Long = 0L
+
+        private def hasMoreValues = index < numValues
         override protected def getNext(): KeyWithIndexAndValue = {
-          if (index >= numValues) {
-            finished = true
-            null
-          } else {
+          while (hasMoreValues) {
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
-            keyWithIndexAndValue.withNew(key, index, valuePair)
-            index += 1
-            keyWithIndexAndValue
+            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              skippedNullValueCount.foreach(_ += 1L)
+              index += 1
+            } else {
+              keyWithIndexAndValue.withNew(key, index, valuePair)
+              index += 1
+              return keyWithIndexAndValue
+            }
           }
+
+          finished = true
+          null
         }
 
         override protected def close(): Unit = {}

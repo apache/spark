@@ -65,38 +65,26 @@ public class NettyUtils {
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
     ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
-    switch (mode) {
-      case NIO:
-        return new NioEventLoopGroup(numThreads, threadFactory);
-      case EPOLL:
-        return new EpollEventLoopGroup(numThreads, threadFactory);
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> new NioEventLoopGroup(numThreads, threadFactory);
+      case EPOLL -> new EpollEventLoopGroup(numThreads, threadFactory);
+    };
   }
 
   /** Returns the correct (client) SocketChannel class based on IOMode. */
   public static Class<? extends Channel> getClientChannelClass(IOMode mode) {
-    switch (mode) {
-      case NIO:
-        return NioSocketChannel.class;
-      case EPOLL:
-        return EpollSocketChannel.class;
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> NioSocketChannel.class;
+      case EPOLL -> EpollSocketChannel.class;
+    };
   }
 
   /** Returns the correct ServerSocketChannel class based on IOMode. */
   public static Class<? extends ServerChannel> getServerChannelClass(IOMode mode) {
-    switch (mode) {
-      case NIO:
-        return NioServerSocketChannel.class;
-      case EPOLL:
-        return EpollServerSocketChannel.class;
-      default:
-        throw new IllegalArgumentException("Unknown io mode: " + mode);
-    }
+    return switch (mode) {
+      case NIO -> NioServerSocketChannel.class;
+      case EPOLL -> EpollServerSocketChannel.class;
+    };
   }
 
   /**
@@ -160,6 +148,14 @@ public class NettyUtils {
     if (numCores == 0) {
       numCores = Runtime.getRuntime().availableProcessors();
     }
+    // SPARK-38541: After upgrade to Netty 4.1.75, there are 2 behavior changes of this method:
+    // 1. `PooledByteBufAllocator.defaultMaxOrder()` change from 11 to 9, this means the default
+    //    `PooledByteBufAllocator` chunk size reduce from 16 MiB to 4 MiB, we need use
+    //    `-Dio.netty.allocator.maxOrder=11` to keep the chunk size of PooledByteBufAllocator
+    //    to 16m.
+    // 2. `PooledByteBufAllocator.defaultUseCacheForAllThreads()` change from true to false, we need
+    //    to use `-Dio.netty.allocator.useCacheForAllThreads=true` to
+    //    enable `useCacheForAllThreads`.
     return new PooledByteBufAllocator(
       allowDirectBufs && PlatformDependent.directBufferPreferred(),
       Math.min(PooledByteBufAllocator.defaultNumHeapArena(), numCores),
@@ -170,5 +166,19 @@ public class NettyUtils {
       allowCache ? PooledByteBufAllocator.defaultNormalCacheSize() : 0,
       allowCache ? PooledByteBufAllocator.defaultUseCacheForAllThreads() : false
     );
+  }
+
+  /**
+   * ByteBuf allocator prefers to allocate direct ByteBuf if both Spark allows to create direct
+   * ByteBuf and Netty enables directBufferPreferred.
+   */
+  public static boolean preferDirectBufs(TransportConf conf) {
+    boolean allowDirectBufs;
+    if (conf.sharedByteBufAllocators()) {
+      allowDirectBufs = conf.preferDirectBufsForSharedByteBufAllocators();
+    } else {
+      allowDirectBufs = conf.preferDirectBufs();
+    }
+    return allowDirectBufs && PlatformDependent.directBufferPreferred();
   }
 }

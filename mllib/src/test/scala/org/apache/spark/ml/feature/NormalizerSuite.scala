@@ -76,7 +76,7 @@ class NormalizerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Normalization with default parameter") {
     val normalizer = new Normalizer().setInputCol("features").setOutputCol("normalized")
-    val dataFrame: DataFrame = data.zip(l2Normalized).seq.toDF("features", "expected")
+    val dataFrame: DataFrame = data.zip(l2Normalized).toDF("features", "expected")
 
     testTransformer[(Vector, Vector)](dataFrame, normalizer, "features", "normalized", "expected") {
       case Row(features: Vector, normalized: Vector, expected: Vector) =>
@@ -102,7 +102,7 @@ class NormalizerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Normalization with setter") {
-    val dataFrame: DataFrame = data.zip(l1Normalized).seq.toDF("features", "expected")
+    val dataFrame: DataFrame = data.zip(l1Normalized).toDF("features", "expected")
     val normalizer = new Normalizer().setInputCol("features").setOutputCol("normalized").setP(1)
 
     testTransformer[(Vector, Vector)](dataFrame, normalizer, "features", "normalized", "expected") {

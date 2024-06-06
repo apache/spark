@@ -17,19 +17,13 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.yarn.api.records.Resource
+import org.apache.hadoop.yarn.api.records.ResourceTypeInfo
+import org.apache.hadoop.yarn.util.resource.ResourceUtils
 
-import org.apache.spark.util.Utils
-
-object ResourceRequestTestHelper {
+trait ResourceRequestTestHelper {
   def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
-    if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
-      throw new IllegalStateException("This method should not be invoked " +
-        "since YARN resource types is not available because of old Hadoop version!" )
-    }
-
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
     // This method should receive standard resources with names of memory-mb and vcores.
@@ -37,64 +31,22 @@ object ResourceRequestTestHelper {
     // with different names e.g. memory, YARN would throw various exceptions
     // because it relies on that standard resources are always specified.
     val defaultResourceTypes = List(
-      createResourceTypeInfo("memory-mb"),
-      createResourceTypeInfo("vcores"))
-    val customResourceTypes = resourceTypes.map(createResourceTypeInfo)
+      ResourceTypeInfo.newInstance("memory-mb"),
+      ResourceTypeInfo.newInstance("vcores"))
+    val customResourceTypes = resourceTypes.map(ResourceTypeInfo.newInstance)
     val allResourceTypes = defaultResourceTypes ++ customResourceTypes
 
-    val resourceUtilsClass =
-      Utils.classForName("org.apache.hadoop.yarn.util.resource.ResourceUtils")
-    val reinitializeResourcesMethod = resourceUtilsClass.getMethod("reinitializeResources",
-      classOf[java.util.List[AnyRef]])
-    reinitializeResourcesMethod.invoke(null, allResourceTypes.asJava)
+    ResourceUtils.reinitializeResources(allResourceTypes.asJava)
   }
 
-  private def createResourceTypeInfo(resourceName: String): AnyRef = {
-    val resTypeInfoClass = Utils.classForName("org.apache.hadoop.yarn.api.records.ResourceTypeInfo")
-    val resTypeInfoNewInstanceMethod = resTypeInfoClass.getMethod("newInstance", classOf[String])
-    resTypeInfoNewInstanceMethod.invoke(null, resourceName)
-  }
-
-  def getRequestedValue(res: Resource, rtype: String): AnyRef = {
-    val resourceInformation = getResourceInformation(res, rtype)
-    invokeMethod(resourceInformation, "getValue")
-  }
-
-  def getResourceInformationByName(res: Resource, nameParam: String): ResourceInformation = {
-    val resourceInformation: AnyRef = getResourceInformation(res, nameParam)
-    val name = invokeMethod(resourceInformation, "getName").asInstanceOf[String]
-    val value = invokeMethod(resourceInformation, "getValue").asInstanceOf[Long]
-    val units = invokeMethod(resourceInformation, "getUnits").asInstanceOf[String]
-    ResourceInformation(name, value, units)
-  }
-
-  private def getResourceInformation(res: Resource, name: String): AnyRef = {
-    if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
-      throw new IllegalStateException("assertResourceTypeValue() should not be invoked " +
-        "since yarn resource types is not available because of old Hadoop version!")
-    }
-
-    val getResourceInformationMethod = res.getClass.getMethod("getResourceInformation",
-      classOf[String])
-    val resourceInformation = getResourceInformationMethod.invoke(res, name)
-    resourceInformation
-  }
-
-  private def invokeMethod(resourceInformation: AnyRef, methodName: String): AnyRef = {
-    val getValueMethod = resourceInformation.getClass.getMethod(methodName)
-    getValueMethod.invoke(resourceInformation)
-  }
-
-  def getResources(res: Resource): Array[ResourceInformation] = {
-    val getResourceInformationMethod = res.getClass.getMethod("getResources")
-    val rInfoArray = getResourceInformationMethod.invoke(res).asInstanceOf[Array[AnyRef]]
-    rInfoArray.map { rInfo =>
-      val name = invokeMethod(rInfo, "getName").asInstanceOf[String]
-      val value = invokeMethod(rInfo, "getValue").asInstanceOf[Long]
-      val units = invokeMethod(rInfo, "getUnits").asInstanceOf[String]
-      ResourceInformation(name, value, units)
+  /**
+   * `initializeResourceTypes` with inputs, call `f` and
+   * restore `resourceTypes`` as default value.
+   */
+  def withResourceTypes(resourceTypes: Seq[String])(f: => Unit): Unit = {
+    initializeResourceTypes(resourceTypes)
+    try f finally {
+      initializeResourceTypes(Seq.empty)
     }
   }
-
-  case class ResourceInformation(name: String, value: Long, unit: String)
 }

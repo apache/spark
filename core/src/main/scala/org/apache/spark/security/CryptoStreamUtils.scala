@@ -16,7 +16,7 @@
  */
 package org.apache.spark.security
 
-import java.io.{Closeable, InputStream, IOException, OutputStream}
+import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
@@ -24,14 +24,15 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
 
@@ -55,10 +56,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     val params = new CryptoParams(key, sparkConf)
     val iv = createInitializationVector(params.conf)
     os.write(iv)
-    new ErrorHandlingOutputStream(
-      new CryptoOutputStream(params.transformation, params.conf, os, params.keySpec,
-        new IvParameterSpec(iv)),
-      os)
+    new CryptoOutputStream(params.transformation, params.conf, os, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   /**
@@ -73,10 +72,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     val helper = new CryptoHelperChannel(channel)
 
     helper.write(ByteBuffer.wrap(iv))
-    new ErrorHandlingWritableChannel(
-      new CryptoOutputStream(params.transformation, params.conf, helper, params.keySpec,
-        new IvParameterSpec(iv)),
-      helper)
+    new CryptoOutputStream(params.transformation, params.conf, helper, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   /**
@@ -89,10 +86,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     ByteStreams.readFully(is, iv)
     val params = new CryptoParams(key, sparkConf)
-    new ErrorHandlingInputStream(
-      new CryptoInputStream(params.transformation, params.conf, is, params.keySpec,
-        new IvParameterSpec(iv)),
-      is)
+    new CryptoInputStream(params.transformation, params.conf, is, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   /**
@@ -107,10 +102,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     JavaUtils.readFully(channel, buf)
 
     val params = new CryptoParams(key, sparkConf)
-    new ErrorHandlingReadableChannel(
-      new CryptoInputStream(params.transformation, params.conf, channel, params.keySpec,
-        new IvParameterSpec(iv)),
-      channel)
+    new CryptoInputStream(params.transformation, params.conf, channel, params.keySpec,
+      new IvParameterSpec(iv))
   }
 
   def toCryptoConf(conf: SparkConf): Properties = {
@@ -139,8 +132,8 @@ private[spark] object CryptoStreamUtils extends Logging {
     val initialIVFinish = System.nanoTime()
     val initialIVTime = TimeUnit.NANOSECONDS.toMillis(initialIVFinish - initialIVStart)
     if (initialIVTime > 2000) {
-      logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
-        s"used by CryptoStream")
+      logWarning(log"It costs ${MDC(TIME_UNITS, initialIVTime)} milliseconds " +
+        log"to create the Initialization Vector used by CryptoStream")
     }
     iv
   }
@@ -164,117 +157,6 @@ private[spark] object CryptoStreamUtils extends Logging {
 
     override def close(): Unit = sink.close()
 
-  }
-
-  /**
-   * SPARK-25535. The commons-crypto library will throw InternalError if something goes
-   * wrong, and leave bad state behind in the Java wrappers, so it's not safe to use them
-   * afterwards. This wrapper detects that situation and avoids further calls into the
-   * commons-crypto code, while still allowing the underlying streams to be closed.
-   *
-   * This should be removed once CRYPTO-141 is fixed (and Spark upgrades its commons-crypto
-   * dependency).
-   */
-  trait BaseErrorHandler extends Closeable {
-
-    private var closed = false
-
-    /** The encrypted stream that may get into an unhealthy state. */
-    protected def cipherStream: Closeable
-
-    /**
-     * The underlying stream that is being wrapped by the encrypted stream, so that it can be
-     * closed even if there's an error in the crypto layer.
-     */
-    protected def original: Closeable
-
-    protected def safeCall[T](fn: => T): T = {
-      if (closed) {
-        throw new IOException("Cipher stream is closed.")
-      }
-      try {
-        fn
-      } catch {
-        case ie: InternalError =>
-          closed = true
-          original.close()
-          throw ie
-      }
-    }
-
-    override def close(): Unit = {
-      if (!closed) {
-        cipherStream.close()
-      }
-    }
-
-  }
-
-  // Visible for testing.
-  class ErrorHandlingReadableChannel(
-      protected val cipherStream: ReadableByteChannel,
-      protected val original: ReadableByteChannel)
-    extends ReadableByteChannel with BaseErrorHandler {
-
-    override def read(src: ByteBuffer): Int = safeCall {
-      cipherStream.read(src)
-    }
-
-    override def isOpen(): Boolean = cipherStream.isOpen()
-
-  }
-
-  private class ErrorHandlingInputStream(
-      protected val cipherStream: InputStream,
-      protected val original: InputStream)
-    extends InputStream with BaseErrorHandler {
-
-    override def read(b: Array[Byte]): Int = safeCall {
-      cipherStream.read(b)
-    }
-
-    override def read(b: Array[Byte], off: Int, len: Int): Int = safeCall {
-      cipherStream.read(b, off, len)
-    }
-
-    override def read(): Int = safeCall {
-      cipherStream.read()
-    }
-  }
-
-  private class ErrorHandlingWritableChannel(
-      protected val cipherStream: WritableByteChannel,
-      protected val original: WritableByteChannel)
-    extends WritableByteChannel with BaseErrorHandler {
-
-    override def write(src: ByteBuffer): Int = safeCall {
-      cipherStream.write(src)
-    }
-
-    override def isOpen(): Boolean = cipherStream.isOpen()
-
-  }
-
-  private class ErrorHandlingOutputStream(
-      protected val cipherStream: OutputStream,
-      protected val original: OutputStream)
-    extends OutputStream with BaseErrorHandler {
-
-    override def flush(): Unit = safeCall {
-      cipherStream.flush()
-    }
-
-    override def write(b: Array[Byte]): Unit = safeCall {
-      cipherStream.write(b)
-    }
-
-    override def write(b: Array[Byte], off: Int, len: Int): Unit = safeCall {
-      cipherStream.write(b, off, len)
-    }
-
-    override def write(b: Int): Unit = safeCall {
-      cipherStream.write(b)
-    }
   }
 
   private class CryptoParams(key: Array[Byte], sparkConf: SparkConf) {

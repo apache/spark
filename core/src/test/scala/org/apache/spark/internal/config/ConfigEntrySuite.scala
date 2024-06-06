@@ -169,20 +169,21 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: valid values check") {
     val conf = new SparkConf()
-    val enum = ConfigBuilder(testKey("enum"))
+    val enumConf = ConfigBuilder(testKey("enum"))
       .stringConf
       .checkValues(Set("a", "b", "c"))
       .createWithDefault("a")
-    assert(conf.get(enum) === "a")
+    assert(conf.get(enumConf) === "a")
 
-    conf.set(enum, "b")
-    assert(conf.get(enum) === "b")
+    conf.set(enumConf, "b")
+    assert(conf.get(enumConf) === "b")
 
-    conf.set(enum, "d")
+    conf.set(enumConf, "d")
     val enumError = intercept[IllegalArgumentException] {
-      conf.get(enum)
+      conf.get(enumConf)
     }
-    assert(enumError.getMessage === s"The value of ${enum.key} should be one of a, b, c, but was d")
+    assert(enumError.getMessage ===
+      s"The value of ${enumConf.key} should be one of a, b, c, but was d")
   }
 
   test("conf entry: conversion error") {
@@ -193,12 +194,6 @@ class ConfigEntrySuite extends SparkFunSuite {
       conf.get(conversionTest)
     }
     assert(conversionError.getMessage === s"${conversionTest.key} should be double, but was abc")
-  }
-
-  test("default value handling is null-safe") {
-    val conf = new SparkConf()
-    val stringConf = ConfigBuilder(testKey("string")).stringConf.createWithDefault(null)
-    assert(conf.get(stringConf) === null)
   }
 
   test("variable expansion of spark config entries") {
@@ -219,7 +214,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     val refConf = ConfigBuilder(testKey("configReferenceTest"))
       .stringConf
-      .createWithDefault(null)
+      .createWithDefault("")
 
     def ref(entry: ConfigEntry[_]): String = "${" + entry.key + "}"
 
@@ -249,12 +244,6 @@ class ConfigEntrySuite extends SparkFunSuite {
     // Make sure SparkConf's env override works.
     conf.set(refConf, "${env:ENV1}")
     assert(conf.get(refConf) === env("ENV1"))
-
-    // Conf with null default value is not expanded.
-    val nullConf = ConfigBuilder(testKey("nullString"))
-      .stringConf
-      .createWithDefault(null)
-    testEntryRef(nullConf, ref(nullConf))
   }
 
   test("conf entry : default function") {

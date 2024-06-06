@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
@@ -143,11 +142,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   def getPredicateLeafType(dataType: DataType): PredicateLeaf.Type = dataType match {
     case BooleanType => PredicateLeaf.Type.BOOLEAN
     case ByteType | ShortType | IntegerType | LongType |
-         _: AnsiIntervalType => PredicateLeaf.Type.LONG
+         _: AnsiIntervalType | TimestampNTZType => PredicateLeaf.Type.LONG
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
     case StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
-    case TimestampType | TimestampNTZType => PredicateLeaf.Type.TIMESTAMP
+    case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
     case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
   }
@@ -170,11 +169,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case _: TimestampType if value.isInstanceOf[Instant] =>
       toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
     case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
-      val orcTimestamp = OrcUtils.toOrcNTZ(localDateTimeToMicros(value.asInstanceOf[LocalDateTime]))
-      // Hive meets OrcTimestamp will throw ClassNotFoundException, So convert it.
-      val timestamp = new Timestamp(orcTimestamp.getTime)
-      timestamp.setNanos(orcTimestamp.getNanos)
-      timestamp
+      localDateTimeToMicros(value.asInstanceOf[LocalDateTime])
     case _: YearMonthIntervalType =>
       IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
     case _: DayTimeIntervalType =>

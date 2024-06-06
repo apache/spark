@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
+import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
@@ -30,12 +30,14 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.util.ExecutionListenerBus
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ThreadUtils
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach with Eventually {
+@ExtendedSQLTest
+class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
 
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
@@ -102,7 +104,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     SparkSession.clearActiveSession()
     assert(SparkSession.active == session)
     SparkSession.clearDefaultSession()
-    intercept[IllegalStateException](SparkSession.active)
+    intercept[SparkException](SparkSession.active)
     session.stop()
   }
 
@@ -198,11 +200,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
       .config("spark.app.name", "test-app-SPARK-31234")
       .getOrCreate()
 
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
     session.sql("RESET")
-    assert(session.sessionState.conf.getConfString("spark.app.name") === "test-app-SPARK-31234")
-    assert(session.sessionState.conf.getConf(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
+    assert(session.conf.get("spark.app.name") === "test-app-SPARK-31234")
+    assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31234")
   }
 
   test("SPARK-31354: SparkContext only register one SparkSession ApplicationEnd listener") {
@@ -299,7 +301,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
 
     val error = intercept[SparkException] {
       session.range(1).foreach { v =>
-        SparkSession.builder.master("local").getOrCreate()
+        SparkSession.builder().master("local").getOrCreate()
         ()
       }
     }.getMessage()
@@ -311,7 +313,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
     val session = SparkSession.builder().master("local-cluster[3, 1, 1024]").getOrCreate()
 
     session.range(1).foreach { v =>
-      SparkSession.builder.master("local")
+      SparkSession.builder().master("local")
         .config(EXECUTOR_ALLOW_SPARK_CONTEXT.key, true).getOrCreate().stop()
       ()
     }
@@ -431,7 +433,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
         .getOrCreate()
         .sharedState
     }
-    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
   }
 
   test("SPARK-33944: no warning setting spark.sql.warehouse.dir using session options") {
@@ -444,7 +446,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
         .getOrCreate()
         .sharedState
     }
-    assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(!logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
   }
 
   Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
@@ -484,6 +486,107 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach wit
           .getOrCreate()
       session.sql("SELECT 1").collect()
     }
-    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+    assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(msg)))
+  }
+
+  test("SPARK-37727: Show ignored configurations in debug level logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      SparkSession.builder()
+        .config("spark.sql.warehouse.dir", "2")
+        .config("spark.abc", "abcb")
+        .config("spark.abcd", "abcb4")
+        .getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+        "Ignored static SQL configurations",
+        "spark.sql.warehouse.dir=2",
+        "Configurations that might not take effect",
+        "spark.abcd=abcb4",
+        "spark.abc=abcb").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+  }
+
+  test("SPARK-37727: Hide the same configuration already explicitly set in logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").config("spark.abc", "abc").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      // Ignore logs because it's already set.
+      SparkSession.builder().config("spark.abc", "abc").getOrCreate()
+      // Show logs for only configuration newly set.
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
+      // Ignore logs because it's set ^.
+      SparkSession.builder().config("spark.abc.new", "abc").getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+      "Using an existing Spark session; only runtime SQL configurations will take effect",
+      "Configurations that might not take effect",
+      "spark.abc.new=abc").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+
+    assert(
+      !logs.exists(_.contains("spark.abc=abc")),
+      s"'spark.abc=abc' existed in:\n${logs.mkString("\n")}")
+  }
+
+  test("SPARK-37727: Hide runtime SQL configurations in logs") {
+    // Create one existing SparkSession to check following logs.
+    SparkSession.builder().master("local").getOrCreate()
+
+    val logAppender = new LogAppender
+    logAppender.setThreshold(Level.DEBUG)
+    withLogAppender(logAppender, level = Some(Level.DEBUG)) {
+      // Ignore logs for runtime SQL configurations
+      SparkSession.builder().config("spark.sql.ansi.enabled", "true").getOrCreate()
+      // Show logs for Spark core configuration
+      SparkSession.builder().config("spark.buffer.size", "1234").getOrCreate()
+      // Show logs for custom runtime options
+      SparkSession.builder().config("spark.sql.source.abc", "abc").getOrCreate()
+      // Show logs for static SQL configurations
+      SparkSession.builder().config("spark.sql.warehouse.dir", "xyz").getOrCreate()
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    Seq(
+      "spark.buffer.size=1234",
+      "spark.sql.source.abc=abc",
+      "spark.sql.warehouse.dir=xyz").foreach { msg =>
+      assert(logs.exists(_.contains(msg)), s"$msg did not exist in:\n${logs.mkString("\n")}")
+    }
+
+    assert(
+      !logs.exists(_.contains("spark.sql.ansi.enabled\"")),
+      s"'spark.sql.ansi.enabled' existed in:\n${logs.mkString("\n")}")
+  }
+
+  test("SPARK-40163: SparkSession.config(Map)") {
+    val map: Map[String, Any] = Map(
+      "string" -> "",
+      "boolean" -> true,
+      "double" -> 0.0,
+      "long" -> 0L
+    )
+
+    val session = SparkSession.builder()
+      .master("local")
+      .config(map)
+      .getOrCreate()
+
+    for (e <- map) {
+      assert(session.conf.get(e._1) == e._2.toString)
+    }
   }
 }

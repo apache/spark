@@ -25,13 +25,12 @@ import scala.util.Random
 import com.google.common.primitives.Ints
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
-class RadixSortSuite extends SparkFunSuite with Logging {
+class RadixSortSuite extends SparkFunSuite {
   private val N = 10000L  // scale this down for more readable results
 
   /**
@@ -137,7 +136,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   def randomBitMask(rand: Random): Long = {
     var tmp = ~0L
     for (i <- 0 to rand.nextInt(5)) {
-      tmp &= rand.nextLong
+      tmp &= rand.nextLong()
     }
     tmp
   }

@@ -20,7 +20,7 @@ package org.apache.spark.resource
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.{Evolving, Since}
 
@@ -93,7 +93,11 @@ class ResourceProfileBuilder() {
   }
 
   def build(): ResourceProfile = {
-    new ResourceProfile(executorResources, taskResources)
+    if (_executorResources.isEmpty) {
+      new TaskResourceProfile(taskResources)
+    } else {
+      new ResourceProfile(executorResources, taskResources)
+    }
   }
 }
 

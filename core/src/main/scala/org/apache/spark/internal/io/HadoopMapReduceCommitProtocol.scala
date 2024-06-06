@@ -29,7 +29,8 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
 /**
@@ -104,7 +105,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  protected def stagingDir = getStagingDir(path, jobId)
+  @transient protected lazy val stagingDir = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -252,7 +253,7 @@ class HadoopMapReduceCommitProtocol(
       committer.abortJob(jobContext, JobStatus.State.FAILED)
     } catch {
       case e: IOException =>
-        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+        logWarning(log"Exception while aborting ${MDC(JOB_ID, jobContext.getJobID)}", e)
     }
     try {
       if (hasValidPath) {
@@ -261,7 +262,7 @@ class HadoopMapReduceCommitProtocol(
       }
     } catch {
       case e: IOException =>
-        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+        logWarning(log"Exception while aborting ${MDC(JOB_ID, jobContext.getJobID)}", e)
     }
   }
 
@@ -292,7 +293,8 @@ class HadoopMapReduceCommitProtocol(
       committer.abortTask(taskContext)
     } catch {
       case e: IOException =>
-        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+        logWarning(log"Exception while aborting " +
+          log"${MDC(TASK_ATTEMPT_ID, taskContext.getTaskAttemptID)}", e)
     }
     // best effort cleanup of other staged files
     try {
@@ -302,7 +304,8 @@ class HadoopMapReduceCommitProtocol(
       }
     } catch {
       case e: IOException =>
-        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+        logWarning(log"Exception while aborting " +
+          log"${MDC(TASK_ATTEMPT_ID, taskContext.getTaskAttemptID)}", e)
     }
   }
 }

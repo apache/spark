@@ -17,62 +17,157 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Any, Union, no_type_check
-
-import numpy as np
-
-from pyspark import SparkContext
-from pyspark.sql import functions as F
-from pyspark.sql.column import (
-    Column,
-    _to_java_column,
-    _create_column_from_literal,
-)
-from pyspark.sql.types import (
-    ByteType,
-    FloatType,
-    IntegerType,
-    LongType,
-)
+from pyspark.sql.column import Column
+from pyspark.sql.utils import is_remote
 
 
-def repeat(col: Column, n: Union[int, Column]) -> Column:
-    """
-    Repeats a string column n times, and returns it as a new string column.
-    """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-    n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
-    return _call_udf(sc, "repeat", _to_java_column(col), n)
+def product(col: Column, dropna: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
 
+        return _invoke_function_over_columns(
+            "pandas_product",
+            col,
+            lit(dropna),
+        )
 
-def lit(literal: Any) -> Column:
-    """
-    Creates a Column of literal value.
-    """
-    if isinstance(literal, np.generic):
-        scol = F.lit(literal.item())
-        if isinstance(literal, np.int64):
-            return scol.astype(LongType())
-        elif isinstance(literal, np.int32):
-            return scol.astype(IntegerType())
-        elif isinstance(literal, np.int8) or isinstance(literal, np.byte):
-            return scol.astype(ByteType())
-        elif isinstance(literal, np.float32):
-            return scol.astype(FloatType())
-        else:  # TODO: Complete mappings between numpy literals and Spark data types
-            return scol
     else:
-        return F.lit(literal)
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
 
 
-@no_type_check
-def _call_udf(sc, name, *cols):
-    return Column(sc._jvm.functions.callUDF(name, _make_arguments(sc, *cols)))
+def stddev(col: Column, ddof: int) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_stddev",
+            col,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
 
-@no_type_check
-def _make_arguments(sc, *cols):
-    java_arr = sc._gateway.new_array(sc._jvm.Column, len(cols))
-    for i, col in enumerate(cols):
-        java_arr[i] = col
-    return java_arr
+def var(col: Column, ddof: int) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_var",
+            col,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+
+
+def skew(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(
+            "pandas_skew",
+            col,
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+
+
+def kurt(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(
+            "pandas_kurt",
+            col,
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+
+
+def mode(col: Column, dropna: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_mode",
+            col,
+            lit(dropna),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+
+
+def covar(col1: Column, col2: Column, ddof: int) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_covar",
+            col1,
+            col2,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
+
+
+def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "ewm",
+            col,
+            lit(alpha),
+            lit(ignore_na),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
+
+
+def null_index(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(
+            "null_index",
+            col,
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))

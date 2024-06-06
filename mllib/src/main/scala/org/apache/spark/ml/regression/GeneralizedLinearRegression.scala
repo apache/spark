@@ -20,21 +20,22 @@ package org.apache.spark.ml.regression
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
+import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
@@ -384,7 +385,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     instr.logParams(this, labelCol, featuresCol, weightCol, offsetCol, predictionCol,
       linkPredictionCol, family, solver, fitIntercept, link, maxIter, regParam, tol,
       aggregationDepth)
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
@@ -397,16 +398,19 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
         "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
-    val w = if (!hasWeightCol) lit(1.0) else checkNonNegativeWeight(col($(weightCol)))
-    val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
+    val validated = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      checkNonNegativeWeights(get(weightCol)),
+      if (!hasOffsetCol) lit(0.0) else checkNonNanValues($(offsetCol), "Offsets"),
+      checkNonNanVectors($(featuresCol))
+    )
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val instances: RDD[Instance] =
-        dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
-            Instance(label - offset, weight, features)
-        }
+      val instances = validated.rdd.map {
+        case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+          Instance(label - offset, weight, features)
+      }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr),
@@ -418,11 +422,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
       model.setSummary(Some(trainingSummary))
     } else {
-      val instances: RDD[OffsetInstance] =
-        dataset.select(col($(labelCol)), w, offset, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
-            OffsetInstance(label, weight, offset, features)
-        }
+      val instances = validated.rdd.map {
+        case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
+          OffsetInstance(label, weight, offset, features)
+      }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam),
         instr = OptionalInstrumentation.create(instr), $(aggregationDepth))
@@ -677,7 +680,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     }
   }
 
-  private[regression] object Tweedie{
+  private[regression] object Tweedie {
 
     /** Constant used in initialization and deviance to avoid numerical issues. */
     val delta: Double = 0.1
@@ -1071,10 +1074,10 @@ class GeneralizedLinearRegressionModel private[ml] (
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GeneralizedLinearRegressionModel.transform()" +
+        log" does nothing because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   /**
@@ -1415,7 +1418,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
         case Row(label: Double, pred: Double, weight: Double) =>
           (label, pred, weight)
     }
-    family.aic(t, deviance, numInstances, weightSum) + 2 * rank
+    family.aic(t, deviance, numInstances.toDouble, weightSum) + 2 * rank
   }
 }
 
@@ -1576,7 +1579,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 
       data.foreach { case strRow: Array[String] =>
         strRow.zipWithIndex.map { case (cell: String, i: Int) =>
-          StringUtils.leftPad(cell.toString, colWidths(i))
+          StringUtils.leftPad(cell, colWidths(i))
         }.addString(sb, "", " ", "\n")
       }
 

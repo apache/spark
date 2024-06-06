@@ -21,8 +21,8 @@ import java.util.Map;
 import java.util.Properties;
 
 import com.google.common.collect.ImmutableMap;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class CryptoUtilsSuite {
 

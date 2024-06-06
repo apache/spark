@@ -21,8 +21,8 @@ import unittest
 from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
-from pyspark.serializers import PickleSerializer
-from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+from pyspark.serializers import CPickleSerializer
+from pyspark.mllib.linalg import (
     Vector,
     SparseVector,
     DenseVector,
@@ -43,7 +43,7 @@ from pyspark.testing.utils import have_scipy
 
 class VectorTests(MLlibTestCase):
     def _test_serialize(self, v):
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(v)))
         nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvec)))
@@ -409,7 +409,6 @@ class VectorTests(MLlibTestCase):
 
 
 class VectorUDTTests(MLlibTestCase):
-
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
     sv0 = SparseVector(2, [], [])
@@ -440,7 +439,7 @@ class VectorUDTTests(MLlibTestCase):
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
     def test_row_matrix_from_dataframe(self):
-        from pyspark.sql.utils import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(Vectors.dense(1))])
         row_matrix = RowMatrix(df)
@@ -450,7 +449,7 @@ class VectorUDTTests(MLlibTestCase):
             RowMatrix(df.selectExpr("'monkey'"))
 
     def test_indexed_row_matrix_from_dataframe(self):
-        from pyspark.sql.utils import IllegalArgumentException
+        from pyspark.errors import IllegalArgumentException
 
         df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
         matrix = IndexedRowMatrix(df)
@@ -471,7 +470,6 @@ class VectorUDTTests(MLlibTestCase):
 
 
 class MatrixUDTTests(MLlibTestCase):
-
     dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
     dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
     sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])
@@ -512,7 +510,7 @@ class SciPyTests(MLlibTestCase):
     def test_serialize(self):
         from scipy.sparse import lil_matrix
 
-        ser = PickleSerializer()
+        ser = CPickleSerializer()
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
         lil[3, 0] = 2
@@ -523,8 +521,8 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(sv, _convert_to_vector(lil.tocsr()))
         self.assertEqual(sv, _convert_to_vector(lil.todok()))
 
-        def serialize(l):
-            return ser.loads(ser.dumps(_convert_to_vector(l)))
+        def serialize(d):
+            return ser.loads(ser.dumps(_convert_to_vector(d)))
 
         self.assertEqual(sv, serialize(lil))
         self.assertEqual(sv, serialize(lil.tocsc()))
@@ -672,7 +670,7 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_linalg import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

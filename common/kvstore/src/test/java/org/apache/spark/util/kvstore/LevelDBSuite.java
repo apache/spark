@@ -18,10 +18,13 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -29,18 +32,19 @@ import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.iq80.leveldb.DBIterator;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.assumeFalse;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class LevelDBSuite {
 
   private LevelDB db;
   private File dbpath;
 
-  @After
+  @AfterEach
   public void cleanup() throws Exception {
     if (db != null) {
       db.close();
@@ -50,7 +54,7 @@ public class LevelDBSuite {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
     dbpath = File.createTempFile("test.", ".ldb");
@@ -71,36 +75,21 @@ public class LevelDBSuite {
     db.close();
     db = null;
 
-    try {
-      db = new LevelDB(dbpath);
-      fail("Should have failed version check.");
-    } catch (UnsupportedStoreVersionException e) {
-      // Expected.
-    }
+    assertThrows(UnsupportedStoreVersionException.class, () -> db = new LevelDB(dbpath));
   }
 
   @Test
   public void testObjectWriteReadDelete() throws Exception {
     CustomType1 t = createCustomType1(1);
 
-    try {
-      db.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existent object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(CustomType1.class, t.key));
 
     db.write(t);
     assertEquals(t, db.read(t.getClass(), t.key));
     assertEquals(1L, db.count(t.getClass()));
 
     db.delete(t.getClass(), t.key);
-    try {
-      db.read(t.getClass(), t.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(t.getClass(), t.key));
 
     // Look into the actual DB and make sure that all the keys related to the type have been
     // removed.
@@ -251,13 +240,14 @@ public class LevelDBSuite {
       db.write(createCustomType1(i));
     }
 
-    KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
-    assertTrue(it.hasNext());
-    assertTrue(it.skip(5));
-    assertEquals("key5", it.next().key);
-    assertTrue(it.skip(3));
-    assertEquals("key9", it.next().key);
-    assertFalse(it.hasNext());
+    try (KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator()) {
+      assertTrue(it.hasNext());
+      assertTrue(it.skip(5));
+      assertEquals("key5", it.next().key);
+      assertTrue(it.skip(3));
+      assertEquals("key9", it.next().key);
+      assertFalse(it.hasNext());
+    }
   }
 
   @Test
@@ -272,12 +262,15 @@ public class LevelDBSuite {
       }
     });
 
-    List<Integer> results = StreamSupport
-      .stream(db.view(CustomType1.class).index("int").spliterator(), false)
-      .map(e -> e.num)
-      .collect(Collectors.toList());
+    try (KVStoreIterator<CustomType1> iterator =
+      db.view(CustomType1.class).index("int").closeableIterator()) {
+      List<Integer> results = StreamSupport
+        .stream(Spliterators.spliteratorUnknownSize(iterator, 0), false)
+        .map(e -> e.num)
+        .collect(Collectors.toList());
 
-    assertEquals(expected, results);
+      assertEquals(expected, results);
+    }
   }
 
   @Test
@@ -315,6 +308,120 @@ public class LevelDBSuite {
     assertTrue(!dbPathForCloseTest.exists());
   }
 
+  @Test
+  public void testHasNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.hasNext should be false after iter close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testHasNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // iter.hasNext should be false after db close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.next should throw NoSuchElementException after iter close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    iter.close();
+    // iter.next should throw NoSuchElementException after db close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testSkipAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // close iter
+    iter.close();
+    // skip should always return false after iter close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testSkipAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // skip should always return false after db close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testResourceCleaner() throws Exception {
+    File dbPathForCleanerTest = File.createTempFile(
+      "test_db_cleaner.", ".rdb");
+    dbPathForCleanerTest.delete();
+
+    LevelDB dbForCleanerTest = new LevelDB(dbPathForCleanerTest);
+    try {
+      for (int i = 0; i < 8192; i++) {
+        dbForCleanerTest.write(createCustomType1(i));
+      }
+      LevelDBIterator<CustomType1> levelDBIterator =
+        (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<LevelDBIterator<?>> reference = new WeakReference<>(levelDBIterator);
+      assertNotNull(reference);
+      LevelDBIterator.ResourceCleaner resourceCleaner = levelDBIterator.getResourceCleaner();
+      assertFalse(resourceCleaner.isCompleted());
+      // Manually set levelDBIterator to null, to be GC.
+      levelDBIterator = null;
+      // 100 times gc, the levelDBIterator should be GCed.
+      int count = 0;
+      while (count < 100 && !reference.refersTo(null)) {
+        System.gc();
+        count++;
+        Thread.sleep(100);
+      }
+      // check rocksDBIterator should be GCed
+      assertTrue(reference.refersTo(null));
+      // Verify that the Cleaner will be executed after a period of time, isAllocated is true.
+      assertTrue(resourceCleaner.isCompleted());
+    } finally {
+      dbForCleanerTest.close();
+      FileUtils.deleteQuietly(dbPathForCleanerTest);
+    }
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
@@ -329,13 +436,14 @@ public class LevelDBSuite {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
 
-    DBIterator it = db.db().iterator();
-    it.seek(prefix);
+    try (DBIterator it = db.db().iterator()) {
+      it.seek(prefix);
 
-    while (it.hasNext()) {
-      byte[] key = it.next().getKey();
-      if (LevelDBIterator.startsWith(key, prefix)) {
-        count++;
+      while (it.hasNext()) {
+        byte[] key = it.next().getKey();
+        if (LevelDBIterator.startsWith(key, prefix)) {
+          count++;
+        }
       }
     }
 

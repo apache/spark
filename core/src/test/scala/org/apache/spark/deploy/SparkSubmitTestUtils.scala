@@ -18,8 +18,6 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.sql.Timestamp
-import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -44,7 +42,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       args: Seq[String],
       sparkHomeOpt: Option[String] = None,
       timeout: Span = defaultSparkSubmitTimeout,
-      isSparkTesting: Boolean = true): Unit = {
+      isSparkTesting: Boolean = true,
+      expectFailure: Boolean = false): Int = {
     val sparkHome = sparkHomeOpt.getOrElse(
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
@@ -69,17 +68,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
     env.put("SPARK_HOME", sparkHome)
 
     def captureOutput(source: String)(line: String): Unit = {
-      // This test suite has some weird behaviors when executed on Jenkins:
-      //
-      // 1. Sometimes it gets extremely slow out of unknown reason on Jenkins.  Here we add a
-      //    timestamp to provide more diagnosis information.
-      // 2. Log lines are not correctly redirected to unit-tests.log as expected, so here we print
-      //    them out for debugging purposes.
-      val logLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
-      // scalastyle:off println
-      println(logLine)
-      // scalastyle:on println
-      history += logLine
+      logInfo(s"$source> $line")
+      history += line
     }
 
     val process = builder.start()
@@ -88,7 +78,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
 
     try {
       val exitCode = failAfter(timeout) { process.waitFor() }
-      if (exitCode != 0) {
+      if (exitCode != 0 && !expectFailure) {
         // include logs in output. Note that logging is async and may not have completed
         // at the time this exception is raised
         Thread.sleep(1000)
@@ -101,6 +91,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
            """.stripMargin
         }
       }
+      exitCode
     } catch {
       case to: TestFailedDueToTimeoutException =>
         val historyLog = history.mkString("\n")

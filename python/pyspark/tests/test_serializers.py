@@ -29,7 +29,7 @@ from pyspark.serializers import (
     PairDeserializer,
     FlattenedValuesSerializer,
     CartesianDeserializer,
-    PickleSerializer,
+    CPickleSerializer,
     UTF8Deserializer,
     MarshalSerializer,
 )
@@ -46,14 +46,12 @@ from pyspark.testing.utils import (
 class SerializationTestCase(unittest.TestCase):
     def test_namedtuple(self):
         from collections import namedtuple
-        from pickle import dumps, loads
+        from pyspark.cloudpickle import dumps, loads
 
         P = namedtuple("P", "x y")
         p1 = P(1, 3)
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
-
-        from pyspark.cloudpickle import dumps
 
         P2 = loads(dumps(P))
         p3 = P2(1, 3)
@@ -74,7 +72,10 @@ class SerializationTestCase(unittest.TestCase):
 
     def test_function_module_name(self):
         ser = CloudPickleSerializer()
-        func = lambda x: x
+
+        def func(x):
+            return x
+
         func2 = ser.loads(ser.dumps(func))
         self.assertEqual(func.__module__, func2.__module__)
 
@@ -83,7 +84,7 @@ class SerializationTestCase(unittest.TestCase):
 
         ser = CloudPickleSerializer()
 
-        class C(object):
+        class C:
             def __getattr__(self, item):
                 return item
 
@@ -107,7 +108,7 @@ class SerializationTestCase(unittest.TestCase):
     def test_pickling_file_handles(self):
         # to be corrected with SPARK-11160
         try:
-            import xmlrunner  # type: ignore[import]  # noqa: F401
+            import xmlrunner  # noqa: F401
         except ImportError:
             ser = CloudPickleSerializer()
             out1 = sys.stderr
@@ -115,7 +116,7 @@ class SerializationTestCase(unittest.TestCase):
             self.assertEqual(out1, out2)
 
     def test_func_globals(self):
-        class Unpicklable(object):
+        class Unpicklable:
             def __reduce__(self):
                 raise RuntimeError("not picklable")
 
@@ -132,7 +133,7 @@ class SerializationTestCase(unittest.TestCase):
         ser.dumps(foo)
 
     def test_compressed_serializer(self):
-        ser = CompressedSerializer(PickleSerializer())
+        ser = CompressedSerializer(CPickleSerializer())
         from io import BytesIO as StringIO
 
         io = StringIO()
@@ -147,15 +148,15 @@ class SerializationTestCase(unittest.TestCase):
     def test_hash_serializer(self):
         hash(NoOpSerializer())
         hash(UTF8Deserializer())
-        hash(PickleSerializer())
+        hash(CPickleSerializer())
         hash(MarshalSerializer())
         hash(AutoSerializer())
-        hash(BatchedSerializer(PickleSerializer()))
+        hash(BatchedSerializer(CPickleSerializer()))
         hash(AutoBatchedSerializer(MarshalSerializer()))
         hash(PairDeserializer(NoOpSerializer(), UTF8Deserializer()))
         hash(CartesianDeserializer(NoOpSerializer(), UTF8Deserializer()))
-        hash(CompressedSerializer(PickleSerializer()))
-        hash(FlattenedValuesSerializer(PickleSerializer()))
+        hash(CompressedSerializer(CPickleSerializer()))
+        hash(FlattenedValuesSerializer(CPickleSerializer()))
 
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
@@ -248,7 +249,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_serializers import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
 
 /**
  * This node updates the session window spec of each input rows via analyzing neighbor rows and
@@ -35,6 +37,8 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
  * Refer [[UpdatingSessionsIterator]] for more details.
  */
 case class UpdatingSessionsExec(
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpression: Seq[Attribute],
     sessionExpression: Attribute,
     child: SparkPlan) extends UnaryExecNode {
@@ -63,7 +67,20 @@ case class UpdatingSessionsExec(
     if (groupingWithoutSessionExpression.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(groupingWithoutSessionExpression) :: Nil
+      if (isStreaming) {
+        numShufflePartitions match {
+          case Some(parts) =>
+            StatefulOperatorPartitioning.getCompatibleDistribution(
+              groupingWithoutSessionExpression, parts, conf) :: Nil
+
+          case _ =>
+            throw SparkException.internalError("Expected to set the number of partitions before " +
+              "constructing required child distribution!")
+        }
+
+      } else {
+        ClusteredDistribution(groupingWithoutSessionExpression) :: Nil
+      }
     }
   }
 

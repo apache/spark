@@ -17,40 +17,19 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Objects;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to {@code true} iff {@code child} is evaluated to {@code false}.
+ * A predicate that evaluates to {@code true} iff {@code child} is evaluated to {@code false}.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class Not extends Filter {
-  private final Filter child;
+public final class Not extends Predicate {
 
-  public Not(Filter child) { this.child = child; }
-
-  public Filter child() { return child; }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    Not not = (Not) o;
-    return Objects.equals(child, not.child);
+  public Not(Predicate child) {
+    super("NOT", new Predicate[]{child});
   }
 
-  @Override
-  public int hashCode() {
-    return Objects.hash(child);
-  }
-
-  @Override
-  public String toString() { return "NOT (" + child.describe() + ")"; }
-
-  @Override
-  public NamedReference[] references() { return child.references(); }
+  public Predicate child() { return (Predicate) children()[0]; }
 }

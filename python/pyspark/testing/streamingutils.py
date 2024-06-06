@@ -35,12 +35,12 @@ if should_skip_kinesis_tests:
     )
 else:
     kinesis_asl_assembly_jar = search_jar(
-        "external/kinesis-asl-assembly",
+        "connector/kinesis-asl-assembly",
         "spark-streaming-kinesis-asl-assembly-",
         "spark-streaming-kinesis-asl-assembly_",
     )
     if kinesis_asl_assembly_jar is None:
-        kinesis_requirement_message = (  # type: ignore
+        kinesis_requirement_message = (
             "Skipping all Kinesis Python tests as the optional Kinesis project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
@@ -57,7 +57,6 @@ should_test_kinesis = kinesis_requirement_message is None
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
-
     timeout = 30  # seconds
     duration = 0.5
 
@@ -76,7 +75,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jSparkContextOption = SparkContext._jvm.SparkContext.get()
             if jSparkContextOption.nonEmpty():
                 jSparkContextOption.get().stop()
-        except:
+        except BaseException:
             pass
 
     def setUp(self):
@@ -90,7 +89,7 @@ class PySparkStreamingTestCase(unittest.TestCase):
             jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
             if jStreamingContextOption.nonEmpty():
                 jStreamingContextOption.get().stop(False)
-        except:
+        except BaseException:
             pass
 
     def wait_for(self, result, n):

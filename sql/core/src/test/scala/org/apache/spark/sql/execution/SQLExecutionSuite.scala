@@ -17,19 +17,25 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.parallel.immutable.ParRange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
-class SQLExecutionSuite extends SparkFunSuite {
+class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
   test("concurrent query execution (SPARK-10548)") {
     val conf = new SparkConf()
@@ -44,7 +50,7 @@ class SQLExecutionSuite extends SparkFunSuite {
   }
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .master("local[*]")
       .appName("test")
       .getOrCreate()
@@ -64,7 +70,7 @@ class SQLExecutionSuite extends SparkFunSuite {
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
   private def testConcurrentQueryExecution(sc: SparkContext): Unit = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
 
     // Initialize local properties. This is necessary for the test to pass.
@@ -98,7 +104,7 @@ class SQLExecutionSuite extends SparkFunSuite {
 
 
   test("Finding QueryExecution for given executionId") {
-    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
     import spark.implicits._
 
     var queryExecution: QueryExecution = null
@@ -155,6 +161,77 @@ class SQLExecutionSuite extends SparkFunSuite {
         executor2.shutdown()
         session.stop()
       }
+    }
+  }
+
+  test("SPARK-34735: Add modified configs for SQL execution in UI") {
+    val spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("test")
+      .config("k1", "v1")
+      .config(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Dkey=value")
+      .getOrCreate()
+
+    try {
+      val index = new AtomicInteger(0)
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+          case start: SparkListenerSQLExecutionStart =>
+            if (index.get() == 0 && hasProject(start)) {
+              assert(!start.modifiedConfigs.contains("k1"))
+              index.incrementAndGet()
+            } else if (index.get() == 1 && hasProject(start)) {
+              assert(start.modifiedConfigs.contains("k2"))
+              assert(start.modifiedConfigs("k2") == "v2")
+              assert(start.modifiedConfigs.contains("redaction.password"))
+              assert(start.modifiedConfigs("redaction.password") == REDACTION_REPLACEMENT_TEXT)
+              assert(!start.modifiedConfigs.contains(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
+              index.incrementAndGet()
+            }
+          case _ =>
+        }
+
+        private def hasProject(start: SparkListenerSQLExecutionStart): Boolean =
+          start.physicalPlanDescription.toLowerCase(Locale.ROOT).contains("project")
+      })
+      spark.sql("SELECT 1").collect()
+      withSQLConf("k2" -> "v2", "redaction.password" -> "123") {
+        spark.sql("SELECT 1").collect()
+      }
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(index.get() == 2)
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-44591: jobTags property") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    val jobTag = "jobTag"
+    try {
+      spark.sparkContext.addJobTag(jobTag)
+
+      var jobTags: Option[String] = None
+      var sqlJobTags: Set[String] = Set.empty
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobTags = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_TAGS))
+        }
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobTags = e.jobTags
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      assert(jobTags.contains(jobTag))
+      assert(sqlJobTags.contains(jobTag))
+    } finally {
+      spark.sparkContext.removeJobTag(jobTag)
+      spark.stop()
     }
   }
 }

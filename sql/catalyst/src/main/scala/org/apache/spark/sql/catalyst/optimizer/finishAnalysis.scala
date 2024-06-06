@@ -17,40 +17,44 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
+import java.time.{Instant, LocalDateTime, ZoneId}
 
-import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ}
+import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 /**
- * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
- * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions:
- * 1) [[RuntimeReplaceable]] expressions
- * 2) [[UnevaluableAggregate]] expressions such as Every, Some, Any, CountIf
+ * Finds all the [[RuntimeReplaceable]] expressions that are unevaluable and replace them
+ * with semantically equivalent expressions that can be evaluated.
+ *
  * This is mainly used to provide compatibility with other databases.
  * Few examples are:
- *   we use this to support "nvl" by replacing it with "coalesce".
+ *   we use this to support "left" by replacing it with "substring".
  *   we use this to replace Every and Any with Min and Max respectively.
- *
- * TODO: In future, explore an option to replace aggregate functions similar to
- * how RuntimeReplaceable does.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG)) {
-    case e: RuntimeReplaceable => e.child
-    case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
-    case BoolOr(arg) => Max(arg)
-    case BoolAnd(arg) => Min(arg)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
+    case p => p.mapExpressions(replace)
+  }
+
+  private def replace(e: Expression): Expression = e match {
+    case r: RuntimeReplaceable => replace(r.replacement)
+    case _ => e.mapChildren(replace)
   }
 }
 
@@ -67,7 +71,35 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
       IsNotNull(
         ScalarSubquery(
           plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), exists.plan)),
-          exprId = exists.exprId))
+          exprId = exists.exprId,
+          hint = exists.hint))
+  }
+}
+
+/**
+ * Computes expressions in inline tables. This rule is supposed to be called at the very end
+ * of the analysis phase, given that all the expressions need to be fully resolved/replaced
+ * at this point.
+ */
+object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
+      case table: ResolvedInlineTable =>
+        val newRows: Seq[InternalRow] =
+          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+              try {
+                prepareForEval(e).eval()
+              } catch {
+                case NonFatal(ex) =>
+                  table.failAnalysis(
+                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                    cause = ex)
+              }})
+          }
+
+        LocalRelation(table.output, newRows)
+    }
   }
 }
 
@@ -76,28 +108,36 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  */
 object ComputeCurrentTime extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val currentDates = mutable.Map.empty[String, Literal]
-    val timeExpr = CurrentTimestamp()
-    val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
-    val currentTime = Literal.create(timestamp, timeExpr.dataType)
+    val instant = Instant.now()
+    val currentTimestampMicros = instantToMicros(instant)
+    val currentTime = Literal.create(currentTimestampMicros, TimestampType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
-    val localTimestamps = mutable.Map.empty[String, Literal]
+    val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
+    val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
-    plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
-      case currentDate @ CurrentDate(Some(timeZoneId)) =>
-        currentDates.getOrElseUpdate(timeZoneId, {
-          Literal.create(currentDate.eval().asInstanceOf[Int], DateType)
-        })
-      case CurrentTimestamp() | Now() => currentTime
-      case CurrentTimeZone() => timezone
-      case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
-        localTimestamps.getOrElseUpdate(timeZoneId, {
-          Literal.create(localTimestamp.eval().asInstanceOf[Long], TimestampNTZType)
-        })
+    def transformCondition(treePatternbits: TreePatternBits): Boolean = {
+      treePatternbits.containsPattern(CURRENT_LIKE)
+    }
+
+    plan.transformDownWithSubqueriesAndPruning(transformCondition) {
+      case subQuery =>
+        subQuery.transformAllExpressionsWithPruning(transformCondition) {
+          case cd: CurrentDate =>
+            currentDates.getOrElseUpdate(cd.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
+            })
+          case CurrentTimestamp() | Now() => currentTime
+          case CurrentTimeZone() => timezone
+          case localTimestamp: LocalTimestamp =>
+            localTimestamps.getOrElseUpdate(localTimestamp.zoneId, {
+              val asDateTime = LocalDateTime.ofInstant(instant, localTimestamp.zoneId)
+              Literal.create(localDateTimeToMicros(asDateTime), TimestampNTZType)
+            })
+        }
     }
   }
 }
-
 
 /**
  * Replaces the expression of CurrentDatabase with the current database name.
@@ -108,15 +148,15 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
     val currentCatalog = catalogManager.currentCatalog.name()
-    val currentUser = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
+    val currentUser = CurrentUserContext.getCurrentUser
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        Literal.create(currentNamespace, StringType)
+        Literal.create(currentNamespace, SQLConf.get.defaultStringType)
       case CurrentCatalog() =>
-        Literal.create(currentCatalog, StringType)
+        Literal.create(currentCatalog, SQLConf.get.defaultStringType)
       case CurrentUser() =>
-        Literal.create(currentUser, StringType)
+        Literal.create(currentUser, SQLConf.get.defaultStringType)
     }
   }
 }

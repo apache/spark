@@ -35,7 +35,6 @@ public class JavaStratifiedSamplingExample {
     SparkConf conf = new SparkConf().setAppName("JavaStratifiedSamplingExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
-    @SuppressWarnings("unchecked")
     // $example on$
     List<Tuple2<Integer, Character>> list = Arrays.asList(
         new Tuple2<>(1, 'a'),

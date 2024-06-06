@@ -17,7 +17,8 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.THREAD
 
 /**
  * The default uncaught exception handler for Spark daemons. It terminates the whole process for
@@ -28,13 +29,22 @@ import org.apache.spark.internal.Logging
 private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
 
+  locally {
+    // eagerly load SparkExitCode class, so the System.exit and runtime.halt have a chance to be
+    // executed when the disk containing Spark jars is corrupted. See SPARK-44542 for more details.
+    val _ = SparkExitCode.OOM
+  }
+
   override def uncaughtException(thread: Thread, exception: Throwable): Unit = {
     try {
+      val mdc = MDC(THREAD, thread)
       // Make it explicit that uncaught exceptions are thrown when container is shutting down.
       // It will help users when they analyze the executor logs
-      val inShutdownMsg = if (ShutdownHookManager.inShutdown()) "[Container in shutdown] " else ""
-      val errMsg = "Uncaught exception in thread "
-      logError(inShutdownMsg + errMsg + thread, exception)
+      if (ShutdownHookManager.inShutdown()) {
+        logError(log"[Container in shutdown] Uncaught exception in thread $mdc", exception)
+      } else {
+        logError(log"Uncaught exception in thread $mdc", exception)
+      }
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
@@ -55,7 +65,9 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
     } catch {
       case oom: OutOfMemoryError =>
         try {
-          logError(s"Uncaught OutOfMemoryError in thread $thread, process halted.", oom)
+          logError(
+            log"Uncaught OutOfMemoryError in thread ${MDC(THREAD, thread)}, process halted.",
+            oom)
         } catch {
           // absorb any exception/error since we're halting the process
           case _: Throwable =>
@@ -63,7 +75,9 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
         Runtime.getRuntime.halt(SparkExitCode.OOM)
       case t: Throwable =>
         try {
-          logError(s"Another uncaught exception in thread $thread, process halted.", t)
+          logError(
+            log"Another uncaught exception in thread ${MDC(THREAD, thread)}, process halted.",
+            t)
         } catch {
           case _: Throwable =>
         }

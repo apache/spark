@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-import _string  # type: ignore[import]
+import _string  # type: ignore[import-not-found]
 from typing import Any, Dict, Optional, Union, List
 import inspect
+
 import pandas as pd
 
 from pyspark.sql import SparkSession, DataFrame as SDataFrame
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
@@ -73,13 +73,17 @@ def sql(
         in pandas-on-Spark is ignored. By default, the index is always lost.
 
         .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
-            and pass it to the sql statement with `index_col` parameter.
+            and pass it to the SQL statement with `index_col` parameter.
 
             For example,
 
+            >>> from pyspark.pandas import sql_processor
+            >>> # we will call 'sql_processor' directly in doctests so decrease one level.
+            >>> sql_processor._CAPTURE_SCOPES = 2
+            >>> sql = sql_processor.sql
             >>> psdf = ps.DataFrame({"A": [1, 2, 3], "B":[4, 5, 6]}, index=['a', 'b', 'c'])
             >>> psdf_reset_index = psdf.reset_index()
-            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col="index")
+            >>> sql("SELECT * FROM {psdf_reset_index}", index_col="index")
             ... # doctest: +NORMALIZE_WHITESPACE
                    A  B
             index
@@ -96,7 +100,7 @@ def sql(
             ...     ),
             ... )
             >>> psdf_reset_index = psdf.reset_index()
-            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col=["index1", "index2"])
+            >>> sql("SELECT * FROM {psdf_reset_index}", index_col=["index1", "index2"])
             ... # doctest: +NORMALIZE_WHITESPACE
                            A  B
             index1 index2
@@ -122,7 +126,7 @@ def sql(
 
     Calling a built-in SQL function.
 
-    >>> ps.sql("select * from range(10) where id > 7")
+    >>> sql("select * from range(10) where id > 7")
        id
     0   8
     1   9
@@ -130,7 +134,7 @@ def sql(
     A query can also reference a local variable or parameter by wrapping them in curly braces:
 
     >>> bound1 = 7
-    >>> ps.sql("select * from range(10) where id > {bound1} and id < {bound2}", bound2=9)
+    >>> sql("select * from range(10) where id > {bound1} and id < {bound2}", bound2=9)
        id
     0   8
 
@@ -139,7 +143,7 @@ def sql(
 
     >>> mydf = ps.range(10)
     >>> x = range(4)
-    >>> ps.sql("SELECT * from {mydf} WHERE id IN {x}")
+    >>> sql("SELECT * from {mydf} WHERE id IN {x}")
        id
     0   0
     1   1
@@ -150,7 +154,7 @@ def sql(
 
     >>> def statement():
     ...     mydf2 = ps.DataFrame({"x": range(2)})
-    ...     return ps.sql("SELECT * from {mydf2}")
+    ...     return sql("SELECT * from {mydf2}")
     >>> statement()
        x
     0  0
@@ -159,7 +163,7 @@ def sql(
     Mixing pandas-on-Spark and pandas DataFrames in a join operation. Note that the index is
     dropped.
 
-    >>> ps.sql('''
+    >>> sql('''
     ...   SELECT m1.a, m2.b
     ...   FROM {table1} m1 INNER JOIN {table2} m2
     ...   ON m1.key = m2.key
@@ -174,7 +178,7 @@ def sql(
     Also, it is possible to query using Series.
 
     >>> myser = ps.Series({'a': [1.0, 2.0, 3.0], 'b': [15.0, 30.0, 45.0]})
-    >>> ps.sql("SELECT * from {myser}")
+    >>> sql("SELECT * from {myser}")
                         0
     0     [1.0, 2.0, 3.0]
     1  [15.0, 30.0, 45.0]
@@ -195,16 +199,14 @@ def sql(
     return SQLProcessor(_dict, query, default_session()).execute(index_col)
 
 
-_CAPTURE_SCOPES = 2
+_CAPTURE_SCOPES = 3
 
 
 def _get_local_scope() -> Dict[str, Any]:
     # Get 2 scopes above (_get_local_scope -> sql -> ...) to capture the vars there.
     try:
         return inspect.stack()[_CAPTURE_SCOPES][0].f_locals
-    except Exception as e:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+    except IndexError:
         return {}
 
 
@@ -214,13 +216,11 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore[import]
+        from IPython import get_ipython
 
         shell = get_ipython()
         return shell.user_ns
-    except Exception as e:
-        # TODO (rxin, thunterdb): use a more narrow scope exception.
-        # See https://github.com/pyspark.pandas/pull/448
+    except (AttributeError, ModuleNotFoundError):
         return None
 
 
@@ -250,7 +250,7 @@ def escape_sql_string(value: str) -> str:
     return value.translate(_escape_table)
 
 
-class SQLProcessor(object):
+class SQLProcessor:
     def __init__(self, scope: Dict[str, Any], statement: str, session: SparkSession):
         self._scope = scope
         self._statement = statement
@@ -272,19 +272,23 @@ class SQLProcessor(object):
         Returns a DataFrame for which the SQL statement has been executed by
         the underlying SQL engine.
 
+        >>> from pyspark.pandas import sql_processor
+        >>> # we will call 'sql_processor' directly in doctests so decrease one level.
+        >>> sql_processor._CAPTURE_SCOPES = 2
+        >>> sql = sql_processor.sql
         >>> str0 = 'abc'
-        >>> ps.sql("select {str0}")
+        >>> sql("select {str0}")
            abc
         0  abc
 
         >>> str1 = 'abc"abc'
         >>> str2 = "abc'abc"
-        >>> ps.sql("select {str0}, {str1}, {str2}")
+        >>> sql("select {str0}, {str1}, {str2}")
            abc  abc"abc  abc'abc
         0  abc  abc"abc  abc'abc
 
         >>> strs = ['a', 'b']
-        >>> ps.sql("select 'a' in {strs} as cond1, 'c' in {strs} as cond2")
+        >>> sql("select 'a' in {strs} as cond1, 'c' in {strs} as cond2")
            cond1  cond2
         0   True  False
         """
@@ -292,7 +296,7 @@ class SQLProcessor(object):
         # TODO: use a string builder
         res = ""
         try:
-            for (pre, inner, _, _) in blocks:
+            for pre, inner, _, _ in blocks:
                 var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res

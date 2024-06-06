@@ -32,21 +32,21 @@ class OptimizeWithFieldsSuite extends PlanTest {
       OptimizeUpdateFields, SimplifyExtractValueOps) :: Nil
   }
 
-  private val testRelation = LocalRelation('a.struct('a1.int))
-  private val testRelation2 = LocalRelation('a.struct('a1.int).notNull)
+  private val testRelation = LocalRelation($"a".struct($"a1".int))
+  private val testRelation2 = LocalRelation($"a".struct($"a1".int).notNull)
 
   test("combines two adjacent UpdateFields Expressions") {
     val originalQuery = testRelation
       .select(Alias(
         UpdateFields(
           UpdateFields(
-            'a,
+            $"a",
             WithField("b1", Literal(4)) :: Nil),
           WithField("c1", Literal(5)) :: Nil), "out")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Alias(UpdateFields('a, WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
+      .select(Alias(UpdateFields($"a", WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
         Nil), "out")())
       .analyze
 
@@ -59,14 +59,14 @@ class OptimizeWithFieldsSuite extends PlanTest {
         UpdateFields(
           UpdateFields(
             UpdateFields(
-              'a,
+              $"a",
               WithField("b1", Literal(4)) :: Nil),
             WithField("c1", Literal(5)) :: Nil),
           WithField("d1", Literal(6)) :: Nil), "out")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Alias(UpdateFields('a, WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
+      .select(Alias(UpdateFields($"a", WithField("b1", Literal(4)) :: WithField("c1", Literal(5)) ::
         WithField("d1", Literal(6)) :: Nil), "out")())
       .analyze
 
@@ -76,7 +76,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
   test("SPARK-32941: optimize WithFields followed by GetStructField") {
     val originalQuery = testRelation2
       .select(Alias(
-        GetStructField(UpdateFields('a,
+        GetStructField(UpdateFields($"a",
           WithField("b1", Literal(4)) :: Nil), 1), "out")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -90,16 +90,16 @@ class OptimizeWithFieldsSuite extends PlanTest {
   test("SPARK-32941: optimize WithFields chain - case insensitive") {
     val originalQuery = testRelation
       .select(
-        Alias(UpdateFields('a,
+        Alias(UpdateFields($"a",
           WithField("b1", Literal(4)) :: WithField("b1", Literal(5)) :: Nil), "out1")(),
-        Alias(UpdateFields('a,
+        Alias(UpdateFields($"a",
           WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select(
-        Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out1")(),
-        Alias(UpdateFields('a, WithField("B1", Literal(5)) :: Nil), "out2")())
+        Alias(UpdateFields($"a", WithField("b1", Literal(5)) :: Nil), "out1")(),
+        Alias(UpdateFields($"a", WithField("B1", Literal(5)) :: Nil), "out2")())
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -109,17 +109,17 @@ class OptimizeWithFieldsSuite extends PlanTest {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val originalQuery = testRelation
         .select(
-          Alias(UpdateFields('a,
+          Alias(UpdateFields($"a",
             WithField("b1", Literal(4)) :: WithField("b1", Literal(5)) :: Nil), "out1")(),
-          Alias(UpdateFields('a,
+          Alias(UpdateFields($"a",
               WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
 
       val optimized = Optimize.execute(originalQuery.analyze)
       val correctAnswer = testRelation
         .select(
-          Alias(UpdateFields('a, WithField("b1", Literal(5)) :: Nil), "out1")(),
+          Alias(UpdateFields($"a", WithField("b1", Literal(5)) :: Nil), "out1")(),
           Alias(
-            UpdateFields('a,
+            UpdateFields($"a",
               WithField("b1", Literal(4)) :: WithField("B1", Literal(5)) :: Nil), "out2")())
         .analyze
 
@@ -130,7 +130,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
   test("SPARK-35213: ensure optimize WithFields maintains correct WithField ordering") {
     val originalQuery = testRelation
       .select(
-        Alias(UpdateFields('a,
+        Alias(UpdateFields($"a",
           WithField("a1", Literal(3)) ::
           WithField("b1", Literal(4)) ::
           WithField("a1", Literal(5)) ::
@@ -139,7 +139,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select(
-        Alias(UpdateFields('a,
+        Alias(UpdateFields($"a",
           WithField("a1", Literal(5)) ::
           WithField("b1", Literal(4)) ::
           Nil), "out")())

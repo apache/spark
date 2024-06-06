@@ -17,8 +17,9 @@
 package org.apache.spark.status.api.v1
 
 import java.util.{List => JList}
-import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
-import javax.ws.rs.core.MediaType
+
+import jakarta.ws.rs.{DefaultValue, GET, Produces, QueryParam}
+import jakarta.ws.rs.core.MediaType
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class ApplicationListResource extends ApiRequestContext {
@@ -38,7 +39,7 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
     val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
 
     uiRoot.getApplicationInfoList.filter { app =>
-      val anyRunning = app.attempts.exists(!_.completed)
+      val anyRunning = app.attempts.isEmpty || !app.attempts.head.completed
       // if any attempt is still running, we consider the app to also still be running;
       // keep the app if *any* attempts fall in the right time window
       ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&

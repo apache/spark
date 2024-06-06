@@ -19,6 +19,7 @@ package org.apache.spark.sql.util;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
 
@@ -44,24 +45,29 @@ import java.util.Random;
  *   4. In Hive's code, the method [[merge()] pass a serialized histogram,
  *      in Spark, this method pass a deserialized histogram.
  *      Here we change the code about merge bins.
+ *
+ * @since 3.3.0
  */
 public class NumericHistogram {
   /**
    * The Coord class defines a histogram bin, which is just an (x,y) pair.
+   *
+   * @since 3.3.0
    */
-  public static class Coord implements Comparable {
+  public static class Coord implements Comparable<Coord> {
     public double x;
     public double y;
 
-    public int compareTo(Object other) {
-      return Double.compare(x, ((Coord) other).x);
+    @Override
+    public int compareTo(Coord other) {
+      return Double.compare(x, other.x);
     }
   }
 
   // Class variables
   private int nbins;
   private int nusedbins;
-  private ArrayList<Coord> bins;
+  private List<Coord> bins;
   private Random prng;
 
   /**
@@ -141,7 +147,7 @@ public class NumericHistogram {
    */
   public void allocate(int num_bins) {
     nbins = num_bins;
-    bins = new ArrayList<Coord>();
+    bins = new ArrayList<>();
     nusedbins = 0;
   }
 
@@ -158,7 +164,7 @@ public class NumericHistogram {
       // by deserializing the ArrayList of (x,y) pairs into an array of Coord objects
       nbins = other.nbins;
       nusedbins = other.nusedbins;
-      bins = new ArrayList<Coord>(nusedbins);
+      bins = new ArrayList<>(nusedbins);
       for (int i = 0; i < other.nusedbins; i += 1) {
         Coord bin = new Coord();
         bin.x = other.getBin(i).x;
@@ -169,7 +175,7 @@ public class NumericHistogram {
       // The aggregation buffer already contains a partial histogram. Therefore, we need
       // to merge histograms using Algorithm #2 from the Ben-Haim and Tom-Tov paper.
 
-      ArrayList<Coord> tmp_bins = new ArrayList<Coord>(nusedbins + other.nusedbins);
+      List<Coord> tmp_bins = new ArrayList<>(nusedbins + other.nusedbins);
       // Copy all the histogram bins from us and 'other' into an overstuffed histogram
       for (int i = 0; i < nusedbins; i++) {
         Coord bin = new Coord();

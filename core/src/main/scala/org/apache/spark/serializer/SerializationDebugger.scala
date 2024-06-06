@@ -18,14 +18,16 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.invoke.MethodHandles
 import java.lang.reflect.{Field, Method}
-import java.security.AccessController
+import java.security.{AccessController, PrivilegedAction}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkClassUtils
 
 private[spark] object SerializationDebugger extends Logging {
 
@@ -68,8 +70,13 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   private[serializer] var enableDebugging: Boolean = {
-    !AccessController.doPrivileged(new sun.security.action.GetBooleanAction(
-      "sun.io.serialization.extendedDebugInfo")).booleanValue()
+    val lookup = MethodHandles.lookup()
+    val clazz = SparkClassUtils.classForName("sun.security.action.GetBooleanAction")
+    val constructor = clazz.getConstructor(classOf[String])
+    val mh = lookup.unreflectConstructor(constructor)
+    val action = mh.invoke("sun.io.serialization.extendedDebugInfo")
+      .asInstanceOf[PrivilegedAction[Boolean]]
+    !AccessController.doPrivileged(action).booleanValue()
   }
 
   private class SerializationDebugger {
@@ -123,7 +130,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     /**
@@ -145,7 +152,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     private def visitSerializable(o: Object, stack: List[String]): List[String] = {
@@ -212,7 +219,7 @@ private[spark] object SerializationDebugger extends Logging {
         }
         i += 1
       }
-      return List.empty
+      List.empty
     }
 
     /**
@@ -249,7 +256,7 @@ private[spark] object SerializationDebugger extends Logging {
       } else {
         visited ++= innerObjectsCatcher.outputArray
       }
-      return List.empty
+      List.empty
     }
   }
 

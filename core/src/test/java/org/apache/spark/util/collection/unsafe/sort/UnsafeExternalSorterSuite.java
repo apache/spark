@@ -25,10 +25,9 @@ import java.util.UUID;
 
 import scala.Tuple2$;
 
-import org.hamcrest.MatcherAssert;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -46,9 +45,7 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -93,7 +90,7 @@ public class UnsafeExternalSorterSuite {
   private final int spillThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
@@ -127,7 +124,7 @@ public class UnsafeExternalSorterSuite {
       });
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     try {
       assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
@@ -139,8 +136,8 @@ public class UnsafeExternalSorterSuite {
 
   private void assertSpillFilesWereCleanedUp() {
     for (File spillFile : spillFilesCreated) {
-      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
-        spillFile.exists());
+      assertFalse(spillFile.exists(),
+        "Spill file " + spillFile.getPath() + " was not cleaned up");
     }
   }
 
@@ -225,7 +222,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    MatcherAssert.assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
     prevSortTime = sorter.getSortTimeNanos();
 
     sorter.spill();  // no sort needed
@@ -233,7 +230,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    MatcherAssert.assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -252,7 +249,7 @@ public class UnsafeExternalSorterSuite {
     // The insertion of this record should trigger a spill:
     insertNumber(sorter, 0);
     // Ensure that spill files were created
-    MatcherAssert.assertThat(tempDir.listFiles().length, greaterThanOrEqualTo(1));
+    assertTrue(tempDir.listFiles().length >= 1);
     // Read back the sorted data:
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -605,9 +602,9 @@ public class UnsafeExternalSorterSuite {
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
-      assert (iter.hasNext());
+      assertTrue(iter.hasNext());
       iter.loadNext();
-      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()), i);
     }
   }
 }

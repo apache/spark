@@ -29,7 +29,19 @@
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-    "totalBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+    "totalBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "remoteReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0],
+    "shufflePushReadMetricsDist" : {
+      "corruptMergedBlockChunks": [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "mergedFetchFallbackCount": [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedChunksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "localMergedBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+      "remoteMergedReqsDuration" : [ 0.0, 0.0, 0.0, 0.0, 0.0]
+    }
   },
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 1710.0, 1710.0, 1710.0, 1710.0, 1710.0 ],

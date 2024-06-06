@@ -32,9 +32,9 @@ class SparkInstallationTestCase(unittest.TestCase):
     def test_install_spark(self):
         # Test only one case. Testing this is expensive because it needs to download
         # the Spark distribution.
-        spark_version, hadoop_version, hive_version = checked_versions("3.0.1", "3.2", "2.3")
+        spark_version, hadoop_version, hive_version = checked_versions("3.0.1", "3", "2.3")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_install_spark") as tmp_dir:
             install_spark(
                 dest=tmp_dir,
                 spark_version=spark_version,
@@ -51,19 +51,22 @@ class SparkInstallationTestCase(unittest.TestCase):
             "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3")
         )
 
+        spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "3", "2.3")
+        self.assertEqual(
+            "spark-3.2.0-bin-hadoop3.2",
+            checked_package_name(spark_version, hadoop_version, hive_version),
+        )
+
+        spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "3", "2.3")
+        self.assertEqual(
+            "spark-3.3.0-bin-hadoop3",
+            checked_package_name(spark_version, hadoop_version, hive_version),
+        )
+
     def test_checked_versions(self):
         test_version = "3.0.1"  # Just pick one version to test.
 
         # Positive test cases
-        self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"),
-            checked_versions("spark-3.0.0", "hadoop2.7", "hive2.3"),
-        )
-
-        self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"), checked_versions("3.0.0", "2.7", "2.3")
-        )
-
         self.assertEqual(
             ("spark-2.4.1", "without-hadoop", "hive2.3"),
             checked_versions("2.4.1", "without", "2.3"),
@@ -74,8 +77,13 @@ class SparkInstallationTestCase(unittest.TestCase):
             checked_versions("spark-3.0.1", "without-hadoop", "hive2.3"),
         )
 
+        self.assertEqual(
+            ("spark-3.3.0", "hadoop3", "hive2.3"),
+            checked_versions("spark-3.3.0", "hadoop3", "hive2.3"),
+        )
+
         # Negative test cases
-        for (hadoop_version, hive_version) in UNSUPPORTED_COMBINATIONS:
+        for hadoop_version, hive_version in UNSUPPORTED_COMBINATIONS:
             with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):
                 checked_versions(
                     spark_version=test_version,
@@ -100,7 +108,7 @@ class SparkInstallationTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "Spark distribution of hive1.2 is not supported"):
             checked_versions(
-                spark_version=test_version, hadoop_version="hadoop3.2", hive_version="hive1.2"
+                spark_version=test_version, hadoop_version="hadoop3", hive_version="hive1.2"
             )
 
 
@@ -108,7 +116,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_install_spark import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

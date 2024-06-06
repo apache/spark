@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LocalRelation}
 class RewriteAsOfJoinSuite extends PlanTest {
 
   test("simple") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
@@ -55,8 +55,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("condition") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0),
       Some(left.output(1) === right.output(1)), Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
@@ -85,8 +85,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("left outer") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
@@ -113,8 +113,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("tolerance") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = true, direction = AsOfJoinDirection("backward"))
 
@@ -142,8 +142,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("allowExactMatches = false") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, LeftOuter,
       tolerance = None, allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
@@ -169,8 +169,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("tolerance & allowExactMatches = false") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("backward"))
 
@@ -198,8 +198,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("direction = forward") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("forward"))
 
@@ -226,8 +226,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("direction = nearest") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = None, allowExactMatches = true, direction = AsOfJoinDirection("nearest"))
 
@@ -256,8 +256,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
   }
 
   test("tolerance & allowExactMatches = false & direction = nearest") {
-    val left = LocalRelation('a.int, 'b.int, 'c.int)
-    val right = LocalRelation('a.int, 'b.int, 'd.int)
+    val left = LocalRelation($"a".int, $"b".int, $"c".int)
+    val right = LocalRelation($"a".int, $"b".int, $"d".int)
     val query = AsOfJoin(left, right, left.output(0), right.output(0), None, Inner,
       tolerance = Some(1), allowExactMatches = false, direction = AsOfJoinDirection("nearest"))
 

@@ -20,8 +20,8 @@ package org.apache.spark.ml.util
 import java.io.IOException
 import java.util.{Locale, ServiceLoader}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
@@ -32,7 +32,8 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
@@ -563,7 +564,7 @@ private[ml] object DefaultParamsReader {
               val param = instance.getParam(paramName)
               val value = param.jsonDecode(compact(render(jsonValue)))
               if (isDefault) {
-                Params.setDefault(instance, param, value)
+                instance.setDefault(param, value)
               } else {
                 instance.set(param, value)
               }
@@ -674,7 +675,7 @@ private[ml] class FileSystemOverwrite extends Logging {
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     if (fs.exists(qualifiedOutputPath)) {
       if (shouldOverwrite) {
-        logInfo(s"Path $path already exists. It will be overwritten.")
+        logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
         // TODO: Revert back to the original content if save is not successful.
         fs.delete(qualifiedOutputPath, true)
       } else {

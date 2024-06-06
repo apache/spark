@@ -24,8 +24,6 @@ import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.shuffle.ExternalBlockHandler;
-import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
-import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 
 /**
  * Messages handled by the {@link ExternalBlockHandler}, or
@@ -50,7 +48,7 @@ public abstract class BlockTransferMessage implements Encodable {
     FETCH_SHUFFLE_BLOCKS(9), GET_LOCAL_DIRS_FOR_EXECUTORS(10), LOCAL_DIRS_FOR_EXECUTORS(11),
     PUSH_BLOCK_STREAM(12), FINALIZE_SHUFFLE_MERGE(13), MERGE_STATUSES(14),
     FETCH_SHUFFLE_BLOCK_CHUNKS(15), DIAGNOSE_CORRUPTION(16), CORRUPTION_CAUSE(17),
-    PUSH_BLOCK_RETURN_CODE(18);
+    PUSH_BLOCK_RETURN_CODE(18), REMOVE_SHUFFLE_MERGE(19);
 
     private final byte id;
 
@@ -68,28 +66,27 @@ public abstract class BlockTransferMessage implements Encodable {
     public static BlockTransferMessage fromByteBuffer(ByteBuffer msg) {
       ByteBuf buf = Unpooled.wrappedBuffer(msg);
       byte type = buf.readByte();
-      switch (type) {
-        case 0: return OpenBlocks.decode(buf);
-        case 1: return UploadBlock.decode(buf);
-        case 2: return RegisterExecutor.decode(buf);
-        case 3: return StreamHandle.decode(buf);
-        case 4: return RegisterDriver.decode(buf);
-        case 5: return ShuffleServiceHeartbeat.decode(buf);
-        case 6: return UploadBlockStream.decode(buf);
-        case 7: return RemoveBlocks.decode(buf);
-        case 8: return BlocksRemoved.decode(buf);
-        case 9: return FetchShuffleBlocks.decode(buf);
-        case 10: return GetLocalDirsForExecutors.decode(buf);
-        case 11: return LocalDirsForExecutors.decode(buf);
-        case 12: return PushBlockStream.decode(buf);
-        case 13: return FinalizeShuffleMerge.decode(buf);
-        case 14: return MergeStatuses.decode(buf);
-        case 15: return FetchShuffleBlockChunks.decode(buf);
-        case 16: return DiagnoseCorruption.decode(buf);
-        case 17: return CorruptionCause.decode(buf);
-        case 18: return BlockPushReturnCode.decode(buf);
-        default: throw new IllegalArgumentException("Unknown message type: " + type);
-      }
+      return switch (type) {
+        case 0 -> OpenBlocks.decode(buf);
+        case 1 -> UploadBlock.decode(buf);
+        case 2 -> RegisterExecutor.decode(buf);
+        case 3 -> StreamHandle.decode(buf);
+        case 6 -> UploadBlockStream.decode(buf);
+        case 7 -> RemoveBlocks.decode(buf);
+        case 8 -> BlocksRemoved.decode(buf);
+        case 9 -> FetchShuffleBlocks.decode(buf);
+        case 10 -> GetLocalDirsForExecutors.decode(buf);
+        case 11 -> LocalDirsForExecutors.decode(buf);
+        case 12 -> PushBlockStream.decode(buf);
+        case 13 -> FinalizeShuffleMerge.decode(buf);
+        case 14 -> MergeStatuses.decode(buf);
+        case 15 -> FetchShuffleBlockChunks.decode(buf);
+        case 16 -> DiagnoseCorruption.decode(buf);
+        case 17 -> CorruptionCause.decode(buf);
+        case 18 -> BlockPushReturnCode.decode(buf);
+        case 19 -> RemoveShuffleMerge.decode(buf);
+        default -> throw new IllegalArgumentException("Unknown message type: " + type);
+      };
     }
   }
 

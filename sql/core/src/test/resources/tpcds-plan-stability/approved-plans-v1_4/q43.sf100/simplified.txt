@@ -16,11 +16,11 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                               Filter [d_year,d_date_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.date_dim [d_date_sk,d_year,d_day_name]
+                                    Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_day_name]
                       Filter [ss_store_sk]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
+                            Scan parquet spark_catalog.default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
                               SubqueryBroadcast [d_date_sk] #1
                                 ReusedExchange [d_date_sk,d_day_name] #2
                   InputAdapter
@@ -30,4 +30,4 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                           Filter [s_gmt_offset,s_store_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.store [s_store_sk,s_store_id,s_store_name,s_gmt_offset]
+                                Scan parquet spark_catalog.default.store [s_store_sk,s_store_id,s_store_name,s_gmt_offset]

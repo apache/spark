@@ -20,11 +20,12 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -56,7 +57,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -66,7 +67,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -76,7 +77,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         table
       case _ =>
-        throw new NoSuchTableException(ident)
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
   }
 
@@ -89,27 +90,40 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    createTable(ident, schema, partitions, properties, Distributions.unspecified(),
-      Array.empty, None)
+    throw QueryCompilationErrors.createTableDeprecatedError()
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
+      Array.empty, None, None)
   }
 
   def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String],
       distribution: Distribution,
       ordering: Array[SortOrder],
-      requiredNumPartitions: Option[Int]): Table = {
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean = true,
+      numRowsPerSplit: Int = Int.MaxValue): Table = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
     val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
-      ordering, requiredNumPartitions)
+      ordering, requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired,
+      numRowsPerSplit)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
@@ -118,7 +132,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
 
     // fail if the last column in the schema was dropped
     if (schema.fields.isEmpty) {
@@ -137,14 +151,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     if (tables.containsKey(newIdent)) {
-      throw new TableAlreadyExistsException(newIdent)
+      throw new TableAlreadyExistsException(newIdent.asMultipartIdentifier)
     }
 
     Option(tables.remove(oldIdent)) match {
       case Some(table) =>
         tables.put(newIdent, table)
       case _ =>
-        throw new NoSuchTableException(oldIdent)
+        throw new NoSuchTableException(oldIdent.asMultipartIdentifier)
     }
   }
 
@@ -158,6 +172,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 }
 
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
+
+  override def capabilities: java.util.Set[TableCatalogCapability] = {
+    Set(
+      TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
+    ).asJava
+  }
+
   protected def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }
@@ -213,10 +235,16 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).foreach(dropNamespace)
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
     try {
-      listTables(namespace).foreach(dropTable)
+      if (!cascade) {
+        if (listTables(namespace).nonEmpty || listNamespaces(namespace).nonEmpty) {
+          throw new NonEmptyNamespaceException(namespace)
+        }
+      } else {
+        listNamespaces(namespace).foreach(namespace => dropNamespace(namespace, cascade))
+        listTables(namespace).foreach(dropTable)
+      }
     } catch {
       case _: NoSuchNamespaceException =>
     }

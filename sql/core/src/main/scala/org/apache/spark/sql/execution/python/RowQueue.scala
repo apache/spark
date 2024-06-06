@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryBlock
+import org.apache.spark.util.Utils
 
 /**
  * A RowQueue is an FIFO queue for UnsafeRow.
@@ -233,7 +234,7 @@ private[python] case class HybridRowQueue(
     val buffer = if (page != null) {
       new InMemoryRowQueue(page, numFields) {
         override def close(): Unit = {
-          freePage(page)
+          freePage(this.page)
         }
       }
     } else {
@@ -288,8 +289,12 @@ private[python] case class HybridRowQueue(
   }
 }
 
-private[python] object HybridRowQueue {
+private[sql] object HybridRowQueue {
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
+  }
+
+  def apply(taskMemoryMgr: TaskMemoryManager, fields: Int): HybridRowQueue = {
+    apply(taskMemoryMgr, new File(Utils.getLocalDir(SparkEnv.get.conf)), fields)
   }
 }

@@ -27,7 +27,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
+class InternalFrameTestsMixin:
     def test_from_pandas(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
@@ -107,12 +107,16 @@ class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(internal.to_pandas_frame, pdf)
 
 
+class InternalFrameTests(InternalFrameTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_internal import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

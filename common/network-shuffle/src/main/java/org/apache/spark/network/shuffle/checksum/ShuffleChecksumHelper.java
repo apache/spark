@@ -25,9 +25,11 @@ import java.util.zip.CheckedInputStream;
 import java.util.zip.Checksum;
 
 import com.google.common.io.ByteStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -36,8 +38,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  */
 @Private
 public class ShuffleChecksumHelper {
-  private static final Logger logger =
-    LoggerFactory.getLogger(ShuffleChecksumHelper.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleChecksumHelper.class);
 
   public static final int CHECKSUM_CALCULATION_BUFFER = 8192;
   public static final Checksum[] EMPTY_CHECKSUM = new Checksum[0];
@@ -50,24 +52,25 @@ public class ShuffleChecksumHelper {
   private static Checksum[] getChecksumsByAlgorithm(int num, String algorithm) {
     Checksum[] checksums;
     switch (algorithm) {
-      case "ADLER32":
+      case "ADLER32" -> {
         checksums = new Adler32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new Adler32();
         }
-        return checksums;
+      }
 
-      case "CRC32":
+      case "CRC32" -> {
         checksums = new CRC32[num];
         for (int i = 0; i < num; i++) {
           checksums[i] = new CRC32();
         }
-        return checksums;
+      }
 
-      default:
-        throw new UnsupportedOperationException(
-          "Unsupported shuffle checksum algorithm: " + algorithm);
+      default -> throw new UnsupportedOperationException(
+        "Unsupported shuffle checksum algorithm: " + algorithm);
     }
+
+    return checksums;
   }
 
   public static Checksum getChecksumByAlgorithm(String algorithm) {
@@ -125,17 +128,18 @@ public class ShuffleChecksumHelper {
       ManagedBuffer partitionData,
       long checksumByReader) {
     Cause cause;
+    long duration = -1L;
+    long checksumByWriter = -1L;
+    long checksumByReCalculation = -1L;
     try {
       long diagnoseStartNs = System.nanoTime();
       // Try to get the checksum instance before reading the checksum file so that
       // `UnsupportedOperationException` can be thrown first before `FileNotFoundException`
       // when the checksum algorithm isn't supported.
       Checksum checksumAlgo = getChecksumByAlgorithm(algorithm);
-      long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
-      long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
-      long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
-      logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
-        duration, checksumFile.getAbsolutePath());
+      checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
+      checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
+      duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
       if (checksumByWriter != checksumByReCalculation) {
         cause = Cause.DISK_ISSUE;
       } else if (checksumByWriter != checksumByReader) {
@@ -147,11 +151,23 @@ public class ShuffleChecksumHelper {
       cause = Cause.UNSUPPORTED_CHECKSUM_ALGORITHM;
     } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
-      logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");
+      logger.warn("Checksum file {} doesn't exit",
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getName()));
       cause = Cause.UNKNOWN_ISSUE;
     } catch (Exception e) {
       logger.warn("Unable to diagnose shuffle block corruption", e);
       cause = Cause.UNKNOWN_ISSUE;
+    }
+    if (logger.isDebugEnabled()) {
+      logger.debug("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}, " +
+        "checksumByReader {}, checksumByWriter {}, checksumByReCalculation {}",
+        duration, checksumFile.getAbsolutePath(), cause,
+        checksumByReader, checksumByWriter, checksumByReCalculation);
+    } else {
+      logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
+        MDC.of(LogKeys.TIME$.MODULE$, duration),
+        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getAbsolutePath()),
+        MDC.of(LogKeys.REASON$.MODULE$, cause));
     }
     return cause;
   }

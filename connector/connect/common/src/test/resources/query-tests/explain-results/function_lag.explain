@@ -1,0 +1,5 @@
+Project [lag(g, 1, NULL) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)#0]
++- Project [g#0, a#0, id#0L, lag(g, 1, NULL) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)#0, lag(g, 1, NULL) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)#0]
+   +- Window [lag(g#0, -1, null) windowspecdefinition(a#0, id#0L ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS lag(g, 1, NULL) OVER (PARTITION BY a ORDER BY id ASC NULLS FIRST ROWS BETWEEN -1 FOLLOWING AND -1 FOLLOWING)#0], [a#0], [id#0L ASC NULLS FIRST]
+      +- Project [g#0, a#0, id#0L]
+         +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

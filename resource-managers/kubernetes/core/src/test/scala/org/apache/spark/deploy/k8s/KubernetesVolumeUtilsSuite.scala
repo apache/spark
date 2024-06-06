@@ -182,4 +182,30 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains("nfs.volumeName.options.server"))
   }
+
+  test("SPARK-47003: Check emptyDir volume size") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.emptyDir.volumeName.mount.path", "/path")
+    sparkConf.set("test.emptyDir.volumeName.mount.readOnly", "true")
+    sparkConf.set("test.emptyDir.volumeName.options.medium", "medium")
+    sparkConf.set("test.emptyDir.volumeName.options.sizeLimit", "5")
+
+    val m = intercept[IllegalArgumentException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
+    }.getMessage
+    assert(m.contains("smaller than 1KiB. Missing units?"))
+  }
+
+  test("SPARK-47003: Check persistentVolumeClaim volume size") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "false")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.claimName", "claimName")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.options.sizeLimit", "1000")
+
+    val m = intercept[IllegalArgumentException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
+    }.getMessage
+    assert(m.contains("smaller than 1KiB. Missing units?"))
+  }
 }

@@ -19,17 +19,17 @@ package test.org.apache.spark.sql;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 
 public class JavaUDAFSuite {
 
   private transient SparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = SparkSession.builder()
         .master("local[*]")
@@ -37,19 +37,18 @@ public class JavaUDAFSuite {
         .getOrCreate();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
     spark.range(1, 10).toDF("value").createOrReplaceTempView("df");
     spark.udf().registerJavaUDAF("myDoubleAvg", MyDoubleAvg.class.getName());
     Row result = spark.sql("SELECT myDoubleAvg(value) as my_avg from df").head();
-    Assert.assertEquals(105.0, result.getDouble(0), 1.0e-6);
+    Assertions.assertEquals(105.0, result.getDouble(0), 1.0e-6);
   }
 
 }

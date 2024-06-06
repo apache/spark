@@ -24,16 +24,16 @@ import itertools
 import operator
 import random
 import sys
-
 import heapq
+
 from pyspark.serializers import (
     BatchedSerializer,
-    PickleSerializer,
+    CPickleSerializer,
     FlattenedValuesSerializer,
     CompressedSerializer,
     AutoBatchedSerializer,
 )
-from pyspark.util import fail_on_stopiteration  # type: ignore
+from pyspark.util import fail_on_stopiteration
 
 
 try:
@@ -51,7 +51,6 @@ try:
         else:
             info = process.get_memory_info()
         return info.rss >> 20
-
 
 except ImportError:
 
@@ -79,9 +78,12 @@ def _get_local_dirs(sub):
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
     dirs = path.split(",")
     if len(dirs) > 1:
-        # different order in different processes and instances
-        rnd = random.Random(os.getpid() + id(dirs))
-        random.shuffle(dirs, rnd.random)
+        if sys.version_info < (3, 11):
+            # different order in different processes and instances
+            rnd = random.Random(os.getpid() + id(dirs))
+            random.shuffle(dirs, rnd.random)
+        else:
+            random.shuffle(dirs)
     return [os.path.join(d, "python", str(os.getpid()), sub) for d in dirs]
 
 
@@ -90,7 +92,7 @@ MemoryBytesSpilled = 0
 DiskBytesSpilled = 0
 
 
-class Aggregator(object):
+class Aggregator:
 
     """
     Aggregator has tree functions to merge values into combiner.
@@ -117,7 +119,7 @@ class SimpleAggregator(Aggregator):
         Aggregator.__init__(self, lambda x: x, combiner, combiner)
 
 
-class Merger(object):
+class Merger:
 
     """
     Merge shuffled data together by aggregator
@@ -140,8 +142,8 @@ class Merger(object):
 
 
 def _compressed_serializer(self, serializer=None):
-    # always use PickleSerializer to simplify implementation
-    ser = PickleSerializer()
+    # always use CPickleSerializer to simplify implementation
+    ser = CPickleSerializer()
     return AutoBatchedSerializer(CompressedSerializer(ser))
 
 
@@ -438,7 +440,7 @@ class ExternalMerger(Merger):
             shutil.rmtree(d, True)
 
 
-class ExternalSorter(object):
+class ExternalSorter:
     """
     ExternalSorter will divide the elements into chunks, sort them in
     memory and dump them into disks, finally merge them back.
@@ -528,7 +530,7 @@ class ExternalSorter(object):
         return heapq.merge(*chunks, key=key, reverse=reverse)
 
 
-class ExternalList(object):
+class ExternalList:
     """
     ExternalList can have many items which cannot be hold in memory in
     the same time.
@@ -609,7 +611,7 @@ class ExternalList(object):
             os.makedirs(d)
         p = os.path.join(d, str(id(self)))
         self._file = open(p, "w+b", 65536)
-        self._ser = BatchedSerializer(CompressedSerializer(PickleSerializer()), 1024)
+        self._ser = BatchedSerializer(CompressedSerializer(CPickleSerializer()), 1024)
         os.unlink(p)
 
     def __del__(self):
@@ -663,7 +665,7 @@ class ExternalListOfList(ExternalList):
                 yield v
 
 
-class GroupByKey(object):
+class GroupByKey:
     """
     Group a sorted iterator as [(k1, it1), (k2, it2), ...]
 

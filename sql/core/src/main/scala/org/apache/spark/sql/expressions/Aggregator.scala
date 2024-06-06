@@ -19,7 +19,6 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.sql.{Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
@@ -50,6 +49,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @tparam OUT The type of the final output result.
  * @since 1.6.0
  */
+@SerialVersionUID(2093413866369130093L)
 abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
@@ -90,19 +90,14 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
-   * operations.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset` operations.
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
     implicit val bEncoder = bufferEncoder
     implicit val cEncoder = outputEncoder
 
-    val expr =
-      AggregateExpression(
-        TypedAggregateExpression(this),
-        Complete,
-        isDistinct = false)
+    val expr = TypedAggregateExpression(this).toAggregateExpression()
 
     new TypedColumn[IN, OUT](expr, encoderFor[OUT])
   }

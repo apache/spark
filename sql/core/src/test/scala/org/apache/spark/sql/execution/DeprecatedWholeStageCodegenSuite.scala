@@ -36,9 +36,9 @@ class DeprecatedWholeStageCodegenSuite extends QueryTest
       .groupByKey(_._1).agg(typed.sum(_._2))
 
     val plan = ds.queryExecution.executedPlan
-    assert(plan.find(p =>
+    assert(plan.exists(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]))
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 }

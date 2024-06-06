@@ -24,10 +24,10 @@ import java.util.concurrent.TimeUnit;
 import com.codahale.metrics.Clock;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Tests for {@link TimerWithCustomTimeUnit} */
 public class TimerWithCustomUnitSuite {

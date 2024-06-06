@@ -18,9 +18,9 @@
 package org.apache.spark.metrics.sink
 
 import java.util.Properties
-import javax.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry
+import jakarta.servlet.http.HttpServletRequest
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SparkConf
@@ -48,7 +48,7 @@ private[spark] class PrometheusServlet(
   }
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     val gaugesLabel = """{type="gauges"}"""
     val countersLabel = """{type="counters"}"""

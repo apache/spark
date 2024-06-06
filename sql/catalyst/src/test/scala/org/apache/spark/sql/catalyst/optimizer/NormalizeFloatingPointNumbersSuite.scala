@@ -30,9 +30,9 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val batches = Batch("NormalizeFloatingPointNumbers", Once, NormalizeFloatingNumbers) :: Nil
   }
 
-  val testRelation1 = LocalRelation('a.double)
+  val testRelation1 = LocalRelation($"a".double)
   val a = testRelation1.output(0)
-  val testRelation2 = LocalRelation('a.double)
+  val testRelation2 = LocalRelation($"a".double)
   val b = testRelation2.output(0)
 
   test("normalize floating points in window function expressions") {

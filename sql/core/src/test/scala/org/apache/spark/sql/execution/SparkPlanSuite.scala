@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,13 +34,13 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
 
-    intercept[IllegalStateException] { plan.execute() }
-    intercept[IllegalStateException] { plan.executeCollect() }
-    intercept[IllegalStateException] { plan.executeCollectPublic() }
-    intercept[IllegalStateException] { plan.executeToIterator() }
-    intercept[IllegalStateException] { plan.executeBroadcast() }
-    intercept[IllegalStateException] { plan.executeTake(1) }
-    intercept[IllegalStateException] { plan.executeTail(1) }
+    intercept[SparkException] { plan.execute() }
+    intercept[SparkException] { plan.executeCollect() }
+    intercept[SparkException] { plan.executeCollectPublic() }
+    intercept[SparkException] { plan.executeToIterator() }
+    intercept[SparkException] { plan.executeBroadcast() }
+    intercept[SparkException] { plan.executeTake(1) }
+    intercept[SparkException] { plan.executeTail(1) }
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
@@ -108,11 +108,14 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(10)
     val planner = spark.sessionState.planner
     val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
-    val err = intercept[IllegalStateException] {
-      planner.plan(deduplicate)
-    }
-    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
-      "should have been replaced by aggregate in the optimizer"))
+    checkError(
+      exception = intercept[SparkException] {
+        planner.plan(deduplicate)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Deduplicate operator for non streaming data source should have been " +
+          "replaced by aggregate in the optimizer")))
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
@@ -124,13 +127,32 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
   }
+
+  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(1).write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        val columnarToRowExec =
+          df.queryExecution.executedPlan.collectFirst { case p: ColumnarToRowExec => p }.get
+        try {
+          spark.range(1).foreach { _ =>
+            columnarToRowExec.canonicalized
+            ()
+          }
+        } catch {
+          case e: Throwable => fail("ColumnarToRowExec was not canonicalizable", e)
+        }
+      }
+    }
+  }
 }
 
 case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override val supportsColumnar: Boolean = true
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     RowToColumnarExec(child).executeColumnar()
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
