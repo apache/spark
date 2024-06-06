@@ -4004,7 +4004,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(TRANSPOSE), ruleId) {
       // scalastyle:off println
-      case t @ Transpose(child) =>
+      case t @ Transpose(child, firstColumnValues) =>
         val firstColumn = child.output.head
         val firstColumnNamedExpr = firstColumn.asInstanceOf[NamedExpression]
 
@@ -4018,15 +4018,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         )
 
         val valueColumnDataType = IntegerType  // to fix
-        val pivotValues: Seq[Expression] = Seq(Literal("dotNET"), Literal("Java")) // to fix
-        val aggFunction = First(
-          AttributeReference("value", valueColumnDataType)(), ignoreNulls = true)
-        val aggExpression = aggFunction.toAggregateExpression(isDistinct = true, None) // to fix
+        val aggExpression = First(
+          AttributeReference("value", valueColumnDataType)(), ignoreNulls = true
+        ).toAggregateExpression(isDistinct = true)
 
         val pivot = Pivot(
           groupByExprsOpt = Some(Seq(AttributeReference("key", StringType)())),
           pivotColumn = firstColumnNamedExpr,
-          pivotValues = pivotValues,
+          pivotValues = firstColumnValues,
           aggregates = Seq(aggExpression),
           child = unpivot
         )

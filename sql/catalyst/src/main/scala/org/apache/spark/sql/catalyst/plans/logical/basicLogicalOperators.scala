@@ -1474,7 +1474,10 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
-case class Transpose (child: LogicalPlan) extends UnresolvedUnaryNode {
+case class Transpose (
+    child: LogicalPlan,
+    firstColumnValues: Seq[Expression]
+) extends UnresolvedUnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
   override def withNewChildInternal(newChild: LogicalPlan): Transpose = copy(child = newChild)
 }
