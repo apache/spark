@@ -257,12 +257,16 @@ object SubExprUtils extends PredicateHelper {
    * We can derive these from correlated equality predicates, though we need to take care about
    * propagating this through operators like OUTER JOIN or UNION.
    *
-   * Positive examples: x = outer(a) AND y = outer(b)
+   * Positive examples:
+   * - x = outer(a) AND y = outer(b)
+   * - x = 1
+   * - x = outer(a) + 1
+   *
    * Negative examples:
    * - x <= outer(a)
    * - x + y = outer(a)
    * - x = outer(a) OR y = outer(b)
-   * - y = outer(b) + 1 (this and similar expressions could be supported, but very carefully)
+   * - y + outer(b) = 1 (this and similar expressions could be supported, but very carefully)
    * - An equality under the right side of a LEFT OUTER JOIN, e.g.
    *   select *, (select count(*) from y left join
    *     (select * from z where z1 = x1) sub on y2 = z2 group by z1) from x;
