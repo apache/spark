@@ -2081,11 +2081,8 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
-    checkError(
-      exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect()),
-      errorClass = "EXPRESSION_DECODING_FAILED",
-      sqlState = "42846",
-      parameters = Map("expressions" -> "newInstance(class scala.Tuple2)"))
+    val exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect())
+    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
