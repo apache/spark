@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.{encoderFor, Encoder, TypedColumn}
@@ -56,7 +56,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
  * @since 4.0.0
  */
 @SerialVersionUID(2093413866369130093L)
-abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
+abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
    * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
@@ -100,7 +100,8 @@ abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
    * @since 4.0.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    val inputEncoder = ScalaReflection.encoderFor[IN]
+    val ttpe = Aggregator.getInputTypeTag[IN](this)
+    val inputEncoder = ScalaReflection.encoderFor(ttpe)
     val udaf =
       ScalaUserDefinedFunction(
         this,
@@ -113,5 +114,36 @@ abstract class Aggregator[-IN: TypeTag, BUF, OUT] extends Serializable {
     val expr = proto.Expression.newBuilder().setTypedAggregateExpression(builder).build()
 
     new TypedColumn(expr, encoderFor(outputEncoder))
+  }
+}
+
+object Aggregator {
+  private def getInputTypeTag[T](obj: Any): TypeTag[T] = {
+    val mirror = runtimeMirror(obj.getClass.getClassLoader)
+    val tpe = mirror.classSymbol(obj.getClass).toType
+    // Find the most generic (last in the tree) Aggregator class
+    val baseAgg =
+      tpe.baseClasses
+        .findLast(_.asClass.toType <:< typeOf[Aggregator[_, _, _]])
+        .getOrElse(throw new IllegalStateException("Could not find the Aggregator base class."))
+    val typeArgs = tpe.baseType(baseAgg).typeArgs
+    assert(
+      typeArgs.length == 3,
+      s"Aggregator should have 3 type arguments, " +
+        s"but found ${typeArgs.length}: ${typeArgs.mkString}.")
+    val inType = typeArgs.head
+
+    import scala.reflect.api._
+    TypeTag(
+      mirror,
+      new TypeCreator {
+        def apply[U <: Universe with Singleton](m: Mirror[U]): U#Type =
+          if (m eq mirror) {
+            inType.asInstanceOf[U#Type]
+          } else {
+            throw new IllegalArgumentException(
+              s"Type tag defined in $mirror cannot be migrated to other mirrors.")
+          }
+      })
   }
 }
