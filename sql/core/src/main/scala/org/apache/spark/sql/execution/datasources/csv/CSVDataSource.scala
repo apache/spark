@@ -198,8 +198,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     csv.flatMap { lines =>
-      val path = new Path(lines.getPath())
       try {
+        val path = new Path(lines.getPath())
         UnivocityParser.tokenizeStream(
           CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
           shouldDropHeader = false,
@@ -215,7 +215,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
             log"${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]
         case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotReadFilesError(e, SparkPath.fromPath(path).urlEncoded)
+          val path = SparkPath.fromPathString(lines.getPath())
+          throw QueryExecutionErrors.cannotReadFilesError(e, path.urlEncoded)
       }
     }.take(1).headOption match {
       case Some(firstRow) =>
