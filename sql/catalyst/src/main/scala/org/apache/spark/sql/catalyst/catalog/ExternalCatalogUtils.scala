@@ -63,26 +63,22 @@ object ExternalCatalogUtils {
     bitSet
   }
 
-  @inline private final def needsEscaping(c: Char): Boolean = {
+  def needsEscaping(c: Char): Boolean = {
     c < charToEscape.size() && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {
-    val firstIndex = path.indexWhere(needsEscaping)
-    if (firstIndex == -1) {
-      path
-    } else {
-      val builder = new StringBuilder(path.substring(0, firstIndex))
-      path.substring(firstIndex).foreach { c =>
-        if (needsEscaping(c)) {
-          builder.append('%')
-          builder.append(f"${c.asInstanceOf[Int]}%02X")
-        } else {
-          builder.append(c)
-        }
+    val builder = new StringBuilder()
+    path.foreach { c =>
+      if (needsEscaping(c)) {
+        builder.append('%')
+        builder.append(f"${c.asInstanceOf[Int]}%02X")
+      } else {
+        builder.append(c)
       }
-      builder.toString()
     }
+
+    builder.toString()
   }
 
 
