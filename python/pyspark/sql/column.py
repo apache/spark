@@ -677,7 +677,7 @@ class Column:
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.filter(df.name.contains('o')).collect()
-        [Row(age=5, name='Bobx')]
+        [Row(age=5, name='Bob')]
         """
         ...
 
