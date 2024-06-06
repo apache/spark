@@ -175,9 +175,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
-    // SPARK-37448: performance optimization: set withOrigin = false in MapExpressions because
-    // transformDownWithPruning calls `CurrentOrigin.withOrigin`:
-    mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule), withOrigin = false)
+    mapExpressions(_.transformDownWithPruning(cond, ruleId)(rule))
   }
 
   /**
@@ -206,9 +204,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression])
   : this.type = {
-    // SPARK-37448: performance optimization: set withOrigin = false in MapExpressions because
-    // transformUpWithPruning calls `CurrentOrigin.withOrigin`:
-    mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule), withOrigin = false)
+    mapExpressions(_.transformUpWithPruning(cond, ruleId)(rule))
   }
 
   /**
@@ -216,18 +212,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * query operator based on the mapped expressions.
    */
   def mapExpressions(f: Expression => Expression): this.type = {
-    mapExpressions(f, withOrigin = true)
-  }
-
-  private def mapExpressions(f: Expression => Expression, withOrigin: Boolean): this.type = {
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
-      val newE = if (withOrigin) {
-        CurrentOrigin.withOrigin(e.origin) {
-          f(e)
-        }
-      } else {
+      val newE = CurrentOrigin.withOrigin(e.origin) {
         f(e)
       }
       if (newE.fastEquals(e)) {
