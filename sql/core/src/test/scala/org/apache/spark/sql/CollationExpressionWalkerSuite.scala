@@ -61,10 +61,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       inputEntry: Any,
       collationType: CollationType): Any =
     inputEntry match {
-      case e: Class[_] if e.isAssignableFrom(classOf[Expression]) => Literal.create("1")
+      case e: Class[_] if e.isAssignableFrom(classOf[Expression]) =>
+        generateLiterals(StringTypeAnyCollation, collationType)
       case se: Class[_] if se.isAssignableFrom(classOf[Seq[Expression]]) =>
-        Seq(Literal.create("1"), Literal.create("2"))
-      case oe: Class[_] if oe.isAssignableFrom(classOf[Option[Expression]]) => None
+        Seq(generateLiterals(StringTypeAnyCollation, collationType),
+          generateLiterals(StringTypeAnyCollation, collationType))
+      case oe: Class[_] if oe.isAssignableFrom(classOf[Option[Any]]) => None
       case b: Class[_] if b.isAssignableFrom(classOf[Boolean]) => false
       case dt: Class[_] if dt.isAssignableFrom(classOf[DataType]) => StringType
       case st: Class[_] if st.isAssignableFrom(classOf[StructType]) => StructType
@@ -213,7 +215,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case types: ExpectsInputTypes =>
             expectsExpressionCounter = expectsExpressionCounter + 1
             val inputTypes = types.inputTypes
-            inputTypes.exists(hasStringType)
+            inputTypes.exists(hasStringType) || inputTypes.isEmpty
         }
       } catch {
         case _: Throwable => false
@@ -230,8 +232,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     println("Number of extracted expressions of relevance: " + (funInfos.length - toSkip.length))
     // scalastyle:on println
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      // scalastyle:off println
-      println(f.getName)
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
       val params = headConstructor.getParameters.map(p => p.getType)
