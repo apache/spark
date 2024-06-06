@@ -274,7 +274,9 @@ object SubExprUtils extends PredicateHelper {
     plan match {
       case Filter(cond, child) =>
         val correlated = AttributeSet(splitConjunctivePredicates(cond)
-          .filter(containsOuter) // TODO: can remove this line to allow e.g. where x = 1 group by x
+          .filter(
+            SQLConf.get.getConf(SQLConf.SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT)
+            || containsOuter(_))
           .filter(DecorrelateInnerQuery.canPullUpOverAgg)
           .flatMap(_.references))
         correlated ++ getCorrelatedEquivalentInnerColumns(child)
