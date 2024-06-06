@@ -224,7 +224,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
 
     val toSkip = List(
       "parse_url", // Parse URL cannot be generalized with ExpectInputTypes
-      "hex" // this is fine
+      "hex" // Different inputs affect conversion
     )
     // scalastyle:off println
     println("Total number of expression: " + expressionCounter)
