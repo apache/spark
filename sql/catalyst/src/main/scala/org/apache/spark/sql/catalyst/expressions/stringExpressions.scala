@@ -846,9 +846,9 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
       > SELECT _FUNC_(x'61');
        a
       > SELECT _FUNC_(x'80');
-       null
+       NULL
       > SELECT _FUNC_(x'61C262');
-       null
+       NULL
   """,
   since = "4.0.0",
   group = "string_funcs")
