@@ -283,25 +283,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Utility methods and constants for UTF-8 string validation.
    */
 
-  private static boolean byteMatchesMask(byte b, byte mask) {
-    return (b & mask) == b;
+  private static boolean byteMatchesMask(byte b, byte mask, byte val) {
+    return (b & mask) == val;
   }
 
-  private static final byte CONTINUATION_BYTE_MASK = (byte) 0x80;
+  private static final byte CONTINUATION_BYTE_MASK = (byte) 0xC0;
+  private static final byte CONTINUATION_BYTE_VAL = (byte) 0x80;
 
   private static boolean isValidContinuationByte(byte b) {
-    return byteMatchesMask(b, CONTINUATION_BYTE_MASK);
+    return byteMatchesMask(b, CONTINUATION_BYTE_MASK, CONTINUATION_BYTE_VAL);
   }
 
-  private static final Map<Byte, Byte> SECOND_BYTE_MAP = Map.of(
-    (byte) 0xE0, (byte) 0x01,
-    (byte) 0xED, (byte) 0x02,
-    (byte) 0xF0, (byte) 0x04,
-    (byte) 0xF4, (byte) 0x08
-  );
-
   private static boolean isValidSecondByte(byte b, byte firstByte) {
-    return byteMatchesMask(b, SECOND_BYTE_MAP.getOrDefault(firstByte, CONTINUATION_BYTE_MASK));
+    return switch (firstByte) {
+      case (byte) 0xE0 -> (byte) 0xA0 <= b && b <= (byte) 0xBF;
+      case (byte) 0xED -> (byte) 0x80 <= b && b <= (byte) 0x9F;
+      case (byte) 0xF0 -> (byte) 0x90 <= b && b <= (byte) 0xBF;
+      case (byte) 0xF4 -> (byte) 0x80 <= b && b <= (byte) 0x8F;
+      default -> isValidContinuationByte(b);
+    };
   }
 
   private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
@@ -324,17 +324,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     while (byteIndex < numBytes) {
       // Read the first byte.
       byte firstByte = getByte(byteIndex);
-      int codePointLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
-      codePointLen = Math.min(codePointLen, numBytes - byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
       if (codePointLen == 0) {
         appendReplacementCharacter(bytes);
         byteIndex += 1;
         continue;
       }
-      // 1B UTF-8 sequence (ASCII).
+      // 1B UTF-8 sequence (ASCII or invalid).
       if (codePointLen == 1) {
-        bytes.add(firstByte);
+        if (firstByte >= 0) bytes.add(firstByte);
+        else appendReplacementCharacter(bytes);
         byteIndex += 1;
         continue;
       }
@@ -354,7 +355,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         }
       }
       // Invalid UTF-8 sequence (not enough continuation bytes).
-      if (continuationBytes < codePointLen) {
+      if (continuationBytes < expectedLen) {
         appendReplacementCharacter(bytes);
         byteIndex += continuationBytes;
         continue;
@@ -372,16 +373,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Checks whether the string represents a valid UTF-8 byte sequence.
    */
 
-//  public byte[] getCodePoint(int index) {
-//    if (index < 0 || index >= numBytes) {
-//      throw new IndexOutOfBoundsException();
-//    }
-//    int codePointLength = numBytesForFirstByte(getByte(index));
-//    int numAvailableBytes = index + codePointLength > numBytes ? numBytes - index : codePointLength;
-//    byte[] codePoint = new byte[codePointLength];
-//    copyMemory(base, offset + index, codePoint, BYTE_ARRAY_OFFSET, numAvailableBytes);
-//    return codePoint;
-//  }
+  public boolean isValidUTF8() {
+    return validateUTF8().equals(this);
+  }
 
   /**
    * Returns a substring of this.
