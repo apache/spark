@@ -712,7 +712,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
-        "expectedNum" -> "[1, 2, 3]",
+        "expectedNum" -> "[1, 3]",
         "actualNum" -> "0",
         "docroot" -> SPARK_DOC_ROOT
       ),

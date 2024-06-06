@@ -3152,10 +3152,17 @@ case class Sentences(
 
   def this(str: Expression) = this(str, None, None)
 
-  def this(str: Expression, language: Expression) = this(str, Some(language))
-
   def this(str: Expression, language: Expression, country: Expression) =
     this(str, Some(language), Some(country))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length != 1 && children.length != 3) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq(1, 3), children.length)
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def nullable: Boolean = true
   override def dataType: DataType =
@@ -3168,8 +3175,8 @@ case class Sentences(
     if (string == null) {
       null
     } else {
-      val languageStr = language.getOrElse(Literal("")).eval(input).asInstanceOf[UTF8String]
-      val countryStr = country.getOrElse(Literal("")).eval(input).asInstanceOf[UTF8String]
+      val languageStr = language.getOrElse(Literal(null)).eval(input).asInstanceOf[UTF8String]
+      val countryStr = country.getOrElse(Literal(null)).eval(input).asInstanceOf[UTF8String]
       val locale = if (languageStr != null && countryStr != null) {
         new Locale(languageStr.toString, countryStr.toString)
       } else {
@@ -3205,10 +3212,6 @@ case class Sentences(
   override def children: Seq[Expression] = {
     if (language.isDefined && country.isDefined) {
       Seq(str, language.get, country.get)
-    } else if (language.isDefined) {
-      Seq(str, language.get)
-    } else if (country.isDefined) {
-      Seq(str, country.get)
     } else {
       Seq(str)
     }
@@ -3216,10 +3219,11 @@ case class Sentences(
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(
-      str = newChildren.head,
-      language = if (language.isDefined) Some(newChildren(1)) else None,
-      country = if (country.isDefined) Some(newChildren(2)) else None)
+    if (language.isDefined && country.isDefined) {
+      copy(str = newChildren.head, language = Some(newChildren(1)), country = Some(newChildren(2)))
+    } else {
+      copy(str = newChildren.head, language = None, country = None)
+    }
   }
 }
 
