@@ -1522,17 +1522,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
   }
-
-  test("test useG1") {
-    Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-      .asInstanceOf[Class[_ <: Integer]]
-    // scalastyle:off
-    val bool = scala.util.Try {
-      throw new NoClassDefFoundError("com/sun/management/GarbageCollectorMXBean")
-      true
-    }.getOrElse(false)
-    println(Utils.isG1GC)
-  }
 }
 
 private class SimpleExtension
