@@ -95,6 +95,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        self.assertTrue(q.exception() is None)
 
     def test_apply_in_pandas_with_state_basic(self):
         def func(key, pdf_iter, state):
