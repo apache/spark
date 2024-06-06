@@ -355,8 +355,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
             }
         }
 
-        val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
+        val (planAfterRule, newAttrMapping) = {
+          if (rule.isDefinedAt(newPlan)) {
+            CurrentOrigin.withOrigin(origin) {
+              rule.apply(newPlan)
+            }
+          } else {
+            plan -> Nil
+          }
         }
 
         val newValidAttrMapping = newAttrMapping.filter {
