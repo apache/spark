@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 
@@ -29,10 +30,10 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     // scalastyle:off println
 
     val logicalPlan = courseSales.queryExecution.logical
-    val firstColumnValues = Seq(Literal("dotNET"), Literal("Java")) // to fix
     val transposePlan = Transpose(
       child = logicalPlan,
-      firstColumnValues = firstColumnValues
+      firstColumnValues = Seq(Literal("dotNET"), Literal("Java")),
+      valueType = IntegerType
     )
 
     println(s"Logical plan before analysis:\n$transposePlan")
