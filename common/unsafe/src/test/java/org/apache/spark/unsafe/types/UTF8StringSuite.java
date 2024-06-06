@@ -902,4 +902,18 @@ public class UTF8StringSuite {
       assertEquals(1, fromBytes(c).numChars());
     }
   }
+
+  private void testValidateUTF8(String expected, String input) {
+    ByteArrayOutputStream exp = new ByteArrayOutputStream();
+    for (String hex : expected.split(" ")) exp.write(Integer.parseInt(hex.substring(2), 16));
+    ByteArrayOutputStream inp = new ByteArrayOutputStream();
+    for (String hex : input.split(" ")) inp.write(Integer.parseInt(hex.substring(2), 16));
+    assertEquals(fromBytes(exp.toByteArray()), fromBytes(inp.toByteArray()).validateUTF8());
+  }
+  @Test
+  public void validateUTF8() {
+    testValidateUTF8("0x42", "0x42");
+    testValidateUTF8("0xEF 0xBF 0xBD", "0x80");
+  }
+
 }

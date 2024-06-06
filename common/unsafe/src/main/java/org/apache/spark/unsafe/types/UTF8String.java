@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -112,6 +113,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return null;
     }
+  }
+
+  private static UTF8String fromBytes(ArrayList<Byte> bytes) {
+    byte[] byteArray = new byte[bytes.size()];
+    for (int i = 0; i < bytes.size(); i++) {
+      byteArray[i] = bytes.get(i);
+    }
+    return fromBytes(byteArray);
   }
 
   /**
@@ -269,6 +278,110 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return bytes;
     }
   }
+
+  /**
+   * Utility methods and constants for UTF-8 string validation.
+   */
+
+  private static boolean byteMatchesMask(byte b, byte mask) {
+    return (b & mask) == b;
+  }
+
+  private static final byte CONTINUATION_BYTE_MASK = (byte) 0x80;
+
+  private static boolean isValidContinuationByte(byte b) {
+    return byteMatchesMask(b, CONTINUATION_BYTE_MASK);
+  }
+
+  private static final Map<Byte, Byte> SECOND_BYTE_MAP = Map.of(
+    (byte) 0xE0, (byte) 0x01,
+    (byte) 0xED, (byte) 0x02,
+    (byte) 0xF0, (byte) 0x04,
+    (byte) 0xF4, (byte) 0x08
+  );
+
+  private static boolean isValidSecondByte(byte b, byte firstByte) {
+    return byteMatchesMask(b, SECOND_BYTE_MAP.getOrDefault(firstByte, CONTINUATION_BYTE_MASK));
+  }
+
+  private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
+    new byte[] { (byte) 0xEF, (byte) 0xBF, (byte) 0xBD };
+
+  private static void appendReplacementCharacter(ArrayList<Byte> bytes) {
+    for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) bytes.add(b);
+  }
+
+  /**
+   * Validates the current UTF-8 string by replacing invalid UTF-8 sequences with the Unicode
+   * replacement character (U+FFFD), as per the rules defined in the Unicode standard. This
+   * behaviour is consistent with the behaviour of `UnicodeString` function in ICU4C.
+   */
+
+  public UTF8String validateUTF8() {
+    ArrayList<Byte> bytes = new ArrayList<>();
+    int byteIndex = 0;
+    byteIteration:
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int codePointLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      codePointLen = Math.min(codePointLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) {
+        appendReplacementCharacter(bytes);
+        byteIndex += 1;
+        continue;
+      }
+      // 1B UTF-8 sequence (ASCII).
+      if (codePointLen == 1) {
+        bytes.add(firstByte);
+        byteIndex += 1;
+        continue;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) {
+        appendReplacementCharacter(bytes);
+        byteIndex += 1;
+        continue;
+      }
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) {
+          break;
+        }
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < codePointLen) {
+        appendReplacementCharacter(bytes);
+        byteIndex += continuationBytes;
+        continue;
+      }
+      // Valid UTF-8 sequence.
+      for (int i = 0; i < codePointLen; ++i) {
+        bytes.add(getByte(byteIndex + i));
+      }
+      byteIndex += codePointLen;
+    }
+    return UTF8String.fromBytes(bytes);
+  }
+
+  /**
+   * Checks whether the string represents a valid UTF-8 byte sequence.
+   */
+
+//  public byte[] getCodePoint(int index) {
+//    if (index < 0 || index >= numBytes) {
+//      throw new IndexOutOfBoundsException();
+//    }
+//    int codePointLength = numBytesForFirstByte(getByte(index));
+//    int numAvailableBytes = index + codePointLength > numBytes ? numBytes - index : codePointLength;
+//    byte[] codePoint = new byte[codePointLength];
+//    copyMemory(base, offset + index, codePoint, BYTE_ARRAY_OFFSET, numAvailableBytes);
+//    return codePoint;
+//  }
 
   /**
    * Returns a substring of this.
