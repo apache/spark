@@ -1255,6 +1255,11 @@
           "List namespaces."
         ]
       },
+      "LOAD_TABLE" : {
+        "message" : [
+          "Load the table <tableName>."
+        ]
+      },
       "NAMESPACE_EXISTS" : {
         "message" : [
           "Check that the namespace <namespace> exists."
