@@ -690,13 +690,15 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
  * A function that checks if a UTF8 string is valid.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns true if `str` is a valid UTF-8 sequence, otherwise returns false.",
+  usage = "_FUNC_(str) - Returns true if `str` is a valid UTF-8 string, otherwise returns false.",
   arguments = """
     Arguments:
       * str - a string expression
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark');
+       true
       > SELECT _FUNC_(x'61');
        true
       > SELECT _FUNC_(x'80');
@@ -715,11 +717,11 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
   override def nullable: Boolean = true
 
   override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].isValidUTF8
+    srcEval.asInstanceOf[UTF8String].isValid
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.isValidUTF8();")
+    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.isValid();")
   }
 
   override def prettyName: String = "is_valid_utf8"
@@ -731,12 +733,13 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
 }
 
 /**
- * A function that converts an invalid UTF8 byte sequences to a valid UTF8 byte sequence,
- * according to the UNICODE standard rules (Section 3.9-D86). Valid sequences stay unchanged.
+ * A function that converts an invalid UTF8 string to a valid UTF8 string by replacing invalid
+ * UTF-8 sequences with the Unicode replacement character (U+FFFD), according to the UNICODE
+ * standard rules (Section 3.9, Paragraph D86, Table 3-7). Valid strings stay unchanged.
  */
 // scalastyle:off
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
     "otherwise returns a new string whose invalid UTF8 bytes sequences are replaced using the " +
     "UNICODE replacement character U+FFFD.",
   arguments = """
@@ -745,6 +748,8 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
       > SELECT _FUNC_(x'61');
        a
       > SELECT _FUNC_(x'80');
@@ -764,11 +769,11 @@ case class MakeValidUTF8(srcExpr: Expression) extends UnaryExpression with Impli
   override def nullable: Boolean = true
 
   override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].makeValidUTF8
+    srcEval.asInstanceOf[UTF8String].makeValid
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.makeValidUTF8();")
+    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.makeValid();")
   }
 
   override def prettyName: String = "make_valid_utf8"
@@ -780,11 +785,11 @@ case class MakeValidUTF8(srcExpr: Expression) extends UnaryExpression with Impli
 }
 
 /**
- * A function that validates a UTF8 string.
+ * A function that validates a UTF8 string, throwing an exception if the string is invalid.
  */
 // scalastyle:off
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
     "otherwise throws an exception.",
   arguments = """
     Arguments:
@@ -792,6 +797,8 @@ case class MakeValidUTF8(srcExpr: Expression) extends UnaryExpression with Impli
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
       > SELECT _FUNC_(x'61');
        a
   """,
@@ -807,13 +814,15 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
   override def nullable: Boolean = true
 
   override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].validateUTF8
+    val utf8string = srcEval.asInstanceOf[UTF8String]
+    if (!utf8string.isValid) throw new IllegalArgumentException("Invalid UTF-8 string")
+    else utf8string
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-        if (!$c.isValidUTF8()) {
+        if (!$c.isValid()) {
           throw new IllegalArgumentException("Invalid UTF-8 string");
         } else {
           ${ev.value} = $c;
@@ -831,11 +840,11 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
 }
 
 /**
- * A function that tries to validate a UTF8 string.
+ * A function that tries to validate a UTF8 string, returning null if the string is invalid.
  */
 // scalastyle:off
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 sequence, " +
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
     "otherwise returns null.",
   arguments = """
     Arguments:
@@ -843,6 +852,8 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
       > SELECT _FUNC_(x'61');
        a
       > SELECT _FUNC_(x'80');
@@ -862,13 +873,15 @@ case class TryValidateUTF8(srcExpr: Expression) extends UnaryExpression with Imp
   override def nullable: Boolean = true
 
   override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].tryValidateUTF8
+    val utf8string = srcEval.asInstanceOf[UTF8String]
+    if (!utf8string.isValid) null
+    else utf8string
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-        if (!$c.isValidUTF8()) {
+        if (!$c.isValid()) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = $c;

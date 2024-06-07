@@ -1411,43 +1411,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Checks if this UTF8String is valid.
    *
-   * @return If string represents a valid UTF8 byte sequence.
+   * @return If string represents a valid UTF8 byte string.
    */
-  public boolean isValidUTF8() {
-    return makeValidUTF8().equals(this);
+  public boolean isValid() {
+    return makeValid().equals(this);
   }
 
   /**
    * Returns a validated version of this UTF8String.
    *
-   * @return A new UTF8String that is a valid UTF8 byte sequence.
+   * @return A new UTF8String that is a valid UTF8 byte string.
    */
-  public UTF8String makeValidUTF8() {
+  public UTF8String makeValid() {
     return fromString(toString());
-  }
-
-  /**
-   * Returns this string if it is a valid UTF8 byte sequence, otherwise throws an exception.
-   *
-   * @return The UTF8String itself if it is a valid UTF8 byte sequence.
-   */
-  public UTF8String validateUTF8() {
-    if (!isValidUTF8()) {
-      throw new IllegalArgumentException("Invalid UTF-8 string");
-    }
-    return this;
-  }
-
-  /**
-   * Returns this string if it is a valid UTF8 byte sequence, otherwise returns null.
-   *
-   * @return The UTF8String itself if it is a valid UTF8 byte sequence, otherwise null.
-   */
-  public UTF8String tryValidateUTF8() {
-    if (!isValidUTF8()) {
-      return null;
-    }
-    return this;
   }
 
   @Override

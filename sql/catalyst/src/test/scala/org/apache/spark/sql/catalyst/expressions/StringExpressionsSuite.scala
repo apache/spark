@@ -2088,8 +2088,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     makeValidUTF8(UTF8String.fromBytes(Array.empty[Byte]), "")
     makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x41)), "A")
     makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x61)), "a")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\ufffd")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\ufffd")
+    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD")
+    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD")
 
     def validateUTF8(str: Any, expected: String, exception: Boolean): Unit = {
       if (exception) {
@@ -2115,8 +2115,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     validateUTF8(UTF8String.fromBytes(Array.empty[Byte]), "", exception = false)
     validateUTF8(UTF8String.fromBytes(Array[Byte](0x41)), "A", exception = false)
     validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), "a", exception = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\ufffd", exception = true)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\ufffd", exception = true)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD", exception = true)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD", exception = true)
 
     def tryValidateUTF8(str: Any, expected: String): Unit = {
       checkEvaluation(
