@@ -886,7 +886,7 @@ case class IntegralDivide(
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
+  usage = "expr1 % expr2, or mod(expr1, expr2) - Returns the remainder after `expr1`/`expr2`.",
   examples = """
     Examples:
       > SELECT 2 % 1.8;

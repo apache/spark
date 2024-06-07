@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
+from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple, TypeVar
 import datetime
 import decimal
 
@@ -28,6 +28,7 @@ from pyspark.sql.streaming.state import GroupState
 
 
 ColumnOrName = Union[Column, str]
+ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
 
 ColumnOrNameOrOrdinal = Union[Column, str, int]
 

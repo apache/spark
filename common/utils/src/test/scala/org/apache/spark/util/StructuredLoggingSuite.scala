@@ -53,6 +53,11 @@ trait LoggingSuiteBase
 
   def basicMsg: String = "This is a log message"
 
+  def basicMsgWithEscapeChar: String = "This is a log message\nThis is a new line \t other msg"
+
+  def basicMsgWithEscapeCharMDC: LogEntry =
+    log"This is a log message\nThis is a new line \t other msg"
+
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 
   def msgWithMDCValueIsNull: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, null)}."
@@ -65,6 +70,12 @@ trait LoggingSuiteBase
 
   // test for basic message (without any mdc)
   def expectedPatternForBasicMsg(level: Level): String
+
+  // test for basic message (with escape char)
+  def expectedPatternForBasicMsgWithEscapeChar(level: Level): String
+
+  // test for basic message (with escape char mdc)
+  def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String
 
   // test for basic message and exception
   def expectedPatternForBasicMsgWithException(level: Level): String
@@ -92,6 +103,30 @@ trait LoggingSuiteBase
       (Level.TRACE, () => logTrace(basicMsg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeChar)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeChar)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeChar)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeChar)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeChar))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeChar(level).r.matches(logOutput))
+    }
+  }
+
+  test("Basic logging with escape char MDC") {
+    Seq(
+      (Level.ERROR, () => logError(basicMsgWithEscapeCharMDC)),
+      (Level.WARN, () => logWarning(basicMsgWithEscapeCharMDC)),
+      (Level.INFO, () => logInfo(basicMsgWithEscapeCharMDC)),
+      (Level.DEBUG, () => logDebug(basicMsgWithEscapeCharMDC)),
+      (Level.TRACE, () => logTrace(basicMsgWithEscapeCharMDC))).foreach { case (level, logFunc) =>
+      val logOutput = captureLogOutput(logFunc)
+      assert(expectedPatternForBasicMsgWithEscapeCharMDC(level).r.matches(logOutput))
     }
   }
 
@@ -193,6 +228,28 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           "ts": "<timestamp>",
           "level": "$level",
           "msg": "This is a log message",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeChar(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "This is a log message\\\\nThis is a new line \\\\t other msg",
           "logger": "$className"
         }""")
   }

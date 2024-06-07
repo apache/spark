@@ -911,6 +911,10 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
   def withNewPlan(newPlan: LogicalPlan): WithCTE = {
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
   }
+
+  override def maxRows: Option[Long] = plan.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = plan.maxRowsPerPartition
 }
 
 /**

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("validate default collation") {
@@ -160,6 +161,31 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val left = arrayLiteral(inLeft, collName)
       val right = arrayLiteral(inRight, collName)
       checkEvaluation(ArrayExcept(left, right), out)
+    }
+  }
+
+  test("CollationKey generates correct collation key for collated string") {
+    val testCases = Seq(
+      ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY", UTF8String.fromString("AA").getBytes),
+      ("aA", "UTF8_BINARY", UTF8String.fromString("aA").getBytes),
+      ("", "UTF8_BINARY_LCASE", UTF8String.fromString("").getBytes),
+      ("aa", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("AA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("aA", "UTF8_BINARY_LCASE", UTF8String.fromString("aa").getBytes),
+      ("", "UNICODE", Array[Byte](1, 1, 0)),
+      ("aa", "UNICODE", Array[Byte](42, 42, 1, 6, 1, 6, 0)),
+      ("AA", "UNICODE", Array[Byte](42, 42, 1, 6, 1, -36, -36, 0)),
+      ("aA", "UNICODE", Array[Byte](42, 42, 1, 6, 1, -59, -36, 0)),
+      ("", "UNICODE_CI", Array[Byte](1, 0)),
+      ("aa", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("AA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
+      ("aA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0))
+    )
+    for ((input, collation, expected) <- testCases) {
+      val str = Literal.create(input, StringType(collation))
+      checkEvaluation(CollationKey(str), expected)
     }
   }
 
