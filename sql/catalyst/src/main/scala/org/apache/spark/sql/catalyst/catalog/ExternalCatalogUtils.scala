@@ -78,7 +78,8 @@ object ExternalCatalogUtils {
     if (firstIndex == 0) {
       path
     } else {
-      val sb = new StringBuilder(path.substring(0, firstIndex))
+      val sb = new java.lang.StringBuilder(length + 16)
+      sb.append(path.substring(0, firstIndex))
       while(firstIndex < length) {
         val c = path.charAt(firstIndex)
         if (needsEscaping(c)) {
