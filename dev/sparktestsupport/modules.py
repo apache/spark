@@ -1102,6 +1102,8 @@ pyspark_pandas_connect_part0 = Module(
         "python/pyspark/pandas",
     ],
     python_test_goals=[
+        # unittests dedicated for Spark Connect
+        "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",
