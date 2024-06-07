@@ -28,11 +28,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCounted;
 import org.apache.spark.network.util.AbstractFileRegion;
+import org.apache.spark.network.util.ByteBufferWriteableChannel;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
@@ -401,41 +401,6 @@ public class GcmTransportCipher implements TransportCipher {
             } finally {
                 ciphertextNettyBuf.release();
             }
-        }
-    }
-
-    static class ByteBufferWriteableChannel implements WritableByteChannel {
-        private final ByteBuffer destination;
-        private boolean open;
-
-        ByteBufferWriteableChannel(ByteBuffer destination) {
-            this.destination = destination;
-            this.open = true;
-        }
-        @Override
-        public int write(ByteBuffer src) throws IOException {
-            if (!isOpen()) {
-                throw new ClosedChannelException();
-            }
-            int bytesToWrite = Math.min(src.remaining(), destination.remaining());
-            // Destination buffer is full
-            if (bytesToWrite == 0) {
-                return 0;
-            }
-            ByteBuffer temp = src.slice().limit(bytesToWrite);
-            destination.put(temp);
-            src.position(src.position() + bytesToWrite);
-            return bytesToWrite;
-        }
-
-        @Override
-        public boolean isOpen() {
-            return open;
-        }
-
-        @Override
-        public void close() {
-            open = false;
         }
     }
 }

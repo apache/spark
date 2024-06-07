@@ -32,7 +32,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
-import org.apache.spark.network.crypto.GcmTransportCipher.ByteBufferWriteableChannel;
 import org.apache.spark.network.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
