@@ -20,22 +20,20 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.adaptive.LogicalQueryStage
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
- * An intermediate placeholder for EmptyRelation planning, will be replaced with
- * EmptyRelationExec eventually.
+ * A leaf node wrapper for propagated empty relation, which preserved the eliminated logical plan.
+ * The logical plan might be partial executed, i.e., containing LogicalQueryStage.
  */
-case class EmptyRelationPlanLater(plan: LogicalPlan) extends PlanLaterBase
-
-/**
- * A leaf node wrapper for propagated empty relation, which preserved the physical plan.
- */
-case class EmptyRelationExec(plan: SparkPlan) extends LeafExecNode with InputRDDCodegen {
+case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNode
+    with InputRDDCodegen {
   private val rdd = sparkContext.emptyRDD[InternalRow]
 
-  override def output: Seq[Attribute] = plan.output
+  override def output: Seq[Attribute] = logical.output
 
   override protected def doExecute(): RDD[InternalRow] = rdd
 
@@ -73,17 +71,20 @@ case class EmptyRelationExec(plan: SparkPlan) extends LeafExecNode with InputRDD
       printNodeId,
       indent)
     lastChildren.add(true)
-    plan.generateTreeString(
+    logical.generateTreeString(
       depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
     lastChildren.remove(lastChildren.size() - 1)
   }
 
   override def doCanonicalize(): SparkPlan = {
-    this.copy(plan = LocalTableScanExec(plan.output, Nil))
+    this.copy(logical = LocalRelation(logical.output))
   }
 
   override protected[sql] def cleanupResources(): Unit = {
-    plan.cleanupResources()
+    logical.foreach {
+      case LogicalQueryStage(_, physical) =>
+        physical.cleanupResources()
+    }
     super.cleanupResources()
   }
 }

@@ -75,7 +75,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
         placeholders.iterator.foldLeft(Iterator(candidate)) {
           case (candidatesWithPlaceholders, (placeholder, logicalPlan)) =>
             // Plan the logical plan for the placeholder.
-            val childPlans = planPlaceHolder(placeholder, logicalPlan)
+            val childPlans = this.plan(logicalPlan)
 
             candidatesWithPlaceholders.flatMap { candidateWithPlaceholders =>
               childPlans.map { childPlan =>
@@ -93,10 +93,6 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     assert(pruned.hasNext, s"No plan for $plan")
     pruned
   }
-
-  protected def planPlaceHolder(
-    placeHolder: PhysicalPlan,
-    logical: LogicalPlan): Iterator[PhysicalPlan] = this.plan(logical)
 
   /**
    * Collects placeholders marked using [[GenericStrategy#planLater planLater]]

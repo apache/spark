@@ -23,17 +23,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{InSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryExec}
-import org.apache.spark.sql.execution.EmptyRelationExec
 
 case class PlanAdaptiveSubqueries(
     subqueryMap: Map[Long, SparkPlan]) extends Rule[SparkPlan] {
 
-  def apply(plan: SparkPlan): SparkPlan = applyInternal(plan.transformUp {
-    case emptyRelation@EmptyRelationExec(p) =>
-      emptyRelation.copy(plan = apply(p))
-  })
-
-  def applyInternal(plan: SparkPlan): SparkPlan = {
+  def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressionsWithPruning(
       _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId, _, _, _) =>

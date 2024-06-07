@@ -54,9 +54,7 @@ abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
   override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
 }
 
-abstract class PlanLaterBase extends LeafExecNode {
-
-  def plan: LogicalPlan
+case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
 
   override def output: Seq[Attribute] = plan.output
 
@@ -64,8 +62,6 @@ abstract class PlanLaterBase extends LeafExecNode {
     throw SparkUnsupportedOperationException()
   }
 }
-
-case class PlanLater(plan: LogicalPlan) extends PlanLaterBase
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -963,6 +959,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
+      case logical.EmptyRelation(logical) => EmptyRelationExec(logical) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
