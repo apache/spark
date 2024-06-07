@@ -18,27 +18,37 @@ import unittest
 
 from pyspark.pandas.tests.plot.test_series_plot_matplotlib import SeriesPlotMatplotlibTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
 class SeriesPlotMatplotlibParityTests(
     SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
+    def test_empty_hist(self):
+        # "Test depends on Spark ML which is not supported from Spark Connect."
+        with self.assertRaises(PandasNotImplementedError) as pe:
+            super().test_empty_hist()
+
     def test_hist(self):
-        super().test_hist()
+        # "Test depends on Spark ML which is not supported from Spark Connect."
+        with self.assertRaises(PandasNotImplementedError) as pe:
+            super().test_hist()
 
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist_plot(self):
-        super().test_hist_plot()
+        # "Test depends on Spark ML which is not supported from Spark Connect."
+        with self.assertRaises(PandasNotImplementedError) as pe:
+            super().test_hist_plot()
 
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_kde_plot(self):
-        super().test_kde_plot()
+        # "Test depends on Spark ML which is not supported from Spark Connect."
+        with self.assertRaises(PandasNotImplementedError) as pe:
+            super().test_kde_plot()
 
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_single_value_hist(self):
-        super().test_single_value_hist()
+        # "Test depends on Spark ML which is not supported from Spark Connect."
+        with self.assertRaises(PandasNotImplementedError) as pe:
+            super().test_single_value_hist()
 
 
 if __name__ == "__main__":

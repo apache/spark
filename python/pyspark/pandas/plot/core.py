@@ -572,10 +572,14 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
+        kind = {"density": "kde"}.get(kind, kind)
+
+        if is_remote() and kind in ["hist", "kde"]:
+            return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
+
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
-        kind = {"density": "kde"}.get(kind, kind)
         if hasattr(plot_backend, "plot_pandas_on_spark"):
             # use if there's pandas-on-Spark specific method.
             return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
