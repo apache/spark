@@ -389,34 +389,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
-   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
-   */
-  public int compareLowerCase(UTF8String other) {
-    int curr;
-    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
-      byte left, right;
-      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
-        return compareLowerCaseSuffixSlow(other, curr);
-      }
-      int lowerLeft = Character.toLowerCase(left);
-      int lowerRight = Character.toLowerCase(right);
-      if (lowerLeft != lowerRight) {
-        return lowerLeft - lowerRight;
-      }
-    }
-    return numBytes - other.numBytes;
-  }
-
-  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
-    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
-      numBytes - pref);
-    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
-      other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
-  }
-
-  /**
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
@@ -427,7 +399,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
   }
 
-  private boolean isFullAscii() {
+  public boolean isFullAscii() {
     for (var i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         return false;
@@ -774,6 +746,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns the (default) position of the first occurrence of an empty substr in the current
+   * string from the specified position (0-based index).
+   *
+   * @param start the start position of the current string for searching
+   * @return the position of the first occurrence of the empty substr (now, always 0)
+   */
+  public int indexOfEmpty(int start) {
+    return 0; // TODO: Fix this behaviour (SPARK-48284)
+  }
+
+  /**
    * Returns the position of the first occurrence of substr in
    * current string from the specified position (0-based index).
    *
@@ -783,7 +766,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
-      return 0;
+      return indexOfEmpty(start);
     }
 
     // locate to the start position.

@@ -127,6 +127,18 @@ object StateStoreErrors {
       stateName: String): StatefulProcessorTTLMustBePositive = {
     new StatefulProcessorTTLMustBePositive(operationType, stateName)
   }
+
+  def stateStoreKeySchemaNotCompatible(
+      storedKeySchema: String,
+      newKeySchema: String): StateStoreKeySchemaNotCompatible = {
+    new StateStoreKeySchemaNotCompatible(storedKeySchema, newKeySchema)
+  }
+
+  def stateStoreValueSchemaNotCompatible(
+      storedValueSchema: String,
+      newValueSchema: String): StateStoreValueSchemaNotCompatible = {
+    new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -214,3 +226,22 @@ class StatefulProcessorTTLMustBePositive(
   extends SparkUnsupportedOperationException(
     errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
+
+class StateStoreKeySchemaNotCompatible(
+    storedKeySchema: String,
+    newKeySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedKeySchema" -> storedKeySchema,
+      "newKeySchema" -> newKeySchema))
+
+class StateStoreValueSchemaNotCompatible(
+    storedValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedValueSchema" -> storedValueSchema,
+      "newValueSchema" -> newValueSchema))
+

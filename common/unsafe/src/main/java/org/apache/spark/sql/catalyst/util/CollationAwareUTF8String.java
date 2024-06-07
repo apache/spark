@@ -183,6 +183,54 @@ public class CollationAwareUTF8String {
     return MATCH_NOT_FOUND;
   }
 
+  /**
+   * Lowercase UTF8String comparison used for UTF8_BINARY_LCASE collation. While the default
+   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
+   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
+   * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
+   *
+   * @param left The first UTF8String to compare.
+   * @param right The second UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  public static int compareLowerCase(final UTF8String left, final UTF8String right) {
+    // Only if both strings are ASCII, we can use faster comparison (no string allocations).
+    if (left.isFullAscii() && right.isFullAscii()) {
+      return compareLowerCaseAscii(left, right);
+    }
+    return compareLowerCaseSlow(left, right);
+  }
+
+  /**
+   * Fast version of the `compareLowerCase` method, used when both arguments are ASCII strings.
+   *
+   * @param left The first ASCII UTF8String to compare.
+   * @param right The second ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseAscii(final UTF8String left, final UTF8String right) {
+    int leftBytes = left.numBytes(), rightBytes = right.numBytes();
+    for (int curr = 0; curr < leftBytes && curr < rightBytes; curr++) {
+      int lowerLeftByte = Character.toLowerCase(left.getByte(curr));
+      int lowerRightByte = Character.toLowerCase(right.getByte(curr));
+      if (lowerLeftByte != lowerRightByte) {
+        return lowerLeftByte - lowerRightByte;
+      }
+    }
+    return leftBytes - rightBytes;
+  }
+
+  /**
+   * Slow version of the `compareLowerCase` method, used when both arguments are non-ASCII strings.
+   *
+   * @param left The first non-ASCII UTF8String to compare.
+   * @param right The second non-ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseSlow(final UTF8String left, final UTF8String right) {
+    return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
+  }
+
   public static UTF8String replace(final UTF8String src, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
@@ -342,6 +390,48 @@ public class CollationAwareUTF8String {
     return UCharacter.toLowerCase(locale, target);
   }
 
+  /**
+   * Converts a single code point to lowercase using ICU rules, with special handling for
+   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase) and
+   * context-insensitive case mappings (i.e. characters that map to different characters based on
+   * string context - e.g. the position in the string relative to other characters).
+   *
+   * @param codePoint The code point to convert to lowercase.
+   * @param sb The StringBuilder to append the lowercase character to.
+   */
+  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    if (codePoint == 0x0130) {
+      // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+      sb.appendCodePoint(0x0069);
+      sb.appendCodePoint(0x0307);
+    }
+    else if (codePoint == 0x03C2) {
+      // Greek final and non-final capital letter sigma should be mapped the same.
+      sb.appendCodePoint(0x03C3);
+    }
+    else {
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+    }
+  }
+
+  /**
+   * Converts an entire string to lowercase using ICU rules, code point by code point, with
+   * special handling for one-to-many case mappings (i.e. characters that map to multiple
+   * characters in lowercase). Also, this method omits information about context-sensitive case
+   * mappings using special handling in the `lowercaseCodePoint` method.
+   *
+   * @param target The target string to convert to lowercase.
+   * @return The string converted to lowercase in a context-unaware manner.
+   */
+  public static String lowerCaseCodePoints(final String target) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      lowercaseCodePoint(target.codePointAt(i), sb);
+    }
+    return sb.toString();
+  }
+
   public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
@@ -391,15 +481,14 @@ public class CollationAwareUTF8String {
    */
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
-    if (pattern.numChars() == 0) return 0;
+    if (pattern.numChars() == 0) return target.indexOfEmpty(start);
     return lowercaseFind(target, pattern.toLowerCase(), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
-    if (pattern.numBytes() == 0) {
-      return 0;
-    }
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     stringSearch.setIndex(start);
@@ -490,47 +579,27 @@ public class CollationAwareUTF8String {
       return UTF8String.EMPTY_UTF8;
     }
 
-    UTF8String lowercaseString = string.toLowerCase();
     UTF8String lowercaseDelimiter = delimiter.toLowerCase();
 
     if (count > 0) {
-      int idx = -1;
+      // Search left to right (note: the start code point is inclusive).
+      int matchLength = -1;
       while (count > 0) {
-        idx = lowercaseString.find(lowercaseDelimiter, idx + 1);
-        if (idx >= 0) {
-          count--;
-        } else {
-          // can not find enough delim
-          return string;
-        }
+        matchLength = lowercaseFind(string, lowercaseDelimiter, matchLength + 1);
+        if (matchLength > MATCH_NOT_FOUND) --count; // Found a delimiter.
+        else return string; // Cannot find enough delimiters in the string.
       }
-      if (idx == 0) {
-        return UTF8String.EMPTY_UTF8;
-      }
-      byte[] bytes = new byte[idx];
-      copyMemory(string.getBaseObject(), string.getBaseOffset(), bytes, BYTE_ARRAY_OFFSET, idx);
-      return UTF8String.fromBytes(bytes);
-
+      return string.substring(0, matchLength);
     } else {
-      int idx = string.numBytes() - delimiter.numBytes() + 1;
+      // Search right to left (note: the end code point is exclusive).
+      int matchLength = string.numChars() + 1;
       count = -count;
       while (count > 0) {
-        idx = lowercaseString.rfind(lowercaseDelimiter, idx - 1);
-        if (idx >= 0) {
-          count--;
-        } else {
-          // can not find enough delim
-          return string;
-        }
+        matchLength = lowercaseRFind(string, lowercaseDelimiter, matchLength - 1);
+        if (matchLength > MATCH_NOT_FOUND) --count; // Found a delimiter.
+        else return string; // Cannot find enough delimiters in the string.
       }
-      if (idx + delimiter.numBytes() == string.numBytes()) {
-        return UTF8String.EMPTY_UTF8;
-      }
-      int size = string.numBytes() - delimiter.numBytes() - idx;
-      byte[] bytes = new byte[size];
-      copyMemory(string.getBaseObject(), string.getBaseOffset() + idx + delimiter.numBytes(),
-        bytes, BYTE_ARRAY_OFFSET, size);
-      return UTF8String.fromBytes(bytes);
+      return string.substring(matchLength, string.numChars());
     }
   }
 

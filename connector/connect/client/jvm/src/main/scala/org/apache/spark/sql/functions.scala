@@ -23,11 +23,12 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.errors.DataTypeErrors
-import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, ScalaUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.SparkClassUtils
@@ -8114,6 +8115,87 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg))
+   * }}}
+   *
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
+   *
+   * @param agg
+   *   the typed Aggregator
+   *
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression.
+   *
+   * @group udf_funcs
+   * @note
+   *   The input encoder is inferred from the input type IN.
+   * @since 4.0.0
+   */
+  def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
+    udaf(agg, ScalaReflection.encoderFor[IN])
+  }
+
+  /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
+   * {{{
+   *   Aggregator<IN, BUF, OUT> agg = // custom Aggregator
+   *   Encoder<IN> enc = // input encoder
+   *
+   *   // declare a UDF based on agg
+   *   UserDefinedFunction aggUDF = udaf(agg, enc)
+   *   DataFrame aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg, enc))
+   * }}}
+   *
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
+   *
+   * @param agg
+   *   the typed Aggregator
+   * @param inputEncoder
+   *   a specific input encoder to use
+   *
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression
+   *
+   * @group udf_funcs
+   * @note
+   *   This overloading takes an explicit input encoder, to support UDAF declarations in Java.
+   * @since 4.0.0
+   */
+  def udaf[IN, BUF, OUT](
+      agg: Aggregator[IN, BUF, OUT],
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    ScalaUserDefinedFunction(
+      agg,
+      Seq(encoderFor(inputEncoder)),
+      encoderFor(agg.outputEncoder),
+      aggregate = true)
+  }
+
+  /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF). The data types are
    * automatically inferred based on the Scala closure's signature. By default the returned UDF is
    * deterministic. To change it to nondeterministic, call the API
@@ -8123,7 +8205,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag](f: () => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT])
+    ScalaUserDefinedFunction(f, typeTag[RT])
   }
 
   /**
@@ -8136,7 +8218,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: A1 => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1])
   }
 
   /**
@@ -8149,7 +8231,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: (A1, A2) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2])
   }
 
   /**
@@ -8163,7 +8245,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](
       f: (A1, A2, A3) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
   }
 
   /**
@@ -8177,7 +8259,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](
       f: (A1, A2, A3, A4) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3], typeTag[A4])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3], typeTag[A4])
   }
 
   /**
@@ -8191,7 +8273,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](
       f: (A1, A2, A3, A4, A5) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8218,7 +8300,7 @@ object functions {
       A4: TypeTag,
       A5: TypeTag,
       A6: TypeTag](f: (A1, A2, A3, A4, A5, A6) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8247,7 +8329,7 @@ object functions {
       A5: TypeTag,
       A6: TypeTag,
       A7: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8278,7 +8360,7 @@ object functions {
       A6: TypeTag,
       A7: TypeTag,
       A8: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8311,7 +8393,7 @@ object functions {
       A7: TypeTag,
       A8: TypeTag,
       A9: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8346,7 +8428,7 @@ object functions {
       A8: TypeTag,
       A9: TypeTag,
       A10: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8375,7 +8457,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8388,7 +8470,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8401,7 +8483,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8414,7 +8496,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8427,7 +8509,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8440,7 +8522,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8453,7 +8535,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8466,7 +8548,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8479,7 +8561,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8492,7 +8574,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8507,7 +8589,7 @@ object functions {
   def udf(
       f: UDF10[_, _, _, _, _, _, _, _, _, _, _],
       returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
   // scalastyle:off line.size.limit
 
@@ -8537,7 +8619,7 @@ object functions {
       "Please use Scala `udf` method without return type parameter.",
     "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, dataType)
+    ScalaUserDefinedFunction(f, dataType)
   }
 
   /**

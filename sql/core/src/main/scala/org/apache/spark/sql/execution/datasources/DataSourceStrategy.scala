@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -595,6 +595,16 @@ object DataSourceStrategy
       translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
       nestedPredicatePushdownEnabled: Boolean)
     : Option[Filter] = {
+
+    def translateAndRecordLeafNodeFilter(filter: Expression): Option[Filter] = {
+      val translatedFilter =
+        translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled))
+      if (translatedFilter.isDefined && translatedFilterToExpr.isDefined) {
+        translatedFilterToExpr.get(translatedFilter.get) = predicate
+      }
+      translatedFilter
+    }
+
     predicate match {
       case expressions.And(left, right) =>
         // See SPARK-12218 for detailed discussion
@@ -621,16 +631,25 @@ object DataSourceStrategy
             right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
         } yield sources.Or(leftFilter, rightFilter)
 
+      case notNull @ expressions.IsNotNull(_: AttributeReference) =>
+        // Not null filters on attribute references can always be pushed, also for collated columns.
+        translateAndRecordLeafNodeFilter(notNull)
+
+      case isNull @ expressions.IsNull(_: AttributeReference) =>
+        // Is null filters on attribute references can always be pushed, also for collated columns.
+        translateAndRecordLeafNodeFilter(isNull)
+
+      case p if p.references.exists(ref => SchemaUtils.hasNonUTF8BinaryCollation(ref.dataType)) =>
+        // The filter cannot be pushed and we widen it to be AlwaysTrue(). This is only valid if
+        // the result of the filter is not negated by a Not expression it is wrapped in.
+        translateAndRecordLeafNodeFilter(Literal.TrueLiteral)
+
       case expressions.Not(child) =>
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(sources.Not)
 
       case other =>
-        val filter = translateLeafNodeFilter(other, PushableColumn(nestedPredicatePushdownEnabled))
-        if (filter.isDefined && translatedFilterToExpr.isDefined) {
-          translatedFilterToExpr.get(filter.get) = predicate
-        }
-        filter
+        translateAndRecordLeafNodeFilter(other)
     }
   }
 

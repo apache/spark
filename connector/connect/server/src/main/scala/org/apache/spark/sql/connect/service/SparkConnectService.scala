@@ -31,18 +31,20 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.Utils
 
 /**
  * The SparkConnectService implementation.
@@ -283,10 +285,12 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
 object SparkConnectService extends Logging {
 
   private[connect] var server: Server = _
+  private[connect] var bindingAddress: InetSocketAddress = _
 
   private[connect] var uiTab: Option[SparkConnectServerTab] = None
   private[connect] var listener: SparkConnectServerListener = _
   private[connect] var executionListener: Option[ConnectProgressExecutionListener] = None
+  private[connect] var listenerBus: LiveListenerBus = _
 
   // For testing purpose, it's package level private.
   private[connect] def localPort: Int = {
@@ -296,12 +300,20 @@ object SparkConnectService extends Logging {
     server.getPort
   }
 
+  private[connect] def hostAddress: String = {
+    Utils.localCanonicalHostName()
+  }
+
   private[connect] lazy val executionManager = new SparkConnectExecutionManager()
 
   private[connect] lazy val sessionManager = new SparkConnectSessionManager()
 
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache()
+
+  // Package level private for testing purpose.
+  @volatile private[connect] var started = false
+  @volatile private[connect] var stopped = false
 
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
@@ -343,6 +355,7 @@ object SparkConnectService extends Logging {
     // Add the execution listener needed for query progress.
     executionListener = Some(new ConnectProgressExecutionListener)
     sc.addSparkListener(executionListener.get)
+    listenerBus = sc.listenerBus
   }
 
   /**
@@ -351,35 +364,75 @@ object SparkConnectService extends Logging {
   private def startGRPCService(): Unit = {
     val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
-    val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
-    val sb = bindAddress match {
-      case Some(hostname) =>
-        logInfo(log"start GRPC service at: ${MDC(HOST, hostname)}")
-        NettyServerBuilder.forAddress(new InetSocketAddress(hostname, port))
-      case _ => NettyServerBuilder.forPort(port)
-    }
-    sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
-      .addService(new SparkConnectService(debugMode))
+    val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
+    val sparkConnectService = new SparkConnectService(debugMode)
+    val protoReflectionService =
+      if (debugMode) Some(ProtoReflectionService.newInstance()) else None
+    val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
 
-    // Add all registered interceptors to the server builder.
-    SparkConnectInterceptorRegistry.chainInterceptors(sb)
+    val startServiceFn = (port: Int) => {
+      val sb = bindAddress match {
+        case Some(hostname) =>
+          logInfo(log"start GRPC service at: ${MDC(HOST, hostname)}")
+          NettyServerBuilder.forAddress(new InetSocketAddress(hostname, port))
+        case _ => NettyServerBuilder.forPort(port)
+      }
+      sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
+        .addService(sparkConnectService)
 
-    // If debug mode is configured, load the ProtoReflection service so that tools like
-    // grpcurl can introspect the API for debugging.
-    if (debugMode) {
-      sb.addService(ProtoReflectionService.newInstance())
+      // Add all registered interceptors to the server builder.
+      SparkConnectInterceptorRegistry.chainInterceptors(sb, configuredInterceptors)
+
+      // If debug mode is configured, load the ProtoReflection service so that tools like
+      // grpcurl can introspect the API for debugging.
+      protoReflectionService.foreach(service => sb.addService(service))
+
+      server = sb.build
+      server.start()
+
+      // It will throw an IllegalStateException if you want to access the binding address
+      // while the server is in a terminated state, so record the actual binding address
+      // immediately after the server starts.
+      // There should only be one address, get the actual binding address
+      // of the server according the `server.port()`
+      bindingAddress = server.getListenSockets.asScala
+        .find(_.isInstanceOf[InetSocketAddress])
+        .get
+        .asInstanceOf[InetSocketAddress]
+
+      (server, server.getPort)
     }
-    server = sb.build
-    server.start()
+
+    val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
+    Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
   }
 
   // Starts the service
-  def start(sc: SparkContext): Unit = {
+  def start(sc: SparkContext): Unit = synchronized {
+    if (started) {
+      logWarning("The Spark Connect service has already started.")
+      return
+    }
+
     startGRPCService()
     createListenerAndUI(sc)
+
+    started = true
+    stopped = false
+    postSparkConnectServiceStarted(sc)
   }
 
-  def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = {
+  def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = synchronized {
+    if (stopped) {
+      logWarning("The Spark Connect service has already been stopped.")
+      return
+    }
+
+    if (!started) {
+      throw new IllegalStateException(
+        "Attempting to stop the Spark Connect service that has not been started.")
+    }
+
     if (server != null) {
       if (timeout.isDefined && unit.isDefined) {
         server.shutdown()
@@ -392,6 +445,57 @@ object SparkConnectService extends Logging {
     executionManager.shutdown()
     sessionManager.shutdown()
     uiTab.foreach(_.detach())
+
+    started = false
+    stopped = true
+    postSparkConnectServiceEnd()
+  }
+
+  /**
+   * Post the event that the Spark Connect service has started. This is expected to be called only
+   * once after the service is ready.
+   */
+  private def postSparkConnectServiceStarted(sc: SparkContext): Unit = {
+    postServiceEvent(isa =>
+      SparkListenerConnectServiceStarted(
+        hostAddress,
+        isa.getPort,
+        sc.conf,
+        System.currentTimeMillis()))
+  }
+
+  /**
+   * Post the event that the Spark Connect service is offline.
+   */
+  private[connect] def postSparkConnectServiceEnd(): Unit = {
+    postServiceEvent(isa =>
+      SparkListenerConnectServiceEnd(hostAddress, isa.getPort, System.currentTimeMillis()))
+  }
+
+  /**
+   * Post the event to the Spark listener bus. To deliver the event to the listeners, the listener
+   * bus must be active in this time.
+   */
+  private def postServiceEvent(eventBuilder: InetSocketAddress => SparkListenerEvent): Unit = {
+    // Sanity checks
+    if (server == null) {
+      logWarning(
+        "The Spark Connect event was dropped because the server bus has not been created and set.")
+      return
+    }
+
+    if (bindingAddress == null) {
+      logWarning(
+        "The Spark Connect event was dropped because the internal server address is not set.")
+      return
+    }
+
+    if (listenerBus == null) {
+      logWarning("The Spark Connect event was dropped because the listener bus has not been set.")
+      return
+    }
+
+    listenerBus.post(eventBuilder(bindingAddress))
   }
 
   def extractErrorMessage(st: Throwable): String = {
@@ -407,3 +511,38 @@ object SparkConnectService extends Logging {
     }
   }
 }
+
+/**
+ * The event is sent after the Spark Connect service has started and is ready to receive the
+ * inbound requests.
+ *
+ * @param hostAddress:
+ *   The host address of the started Spark Connect service.
+ * @param bindingPort:
+ *   The binding port of the started Spark Connect service.
+ * @param sparkConf:
+ *   The SparkConf of the active SparkContext that associated with the service.
+ * @param eventTime:
+ *   The time in ms when the event was generated.
+ */
+case class SparkListenerConnectServiceStarted(
+    hostAddress: String,
+    bindingPort: Int,
+    sparkConf: SparkConf,
+    eventTime: Long)
+    extends SparkListenerEvent
+
+/**
+ * The event is sent to inform that Spark Connect service has already been shutdown. This event
+ * indicates the end of the service, and any in-processing requests or upcoming requests are not
+ * guaranteed to be handled properly by the service.
+ *
+ * @param hostAddress:
+ *   The host address of the Spark Connect service.
+ * @param bindingPort:
+ *   The binding port of the Spark Connect service.
+ * @param eventTime:
+ *   The time in ms when the event was generated.
+ */
+case class SparkListenerConnectServiceEnd(hostAddress: String, bindingPort: Int, eventTime: Long)
+    extends SparkListenerEvent

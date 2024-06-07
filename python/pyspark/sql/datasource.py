@@ -33,6 +33,7 @@ __all__ = [
     "DataSourceWriter",
     "DataSourceRegistration",
     "InputPartition",
+    "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
 ]
 
