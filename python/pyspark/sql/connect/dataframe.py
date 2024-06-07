@@ -1132,6 +1132,8 @@ class DataFrame(ParentDataFrame):
         print(self._show_string(n, truncate, vertical))
 
     def _merge_cached_schema(self, other: ParentDataFrame) -> Optional[StructType]:
+        # to avoid type coercion, only propagate the schema
+        # when the cached schemas are exactly the same
         if self._cached_schema is not None and self._cached_schema == other._cached_schema:  # type: ignore[arg-type]
             return self.schema
         return None
