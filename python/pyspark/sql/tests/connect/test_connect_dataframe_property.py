@@ -37,6 +37,29 @@ if have_pandas:
 
 
 class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
+    def test_cached_property_is_copied(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+                StructField("age", IntegerType(), True),
+                StructField("city", StringType(), True),
+            ]
+        )
+        # Create some dummy data
+        data = [
+            (1, "Alice", 30, "New York"),
+            (2, "Bob", 25, "San Francisco"),
+            (3, "Cathy", 29, "Los Angeles"),
+            (4, "David", 35, "Chicago"),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        df_columns = df.columns
+        assert len(df.columns) == 4
+        for col in ["id", "name"]:
+            df_columns.remove(col)
+        assert len(df.columns) == 4
+
     def test_cached_schema_to(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)
