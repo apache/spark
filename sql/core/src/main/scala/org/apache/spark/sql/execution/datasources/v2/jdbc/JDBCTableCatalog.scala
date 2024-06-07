@@ -131,16 +131,13 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     val optionsWithTableName = new JDBCOptions(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    JdbcUtils.classifyException(
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      messageParameters = Map(
-        "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
-      dialect,
-      description = s"Failed to load table: $ident"
-    ) {
+    try {
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
+    } catch {
+      case e: SQLException =>
+        logWarning("Failed to load table", e)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
 
