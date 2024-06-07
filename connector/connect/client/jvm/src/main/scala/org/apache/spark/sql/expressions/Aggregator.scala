@@ -100,7 +100,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
    * @since 4.0.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
-    val ttpe = Aggregator.getInputTypeTag[IN](this)
+    val ttpe = getInputTypeTag[IN]
     val inputEncoder = ScalaReflection.encoderFor(ttpe)
     val udaf =
       ScalaUserDefinedFunction(
@@ -115,12 +115,10 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
     new TypedColumn(expr, encoderFor(outputEncoder))
   }
-}
 
-object Aggregator {
-  private def getInputTypeTag[T](obj: Any): TypeTag[T] = {
-    val mirror = runtimeMirror(obj.getClass.getClassLoader)
-    val tpe = mirror.classSymbol(obj.getClass).toType
+  private final def getInputTypeTag[T]: TypeTag[T] = {
+    val mirror = runtimeMirror(this.getClass.getClassLoader)
+    val tpe = mirror.classSymbol(this.getClass).toType
     // Find the most generic (last in the tree) Aggregator class
     val baseAgg =
       tpe.baseClasses
