@@ -38,6 +38,14 @@ object Connect {
       .intConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_BINDING_PORT)
 
+  val CONNECT_GRPC_PORT_MAX_RETRIES =
+    buildStaticConf("spark.connect.grpc.port.maxRetries")
+      .doc("The max port retry attempts for the gRPC server binding." +
+        "By default, it's set to 0, and the server will fail fast in case of port conflicts.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_PORT_MAX_RETRIES)
+
   val CONNECT_GRPC_INTERCEPTOR_CLASSES =
     buildStaticConf("spark.connect.grpc.interceptor.classes")
       .doc(
