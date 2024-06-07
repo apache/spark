@@ -200,168 +200,22 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 
-------------------------------------------------------------------------------------
-This project bundles some components that are also licensed under the Apache
-License Version 2.0:
 
-com.clearspring.analytics:stream
-com.fasterxml.jackson.core:jackson-annotations
-com.fasterxml.jackson.core:jackson-core
-com.fasterxml.jackson.core:jackson-databind
-com.fasterxml.jackson.dataformat:jackson-dataformat-yaml
-com.fasterxml.jackson.datatype:jackson-datatype-jsr310
-com.fasterxml.jackson.module:jackson-module-scala_2.13
-com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
-com.google.code.findbugs:jsr305
-com.google.code.gson:gson
-com.google.crypto.tink:tink
-com.google.flatbuffers:flatbuffers-java
+------------------------------------------------------------------------------------
+This product bundles various third-party components under other open source licenses.
+This section summarizes those components and their licenses. See licenses/
+for text of these licenses.
+
+
+Apache Software Foundation License 2.0
+--------------------------------------
 com.google.guava:guava
-com.jamesmurty.utils:java-xmlbuilder
-com.ning:compress-lzf
-com.squareup.okhttp3:logging-interceptor
-com.squareup.okhttp3:okhttp
-com.squareup.okio:okio
-com.tdunning:json
-com.twitter:chill-java
-com.twitter:chill_2.13
-com.univocity:univocity-parsers
-com.zaxxer.HikariCP
-commons-cli:commons-cli
-commons-codec:commons-codec
-commons-collections:commons-collections
-commons-dbcp:commons-dbcp
-commons-io:commons-io
-commons-lang:commons-lang
-commons-pool:commons-pool
-io.airlift:aircompressor
-io.dropwizard.metrics:metrics-core
-io.dropwizard.metrics:metrics-graphite
-io.dropwizard.metrics:metrics-jmx
-io.dropwizard.metrics:metrics-json
-io.dropwizard.metrics:metrics-jvm
-io.fabric8:kubernetes-client
-io.fabric8:kubernetes-client-api
-io.fabric8:kubernetes-httpclient-okhttp
-io.fabric8:kubernetes-model-admissionregistration
-io.fabric8:kubernetes-model-apiextensions
-io.fabric8:kubernetes-model-apps
-io.fabric8:kubernetes-model-autoscaling
-io.fabric8:kubernetes-model-batch
-io.fabric8:kubernetes-model-certificates
-io.fabric8:kubernetes-model-common
-io.fabric8:kubernetes-model-coordination
-io.fabric8:kubernetes-model-core
-io.fabric8:kubernetes-model-discovery
-io.fabric8:kubernetes-model-events
-io.fabric8:kubernetes-model-extensions
-io.fabric8:kubernetes-model-flowcontrol
-io.fabric8:kubernetes-model-gatewayapi
-io.fabric8:kubernetes-model-metrics
-io.fabric8:kubernetes-model-networking
-io.fabric8:kubernetes-model-node
-io.fabric8:kubernetes-model-policy
-io.fabric8:kubernetes-model-rbac
-io.fabric8:kubernetes-model-resource
-io.fabric8:kubernetes-model-scheduling
-io.fabric8:kubernetes-model-storageclass
-io.fabric8:zjsonpatch
-io.github.java-diff-utils:java-diff-utils
-io.netty:netty-all
-io.netty:netty-buffer
-io.netty:netty-codec
-io.netty:netty-codec-http
-io.netty:netty-codec-http2
-io.netty:netty-codec-socks
-io.netty:netty-common
-io.netty:netty-handler
-io.netty:netty-handler-proxy
-io.netty:netty-resolver
-io.netty:netty-tcnative-boringssl-static
-io.netty:netty-tcnative-classes
-io.netty:netty-transport
-io.netty:netty-transport-classes-epoll
-io.netty:netty-transport-classes-kqueue
-io.netty:netty-transport-native-epoll
-io.netty:netty-transport-native-kqueue
-io.netty:netty-transport-native-unix-common
-jakarta.inject:jakarta.inject-api
-jakarta.validation:jakarta.validation-api
-javax.jdo:jdo-api
-joda-time:joda-time
-net.java.dev.jna:jna
-net.sf.opencsv:opencsv
-net.sf.supercsv:super-csv
-net.sf.jpam:jpam
-org.apache.arrow:arrow-format
-org.apache.arrow:arrow-memory-core
-org.apache.arrow:arrow-memory-netty
-org.apache.arrow:arrow-memory-netty-buffer-patch
-org.apache.arrow:arrow-vector
-org.apache.avro:avro
-org.apache.avro:avro-ipc
-org.apache.avro:avro-mapred
-org.apache.commons:commons-collections4
-org.apache.commons:commons-compress
-org.apache.commons:commons-crypto
-org.apache.commons:commons-lang3
-org.apache.commons:commons-math3
-org.apache.commons:commons-text
-org.apache.curator:curator-client
-org.apache.curator:curator-framework
-org.apache.curator:curator-recipes
-org.apache.derby:derby
-org.apache.derby:derbyshared
-org.apache.derby:derbytools
-org.apache.datasketches:datasketches-java
-org.apache.datasketches:datasketches-memory
-org.apache.hadoop:hadoop-client-api
-org.apache.hadoop:hadoop-client-runtime
-org.apache.hive:hive-beeline
-org.apache.hive:hive-cli
-org.apache.hive:hive-common
-org.apache.hive:hive-exec
-org.apache.hive:hive-jdbc
-org.apache.hive:hive-llap-common
-org.apache.hive:hive-metastore
-org.apache.hive:hive-serde
-org.apache.hive:hive-service-rpc
-org.apache.hive:hive-shims-0.23
-org.apache.hive:hive-shims
-org.apache.hive:hive-shims-common
-org.apache.hive:hive-shims-scheduler
-org.apache.hive:hive-storage-api
-org.apache.httpcomponents:httpclient
-org.apache.httpcomponents:httpcore
-org.apache.ivy:ivy
-org.apache.logging.log4j:log4j-1.2-api
-org.apache.logging.log4j:log4j-api
-org.apache.logging.log4j:log4j-core
-org.apache.logging.log4j:log4j-layout-template-json
-org.apache.logging.log4j:log4j-slf4j-impl
-org.apache.orc:orc-core
-org.apache.orc:orc-format
-org.apache.orc:orc-mapreduce
-org.apache.orc:orc-shims
-org.apache.parquet:parquet-column
-org.apache.parquet:parquet-common
-org.apache.parquet:parquet-encoding
-org.apache.parquet:parquet-format-structures
-org.apache.parquet:parquet-hadoop
-org.apache.parquet:parquet-jackson
-org.apache.thrift:libfb303
-org.apache.thrift:libthrift
-org.apache.ws.xmlschema:xmlschema-core
-org.apache.xbean:xbean-asm9-shaded
-org.apache.yetus:audience-annotations
-org.apache.zookeeper:zookeeper
-org.apache.zookeeper:zookeeper-jute
-org.codehaus.jackson:jackson-core-asl
-org.codehaus.jackson:jackson-mapper-asl
-org.datanucleus:datanucleus-api-jdo
-org.datanucleus:datanucleus-core
-org.datanucleus:datanucleus-rdbms
-org.datanucleus:javax.jdo
+com.google.protobuf:protobuf-java
+core/src/main/java/org/apache/spark/util/collection/TimSort.java
+core/src/main/resources/org/apache/spark/ui/static/bootstrap*
+core/src/main/resources/org/apache/spark/ui/static/vis*
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
 org.eclipse.jetty:jetty-client
 org.eclipse.jetty:jetty-http
 org.eclipse.jetty:jetty-io
@@ -372,170 +226,15 @@ org.eclipse.jetty:jetty-server
 org.eclipse.jetty:jetty-servlet
 org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
-org.glassfish.jersey.containers:jersey-container-servlet
-org.glassfish.jersey.containers:jersey-container-servlet-core
-org.glassfish.jersey.core:jersey-client
-org.glassfish.jersey.core:jersey-common
-org.glassfish.jersey.core:jersey-server
-org.glassfish.jersey.inject:jersey-hk2
-org.json4s:json4s-ast_2.13
-org.json4s:json4s-core_2.13
-org.json4s:json4s-jackson-core_2.13
-org.json4s:json4s-jackson_2.13
-org.json4s:json4s-scalap_2.13
-org.lz4:lz4-java
-org.objenesis:objenesis
-org.roaringbitmap:RoaringBitmap
-org.rocksdb:rocksdbjni
-org.scala-lang:scala-compiler
-org.scala-lang:scala-library
-org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-collection-compat_2.13
-org.scala-lang.modules:scala-parallel-collections_2.13
-org.scala-lang.modules:scala-parser-combinators_2.13
-org.scala-lang.modules:scala-xml_2.13
-org.scalanlp:breeze-macros_2.13
-org.scalanlp:breeze_2.13
-org.snakeyaml:snakeyaml-engine
-org.xerial.snappy:snappy-java
-org.yaml:snakeyaml
-oro:oro
-stax:stax-api
-xerces:xercesImpl
-
-core/src/main/java/org/apache/spark/util/collection/TimSort.java
-core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/vis*
-core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
-core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
-
-
-------------------------------------------------------------------------------------
-This product bundles various third-party components under other open source licenses.
-This section summarizes those components and their licenses. See licenses-binary/
-for text of these licenses.
-
-
-Python Software Foundation License
-----------------------------------
-python/pyspark/loose_version.py
-
-
-BSD 2-Clause
-------------
-com.github.luben:zstd-jni
-com.github.wendykierp:JTransforms
-javolution:javolution
-jline:jline
-org.jodd:jodd-core
-pl.edu.icm:JLargeArrays
-
-
-BSD 3-Clause
-------------
-com.esotericsoftware:kryo-shaded
-com.esotericsoftware:minlog
-com.esotericsoftware:reflectasm
-com.google.protobuf:protobuf-java
-com.thoughtworks.paranamer:paranamer
-net.sf.py4j:py4j
-net.sourceforge.f2j:arpack_combined_all
-org.antlr:ST4
-org.antlr:antlr-runtime
-org.antlr:antlr4-runtime
-org.codehaus.janino:commons-compiler
-org.codehaus.janino:janino
-org.fusesource.leveldbjni:leveldbjni-all
-org.jline:jline
-org.jpmml:pmml-model
-org.threeten:threeten-extra
-
-python/lib/py4j-*-src.zip
-python/pyspark/cloudpickle.py
-python/pyspark/join.py
-
-The CSS style for the navigation sidebar of the documentation was originally
-submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
-is distributed under the 3-Clause BSD license.
-
 
 MIT License
 -----------
-com.github.scopt:scopt_2.13
-dev.ludovic.netlib:blas
-dev.ludovic.netlib:arpack
-dev.ludovic.netlib:lapack
-net.razorvine:pickle
-org.checkerframework:checker-qual
-org.typelevel:algebra_2.13:jar
-org.typelevel:cats-kernel_2.13
-org.typelevel:spire_2.13
-org.typelevel:spire-macros_2.13
-org.typelevel:spire-platform_2.13
-org.typelevel:spire-util_2.13
-org.slf4j:jcl-over-slf4j
-org.slf4j:jul-to-slf4j
-org.slf4j:slf4j-api
-
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
 core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
 core/src/main/resources/org/apache/spark/ui/static/jquery*
 core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 
-
 ISC License
 -----------
 core/src/main/resources/org/apache/spark/ui/static/d3.min.js
-
-
-Common Development and Distribution License (CDDL) 1.0
-------------------------------------------------------
-javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
-javax.transaction:transaction-api
-
-
-Common Development and Distribution License (CDDL) 1.1
-------------------------------------------------------
-javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
-javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
-
-
-
-Eclipse Distribution License (EDL) 1.0
---------------------------------------
-com.sun.istack:istack-commons-runtime
-jakarta.xml.bind:jakarta.xml.bind-api
-org.glassfish.jaxb:jaxb-runtime
-org.glassfish.jaxb:txw2
-
-Eclipse Public License (EPL) 2.0
---------------------------------
-jakarta.annotation:jakarta.annotation-api https://projects.eclipse.org/projects/ee4j.ca
-jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
-jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
-org.glassfish.hk2.external:aopalliance-repackaged
-org.glassfish.hk2:hk2-api
-org.glassfish.hk2:hk2-locator
-org.glassfish.hk2:hk2-utils
-org.glassfish.hk2:osgi-resource-locator
-
-
-Public Domain
--------------
-org.tukaani:xz
-
-
-Creative Commons CC0 1.0 Universal Public Domain Dedication
------------------------------------------------------------
-(see LICENSE-CC0.txt)
-
-data/mllib/images/kittens/29.5.a_b_EGDP022204.jpg
-data/mllib/images/kittens/54893.jpg
-data/mllib/images/kittens/DP153539.jpg
-data/mllib/images/kittens/DP802813.jpg
-data/mllib/images/multi-channel/chr30.4.184.jpg
-
-Unicode/ICU License
--------------------
-com.ibm.icu:icu4j
