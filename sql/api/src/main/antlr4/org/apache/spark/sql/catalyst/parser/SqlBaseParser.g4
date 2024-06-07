@@ -824,7 +824,7 @@ identifierComment
 
 relationPrimary
     : identifierReference temporalClause?
-      sample? optionsClause? tableAlias                     #tableName
+      optionsClause? sample? tableAlias                     #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
     | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
@@ -832,7 +832,7 @@ relationPrimary
     ;
 
 optionsClause
-    : WITH options=propertyList
+    : WITH OPTIONS options=propertyList
     ;
 
 inlineTable
