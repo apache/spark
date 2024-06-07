@@ -459,4 +459,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       assert(Integer.signum(result) == testCase.expectedResult)
     })
   }
+
+  test("xxx") {
+    assert(1 == 2)
+  }
 }
