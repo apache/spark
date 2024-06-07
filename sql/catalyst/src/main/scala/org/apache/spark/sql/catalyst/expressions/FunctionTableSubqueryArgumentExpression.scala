@@ -165,20 +165,18 @@ case class FunctionTableSubqueryArgumentExpression(
    * when the partition has changed.
    */
   lazy val partitioningExpressionIndexes: Seq[Int] = {
-    val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
-      extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
-    partitionByExpressions.map { e =>
-      subqueryOutputs.getOrElse(e, extraPartitionByExpressionsToIndexes(e) + plan.output.length)
+    (0 until extraProjectedPartitioningExpressions.length).map { i =>
+      if (selectedInputExpressions.nonEmpty) {
+        selectedInputExpressions.length + i
+      } else {
+        plan.output.length + i
+      }
     }
   }
 
   private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
-    partitionByExpressions.filter { e =>
-      !subqueryOutputs.contains(e)
-    }.zipWithIndex.map { case (expr, index) =>
+    partitionByExpressions.zipWithIndex.map { case (expr: Expression, index: Int) =>
       Alias(expr, s"partition_by_$index")()
     }
   }
-
-  private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap
 }
