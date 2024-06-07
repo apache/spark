@@ -1,9 +1,15 @@
 from pyspark.sql.functions import window, col
 
+spark = SparkSession.builder\
+    .config("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")\
+    .config("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled", True)\
+    .config("spark.sql.shuffle.partitions", 4).getOrCreate()
+
+
 # aggregate operator
-q1 = spark.readStream.format("rate").option("rowsPerSecond", 3).load().withWatermark("timestamp", "50 seconds")\
+q1 = spark.readStream.format("rate").option("rowsPerSecond", 3).load().withWatermark("timestamp", "30 seconds")\
     .groupBy(window("timestamp", "10 seconds")).count().select("window.start", "window.end", "count")\
-        .writeStream.format("memory").queryName("window").option("checkpointLocation", "/tmp/state/window").trigger(processingTime="50 seconds").start()
+        .writeStream.format("memory").queryName("window").option("checkpointLocation", "/tmp/state/window").trigger(processingTime="30 seconds").start()
         
 # join operator
 sdf1 = spark.readStream.format("rate").option("rowsPerSecond", 100).load().withWatermark("timestamp", "50 seconds")
@@ -24,9 +30,9 @@ state1 = spark.read.format("statestore").load("/tmp/state/window")
 
 
 state1_1 = spark.read.format("statestore")\
-    .option("snapshotStartBatchId", 11)\
+    .option("snapshotStartBatchId", 1)\
         .option("snapshotPartitionId", 1)\
-                .load("/Users/yuchen.liu/Desktop/spark/sql/core/src/test/resources/structured-streaming/checkpoint-version-4.0.0-state-source").show()
+                .load("/tmp/state/window").show()
                 
                 
 state1_2 = spark.read.format("statestore").option("batchId", 53).load("/tmp/state/window").show()

@@ -576,29 +576,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def loadMap(startVersion: Long, endVersion: Long): HDFSBackedStateStoreMap = {
 
     val (result, elapsedMs) = Utils.timeTakenMs {
-    //   val snapshotCurrentVersionMap = readSnapshotFile(version)
-    //   if (snapshotCurrentVersionMap.isDefined) {
-    //     synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
-    //     return snapshotCurrentVersionMap.get
-    //   }
-
-    //   // Find the most recent map before this version that we can.
-    //   // [SPARK-22305] This must be done iteratively to avoid stack overflow.
-    //   var lastAvailableVersion = version
-    //   var lastAvailableMap: Option[HDFSBackedStateStoreMap] = None
-    //   while (lastAvailableMap.isEmpty) {
-    //     lastAvailableVersion -= 1
-
-    //     if (lastAvailableVersion <= 0) {
-    //       // Use an empty map for versions 0 or less.
-    //       lastAvailableMap = Some(HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey))
-    //     } else {
-    //       lastAvailableMap =
-    //         synchronized { Option(loadedMaps.get(lastAvailableVersion)) }
-    //           .orElse(readSnapshotFile(lastAvailableVersion))
-    //     }
-    //   }
-
       val startVersionMap =
         synchronized { Option(loadedMaps.get(startVersion)) }
               .orElse{
@@ -623,7 +600,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       resultMap
     }
 
-    // todo
     logDebug(s"Loading state from $startVersion to $endVersion takes $elapsedMs ms.")
 
     result
