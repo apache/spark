@@ -89,7 +89,7 @@ object ExternalCatalogUtils {
         }
         firstIndex += 1
       }
-      sb.toString()
+      sb.toString
     }
   }
 
