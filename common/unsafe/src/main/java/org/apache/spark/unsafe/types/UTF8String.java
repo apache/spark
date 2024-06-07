@@ -284,15 +284,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
 
   private static boolean isValidContinuationByte(byte b) {
-     return (byte) 0x80 <= b && b <= (byte) 0xBF;
+     return b >= (byte) 0x80 && b <= (byte) 0xBF;
   }
 
   private static boolean isValidSecondByte(byte b, byte firstByte) {
     return switch (firstByte) {
-      case (byte) 0xE0 -> (byte) 0xA0 <= b && b <= (byte) 0xBF;
-      case (byte) 0xED -> (byte) 0x80 <= b && b <= (byte) 0x9F;
-      case (byte) 0xF0 -> (byte) 0x90 <= b && b <= (byte) 0xBF;
-      case (byte) 0xF4 -> (byte) 0x80 <= b && b <= (byte) 0x8F;
+      case (byte) 0xE0 -> b >= (byte) 0xA0 && b <= (byte) 0xBF;
+      case (byte) 0xED -> b >= (byte) 0x80 && b <= (byte) 0x9F;
+      case (byte) 0xF0 -> b >= (byte) 0x90 && b <= (byte) 0xBF;
+      case (byte) 0xF4 -> b >= (byte) 0x80 && b <= (byte) 0x8F;
       default -> isValidContinuationByte(b);
     };
   }
@@ -307,14 +307,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns a validated version of the current UTF-8 string by replacing invalid UTF-8 sequences
    * with the Unicode replacement character (U+FFFD), as per the rules defined in the Unicode
-   * standard. This behaviour is consistent with the behaviour of `UnicodeString` in ICU4C.
+   * standard 15, Section 3.9, Paragraph D86, Table 3-7. This behaviour is consistent with the
+   * behaviour of `UnicodeString` in ICU4C.
    *
-   * @return A new UTF8String that is a valid UTF8 byte sequence.
+   * @return A new UTF8String that is a valid UTF8 string.
    */
-  public UTF8String makeValidUTF8() {
+  public UTF8String makeValid() {
     ArrayList<Byte> bytes = new ArrayList<>();
     int byteIndex = 0;
-    byteIteration:
     while (byteIndex < numBytes) {
       // Read the first byte.
       byte firstByte = getByte(byteIndex);
@@ -323,21 +323,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // 0B UTF-8 sequence (invalid first byte).
       if (codePointLen == 0) {
         appendReplacementCharacter(bytes);
-        byteIndex += 1;
+        ++byteIndex;
         continue;
       }
       // 1B UTF-8 sequence (ASCII or invalid).
       if (codePointLen == 1) {
         if (firstByte >= 0) bytes.add(firstByte);
         else appendReplacementCharacter(bytes);
-        byteIndex += 1;
+        ++byteIndex;
         continue;
       }
       // Read the second byte.
       byte secondByte = getByte(byteIndex + 1);
       if (!isValidSecondByte(secondByte, firstByte)) {
         appendReplacementCharacter(bytes);
-        byteIndex += 1;
+        ++byteIndex;
         continue;
       }
       // Read remaining continuation bytes.
@@ -366,34 +366,40 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Checks if the current UTF8String is valid.
    *
-   * @return If string represents a valid UTF8 byte sequence.
+   * @return If string represents a valid UTF8 string.
    */
-  public boolean isValidUTF8() {
-    return makeValidUTF8().equals(this);
-  }
-
-  /**
-   * Returns the current string if it is a valid UTF8 byte sequence, otherwise throws an exception.
-   *
-   * @return The UTF8String itself if it is a valid UTF8 byte sequence.
-   */
-  public UTF8String validateUTF8() {
-    if (!isValidUTF8()) {
-      throw new IllegalArgumentException("Invalid UTF-8 string");
+  public boolean isValid() {
+    int byteIndex = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) return false;
+      // 1B UTF-8 sequence (ASCII or invalid).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) {
+          ++byteIndex;
+          continue;
+        }
+        else return false;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) return false;
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) return false;
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) return false;
+      // Valid UTF-8 sequence.
+      byteIndex += codePointLen;
     }
-    return this;
-  }
-
-  /**
-   * Returns the current string if it is a valid UTF8 byte sequence, otherwise returns null.
-   *
-   * @return The UTF8String itself if it is a valid UTF8 byte sequence, otherwise null.
-   */
-  public UTF8String tryValidateUTF8() {
-    if (!isValidUTF8()) {
-      return null;
-    }
-    return this;
+    return true;
   }
 
   /**
