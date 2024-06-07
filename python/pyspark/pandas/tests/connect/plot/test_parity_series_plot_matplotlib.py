@@ -27,27 +27,27 @@ class SeriesPlotMatplotlibParityTests(
 ):
     def test_empty_hist(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_empty_hist()
 
     def test_hist(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_hist()
 
     def test_hist_plot(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_hist_plot()
 
     def test_kde_plot(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_kde_plot()
 
     def test_single_value_hist(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_single_value_hist()
 
 

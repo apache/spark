@@ -27,12 +27,12 @@ class SeriesPlotPlotlyParityTests(
 ):
     def test_hist_plot(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_hist_plot()
 
     def test_kde_plot(self):
         # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError) as pe:
+        with self.assertRaises(PandasNotImplementedError):
             super().test_kde_plot()
 
 
