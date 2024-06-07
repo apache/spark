@@ -349,7 +349,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
               rule.apply(newPlan)
             }
           } else {
-            plan -> Nil
+            newPlan -> Nil
           }
         }
 
