@@ -40,7 +40,7 @@ object ExternalCatalogUtils {
   // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
-  final val charToEscape = {
+  final val (charToEscape, sizeOfCharToEscape) = {
     val bitSet = new java.util.BitSet(128)
 
     /**
@@ -60,22 +60,22 @@ object ExternalCatalogUtils {
       Array(' ', '<', '>', '|').foreach(bitSet.set(_))
     }
 
-    bitSet
+    (bitSet, bitSet.size)
   }
 
   private final val HEX_CHARS = "0123456789ABCDEF".toCharArray
 
   @inline final def needsEscaping(c: Char): Boolean = {
-    c < charToEscape.size() && charToEscape.get(c)
+    c < sizeOfCharToEscape && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {
-    var firstIndex = 0
     val length = path.length
+    var firstIndex = 0
     while (firstIndex < length && !needsEscaping(path.charAt(firstIndex))) {
       firstIndex += 1
     }
-    if (firstIndex == 0 && !needsEscaping(path.charAt(firstIndex))) {
+    if (firstIndex == 0 && !needsEscaping(path.charAt(0))) {
       path
     } else {
       val sb = new java.lang.StringBuilder(length + 16)
