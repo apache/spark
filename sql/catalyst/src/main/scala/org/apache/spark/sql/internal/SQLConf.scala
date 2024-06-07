@@ -5949,6 +5949,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
+  def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 

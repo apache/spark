@@ -123,6 +123,7 @@ class SessionCatalog(
 
   lazy val externalCatalog = externalCatalogBuilder()
   lazy val globalTempViewManager = globalTempViewManagerBuilder()
+  val globalTempDatabase: String = SQLConf.get.globalTempDatabase
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
@@ -273,9 +274,9 @@ class SessionCatalog(
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
     val dbName = format(dbDefinition.name)
-    if (dbName == globalTempViewManager.database) {
+    if (dbName == globalTempDatabase) {
       throw QueryCompilationErrors.cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(
-        globalTempViewManager.database)
+        globalTempDatabase)
     }
     validateName(dbName)
     externalCatalog.createDatabase(
@@ -333,9 +334,9 @@ class SessionCatalog(
 
   def setCurrentDatabase(db: String): Unit = {
     val dbName = format(db)
-    if (dbName == globalTempViewManager.database) {
+    if (dbName == globalTempDatabase) {
       throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
-        globalTempViewManager.database)
+        globalTempDatabase)
     }
     requireDbExists(dbName)
     synchronized { currentDb = dbName }
@@ -659,7 +660,7 @@ class SessionCatalog(
       } else {
         false
       }
-    } else if (format(name.database.get) == globalTempViewManager.database) {
+    } else if (format(name.database.get) == globalTempDatabase) {
       globalTempViewManager.update(viewName, viewDefinition)
     } else {
       false
@@ -767,9 +768,9 @@ class SessionCatalog(
     val table = format(name.table)
     if (name.database.isEmpty) {
       tempViews.get(table).map(_.tableMeta).getOrElse(getTableMetadata(name))
-    } else if (format(name.database.get) == globalTempViewManager.database) {
+    } else if (format(name.database.get) == globalTempDatabase) {
       globalTempViewManager.get(table).map(_.tableMeta)
-        .getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
+        .getOrElse(throw new NoSuchTableException(globalTempDatabase, table))
     } else {
       getTableMetadata(name)
     }
@@ -795,7 +796,7 @@ class SessionCatalog(
 
     val oldTableName = qualifiedIdent.table
     val newTableName = format(newName.table)
-    if (db == globalTempViewManager.database) {
+    if (db == globalTempDatabase) {
       globalTempViewManager.rename(oldTableName, newTableName)
     } else {
       requireDbExists(db)
@@ -832,10 +833,10 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val table = qualifiedIdent.table
-    if (db == globalTempViewManager.database) {
+    if (db == globalTempDatabase) {
       val viewExists = globalTempViewManager.remove(table)
       if (!viewExists && !ignoreIfNotExists) {
-        throw new NoSuchTableException(globalTempViewManager.database, table)
+        throw new NoSuchTableException(globalTempDatabase, table)
       }
     } else {
       if (name.database.isDefined || !tempViews.contains(table)) {
@@ -873,7 +874,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val table = qualifiedIdent.table
-    if (db == globalTempViewManager.database) {
+    if (db == globalTempDatabase) {
       globalTempViewManager.get(table).map { viewDef =>
         SubqueryAlias(table, db, getTempViewPlan(viewDef))
       }.getOrElse(throw new NoSuchTableException(db, table))
@@ -1026,7 +1027,7 @@ class SessionCatalog(
   }
 
   def isGlobalTempViewDB(dbName: String): Boolean = {
-    globalTempViewManager.database.equalsIgnoreCase(dbName)
+    globalTempDatabase.equalsIgnoreCase(dbName)
   }
 
   /**
@@ -1085,9 +1086,9 @@ class SessionCatalog(
       pattern: String,
       includeLocalTempViews: Boolean): Seq[TableIdentifier] = {
     val dbName = format(db)
-    val dbTables = if (dbName == globalTempViewManager.database) {
+    val dbTables = if (dbName == globalTempDatabase) {
       globalTempViewManager.listViewNames(pattern).map { name =>
-        TableIdentifier(name, Some(globalTempViewManager.database))
+        TableIdentifier(name, Some(globalTempDatabase))
       }
     } else {
       requireDbExists(dbName)
@@ -1108,9 +1109,9 @@ class SessionCatalog(
    */
   def listViews(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbName = format(db)
-    val dbViews = if (dbName == globalTempViewManager.database) {
+    val dbViews = if (dbName == globalTempDatabase) {
       globalTempViewManager.listViewNames(pattern).map { name =>
-        TableIdentifier(name, Some(globalTempViewManager.database))
+        TableIdentifier(name, Some(globalTempDatabase))
       }
     } else {
       requireDbExists(dbName)
@@ -1126,7 +1127,7 @@ class SessionCatalog(
    * List all matching temp views in the specified database, including global/local temporary views.
    */
   def listTempViews(db: String, pattern: String): Seq[CatalogTable] = {
-    val globalTempViews = if (format(db) == globalTempViewManager.database) {
+    val globalTempViews = if (format(db) == globalTempDatabase) {
       globalTempViewManager.listViewNames(pattern).flatMap { viewName =>
         globalTempViewManager.get(viewName).map(_.tableMeta)
       }
