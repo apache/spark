@@ -18,22 +18,19 @@ import unittest
 
 from pyspark.pandas.tests.plot.test_frame_plot_matplotlib import DataFramePlotMatplotlibTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 
 
 class DataFramePlotMatplotlibParityTests(
     DataFramePlotMatplotlibTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_hist_plot(self):
-        # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError):
-            super().test_hist_plot()
+        super().test_hist_plot()
 
+    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
     def test_kde_plot(self):
-        # "Test depends on Spark ML which is not supported from Spark Connect."
-        with self.assertRaises(PandasNotImplementedError):
-            super().test_kde_plot()
+        super().test_kde_plot()
 
 
 if __name__ == "__main__":
