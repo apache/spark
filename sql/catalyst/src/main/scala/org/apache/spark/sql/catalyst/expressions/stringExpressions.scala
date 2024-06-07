@@ -815,7 +815,7 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
 
   override def nullSafeEval(srcEval: Any): Any = {
     val utf8string = srcEval.asInstanceOf[UTF8String]
-    if (!utf8string.isValid) throw new IllegalArgumentException("Invalid UTF-8 string")
+    if (!utf8string.isValid) throw QueryExecutionErrors.invalidUTF8StringError(utf8string)
     else utf8string
   }
 
@@ -823,7 +823,7 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if (!$c.isValid()) {
-          throw new IllegalArgumentException("Invalid UTF-8 string");
+          throw QueryExecutionErrors.invalidUTF8StringError($c);
         } else {
           ${ev.value} = $c;
         }

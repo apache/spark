@@ -2886,6 +2886,12 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_UTF8_STRING" : {
+    "message" : [
+      "Invalid UTF8-sequence found in string: <str>."
+    ],
+    "sqlState" : "HV00A"
+  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."

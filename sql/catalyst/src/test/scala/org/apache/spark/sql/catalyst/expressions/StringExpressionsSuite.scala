@@ -2091,11 +2091,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD")
     makeValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD")
 
-    def validateUTF8(str: Any, expected: String, exception: Boolean): Unit = {
-      if (exception) {
-        checkExceptionInExpression[IllegalArgumentException](
-          ValidateUTF8(Literal.create(str, StringType)),
-          "Invalid UTF-8 string"
+    def validateUTF8(str: Any, expected: String, except: Boolean): Unit = {
+      if (except) {
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            ValidateUTF8(Literal.create(str, StringType)).eval()
+          },
+          errorClass = "INVALID_UTF8_STRING",
+          parameters = Map(
+            "str" -> str.toString
+          )
         )
       } else {
         checkEvaluation(
@@ -2104,19 +2109,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         )
       }
     }
-    validateUTF8(null, null, exception = false)
-    validateUTF8("", "", exception = false)
-    validateUTF8("aa", "aa", exception = false)
-    validateUTF8("\u0061", "\u0061", exception = false)
-    validateUTF8(UTF8String.EMPTY_UTF8, "", exception = false)
-    validateUTF8(UTF8String.fromString(""), "", exception = false)
-    validateUTF8(UTF8String.fromString("abc"), "abc", exception = false)
-    validateUTF8(UTF8String.fromString("hello"), "hello", exception = false)
-    validateUTF8(UTF8String.fromBytes(Array.empty[Byte]), "", exception = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x41)), "A", exception = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), "a", exception = false)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD", exception = true)
-    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD", exception = true)
+    validateUTF8(null, null, except = false)
+    validateUTF8("", "", except = false)
+    validateUTF8("aa", "aa", except = false)
+    validateUTF8("\u0061", "\u0061", except = false)
+    validateUTF8(UTF8String.EMPTY_UTF8, "", except = false)
+    validateUTF8(UTF8String.fromString(""), "", except = false)
+    validateUTF8(UTF8String.fromString("abc"), "abc", except = false)
+    validateUTF8(UTF8String.fromString("hello"), "hello", except = false)
+    validateUTF8(UTF8String.fromBytes(Array.empty[Byte]), "", except = false)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x41)), "A", except = false)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)), "a", except = false)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD", except = true)
+    validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD", except = true)
 
     def tryValidateUTF8(str: Any, expected: String): Unit = {
       checkEvaluation(
