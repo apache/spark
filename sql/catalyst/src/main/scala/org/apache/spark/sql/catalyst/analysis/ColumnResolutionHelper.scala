@@ -140,62 +140,66 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val resolver = conf.resolver
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
-      if (e.resolved) return e
-      withOrigin(e.origin) {
-        val resolved = e match {
-          case f: LambdaFunction if !f.bound => f
+      if (e.resolved) {
+        e
+      } else {
+        withOrigin(e.origin) {
+          val resolved = e match {
+            case f: LambdaFunction if !f.bound => f
 
-          case GetColumnByOrdinal(ordinal, _) =>
-            val attrCandidates = getAttrCandidates()
-            assert(ordinal >= 0 && ordinal < attrCandidates.length)
-            attrCandidates(ordinal)
+            case GetColumnByOrdinal(ordinal, _) =>
+              val attrCandidates = getAttrCandidates()
+              assert(ordinal >= 0 && ordinal < attrCandidates.length)
+              attrCandidates(ordinal)
 
-          case GetViewColumnByNameAndOrdinal(
-          viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
-            val attrCandidates = getAttrCandidates()
-            val matched = attrCandidates.filter(a => resolver(a.name, colName))
-            if (matched.length != expectedNumCandidates) {
-              throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
-                viewName, colName, expectedNumCandidates, matched, viewDDL)
-            }
-            matched(ordinal)
+            case GetViewColumnByNameAndOrdinal(
+            viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
+              val attrCandidates = getAttrCandidates()
+              val matched = attrCandidates.filter(a => resolver(a.name, colName))
+              if (matched.length != expectedNumCandidates) {
+                throw QueryCompilationErrors.incompatibleViewSchemaChangeError(
+                  viewName, colName, expectedNumCandidates, matched, viewDDL)
+              }
+              matched(ordinal)
 
-          case u @ UnresolvedAttribute(nameParts) =>
-            val result = withPosition(u) {
-              resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
-                // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-                // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-                // can trim the top-level alias if it's safe to do so. Since we will call
-                // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
-                case Alias(child, _) if !isTopLevel => child
+            case u @ UnresolvedAttribute(nameParts) =>
+              val result = withPosition(u) {
+                resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
+                  // We trim unnecessary alias here.
+                  // Note that, we cannot trim the alias at top-level, as we should resolve
+                  // `UnresolvedAttribute` to a named expression. The caller side
+                  // can trim the top-level alias if it's safe to do so. Since we will call
+                  // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
+                  case Alias(child, _) if !isTopLevel => child
+                  case other => other
+                }.getOrElse(u)
+              }
+              logDebug(s"Resolving $u to $result")
+              result
+
+            // Re-resolves `TempResolvedColumn` if it has tried to be resolved with Aggregate
+            // but failed. If we still can't resolve it, we should keep it as `TempResolvedColumn`,
+            // so that it won't become a fresh `TempResolvedColumn` again.
+            case t: TempResolvedColumn if t.hasTried => withPosition(t) {
+              innerResolve(UnresolvedAttribute(t.nameParts), isTopLevel) match {
+                case _: UnresolvedAttribute => t
                 case other => other
-              }.getOrElse(u)
+              }
             }
-            logDebug(s"Resolving $u to $result")
-            result
 
-          // Re-resolves `TempResolvedColumn` if it has tried to be resolved with Aggregate
-          // but failed. If we still can't resolve it, we should keep it as `TempResolvedColumn`,
-          // so that it won't become a fresh `TempResolvedColumn` again.
-          case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-            innerResolve(UnresolvedAttribute(t.nameParts), isTopLevel) match {
-              case _: UnresolvedAttribute => t
-              case other => other
-            }
+            case u @ UnresolvedExtractValue(child, fieldName) =>
+              val newChild = innerResolve(child, isTopLevel = false)
+              if (newChild.resolved) {
+                ExtractValue(newChild, fieldName, resolver)
+              } else {
+                u.copy(child = newChild)
+              }
+
+            case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
           }
-
-          case u @ UnresolvedExtractValue(child, fieldName) =>
-            val newChild = innerResolve(child, isTopLevel = false)
-            if (newChild.resolved) {
-              ExtractValue(newChild, fieldName, resolver)
-            } else {
-              u.copy(child = newChild)
-            }
-
-          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+          resolved.copyTagsFrom(e)
+          resolved
         }
-        resolved.copyTagsFrom(e)
-        resolved
       }
     }
 
@@ -318,32 +322,36 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
-      if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) return e
-      withOrigin(e.origin) {
-        val resolved = e match {
-          case u @ UnresolvedAttribute(nameParts) =>
-            val result = withPosition(u) {
-              resolve(nameParts).getOrElse(u) match {
-                // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-                case Alias(child, _) if !isTopLevel => child
+      if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+        e
+      } else {
+        withOrigin(e.origin) {
+          val resolved = e match {
+            case u @ UnresolvedAttribute(nameParts) =>
+              val result = withPosition(u) {
+                resolve(nameParts).getOrElse(u) match {
+                  // We trim unnecessary alias here.
+                  // Note that, we cannot trim the alias at top-level,
+                  case Alias(child, _) if !isTopLevel => child
+                  case other => other
+                }
+              }
+              result
+
+            // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
+            // resolved with Aggregate but failed.
+            case t: TempResolvedColumn if t.hasTried => withPosition(t) {
+              resolve(t.nameParts).getOrElse(t) match {
+                case _: UnresolvedAttribute => t
                 case other => other
               }
             }
-            result
 
-          // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
-          // resolved with Aggregate but failed.
-          case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-            resolve(t.nameParts).getOrElse(t) match {
-              case _: UnresolvedAttribute => t
-              case other => other
-            }
+            case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
           }
-
-          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+          resolved.copyTagsFrom(e)
+          resolved
         }
-        resolved.copyTagsFrom(e)
-        resolved
       }
     }
 
