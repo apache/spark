@@ -45,6 +45,10 @@ object ExecutorExitCode {
    */
   val HEARTBEAT_FAILURE = 56
 
+  /** The default uncaught exception handler was reached and the exception was thrown by
+   * TaskReaper. */
+  val KILLED_BY_TASK_REAPER = 57
+
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"

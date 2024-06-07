@@ -30,6 +30,7 @@ import scala.concurrent.duration._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
@@ -465,7 +466,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, 15.seconds) }.getCause
     assert(e.getMessage contains "cancel")
     semExec.acquire(2)
-    assert(execLossReason == Seq("Command exited with code 53", "Command exited with code 53"))
+    val expectedReason = s"Command exited with code ${ExecutorExitCode.KILLED_BY_TASK_REAPER}"
+    assert(execLossReason == Seq(expectedReason, expectedReason))
 
     // Once A is cancelled, job B should finish fairly quickly.
     assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)

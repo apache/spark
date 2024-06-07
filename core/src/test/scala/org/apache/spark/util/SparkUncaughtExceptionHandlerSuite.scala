@@ -22,7 +22,7 @@ import java.io.File
 import scala.util.Try
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.executor.KilledByTaskReaperException
+import org.apache.spark.executor.{ExecutorExitCode, KilledByTaskReaperException}
 
 class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
 
@@ -34,7 +34,7 @@ class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
     (ThrowableTypes.RuntimeException, false, 0),
     (ThrowableTypes.OutOfMemoryError, true, SparkExitCode.OOM),
     (ThrowableTypes.OutOfMemoryError, false, SparkExitCode.OOM),
-    (ThrowableTypes.KilledByTaskReaperException, true, SparkExitCode.KILLED_BY_TASK_REAPER),
+    (ThrowableTypes.KilledByTaskReaperException, true, ExecutorExitCode.KILLED_BY_TASK_REAPER),
     (ThrowableTypes.KilledByTaskReaperException, false, 0),
     (ThrowableTypes.SparkFatalRuntimeException, true, SparkExitCode.UNCAUGHT_EXCEPTION),
     (ThrowableTypes.SparkFatalRuntimeException, false, 0),
