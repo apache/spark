@@ -70,6 +70,9 @@ object ExternalCatalogUtils {
   }
 
   def escapePathName(path: String): String = {
+    if (path == null || path.isEmpty) {
+      return path
+    }
     val length = path.length
     var firstIndex = 0
     while (firstIndex < length && !needsEscaping(path.charAt(firstIndex))) {
