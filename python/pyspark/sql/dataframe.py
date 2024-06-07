@@ -4603,7 +4603,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4619,6 +4619,9 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
         Parameters
         ----------
@@ -4651,7 +4654,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates(['name', 'height']).show()
+        >>> df.dropDuplicates('name', 'height').show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4661,7 +4664,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4677,6 +4680,9 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
+
+         .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
          Parameters
          ----------
@@ -4707,7 +4713,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
         """
         ...
 
@@ -5964,11 +5970,17 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
         """
         ...
 

@@ -1208,50 +1208,52 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
-    sql("""
-      |create table sc as select *
-      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    withSQLConf("hive.exec.dynamic.partition" -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      sql(
+        """
+          |create table sc as select *
+          |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
     """.stripMargin)
-    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
-    sql("set hive.exec.dynamic.partition=true")
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("insert overwrite table sc_part partition(ts) select * from sc")
-    sql("drop table sc_part")
+      sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+      sql("insert overwrite table sc_part partition(ts) select * from sc")
+      sql("drop table sc_part")
+    }
   }
 
   test("Partition spec validation") {
-    sql("DROP TABLE IF EXISTS dp_test")
-    sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
-    sql("SET hive.exec.dynamic.partition.mode=strict")
-
-    // Should throw when using strict dynamic partition mode without any static partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "tableColumns" -> "`key`, `value`, `dp`, `sp`",
-        "dataColumns" -> "`key`, `value`, `(key % 5)`"))
-
-    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
-
-    // Should throw when a static partition appears after a dynamic partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_3079",
-      parameters = Map.empty)
+    withTable("dp_test") {
+      sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
+        // Should throw when using strict dynamic partition mode without any static partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`dp_test`",
+            "tableColumns" -> "`key`, `value`, `dp`, `sp`",
+            "dataColumns" -> "`key`, `value`, `(key % 5)`"))
+      }
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // Should throw when a static partition appears after a dynamic partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_3079",
+          parameters = Map.empty)
+      }
+    }
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
@@ -1292,21 +1294,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3810: PreprocessTableInsertion dynamic partitioning support") {
-    val analyzedPlan = {
-      loadTestTable("srcpart")
-      sql("DROP TABLE IF EXISTS withparts")
-      sql("CREATE TABLE withparts LIKE srcpart")
-      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      val analyzedPlan = {
+        loadTestTable("srcpart")
+        sql("DROP TABLE IF EXISTS withparts")
+        sql("CREATE TABLE withparts LIKE srcpart")
 
-      sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
-        .queryExecution.analyzed
-    }
+        sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
+        sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
+          .queryExecution.analyzed
+      }
 
-    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
-      analyzedPlan.collect {
-        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
-      }.sum
+      assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
+        analyzedPlan.collect {
+          case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+        }.sum
+      }
     }
   }
 

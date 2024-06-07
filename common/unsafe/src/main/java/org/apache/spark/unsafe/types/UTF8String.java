@@ -342,44 +342,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns whether `this` contains `substring` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
-   */
-  public boolean containsInLowerCase(final UTF8String substring) {
-    if (substring.numBytes == 0) {
-      return true;
-    }
-
-    // Both `this` and the `substring` are checked for non-ASCII characters, otherwise we would
-    // have to use `startsWithLowerCase(...)` in a loop, and it would frequently allocate
-    // (e.g. in case of `containsInLowerCase("1大1大1大...", "11")`)
-    if (!substring.isFullAscii()) {
-      return toLowerCase().contains(substring.toLowerCaseSlow());
-    }
-    if (!isFullAscii()) {
-      return toLowerCaseSlow().contains(substring.toLowerCaseAscii());
-    }
-
-    if (numBytes < substring.numBytes) {
-      return false;
-    }
-
-    final var firstLower = Character.toLowerCase(substring.getByte(0));
-    for (var i = 0; i <= (numBytes - substring.numBytes); i++) {
-      if (Character.toLowerCase(getByte(i)) == firstLower) {
-        final var rest = UTF8String.fromAddress(base, offset + i, numBytes - i);
-        if (rest.matchAtInLowerCaseAscii(substring, 0)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Returns the byte at position `i`.
    */
   public byte getByte(int i) {
@@ -393,92 +355,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAtInLowerCaseAscii(final UTF8String s, int pos) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
-      return false;
-    }
-
-    for (var i = 0; i < s.numBytes; i++) {
-      if (Character.toLowerCase(getByte(pos + i)) != Character.toLowerCase(s.getByte(i))) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
-  /**
-   * Checks whether `prefix` is a prefix of `this` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
-   */
-  public boolean startsWithInLowerCase(final UTF8String prefix) {
-    // No way to match sizes of strings for early return, since single grapheme can be expanded
-    // into several independent ones in lowercase
-    if (prefix.numBytes == 0) {
-      return true;
-    }
-    if (numBytes == 0) {
-      return false;
-    }
-
-    if (!prefix.isFullAscii()) {
-      return toLowerCase().startsWith(prefix.toLowerCaseSlow());
-    }
-
-    final var part = prefix.numBytes >= numBytes ? this : UTF8String.fromAddress(
-      base, offset, prefix.numBytes);
-    if (!part.isFullAscii()) {
-      return toLowerCaseSlow().startsWith(prefix.toLowerCaseAscii());
-    }
-
-    if (numBytes < prefix.numBytes) {
-      return false;
-    }
-
-    return matchAtInLowerCaseAscii(prefix, 0);
-  }
-
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
-  }
-
-  /**
-   * Checks whether `suffix` is a suffix of `this` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
-   */
-  public boolean endsWithInLowerCase(final UTF8String suffix) {
-    // No way to match sizes of strings for early return, since single grapheme can be expanded
-    // into several independent ones in lowercase
-    if (suffix.numBytes == 0) {
-      return true;
-    }
-    if (numBytes == 0) {
-      return false;
-    }
-
-    if (!suffix.isFullAscii()) {
-      return toLowerCase().endsWith(suffix.toLowerCaseSlow());
-    }
-
-    final var part = suffix.numBytes >= numBytes ? this : UTF8String.fromAddress(
-      base, offset + numBytes - suffix.numBytes, suffix.numBytes);
-    if (!part.isFullAscii()) {
-      return toLowerCaseSlow().endsWith(suffix.toLowerCaseAscii());
-    }
-
-    if (numBytes < suffix.numBytes) {
-      return false;
-    }
-
-    return matchAtInLowerCaseAscii(suffix, numBytes - suffix.numBytes);
   }
 
   /**
@@ -507,34 +389,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
-   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
-   */
-  public int compareLowerCase(UTF8String other) {
-    int curr;
-    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
-      byte left, right;
-      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
-        return compareLowerCaseSuffixSlow(other, curr);
-      }
-      int lowerLeft = Character.toLowerCase(left);
-      int lowerRight = Character.toLowerCase(right);
-      if (lowerLeft != lowerRight) {
-        return lowerLeft - lowerRight;
-      }
-    }
-    return numBytes - other.numBytes;
-  }
-
-  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
-    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
-      numBytes - pref);
-    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
-      other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
-  }
-
-  /**
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
@@ -545,7 +399,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
   }
 
-  private boolean isFullAscii() {
+  public boolean isFullAscii() {
     for (var i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         return false;
@@ -892,6 +746,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns the (default) position of the first occurrence of an empty substr in the current
+   * string from the specified position (0-based index).
+   *
+   * @param start the start position of the current string for searching
+   * @return the position of the first occurrence of the empty substr (now, always 0)
+   */
+  public int indexOfEmpty(int start) {
+    return 0; // TODO: Fix this behaviour (SPARK-48284)
+  }
+
+  /**
    * Returns the position of the first occurrence of substr in
    * current string from the specified position (0-based index).
    *
@@ -901,7 +766,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
-      return 0;
+      return indexOfEmpty(start);
     }
 
     // locate to the start position.

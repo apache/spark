@@ -478,6 +478,7 @@ pyspark_sql = Module(
         "pyspark.sql.catalog",
         "pyspark.sql.classic.column",
         "pyspark.sql.classic.dataframe",
+        "pyspark.sql.classic.window",
         "pyspark.sql.datasource",
         "pyspark.sql.group",
         "pyspark.sql.functions.builtin",
@@ -488,7 +489,6 @@ pyspark_sql = Module(
         "pyspark.sql.streaming.listener",
         "pyspark.sql.udf",
         "pyspark.sql.udtf",
-        "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         "pyspark.sql.protobuf.functions",
         "pyspark.sql.pandas.conversion",
@@ -1009,6 +1009,7 @@ pyspark_connect = Module(
         # sql unittests
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_dataframe_property",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",

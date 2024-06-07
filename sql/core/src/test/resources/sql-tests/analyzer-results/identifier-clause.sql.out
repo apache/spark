@@ -732,7 +732,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -754,7 +754,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -924,6 +924,65 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "CREATE TEMPORARY VIEW IDENTIFIER('default.v')(c1) AS VALUES(1)"
   } ]
 }
+
+
+-- !query
+create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query analysis
+CreateViewCommand `v1`, (select my_col from (values (1), (2), (1) as (my_col)) group by 1), false, false, LocalTempView, UNSUPPORTED, true
+   +- Aggregate [my_col#x], [my_col#x]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- SubqueryAlias as
+            +- LocalRelation [my_col#x]
+
+
+-- !query
+cache table identifier('t1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query analysis
+CacheTableAsSelect t1, (select my_col from (values (1), (2), (1) as (my_col)) group by 1), false, true
+   +- Aggregate [my_col#x], [my_col#x]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- SubqueryAlias as
+            +- LocalRelation [my_col#x]
+
+
+-- !query
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t2`, ErrorIfExists, [my_col]
+   +- Aggregate [my_col#x], [my_col#x]
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- SubqueryAlias as
+            +- LocalRelation [my_col#x]
+
+
+-- !query
+insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [my_col]
++- Aggregate [my_col#x], [my_col#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- SubqueryAlias as
+         +- LocalRelation [my_col#x]
+
+
+-- !query
+drop view v1
+-- !query analysis
+DropTempViewCommand v1
+
+
+-- !query
+drop table t1
+-- !query analysis
+DropTempViewCommand t1
+
+
+-- !query
+drop table t2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
 
 
 -- !query

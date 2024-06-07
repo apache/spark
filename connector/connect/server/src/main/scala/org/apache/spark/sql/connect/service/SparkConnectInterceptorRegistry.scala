@@ -46,8 +46,14 @@ object SparkConnectInterceptorRegistry {
    * @param sb
    */
   def chainInterceptors(sb: NettyServerBuilder): Unit = {
+    chainInterceptors(sb, createConfiguredInterceptors())
+  }
+
+  def chainInterceptors(
+      sb: NettyServerBuilder,
+      additionalInterceptors: Seq[ServerInterceptor]): Unit = {
     interceptorChain.foreach(i => sb.intercept(i()))
-    createConfiguredInterceptors().foreach(sb.intercept(_))
+    additionalInterceptors.foreach(sb.intercept(_))
   }
 
   // Type used to identify the closure responsible to instantiate a ServerInterceptor.

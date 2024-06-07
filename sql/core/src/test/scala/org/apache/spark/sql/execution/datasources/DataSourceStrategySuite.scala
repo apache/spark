@@ -327,8 +327,10 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
 
   test("SPARK-41636: selectFilters returns predicates in deterministic order") {
 
-    val predicates = Seq(EqualTo($"id", 1), EqualTo($"id", 2),
-      EqualTo($"id", 3), EqualTo($"id", 4), EqualTo($"id", 5), EqualTo($"id", 6))
+    val idColAttribute = AttributeReference("id", IntegerType)()
+    val predicates = Seq(EqualTo(idColAttribute, 1), EqualTo(idColAttribute, 2),
+      EqualTo(idColAttribute, 3), EqualTo(idColAttribute, 4), EqualTo(idColAttribute, 5),
+      EqualTo(idColAttribute, 6))
 
     val (unhandledPredicates, pushedFilters, handledFilters) =
       DataSourceStrategy.selectFilters(FakeRelation(), predicates)
@@ -337,5 +339,54 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
       f.equals(sources.EqualTo("id", i + 1))
     })
     assert(handledFilters.isEmpty)
+  }
+
+  test("SPARK-48431: Push filters on columns with UTF8_BINARY collation") {
+    val colAttr = $"col".string("UTF8_BINARY")
+    testTranslateFilter(EqualTo(colAttr, Literal("value")), Some(sources.EqualTo("col", "value")))
+    testTranslateFilter(Not(EqualTo(colAttr, Literal("value"))),
+      Some(sources.Not(sources.EqualTo("col", "value"))))
+    testTranslateFilter(LessThan(colAttr, Literal("value")),
+      Some(sources.LessThan("col", "value")))
+    testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.LessThan("col", "value")))
+    testTranslateFilter(LessThanOrEqual(colAttr, Literal("value")),
+      Some(sources.LessThanOrEqual("col", "value")))
+    testTranslateFilter(GreaterThan(colAttr, Literal("value")),
+      Some(sources.GreaterThan("col", "value")))
+    testTranslateFilter(GreaterThanOrEqual(colAttr, Literal("value")),
+      Some(sources.GreaterThanOrEqual("col", "value")))
+    testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
+  }
+
+  for (collation <- Seq("UTF8_BINARY_LCASE", "UNICODE")) {
+    test(s"SPARK-48431: Filter pushdown on columns with $collation collation") {
+      val colAttr = $"col".string(collation)
+
+      // No pushdown for all comparison based filters.
+      testTranslateFilter(EqualTo(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+      testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+      testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+      testTranslateFilter(LessThanOrEqual(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+      testTranslateFilter(GreaterThan(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+      testTranslateFilter(GreaterThanOrEqual(colAttr, Literal("value")), Some(sources.AlwaysTrue))
+
+      // Allow pushdown of Is(Not)Null filter.
+      testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
+      testTranslateFilter(IsNull(colAttr), Some(sources.IsNull("col")))
+
+      // Top level filter splitting at And and Or.
+      testTranslateFilter(And(EqualTo(colAttr, Literal("value")), IsNotNull(colAttr)),
+        Some(sources.And(sources.AlwaysTrue, sources.IsNotNull("col"))))
+      testTranslateFilter(Or(EqualTo(colAttr, Literal("value")), IsNotNull(colAttr)),
+        Some(sources.Or(sources.AlwaysTrue, sources.IsNotNull("col"))))
+
+      // Different cases involving Not.
+      testTranslateFilter(Not(EqualTo(colAttr, Literal("value"))), Some(sources.AlwaysTrue))
+      testTranslateFilter(And(Not(EqualTo(colAttr, Literal("value"))), IsNotNull(colAttr)),
+        Some(sources.And(sources.AlwaysTrue, sources.IsNotNull("col"))))
+      // This filter would work, but we want to keep the translation logic simple.
+      testTranslateFilter(And(EqualTo(colAttr, Literal("value")), Not(IsNotNull(colAttr))),
+        Some(sources.And(sources.AlwaysTrue, sources.AlwaysTrue)))
+    }
   }
 }

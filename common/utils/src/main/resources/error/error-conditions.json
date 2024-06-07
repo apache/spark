@@ -119,6 +119,12 @@
     ],
     "sqlState" : "42KDE"
   },
+  "CANNOT_ALTER_COLLATION_BUCKET_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN cannot change collation of type/subtypes of bucket columns, but found the bucket column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
+  },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
       "ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column <columnName> in the table <tableName>."
@@ -469,7 +475,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
+      "The value <collationName> does not represent a correct collation name."
     ],
     "sqlState" : "42704"
   },
@@ -1249,6 +1255,11 @@
           "List namespaces."
         ]
       },
+      "LOAD_TABLE" : {
+        "message" : [
+          "Load the table <tableName>."
+        ]
+      },
       "NAMESPACE_EXISTS" : {
         "message" : [
           "Check that the namespace <namespace> exists."
@@ -1921,7 +1932,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation. Did you mean '<proposal>'?"
+          "Cannot resolve the given default collation."
         ]
       },
       "TIME_ZONE" : {
@@ -2019,6 +2030,11 @@
       "EMPTY_STRING" : {
         "message" : [
           "Delimiter cannot be empty string."
+        ]
+      },
+      "NULL_VALUE" : {
+        "message" : [
+          "Delimiter cannot be null."
         ]
       },
       "SINGLE_BACKSLASH" : {
@@ -3204,6 +3220,12 @@
     ],
     "sqlState" : "42809"
   },
+  "NOT_NULL_ASSERT_VIOLATION" : {
+    "message" : [
+      "NULL value appeared in non-nullable field: <walkedTypePath>If the schema is inferred from a Scala tuple/case class, or a Java bean, please try to use scala.Option[_] or other nullable types (such as java.lang.Integer instead of int/scala.Int)."
+    ],
+    "sqlState" : "42000"
+  },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
       "Assigning a NULL is not allowed here."
@@ -3707,6 +3729,22 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INVALID_PROVIDER" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
+    ],
+    "sqlState" : "42K06"
+  },
+  "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided key schema does not match existing state key schema.",
+      "Please check number and type of fields.",
+      "Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
@@ -3730,6 +3768,16 @@
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided value schema does not match existing state value schema.",
+      "Please check number and type of fields.",
+      "Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
@@ -8212,11 +8260,6 @@
   "_LEGACY_ERROR_TEMP_3246" : {
     "message" : [
       "Failed to parse a value for data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3250" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a field."
     ]
   },
   "_LEGACY_ERROR_TEMP_3260" : {
