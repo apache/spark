@@ -75,6 +75,11 @@ class StreamingQueryListener(ABC):
         else:
             return None
 
+    @spark.setter
+    def spark(self, session):
+        # For backward compatibility
+        self._sparkSession = session
+
     def _init_listener_id(self) -> None:
         self._id = str(uuid.uuid4())
 
