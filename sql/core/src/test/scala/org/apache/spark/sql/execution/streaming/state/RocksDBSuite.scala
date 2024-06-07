@@ -167,50 +167,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
 
   testWithColumnFamilies(
-    "MyRocksDB: reproduce mismatch condition",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
-    val remoteDir = Utils.createTempDir().toString
-    val conf = RocksDBConf().copy()
-    new File(remoteDir).delete() // to make sure that the directory gets created
-
-    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
-      // Create version 1 with maintenance: branch A
-      db.put("a", "1")
-      db.commit() // trigger checkpointing, version 1 created
-
-      // v2
-      db.load(1)
-      db.put("b", "2")
-      db.commit() // trigger checkpointing, version 2 created
-
-      db.load(2)
-      db.doMaintenance() // upload snapshot
-
-      db.load(1) // load v1
-      db.put("c", "3")
-      db.commit() // trigger checkpointing, version 2 created again
-
-      db.doMaintenance() // try uploading snapshot for branch B again
-
-      db.load(2)
-
-    }
-
-    // Creates a divergent branch B
-//    withDB(remoteDir, version = 2, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
-//      // Emulate background process trying uploading snapshot from branch A
-//      db.doMaintenance()
-//      // Rollback to the previous version 1
-//      db.load(1)
-//      db.put("c", "3")
-//      db.commit() // trigger checkpointing, version 2 created again
-//      assert(db.getLatestVersion() === 2)
-//      assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("c", "3")))
-//      db.doMaintenance() // try uploading snapshot for branch B
-//    }
-  }
-
-  testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
     TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
