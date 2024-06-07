@@ -25,6 +25,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -111,13 +112,6 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
       case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
     }
-    // If this thread is the handling thread of the original ADD_LISTENER_BUS_LISTENER command,
-    // this will be sent when the latch is counted down (either through
-    // a REMOVE_LISTENER_BUS_LISTENER command, or long-lived gRPC throws.
-    // If this thread is the handling thread of the REMOVE_LISTENER_BUS_LISTENER command,
-    // this is hit right away.
-
-    // TODO: don't send createResultComplete here
     executeHolder.eventsManager.postFinished()
   }
 }

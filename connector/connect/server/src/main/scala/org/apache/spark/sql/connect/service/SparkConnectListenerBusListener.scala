@@ -22,6 +22,8 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import io.grpc.stub.StreamObserver
+
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
@@ -65,7 +67,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * @param responseObserver
    *   the responseObserver created from the first long running executeThread.
    */
-  def init(responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse]): Unit =
+  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit =
     lock.synchronized {
       val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
       sessionHolder.session.streams.addListener(serverListener)
@@ -98,7 +100,7 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
  */
 private[sql] class SparkConnectListenerBusListener(
     serverSideListenerHolder: ServerSideListenerHolder,
-    responseObserver: ExecuteResponseObserver[proto.ExecutePlanResponse])
+    responseObserver: StreamObserver[ExecutePlanResponse])
     extends StreamingQueryListener
     with Logging {
 
@@ -143,10 +145,9 @@ private[sql] class SparkConnectListenerBusListener(
   }
 
   def sendResultComplete(): Unit = {
-    responseObserver.onNextComplete(
-      proto.ExecutePlanResponse
-        .newBuilder()
-        .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+    responseObserver.asInstanceOf[ExecuteResponseObserver[ExecutePlanResponse]]
+      .onNextComplete(ExecutePlanResponse.newBuilder()
+        .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
         .build())
   }
 
