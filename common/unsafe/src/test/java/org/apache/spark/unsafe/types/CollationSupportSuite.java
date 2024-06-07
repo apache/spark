@@ -498,6 +498,10 @@ public class CollationSupportSuite {
     assertUpper("i\u0307o", "UTF8_BINARY_LCASE","I\u0307O");
     assertUpper("i\u0307o", "UNICODE","I\u0307O");
     assertUpper("i\u0307o", "UNICODE_CI","I\u0307O");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY_LCASE","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
   }
 
   private void assertLower(String target, String collationName, String expected)
