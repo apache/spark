@@ -500,7 +500,13 @@ class StreamingQueryProgress(dict):
         )
 
     def __getitem__(self, key):
-        return getattr(self, key)
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. To prevent breaking change, also cast them to string when accessed with
+        # __getitem__.
+        if key == "id" or key == "runId":
+            return str(getattr(self, key))
+        else:
+            return getattr(self, key)
 
     def __setitem__(self, key, value):
         internal_key = "_" + key

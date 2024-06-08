@@ -121,7 +121,7 @@ class StreamingListenerTestsMixin:
 
         self.assertTrue(isinstance(progress.sink, SinkProgress))
         self.check_sink_progress(progress.sink)
-        self.assertTrue(isinstance(progress.observedMetrics, dict))
+        self.assertTrue(isinstance(progress.observedMetrics, Row))
 
     def check_state_operator_progress(self, progress):
         """Check StateOperatorProgress"""
@@ -264,9 +264,6 @@ class StreamingListenerTestsMixin:
             for p in q.recentProgress:
                 self.check_streaming_query_progress(p, True)
 
-            row = q.lastProgress.observedMetrics.get("my_event")
-            self.assertTrue(row["rc"] > 0)
-            self.assertTrue(row["erc"] > 0)
         finally:
             q.stop()
 

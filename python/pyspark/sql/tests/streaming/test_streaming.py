@@ -70,7 +70,7 @@ class StreamingTestsMixin:
             self.assertEqual(lastProgress["id"], query.id)
             # SPARK-48567 Use attribute to access fields in q.lastProgress
             self.assertEqual(lastProgress.name, query.name)
-            self.assertEqual(lastProgress.id, query.id)
+            self.assertEqual(str(lastProgress.id), query.id)
             new_name = "myNewQuery"
             lastProgress["name"] = new_name
             self.assertEqual(lastProgress.name, new_name)
