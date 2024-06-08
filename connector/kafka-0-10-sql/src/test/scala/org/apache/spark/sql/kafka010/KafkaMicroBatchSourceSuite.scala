@@ -54,6 +54,25 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
+class CustomTestKPLAssigner extends KafkaPartitionLocationAssigner {
+  type LocationMap = Map[PartitionDescription, Array[ExecutorDescription]]
+  override def getLocationPreferences(
+                                       partDescrs: Array[PartitionDescription],
+                                       knownExecutors: Array[ExecutorDescription]): LocationMap = {
+    val executors = Array(
+      ExecutorDescription("exec0", "localhost"),
+      ExecutorDescription("exec1", "localhost"),
+      ExecutorDescription("exec2", "localhost"),
+      ExecutorDescription("exec3", "localhost"))
+
+    partDescrs.map { partitionDescription =>
+      val execs = executors
+        .filter(exec => exec.id.contains(partitionDescription.partition.toString))
+      (partitionDescription -> execs)
+    }.toMap
+  }
+}
+
 abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
@@ -1578,6 +1597,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       .option("minPartitions", "6")
       .load()
       .select($"value".as[String])
+
     val q = ds.writeStream.foreachBatch { (batch: Dataset[String], _: Long) =>
       val partitions = batch.rdd.collectPartitions()
       assert(partitions.length >= 6)
@@ -1590,7 +1610,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     }
   }
 }
-
 
 class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
   override def beforeAll(): Unit = {
@@ -1660,6 +1679,30 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         }
       }
     )
+  }
+
+  test("SPARK-46798: custom location assigner") {
+    val topic = newTopic()
+    val tp = new TopicPartition(topic, 0)
+    testUtils.createTopic(topic, partitions = 1)
+    SparkSession.setActiveSession(spark)
+    withTempDir { dir =>
+      val provider = new KafkaSourceProvider()
+      val options = Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic,
+        "partitionlocationassigner" -> "org.apache.spark.sql.kafka010.CustomTestKPLAssigner"
+      )
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+      val table = provider.getTable(dsOptions)
+      val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
+      val inputPartitions = stream.planInputPartitions(
+        KafkaSourceOffset(Map(tp -> 0L)),
+        KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
+
+      inputPartitions.foreach(p => assert(p.preferredLocations().length > 0))
+      inputPartitions.foreach(p => p.preferredLocations().foreach(loc => assert(loc.equals("localhost"))))
+    }
   }
 
   testWithUninterruptibleThread("minPartitions is supported") {
