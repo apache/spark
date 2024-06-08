@@ -35,7 +35,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
-    val globalTempDB = spark.sharedState.globalTempViewManager.database
+    val globalTempDB = spark.sharedState.globalTempDB
     withJdbcStatement() { statement =>
       statement.execute("CACHE TABLE tempTbl AS SELECT 1")
     }
