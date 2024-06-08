@@ -394,9 +394,11 @@ class QueryTerminatedEvent:
         return self._errorClassOnException
 
 
-class StreamingQueryProgress:
+class StreamingQueryProgress(dict):
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
@@ -486,9 +488,9 @@ class StreamingQueryProgress:
             stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
             sources=[SourceProgress.fromJson(s) for s in j["sources"]],
             sink=SinkProgress.fromJson(j["sink"]),
-            numInputRows=j["numInputRows"],
-            inputRowsPerSecond=j["inputRowsPerSecond"],
-            processedRowsPerSecond=j["processedRowsPerSecond"],
+            numInputRows=j["numInputRows"] if "numInputRows" in j else None,
+            inputRowsPerSecond=j["inputRowsPerSecond"] if "inputRowsPerSecond" in j else None,
+            processedRowsPerSecond=j["processedRowsPerSecond"] if "processedRowsPerSecond" in j else None,
             observedMetrics={
                 k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
                 for k, row_dict in j["observedMetrics"].items()
@@ -496,6 +498,9 @@ class StreamingQueryProgress:
             if "observedMetrics" in j
             else {},
         )
+
+    def __getitem__(self, key):
+        return getattr(self, key)
 
     @property
     def id(self) -> uuid.UUID:
@@ -600,21 +605,30 @@ class StreamingQueryProgress:
         """
         The aggregate (across all sources) number of records processed in a trigger.
         """
-        return self._numInputRows
+        if self._numInputRows is not None:
+            return self._numInputRows
+        else:
+            return sum(s.numInputRows for s in self.sources)
 
     @property
     def inputRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate of data arriving.
         """
-        return self._inputRowsPerSecond
+        if self._inputRowsPerSecond is not None:
+            return self._inputRowsPerSecond
+        else:
+            return sum(s.inputRowsPerSecond for s in self.sources)
 
     @property
     def processedRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate at which Spark is processing data.
         """
-        return self._processedRowsPerSecond
+        if self._processedRowsPerSecond is not None:
+            return self._processedRowsPerSecond
+        else:
+            return sum(s.processedRowsPerSecond for s in self.sources)
 
     @property
     def json(self) -> str:
