@@ -117,7 +117,7 @@ case class TransformExpression(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 
-  lazy val resolvedFunction: Option[Expression] = this match {
+  private lazy val resolvedFunction: Option[Expression] = this match {
     case TransformExpression(scalarFunc: ScalarFunction[_], arguments, Some(numBuckets)) =>
       Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc,
         Seq(Literal(numBuckets)) ++ arguments))
