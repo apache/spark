@@ -28,7 +28,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 class StreamingTestsMixin:
     def test_streaming_query_functions_basic(self):
-        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         query = (
             df.writeStream.format("memory")
             .queryName("test_streaming_query_functions_basic")
@@ -46,6 +46,7 @@ class StreamingTestsMixin:
             lastProgress = query.lastProgress
             self.assertEqual(lastProgress["name"], query.name)
             self.assertEqual(lastProgress["id"], query.id)
+            # SPARK-48567 Use attribute to access progress
             self.assertTrue(any(p == lastProgress for p in recentProgress))
             query.explain()
 
@@ -55,6 +56,31 @@ class StreamingTestsMixin:
                 "Error message: " + str(e)
             )
 
+        finally:
+            query.stop()
+
+    def test_streaming_progress(self):
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        query = df.writeStream.format("noop").start()
+        try:
+            query.processAllAvailable()
+            recentProgress = query.recentProgress
+            lastProgress = query.lastProgress
+            self.assertEqual(lastProgress["name"], query.name)
+            self.assertEqual(lastProgress["id"], query.id)
+            # SPARK-48567 Use attribute to access fields in q.lastProgress
+            self.assertEqual(lastProgress.name, query.name)
+            self.assertEqual(lastProgress.id, query.id)
+            new_name = "myNewQuery"
+            lastProgress["name"] = new_name
+            self.assertEqual(lastProgress.name, new_name)
+            self.assertTrue(any(p == lastProgress for p in recentProgress))
+
+        except Exception as e:
+            self.fail(
+                "Streaming query functions sanity check shouldn't throw any error. "
+                "Error message: " + str(e)
+            )
         finally:
             query.stop()
 

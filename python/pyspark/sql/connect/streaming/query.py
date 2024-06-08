@@ -125,7 +125,7 @@ class StreamingQuery:
         cmd.last_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
         if len(progress) > 0:
-            return StreamingQueryProgress.fromJson(json.loads(progress))
+            return StreamingQueryProgress.fromJson(json.loads(progress[-1]))
         else:
             return None
 

@@ -283,7 +283,7 @@ class StreamingQuery:
 
         >>> sq.stop()
         """
-        return [StreamingQueryProgress.fromJson(json.loads(p)) for p in self._jsq.recentProgress()]
+        return [StreamingQueryProgress.fromJObject(p) for p in self._jsq.recentProgress()]
 
     @property
     def lastProgress(self) -> Optional[StreamingQueryProgress]:
@@ -314,7 +314,7 @@ class StreamingQuery:
         """
         lastProgress = self._jsq.lastProgress()
         if lastProgress:
-            return StreamingQueryProgress.fromJson(json.loads(lastProgress.json()))
+            return StreamingQueryProgress.fromJObject(lastProgress)
         else:
             return None
 

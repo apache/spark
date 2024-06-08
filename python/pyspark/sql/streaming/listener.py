@@ -502,6 +502,10 @@ class StreamingQueryProgress(dict):
     def __getitem__(self, key):
         return getattr(self, key)
 
+    def __setitem__(self, key, value):
+        internal_key = "_" + key
+        setattr(self, internal_key, value)
+
     @property
     def id(self) -> uuid.UUID:
         """
@@ -653,6 +657,9 @@ class StreamingQueryProgress(dict):
             return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
+        return self.prettyJson
+
+    def __repr__(self) -> str:
         return self.prettyJson
 
 
