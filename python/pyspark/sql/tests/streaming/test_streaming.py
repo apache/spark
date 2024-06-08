@@ -24,6 +24,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.errors import PySparkValueError
 
 
 class StreamingTestsMixin:
@@ -57,6 +58,26 @@ class StreamingTestsMixin:
 
         finally:
             query.stop()
+
+    def test_streaming_query_name_edge_case(self):
+        # Query name should be None when not specified
+        q1 = self.spark.readStream.format("rate").load().writeStream.format("noop").start()
+        self.assertEqual(q1.name, None)
+
+        # Cannot set query name to be an empty string
+        error_thrown = False
+        try:
+            (
+                self.spark.readStream.format("rate")
+                .load()
+                .writeStream.format("noop")
+                .queryName("")
+                .start()
+            )
+        except PySparkValueError as e:
+            error_thrown = True
+
+        self.assertTrue(error_thrown)
 
     def test_stream_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
