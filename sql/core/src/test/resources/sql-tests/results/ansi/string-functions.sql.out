@@ -2137,8 +2137,14 @@ select validate_utf8(x'80')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Invalid UTF-8 string
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_UTF8_STRING",
+  "sqlState" : "HV00A",
+  "messageParameters" : {
+    "str" : "�"
+  }
+}
 
 
 -- !query
