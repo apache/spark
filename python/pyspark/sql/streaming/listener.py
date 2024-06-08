@@ -669,9 +669,10 @@ class StreamingQueryProgress(dict):
         return self.prettyJson
 
 
-class StateOperatorProgress:
+class StateOperatorProgress(dict):
     """
     .. versionadded:: 3.4.0
+
 
     Notes
     -----
@@ -819,10 +820,22 @@ class StateOperatorProgress:
     def __str__(self) -> str:
         return self.prettyJson
 
+    def __repr__(self) -> str:
+        return self.prettyJson
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        internal_key = "_" + key
+        setattr(self, internal_key, value)
+
 
 class SourceProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
@@ -959,10 +972,22 @@ class SourceProgress:
     def __str__(self) -> str:
         return self.prettyJson
 
+    def __repr__(self) -> str:
+        return self.prettyJson
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        internal_key = "_" + key
+        setattr(self, internal_key, value)
+
 
 class SinkProgress:
     """
     .. versionadded:: 3.4.0
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
@@ -1044,6 +1069,16 @@ class SinkProgress:
 
     def __str__(self) -> str:
         return self.prettyJson
+
+    def __repr__(self) -> str:
+        return self.prettyJson
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        internal_key = "_" + key
+        setattr(self, internal_key, value)
 
 
 def _test() -> None:
