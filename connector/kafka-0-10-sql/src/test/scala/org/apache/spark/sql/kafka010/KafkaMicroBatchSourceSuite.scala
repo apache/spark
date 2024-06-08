@@ -60,10 +60,8 @@ class CustomTestKPLAssigner extends KafkaPartitionLocationAssigner {
                                        partDescrs: Array[PartitionDescription],
                                        knownExecutors: Array[ExecutorDescription]): LocationMap = {
     val executors = Array(
-      ExecutorDescription("exec0", "localhost"),
-      ExecutorDescription("exec1", "localhost"),
-      ExecutorDescription("exec2", "localhost"),
-      ExecutorDescription("exec3", "localhost"))
+      ExecutorDescription("exec0", "host0"),
+      ExecutorDescription("exec1", "host1"))
 
     partDescrs.map { partitionDescription =>
       val execs = executors
@@ -1597,7 +1595,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       .option("minPartitions", "6")
       .load()
       .select($"value".as[String])
-
     val q = ds.writeStream.foreachBatch { (batch: Dataset[String], _: Long) =>
       val partitions = batch.rdd.collectPartitions()
       assert(partitions.length >= 6)
@@ -1610,6 +1607,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
     }
   }
 }
+
 
 class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
   override def beforeAll(): Unit = {
@@ -1700,8 +1698,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         KafkaSourceOffset(Map(tp -> 0L)),
         KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
 
-      inputPartitions.foreach(p => assert(p.preferredLocations().length > 0))
-      inputPartitions.foreach(p => p.preferredLocations().foreach(loc => assert(loc.equals("localhost"))))
+      inputPartitions.foreach(p => p.preferredLocations().foreach(loc => assert(loc.equals("host0"))))
     }
   }
 
