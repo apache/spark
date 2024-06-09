@@ -74,7 +74,7 @@ class StreamingTestsMixin:
                 .queryName("")
                 .start()
             )
-        except PySparkValueError as e:
+        except PySparkValueError:
             error_thrown = True
 
         self.assertTrue(error_thrown)
