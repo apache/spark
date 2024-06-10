@@ -1131,24 +1131,33 @@ class DataFrame(ParentDataFrame):
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
 
+    def _merge_cached_schema(self, other: ParentDataFrame) -> Optional[StructType]:
+        # to avoid type coercion, only propagate the schema
+        # when the cached schemas are exactly the same
+        if self._cached_schema is not None and self._cached_schema == other._cached_schema:
+            return self.schema
+        return None
+
     def union(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
         return self.unionAll(other)
 
     def unionAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "union", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def unionByName(
         self, other: ParentDataFrame, allowMissingColumns: bool = False
     ) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan,
                 other._plan,  # type: ignore[arg-type]
@@ -1158,42 +1167,52 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersectAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
