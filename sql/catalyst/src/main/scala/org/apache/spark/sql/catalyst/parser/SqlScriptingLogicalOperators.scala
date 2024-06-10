@@ -33,7 +33,7 @@ sealed trait CompoundPlanStatement
  * @param sourceStart Index of the first char of the statement in the original SQL script text.
  * @param sourceEnd Index of the last char of the statement in the original SQL script text.
  */
-case class SparkStatementWithPlan(
+case class SingleStatement(
     parsedPlan: LogicalPlan,
     sourceStart: Int,
     sourceEnd: Int)
@@ -46,4 +46,4 @@ case class SparkStatementWithPlan(
  * Logical operator for a compound body. Contains all statements within the compound body.
  * @param collection Collection of statements within the compound body.
  */
-case class CompoundBody(collection: List[CompoundPlanStatement]) extends CompoundPlanStatement
+case class CompoundBody(collection: Seq[CompoundPlanStatement]) extends CompoundPlanStatement

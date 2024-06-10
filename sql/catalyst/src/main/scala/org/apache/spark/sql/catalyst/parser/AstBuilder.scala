@@ -124,7 +124,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(List(SparkStatementWithPlan(
+      CompoundBody(Seq(SingleStatement(
         parsedPlan = logicalPlan,
         sourceStart = ctx.start.getStartIndex,
         sourceEnd = ctx.stop.getStopIndex + 1)))
@@ -146,7 +146,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
 
-    CompoundBody(buff.toList)
+    CompoundBody(buff.toSeq)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
@@ -161,7 +161,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val child = visit(ctx.getChild(0))
     child match {
       case logicalPlan: LogicalPlan =>
-        SparkStatementWithPlan(
+        SingleStatement(
           parsedPlan = logicalPlan,
           sourceStart = ctx.statement().start.getStartIndex,
           sourceEnd = ctx.statement().stop.getStopIndex + 1)
