@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.text.TextOptions
 import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
@@ -44,6 +45,12 @@ case class TextScan(
   private val optionsAsScala = options.asScala.toMap
   private lazy val textOptions: TextOptions = new TextOptions(optionsAsScala)
 
+  private def verifyReadSchema(schema: StructType): Unit = {
+    if (schema.size > 1) {
+      throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
+    }
+  }
+
   override def isSplitable(path: Path): Boolean = {
     super.isSplitable(path) && !textOptions.wholeText
   }
@@ -58,9 +65,7 @@ case class TextScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    assert(
-      readDataSchema.length <= 1,
-      "Text data source only produces a single data column named \"value\".")
+    verifyReadSchema(readDataSchema)
     val hadoopConf = {
       val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
       // Hadoop Configurations are case sensitive.

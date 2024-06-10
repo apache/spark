@@ -109,7 +109,7 @@ private[hive] class SparkGetColumnsOperation(
       }
 
       // Global temporary views
-      val globalTempViewDb = catalog.globalTempViewManager.database
+      val globalTempViewDb = catalog.globalTempDatabase
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         catalog.globalTempViewManager.listViewNames(tablePattern).foreach { globalTempView =>

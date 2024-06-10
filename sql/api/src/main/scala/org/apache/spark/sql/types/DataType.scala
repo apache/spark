@@ -409,6 +409,41 @@ object DataType {
   }
 
   /**
+   * Check if `from` is equal to `to` type except for collations, which are checked to be
+   * compatible so that data of type `from` can be interpreted as of type `to`.
+   */
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType): Boolean = {
+    (from, to) match {
+      // String types with possibly different collations are compatible.
+      case (_: StringType, _: StringType) => true
+
+      case (ArrayType(fromElement, fromContainsNull), ArrayType(toElement, toContainsNull)) =>
+        (fromContainsNull == toContainsNull) &&
+          equalsIgnoreCompatibleCollation(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fromContainsNull),
+          MapType(toKey, toValue, toContainsNull)) =>
+        fromContainsNull == toContainsNull &&
+          // Map keys cannot change collation.
+          fromKey == toKey &&
+          equalsIgnoreCompatibleCollation(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              fromField.nullable == toField.nullable &&
+              fromField.metadata == toField.metadata &&
+              equalsIgnoreCompatibleCollation(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
    * Returns true if the two data types share the same "shape", i.e. the types
    * are the same, but the field names don't need to be the same.
    *

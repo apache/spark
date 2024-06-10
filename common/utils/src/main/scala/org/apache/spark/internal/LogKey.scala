@@ -311,6 +311,7 @@ object LogKeys {
   case object ISOLATION_LEVEL extends LogKey
   case object ISSUE_DATE extends LogKey
   case object IS_NETWORK_REQUEST_DONE extends LogKey
+  case object JAR_ENTRY extends LogKey
   case object JAR_MESSAGE extends LogKey
   case object JAR_URL extends LogKey
   case object JAVA_VERSION extends LogKey
