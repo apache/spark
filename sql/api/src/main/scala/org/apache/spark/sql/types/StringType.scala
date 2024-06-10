@@ -29,7 +29,25 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType with Serializable {
+class StringType protected(
+  val collationId: Int,
+  val len: Option[Int] = None,
+  val fixed: Option[Boolean] = None
+) extends AtomicType with Serializable {
+  /**
+   * Flags indicating if this StringType corresponds to a CHAR or a VARCHAR. If the `len`
+   * option is defined, then this StringType is a CHAR or a VARCHAR: if `fixed` is true, then
+   * this StringType is a CHAR, otherwise it is a VARCHAR. If `len` is not defined, then
+   * this StringType is a STRING. Note that if `fixed` is defined, then `len` must be defined.
+   */
+  def isChar: Boolean = len.isDefined && fixed.isDefined && fixed.get
+  def isVarchar: Boolean = len.isDefined && fixed.isEmpty
+  def isString: Boolean = len.isEmpty && fixed.isEmpty
+
+  require(List(isChar, isVarchar, isString).count(_ == true) == 1, "StringType is ill-defined.")
+  require(!isVarchar || len.get >= 0, "The length of varchar type cannot be negative.")
+  require(!isChar || len.get >= 0, "The length of char type cannot be negative.")
+
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
@@ -59,9 +77,20 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * Type name that is shown to the customer.
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
-  override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
-    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+  override def typeName: String = {
+    baseTypeName + collationName
+  }
+
+  private def baseTypeName: String = {
+    if (isChar) s"char($len)"
+    else if (isVarchar) s"varchar($len)"
+    else "string"
+  }
+
+  private def collationName: String = {
+    if (isUTF8BinaryCollation) ""
+    else s"collate ${CollationFactory.fetchCollation(collationId).collationName}"
+  }
 
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and
@@ -76,7 +105,16 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
-  override def defaultSize: Int = 20
+  override def defaultSize: Int = {
+    if (isString) 20
+    else len.get
+  }
+
+  override def toString: String = {
+    if (isChar) s"CharType($len, $collationId)"
+    else if (isVarchar) s"VarcharType($len, $collationId)"
+    else s"StringType($collationId)"
+  }
 
   private[spark] override def asNullable: StringType = this
 }
@@ -87,7 +125,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType extends StringType(0, None, None) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {

@@ -343,7 +343,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("create table with collation") {
+  test("create table with collated string column") {
     val tableName = "dummy_tbl"
     val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
@@ -353,16 +353,62 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(
         s"""
            |CREATE TABLE $tableName (
+           |  c0 STRING,
            |  c1 STRING COLLATE $collationName
            |)
            |USING $format
            |""".stripMargin)
 
-        sql(s"INSERT INTO $tableName VALUES ('aaa')")
-        sql(s"INSERT INTO $tableName VALUES ('AAA')")
+        sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+        sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
 
-        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
-        assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c0) FROM $tableName"), Seq(Row(CollationFactory
+            .fetchCollation(SQLConf.get.defaultStringType.collationId).collationName))
+        )
+        val defaultCollationType = SQLConf.get.defaultStringType
+        assert(sql(s"select c0 FROM $tableName").schema.head.dataType == defaultCollationType)
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+          Seq(Row(collationName))
+        )
+        val customCollationType = StringType(collationId)
+        assert(sql(s"select c1 FROM $tableName").schema.head.dataType == customCollationType)
+      }
+    }
+  }
+
+  test("create table with collated varchar column") {
+    val tableName = "dummy_tbl"
+    val collationName = "UTF8_BINARY_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    allFileBasedDataSources.foreach { format =>
+      withTable(tableName) {
+        sql(
+        s"""
+           |CREATE TABLE $tableName (
+           |  c0 VARCHAR(10),
+           |  c1 STRING COLLATE $collationName
+           |)
+           |USING $format
+           |""".stripMargin)
+
+        sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+        sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
+
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c0) FROM $tableName"), Seq(Row(CollationFactory
+            .fetchCollation(SQLConf.get.defaultStringType.collationId).collationName))
+        )
+        val defaultCollationType = SQLConf.get.defaultStringType
+        assert(sql(s"select c0 FROM $tableName").schema.head.dataType == defaultCollationType)
+        checkAnswer(
+          sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+          Seq(Row(collationName))
+        )
+        val customCollationType = StringType(collationId)
+        assert(sql(s"select c1 FROM $tableName").schema.head.dataType == customCollationType)
       }
     }
   }
