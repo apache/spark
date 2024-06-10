@@ -514,7 +514,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     val inputData = MemoryStream[(String)]
     val result = inputData.toDF()
       .select(col("value")
-        .try_cast(StringType("UTF8_BINARY_LCASE")).as("str"))
+        .try_cast(StringType("UTF8_LCASE")).as("str"))
       .dropDuplicates("str")
 
     val ex = intercept[StreamingQueryException] {
@@ -527,7 +527,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
       errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
       parameters = Map(
-        "schema" -> ".+\"str\":\"spark.UTF8_BINARY_LCASE\".+"
+        "schema" -> ".+\"str\":\"spark.UTF8_LCASE\".+"
       ),
       matchPVals = true
     )

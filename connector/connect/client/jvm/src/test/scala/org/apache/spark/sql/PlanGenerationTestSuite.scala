@@ -701,7 +701,7 @@ class PlanGenerationTestSuite
 
   test("select collated string") {
     val schema = StructType(
-      StructField("s", StringType(CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID)) :: Nil)
+      StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
