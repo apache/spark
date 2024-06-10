@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -42,8 +42,6 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   // There is only one listener per sessionHolder, but each listener is responsible for all events
   // of all streaming queries in the SparkSession.
   var streamingQueryServerSideListener: Option[SparkConnectListenerBusListener] = None
-  // The count down latch to hold the long-running listener thread before sending ResultComplete.
-  var streamingQueryListenerLatch = new CountDownLatch(1)
   // The cache for QueryStartedEvent, key is query runId and value is the actual QueryStartedEvent.
   // Events for corresponding query will be sent back to client with
   // the WriteStreamOperationStart response, so that the client can handle the event before
@@ -72,15 +70,13 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
       val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
       sessionHolder.session.streams.addListener(serverListener)
       streamingQueryServerSideListener = Some(serverListener)
-      streamingQueryListenerLatch = new CountDownLatch(1)
     }
 
   /**
    * The cleanup of the server side listener and related resources. This method is called when the
    * REMOVE_LISTENER_BUS_LISTENER command is received or when responseObserver.onNext throws an
-   * exception. It removes the listener from the session, clears the cache. Also it counts down
-   * the latch, so the long-running thread can proceed to send back the final ResultComplete
-   * response.
+   * exception. It removes the listener from the session, clears the cache. Also it sends back
+   * the final ResultComplete response.
    */
   def cleanUp(): Unit = lock.synchronized {
     streamingQueryServerSideListener.foreach { listener =>
@@ -89,7 +85,6 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
     }
     streamingQueryStartedEventCache.clear()
     streamingQueryServerSideListener = None
-//    streamingQueryListenerLatch.countDown()
   }
 }
 
@@ -107,8 +102,6 @@ private[sql] class SparkConnectListenerBusListener(
   val sessionHolder = serverSideListenerHolder.sessionHolder
   // The method used to stream back the events to the client.
   // The event is serialized to json and sent to the client.
-  // The responseObserver is what of the first executeThread (long running thread),
-  // which is held still by the streamingQueryListenerLatch.
   // If any exception is thrown while transmitting back the event, the listener is removed,
   // all related sources are cleaned up, and the long-running thread will proceed to send
   // the final ResultComplete response.

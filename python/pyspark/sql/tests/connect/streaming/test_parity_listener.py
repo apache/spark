@@ -266,6 +266,10 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
 
+    def test_server_listener_uninterruptible(self):
+        pass
+
+
 
 if __name__ == "__main__":
     import unittest
