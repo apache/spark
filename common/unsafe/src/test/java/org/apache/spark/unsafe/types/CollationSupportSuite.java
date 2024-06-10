@@ -645,10 +645,14 @@ public class CollationSupportSuite {
     assertUpper("ab世De", "UNICODE_CI", "AB世DE");
     assertUpper("äbćδe", "UNICODE_CI", "ÄBĆΔE");
     // Case-variable character length
-    assertUpper("i̇o", "UTF8_BINARY","İO");
-    assertUpper("i̇o", "UTF8_LCASE","İO");
-    assertUpper("i̇o", "UNICODE","İO");
-    assertUpper("i̇o", "UNICODE_CI","İO");
+    assertUpper("i\u0307o", "UTF8_BINARY","I\u0307O");
+    assertUpper("i\u0307o", "UTF8_LCASE","I\u0307O");
+    assertUpper("i\u0307o", "UNICODE","I\u0307O");
+    assertUpper("i\u0307o", "UNICODE_CI","I\u0307O");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_LCASE","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
+    assertUpper("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","SS FI FFI FF ST \u0399\u0308\u0342");
   }
 
   private void assertLower(String target, String collationName, String expected)
@@ -695,10 +699,10 @@ public class CollationSupportSuite {
     assertLower("aB世De", "UNICODE_CI", "ab世de");
     assertLower("ÄBĆΔE", "UNICODE_CI", "äbćδe");
     // Case-variable character length
-    assertLower("İo", "UTF8_BINARY","i̇o");
-    assertLower("İo", "UTF8_LCASE","i̇o");
-    assertLower("İo", "UNICODE","i̇o");
-    assertLower("İo", "UNICODE_CI","i̇o");
+    assertLower("İo", "UTF8_BINARY","i\u0307o");
+    assertLower("İo", "UTF8_LCASE","i\u0307o");
+    assertLower("İo", "UNICODE","i\u0307o");
+    assertLower("İo", "UNICODE_CI","i\u0307o");
   }
 
   private void assertInitCap(String target, String collationName, String expected)
@@ -745,10 +749,48 @@ public class CollationSupportSuite {
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
     // Case-variable character length
-    assertInitCap("İo", "UTF8_BINARY", "İo");
-    assertInitCap("İo", "UTF8_LCASE", "İo");
-    assertInitCap("İo", "UNICODE", "İo");
-    assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("İo", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("İo", "UTF8_LCASE", "İo");
+    assertInitCap("İo", "UNICODE", "İo");
+    assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("i\u0307o", "UTF8_LCASE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
+    // Different possible word boundaries
+    assertInitCap("a b c", "UTF8_BINARY", "A B C");
+    assertInitCap("a b c", "UNICODE", "A B C");
+    assertInitCap("a b c", "UTF8_LCASE", "A B C");
+    assertInitCap("a b c", "UNICODE_CI", "A B C");
+    assertInitCap("a.b,c", "UTF8_BINARY", "A.b,c");
+    assertInitCap("a.b,c", "UNICODE", "A.b,C");
+    assertInitCap("a.b,c", "UTF8_LCASE", "A.b,C");
+    assertInitCap("a.b,c", "UNICODE_CI", "A.b,C");
+    assertInitCap("a. b-c", "UTF8_BINARY", "A. B-c");
+    assertInitCap("a. b-c", "UNICODE", "A. B-C");
+    assertInitCap("a. b-c", "UTF8_LCASE", "A. B-C");
+    assertInitCap("a. b-c", "UNICODE_CI", "A. B-C");
+    assertInitCap("a?b世c", "UTF8_BINARY", "A?b世c");
+    assertInitCap("a?b世c", "UNICODE", "A?B世C");
+    assertInitCap("a?b世c", "UTF8_LCASE", "A?B世C");
+    assertInitCap("a?b世c", "UNICODE_CI", "A?B世C");
+    // Titlecase characters that are different from uppercase characters
+    assertInitCap("ǳǱǲ", "UTF8_BINARY", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UNICODE", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UTF8_LCASE", "ǲǳǳ");
+    assertInitCap("ǳǱǲ", "UNICODE_CI", "ǲǳǳ");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_BINARY", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_LCASE", "ǅaba ǈubav ǋegova");
+    assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE_CI", "ǅaba ǈubav ǋegova");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_BINARY",
+      "ß ﬁ ﬃ ﬀ ﬆ Σημερινος Ασημενιος I\u0307ota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_LCASE",
+      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE",
+      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
+      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
   }
 
   private void assertStringInstr(String string, String substring, String collationName,
