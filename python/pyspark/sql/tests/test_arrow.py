@@ -1204,8 +1204,13 @@ class ArrowTestsMixin:
                 self.spark.sql("select 1/0").toPandas()
 
     def test_toArrow_error(self):
-        with self.assertRaises(ArithmeticException):
-            self.spark.sql("select 1/0").toArrow()
+        with self.sql_conf(
+            {
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            with self.assertRaises(ArithmeticException):
+                self.spark.sql("select 1/0").toArrow()
 
     def test_toPandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:

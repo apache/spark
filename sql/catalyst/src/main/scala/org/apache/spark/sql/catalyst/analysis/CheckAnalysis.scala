@@ -1371,6 +1371,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             aggregated,
             canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
+        // We always inline CTE relations before analysis check, and only un-referenced CTE
+        // relations will be kept in the plan. Here we should simply skip them and check the
+        // children, as un-referenced CTE relations won't be executed anyway and doesn't need to
+        // be restricted by the current subquery correlation limitations.
+        case _: WithCTE | _: CTERelationDef =>
+          plan.children.foreach(p => checkPlan(p, aggregated, canContainOuter))
+
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
         // under a correlation point but they and their descendant operators
