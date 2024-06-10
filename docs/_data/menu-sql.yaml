@@ -85,6 +85,8 @@
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern
       url: sql-ref-number-pattern.html
+    - text: Operators
+      url: sql-ref-operators.html
     - text: Functions
       url: sql-ref-functions.html
     - text: Identifiers

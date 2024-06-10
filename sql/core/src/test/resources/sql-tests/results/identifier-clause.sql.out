@@ -843,7 +843,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -867,7 +867,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -1076,7 +1076,7 @@ struct<>
 
 
 -- !query
-create table identifier('t2') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
 -- !query schema
 struct<>
 -- !query output

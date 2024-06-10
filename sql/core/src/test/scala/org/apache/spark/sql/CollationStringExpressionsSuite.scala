@@ -840,10 +840,12 @@ class CollationStringExpressionsSuite
     evalStringTrim("cba", "abc", "")
 
     // Without trimString param.
-    checkEvaluation(StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
+    checkEvaluation(
+      StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
     checkEvaluation(
       StringTrimLeft(Literal.create("  asd  ", StringType("UTF8_BINARY_LCASE"))), "asd  ")
-    checkEvaluation(StringTrimRight(Literal.create("  asd  ", StringType("UNICODE"))), "  asd")
+    checkEvaluation(StringTrimRight(
+      Literal.create("  asd  ", StringType("UTF8_BINARY"))), "  asd")
 
     // With trimString param.
     checkEvaluation(
@@ -858,8 +860,8 @@ class CollationStringExpressionsSuite
       "asd  ")
     checkEvaluation(
       StringTrimRight(
-        Literal.create("  asd  ", StringType("UNICODE")),
-        Literal.create(" ", StringType("UNICODE"))),
+        Literal.create("  asd  ", StringType("UTF8_BINARY")),
+        Literal.create(" ", StringType("UTF8_BINARY"))),
       "  asd")
 
     checkEvaluation(
@@ -874,8 +876,8 @@ class CollationStringExpressionsSuite
       "asdxx")
     checkEvaluation(
       StringTrimRight(
-        Literal.create("xxasdxx", StringType("UNICODE")),
-        Literal.create("x", StringType("UNICODE"))),
+        Literal.create("xxasdxx", StringType("UTF8_BINARY")),
+        Literal.create("x", StringType("UTF8_BINARY"))),
       "xxasd")
   }
 
@@ -899,10 +901,10 @@ class CollationStringExpressionsSuite
       StringTrimTestCase("UTF8_BINARY_LCASE", "LTRIM", "xxasdxx", true, "x", "asdxx"),
       StringTrimTestCase("UTF8_BINARY_LCASE", "RTRIM", "  asd  ", false, null, "  asd"),
 
-      StringTrimTestCase("UNICODE", "TRIM", "xxasdxx", true, "x", "asd"),
-      StringTrimTestCase("UNICODE", "BTRIM", "xxasdxx", true, "x", "asd"),
-      StringTrimTestCase("UNICODE", "LTRIM", "  asd  ", false, null, "asd  "),
-      StringTrimTestCase("UNICODE", "RTRIM", "  asd  ", true, null, null)
+      StringTrimTestCase("UTF8_BINARY", "TRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "BTRIM", "xxasdxx", true, "x", "asd"),
+      StringTrimTestCase("UTF8_BINARY", "LTRIM", "  asd  ", false, null, "asd  "),
+      StringTrimTestCase("UTF8_BINARY", "RTRIM", "  asd  ", true, null, null)
 
       // Other more complex cases can be found in unit tests in CollationSupportSuite.java.
     )
@@ -942,7 +944,7 @@ class CollationStringExpressionsSuite
         + "COLLATE('x', 'UTF8_BINARY_LCASE'))"),
       expectedAnswer = Row("a"))
     checkAnswer(
-      df = sql("SELECT LTRIM(COLLATE('x', 'UNICODE'), COLLATE('xax', 'UNICODE'))"),
+      df = sql("SELECT LTRIM(COLLATE('x', 'UTF8_BINARY'), COLLATE('xax', 'UTF8_BINARY'))"),
       expectedAnswer = Row("ax"))
 
     checkAnswer(
@@ -952,7 +954,7 @@ class CollationStringExpressionsSuite
       df = sql("SELECT TRIM('x', COLLATE('xax', 'UTF8_BINARY_LCASE'))"),
       expectedAnswer = Row("a"))
     checkAnswer(
-      df = sql("SELECT BTRIM('xax', COLLATE('x', 'UNICODE'))"),
+      df = sql("SELECT BTRIM('xax', COLLATE('x', 'UTF8_BINARY'))"),
       expectedAnswer = Row("a"))
 
     checkAnswer(
@@ -962,7 +964,7 @@ class CollationStringExpressionsSuite
       df = sql("SELECT RTRIM(COLLATE('x', 'UTF8_BINARY_LCASE'), 'xax')"),
       expectedAnswer = Row("xa"))
     checkAnswer(
-      df = sql("SELECT TRIM(COLLATE('x', 'UNICODE'), 'xax')"),
+      df = sql("SELECT TRIM(COLLATE('x', 'UTF8_BINARY'), 'xax')"),
       expectedAnswer = Row("a"))
   }
 
@@ -970,13 +972,13 @@ class CollationStringExpressionsSuite
     List("TRIM", "LTRIM", "RTRIM").foreach(func => {
       val collationMismatch = intercept[AnalysisException] {
         sql("SELECT " + func + "(COLLATE('x', 'UTF8_BINARY_LCASE'), "
-          + "COLLATE('xxaaaxx', 'UNICODE'))")
+          + "COLLATE('xxaaaxx', 'UTF8_BINARY'))")
       }
       assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
     })
 
     val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
+      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UTF8_BINARY'), COLLATE('x', 'UTF8_BINARY_LCASE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }

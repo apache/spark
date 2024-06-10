@@ -732,7 +732,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -754,7 +754,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -947,7 +947,7 @@ CacheTableAsSelect t1, (select my_col from (values (1), (2), (1) as (my_col)) gr
 
 
 -- !query
-create table identifier('t2') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
 -- !query analysis
 CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t2`, ErrorIfExists, [my_col]
    +- Aggregate [my_col#x], [my_col#x]
@@ -959,7 +959,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t2`, ErrorIfExis
 -- !query
 insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [my_col]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [my_col]
 +- Aggregate [my_col#x], [my_col#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- SubqueryAlias as

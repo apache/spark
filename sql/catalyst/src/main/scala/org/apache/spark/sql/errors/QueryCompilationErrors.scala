@@ -2687,6 +2687,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
     )
   }
+
+  def cannotAlterCollationBucketColumn(tableName: String, columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ALTER_COLLATION_BUCKET_COLUMN",
+      messageParameters =
+        Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
+    )
+  }
+
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1246",

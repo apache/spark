@@ -1924,10 +1924,10 @@ abstract class JsonSuite
         val e = intercept[SparkException] {
           spark.read.json(inputFile.toURI.toString).collect()
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = e,
           errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> inputFile.toPath.toUri.toString))
+          parameters = Map("path" -> s".*${inputFile.getName}.*"))
         assert(e.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
@@ -3039,14 +3039,13 @@ abstract class JsonSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
         }
         checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
 
         val msg = err.getCause.getMessage
         assert(

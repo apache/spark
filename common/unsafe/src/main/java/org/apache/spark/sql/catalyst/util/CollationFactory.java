@@ -412,9 +412,9 @@ public final class CollationFactory {
             "UTF8_BINARY_LCASE",
             PROVIDER_SPARK,
             null,
-            UTF8String::compareLowerCase,
+            CollationAwareUTF8String::compareLowerCase,
             "1.0",
-            s -> (long) s.toLowerCase().hashCode(),
+            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
             /* supportsLowercaseEquality = */ true);
@@ -671,7 +671,7 @@ public final class CollationFactory {
           (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
           ICU_COLLATOR_VERSION,
           s -> (long) collator.getCollationKey(s.toString()).hashCode(),
-          /* supportsBinaryEquality = */ collationId == UNICODE_COLLATION_ID,
+          /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
           /* supportsLowercaseEquality = */ false);
       }
@@ -826,6 +826,17 @@ public final class CollationFactory {
     } else {
       CollationKey collationKey = collation.collator.getCollationKey(input.toString());
       return UTF8String.fromBytes(collationKey.toByteArray());
+    }
+  }
+
+  public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
+    Collation collation = fetchCollation(collationId);
+    if (collation.supportsBinaryEquality) {
+      return input.getBytes();
+    } else if (collation.supportsLowercaseEquality) {
+      return input.toLowerCase().getBytes();
+    } else {
+      return collation.collator.getCollationKey(input.toString()).toByteArray();
     }
   }
 
