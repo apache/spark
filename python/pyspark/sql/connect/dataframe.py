@@ -1844,14 +1844,6 @@ class DataFrame(ParentDataFrame):
         assert result is not None
         return result
 
-    def _tree_string(self, level: Optional[int] = None) -> str:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(
-            method="tree_string", plan=query, level=level
-        ).tree_string
-        assert result is not None
-        return result
-
     def printSchema(self, level: Optional[int] = None) -> None:
         if level:
             print(self.schema.treeString(level))
