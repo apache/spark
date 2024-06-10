@@ -47,7 +47,6 @@ class StreamingTestsMixin:
             lastProgress = query.lastProgress
             self.assertEqual(lastProgress["name"], query.name)
             self.assertEqual(lastProgress["id"], query.id)
-            # SPARK-48567 Use attribute to access progress
             self.assertTrue(any(p == lastProgress for p in recentProgress))
             query.explain()
 
@@ -61,6 +60,10 @@ class StreamingTestsMixin:
             query.stop()
 
     def test_streaming_progress(self):
+        """
+        Should be able to access fields using attributes in lastProgress / recentProgress
+        e.g. q.lastProgress.id
+        """
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         query = df.writeStream.format("noop").start()
         try:
@@ -76,6 +79,12 @@ class StreamingTestsMixin:
             lastProgress["name"] = new_name
             self.assertEqual(lastProgress.name, new_name)
             self.assertTrue(any(p == lastProgress for p in recentProgress))
+            self.assertTrue(lastProgress.numInputRows > 0)
+            # Also access source / sink progress with attributes
+            self.assertTrue(len(lastProgress.sources) > 0)
+            self.assertTrue(lastProgress.sources[0].numInputRows > 0)
+            self.assertTrue(lastProgress["sources"][0]["numInputRows"] > 0)
+            self.assertTrue(lastProgress.sink.numOutputRows > 0)
 
         except Exception as e:
             self.fail(
