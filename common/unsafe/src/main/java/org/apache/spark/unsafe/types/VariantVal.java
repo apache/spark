@@ -21,6 +21,8 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.types.variant.Variant;
 
 import java.io.Serializable;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 
 /**
@@ -99,13 +101,17 @@ public class VariantVal implements Serializable {
         '}';
   }
 
+  public String toJson(ZoneId zoneId) {
+    return new Variant(value, metadata).toJson(zoneId);
+  }
+
   /**
    * @return A human-readable representation of the Variant value. It is always a JSON string at
    * this moment.
    */
   @Override
   public String toString() {
-    return new Variant(value, metadata).toJson();
+    return toJson(ZoneOffset.UTC);
   }
 
   /**

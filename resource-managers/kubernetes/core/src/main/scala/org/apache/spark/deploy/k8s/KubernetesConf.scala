@@ -22,13 +22,16 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferen
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, EXECUTOR_ENV_REGEX}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * Structure containing metadata for Kubernetes logic to build Spark pods.
@@ -76,17 +79,40 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def getOption(key: String): Option[String] = sparkConf.getOption(key)
 }
 
-private[spark] class KubernetesDriverConf(
+/**
+ * :: DeveloperApi ::
+ *
+ * Used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+@Since("4.0.0")
+class KubernetesDriverConf(
     sparkConf: SparkConf,
     val appId: String,
     val mainAppResource: MainAppResource,
     val mainClass: String,
     val appArgs: Array[String],
-    val proxyUser: Option[String])
-  extends KubernetesConf(sparkConf) {
+    val proxyUser: Option[String],
+    clock: Clock = new SystemClock())
+  extends KubernetesConf(sparkConf) with Logging {
 
   def driverNodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
+
+  lazy val driverServiceName: String = {
+    val preferredServiceName = s"$resourceNamePrefix$DRIVER_SVC_POSTFIX"
+    if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+      preferredServiceName
+    } else {
+      val randomServiceId = KubernetesUtils.uniqueID(clock)
+      val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
+      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
+        s"$shorterServiceName as the driver service's name.")
+      shorterServiceName
+    }
+  }
 
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
@@ -99,8 +125,9 @@ private[spark] class KubernetesDriverConf(
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
-    val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
+    val driverCustomLabels =
+      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
+        .map { case(k, v) => (k, Utils.substituteAppNExecIds(v, appId, "")) }
 
     presetLabels.keys.foreach { key =>
       require(
@@ -172,8 +199,9 @@ private[spark] class KubernetesExecutorConf(
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
       SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
 
-    val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
+    val executorCustomLabels =
+      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
+        .map { case(k, v) => (k, Utils.substituteAppNExecIds(v, appId, executorId)) }
 
     presetLabels.keys.foreach { key =>
       require(
@@ -214,10 +242,10 @@ private[spark] class KubernetesExecutorConf(
     if (executorEnvRegex.pattern.matcher(key).matches()) {
       true
     } else {
-      logWarning(s"Invalid key: $key: " +
-        "a valid environment variable name must consist of alphabetic characters, " +
-        "digits, '_', '-', or '.', and must not start with a digit." +
-        s"Regex used for validation is '$executorEnvRegex')")
+      logWarning(log"Invalid key: ${MDC(CONFIG, key)}, " +
+        log"a valid environment variable name must consist of alphabetic characters, " +
+        log"digits, '_', '-', or '.', and must not start with a digit. " +
+        log"Regex used for validation is '${MDC(EXECUTOR_ENV_REGEX, executorEnvRegex)}'")
       false
     }
   }

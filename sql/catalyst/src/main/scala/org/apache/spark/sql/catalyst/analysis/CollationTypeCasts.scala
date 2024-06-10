@@ -22,10 +22,10 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -45,9 +45,43 @@ object CollationTypeCasts extends TypeCoercionRule {
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
         CaseWhen(newBranches, newElseValue)
 
+    case stringLocate: StringLocate =>
+      stringLocate.withNewChildren(collateToSingleType(
+        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+
+    case substringIndex: SubstringIndex =>
+      substringIndex.withNewChildren(
+        collateToSingleType(
+          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+
+    case eltExpr: Elt =>
+      eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
+
+    case overlayExpr: Overlay =>
+      overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
+        ++ Seq(overlayExpr.pos, overlayExpr.len))
+
+    case regExpReplace: RegExpReplace =>
+      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
+      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
+      regExpReplace.withNewChildren(newChildren)
+
+    case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
+      val Seq(str, len, pad) = stringPadExpr.children
+      val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
+      stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
+
+    case raiseError: RaiseError =>
+      val newErrorParams = raiseError.errorParms.dataType match {
+        case MapType(StringType, StringType, _) => raiseError.errorParms
+        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
+      }
+      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
+      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
@@ -96,7 +130,10 @@ object CollationTypeCasts extends TypeCoercionRule {
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
   def getOutputCollation(expr: Seq[Expression]): StringType = {
-    val explicitTypes = expr.filter(_.isInstanceOf[Collate])
+    val explicitTypes = expr.filter {
+        case _: Collate => true
+        case _ => false
+      }
       .map(_.dataType.asInstanceOf[StringType].collationId)
       .distinct
 
@@ -111,17 +148,22 @@ object CollationTypeCasts extends TypeCoercionRule {
           )
       // Only implicit or default collations present
       case 0 =>
-        val implicitTypes = expr.map(_.dataType)
+        val implicitTypes = expr.filter {
+            case Literal(_, _: StringType) => false
+            case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+              cast.child.dataType.isInstanceOf[StringType]
+            case _ => true
+          }
+          .map(_.dataType)
           .filter(hasStringType)
-          .map(extractStringType)
-          .filter(dt => dt.collationId != SQLConf.get.defaultStringType.collationId)
-          .distinctBy(_.collationId)
+          .map(extractStringType(_).collationId)
+          .distinct
 
         if (implicitTypes.length > 1) {
           throw QueryCompilationErrors.implicitCollationMismatchError()
         }
         else {
-          implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
         }
     }
   }

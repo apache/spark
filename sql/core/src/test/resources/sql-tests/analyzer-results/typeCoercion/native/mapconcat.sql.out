@@ -70,7 +70,7 @@ CreateViewCommand `various_maps`, SELECT * FROM VALUES (
   struct_map1, struct_map2,
   string_int_map1, string_int_map2,
   int_string_map1, int_string_map2
-), false, false, LocalTempView, true
+), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [boolean_map1#x, boolean_map2#x, tinyint_map1#x, tinyint_map2#x, smallint_map1#x, smallint_map2#x, int_map1#x, int_map2#x, bigint_map1#x, bigint_map2#x, decimal_map1#x, decimal_map2#x, double_map1#x, double_map2#x, float_map1#x, float_map2#x, date_map1#x, date_map2#x, timestamp_map1#x, timestamp_map2#x, string_map1#x, string_map2#x, array_map1#x, array_map2#x, ... 6 more fields]
       +- SubqueryAlias various_maps
          +- LocalRelation [boolean_map1#x, boolean_map2#x, tinyint_map1#x, tinyint_map2#x, smallint_map1#x, smallint_map2#x, int_map1#x, int_map2#x, bigint_map1#x, bigint_map2#x, decimal_map1#x, decimal_map2#x, double_map1#x, double_map2#x, float_map1#x, float_map2#x, date_map1#x, date_map2#x, timestamp_map1#x, timestamp_map2#x, string_map1#x, string_map2#x, array_map1#x, array_map2#x, ... 6 more fields]

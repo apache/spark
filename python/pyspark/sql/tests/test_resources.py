@@ -16,7 +16,7 @@
 #
 import unittest
 
-from pyspark import SparkContext, TaskContext
+from pyspark import TaskContext
 from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import (
@@ -41,7 +41,7 @@ class ResourceProfileTestsMixin(object):
                 yield batch
 
         df = self.spark.range(10)
-        df.mapInArrow(func, "id long").collect()
+        df.mapInArrow(func, "id long").show(n=10)
 
     def test_map_in_arrow_with_profile(self):
         def func(iterator):
@@ -54,7 +54,7 @@ class ResourceProfileTestsMixin(object):
 
         treqs = TaskResourceRequests().cpus(3)
         rp = ResourceProfileBuilder().require(treqs).build
-        df.mapInArrow(func, "id long", False, rp).collect()
+        df.mapInArrow(func, "id long", False, rp).show(n=10)
 
     def test_map_in_pandas_without_profile(self):
         def func(iterator):
@@ -64,7 +64,7 @@ class ResourceProfileTestsMixin(object):
                 yield batch
 
         df = self.spark.range(10)
-        df.mapInPandas(func, "id long").collect()
+        df.mapInPandas(func, "id long").show(n=10)
 
     def test_map_in_pandas_with_profile(self):
         def func(iterator):
@@ -77,12 +77,14 @@ class ResourceProfileTestsMixin(object):
 
         treqs = TaskResourceRequests().cpus(3)
         rp = ResourceProfileBuilder().require(treqs).build
-        df.mapInPandas(func, "id long", False, rp).collect()
+        df.mapInPandas(func, "id long", False, rp).show(n=10)
 
 
 class ResourceProfileTests(ResourceProfileTestsMixin, ReusedPySparkTestCase):
     @classmethod
     def setUpClass(cls):
+        from pyspark.core.context import SparkContext
+
         cls.sc = SparkContext("local-cluster[1, 4, 1024]", cls.__name__, conf=cls.conf())
         cls.spark = SparkSession(cls.sc)
 

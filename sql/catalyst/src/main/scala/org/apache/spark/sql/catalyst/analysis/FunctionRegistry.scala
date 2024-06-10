@@ -18,14 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
-import javax.annotation.concurrent.GuardedBy
+import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.FUNCTION_NAME
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -195,9 +195,8 @@ object FunctionRegistryBase {
 
 trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging {
 
-  @GuardedBy("this")
   protected val functionBuilders =
-    new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
+    new ConcurrentHashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
   // Resolution of the function name is always case insensitive, but the database name
   // depends on the caller
@@ -220,10 +219,10 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   def internalRegisterFunction(
       name: FunctionIdentifier,
       info: ExpressionInfo,
-      builder: FunctionBuilder): Unit = synchronized {
+      builder: FunctionBuilder): Unit = {
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
-      case Some(previousFunction) if previousFunction != newFunction =>
+      case previousFunction if previousFunction != null =>
         logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
           log"previously registered function.")
       case _ =>
@@ -231,34 +230,25 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    val func = synchronized {
-      functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
-        throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
-      }
+    val func = Option(functionBuilders.get(normalizeFuncName(name))).map(_._2).getOrElse {
+      throw QueryCompilationErrors.unresolvedRoutineError(name, Seq("system.builtin"))
     }
     func(children)
   }
 
-  override def listFunction(): Seq[FunctionIdentifier] = synchronized {
-    functionBuilders.iterator.map(_._1).toList
-  }
+  override def listFunction(): Seq[FunctionIdentifier] =
+    functionBuilders.keys().asScala.toSeq
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._1)
-  }
+  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] =
+    Option(functionBuilders.get(normalizeFuncName(name))).map(_._1)
 
-  override def lookupFunctionBuilder(
-      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._2)
-  }
+  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] =
+    Option(functionBuilders.get(normalizeFuncName(name))).map(_._2)
 
-  override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
-    functionBuilders.remove(normalizeFuncName(name)).isDefined
-  }
+  override def dropFunction(name: FunctionIdentifier): Boolean =
+    Option(functionBuilders.remove(normalizeFuncName(name))).isDefined
 
-  override def clear(): Unit = synchronized {
-    functionBuilders.clear()
-  }
+  override def clear(): Unit = functionBuilders.clear()
 }
 
 /**
@@ -308,7 +298,11 @@ class SimpleFunctionRegistry
 
   override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
-    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+    val iterator = functionBuilders.entrySet().iterator()
+    while (iterator.hasNext) {
+      val entry = iterator.next()
+      val name = entry.getKey
+      val (info, builder) = entry.getValue
       registry.internalRegisterFunction(name, info, builder)
     }
     registry
@@ -451,6 +445,7 @@ object FunctionRegistry {
     // "try_*" function which always return Null instead of runtime error.
     expression[TryAdd]("try_add"),
     expression[TryDivide]("try_divide"),
+    expression[TryRemainder]("try_remainder"),
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
@@ -799,6 +794,9 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+    expression[ShiftLeft]("<<", true, Some("4.0.0")),
+    expression[ShiftRight](">>", true, Some("4.0.0")),
+    expression[ShiftRightUnsigned](">>>", true, Some("4.0.0")),
     expression[BitwiseCount]("bit_count"),
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
@@ -821,10 +819,13 @@ object FunctionRegistry {
     expression[JsonObjectKeys]("json_object_keys"),
 
     // Variant
-    expression[ParseJson]("parse_json"),
+    expressionBuilder("parse_json", ParseJsonExpressionBuilder),
+    expressionBuilder("try_parse_json", TryParseJsonExpressionBuilder),
+    expression[IsVariantNull]("is_variant_null"),
     expressionBuilder("variant_get", VariantGetExpressionBuilder),
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
     expression[SchemaOfVariant]("schema_of_variant"),
+    expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
 
     // cast
     expression[Cast]("cast"),
@@ -952,7 +953,14 @@ object FunctionRegistry {
       since: Option[String] = None): (String, (ExpressionInfo, FunctionBuilder)) = {
     val info = FunctionRegistryBase.expressionInfo[T](name, since)
     val funcBuilder = (expressions: Seq[Expression]) => {
-      assert(expressions.forall(_.resolved), "function arguments must be resolved.")
+      val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
+      if (lambdas.nonEmpty && !builder.supportsLambda) {
+        throw new AnalysisException(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> builder.getClass.getCanonicalName))
+      }
+      assert(others.forall(_.resolved), "function arguments must be resolved.")
       val rearrangedExpressions = rearrangeExpressions(name, builder, expressions)
       val expr = builder.build(name, rearrangedExpressions)
       if (setAlias) expr.setTagValue(FUNC_ALIAS, name)
@@ -1022,7 +1030,11 @@ class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan
 
   override def clone(): SimpleTableFunctionRegistry = synchronized {
     val registry = new SimpleTableFunctionRegistry
-    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+    val iterator = functionBuilders.entrySet().iterator()
+    while (iterator.hasNext) {
+      val entry = iterator.next()
+      val name = entry.getKey
+      val (info, builder) = entry.getValue
       registry.internalRegisterFunction(name, info, builder)
     }
     registry
@@ -1096,7 +1108,9 @@ object TableFunctionRegistry {
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
     generator[Stack]("stack"),
-    generator[SQLKeywords]("sql_keywords")
+    generator[SQLKeywords]("sql_keywords"),
+    generator[VariantExplode]("variant_explode"),
+    generator[VariantExplode]("variant_explode_outer", outer = true)
   )
 
   val builtin: SimpleTableFunctionRegistry = {

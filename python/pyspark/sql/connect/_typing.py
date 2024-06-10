@@ -15,19 +15,20 @@
 # limitations under the License.
 #
 from types import FunctionType
-from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple
+from typing import Any, Callable, Iterable, Union, Optional, NewType, Protocol, Tuple, TypeVar
 import datetime
 import decimal
 
 import pyarrow
 from pandas.core.frame import DataFrame as PandasDataFrame
 
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.types import DataType
 from pyspark.sql.streaming.state import GroupState
 
 
 ColumnOrName = Union[Column, str]
+ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
 
 ColumnOrNameOrOrdinal = Union[Column, str, int]
 

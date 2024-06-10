@@ -33,8 +33,8 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, LogKey, MDC}
-import org.apache.spark.internal.LogKey.{REASON, TASK_SET_NAME, TASK_STATE, TID}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -250,8 +250,9 @@ private[spark] class TaskSchedulerImpl(
 
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
-    logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
-      + "resource profile " + taskSet.resourceProfileId)
+    logInfo(log"Adding task set ${MDC(LogKeys.TASK_SET_ID, taskSet.id)} with " +
+      log"${MDC(LogKeys.NUM_TASKS, tasks.length)} tasks resource profile " +
+      log"${MDC(LogKeys.RESOURCE_PROFILE_ID, taskSet.resourceProfileId)}")
     this.synchronized {
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
@@ -306,9 +307,10 @@ private[spark] class TaskSchedulerImpl(
       stageId: Int,
       interruptThread: Boolean,
       reason: String): Unit = synchronized {
-    logInfo("Cancelling stage " + stageId)
+    logInfo(log"Canceling stage ${MDC(LogKeys.STAGE_ID, stageId)}")
     // Kill all running tasks for the stage.
-    logInfo(s"Killing all running tasks in stage $stageId: $reason")
+    logInfo(log"Killing all running tasks in stage ${MDC(LogKeys.STAGE_ID, stageId)}: " +
+      log"${MDC(LogKeys.REASON, reason)}")
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
         // There are two possible cases here:
@@ -322,7 +324,8 @@ private[spark] class TaskSchedulerImpl(
           }
         }
         tsm.suspend()
-        logInfo("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
+        logInfo(log"Stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+          log"${MDC(LogKeys.STAGE_ATTEMPT, tsm.taskSet.stageAttemptId)} was cancelled")
       }
     }
   }
@@ -331,13 +334,14 @@ private[spark] class TaskSchedulerImpl(
       taskId: Long,
       interruptThread: Boolean,
       reason: String): Boolean = synchronized {
-    logInfo(s"Killing task $taskId: $reason")
+    logInfo(log"Killing task ${MDC(LogKeys.TASK_ID, taskId)}: ${MDC(LogKeys.REASON, reason)}")
     val execId = taskIdToExecutorId.get(taskId)
     if (execId.isDefined) {
       backend.killTask(taskId, execId.get, interruptThread, reason)
       true
     } else {
-      logWarning(s"Could not kill task $taskId because no task with that ID was found.")
+      logWarning(log"Could not kill task ${MDC(TASK_ID, taskId)} " +
+        log"because no task with that ID was found.")
       false
     }
   }
@@ -360,8 +364,8 @@ private[spark] class TaskSchedulerImpl(
     }
     noRejectsSinceLastReset -= manager.taskSet
     manager.parent.removeSchedulable(manager)
-    logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
-      s" ${manager.parent.name}")
+    logInfo(log"Removed TaskSet ${MDC(LogKeys.TASK_SET_NAME, manager.taskSet.id)}, whose tasks " +
+      log"have all completed, from pool ${MDC(LogKeys.POOL_NAME, manager.parent.name)}")
   }
 
   /**
@@ -428,7 +432,8 @@ private[spark] class TaskSchedulerImpl(
           } catch {
             case e: TaskNotSerializableException =>
               // scalastyle:off line.size.limit
-              logError(log"Resource offer failed, task set ${MDC(TASK_SET_NAME, taskSet.name)} was not serializable")
+              logError(log"Resource offer failed, task set " +
+                log"${MDC(LogKeys.TASK_SET_NAME, taskSet.name)} was not serializable")
               // scalastyle:on
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
@@ -557,9 +562,10 @@ private[spark] class TaskSchedulerImpl(
         // Skip the launch process.
         // TODO SPARK-24819 If the job requires more slots than available (both busy and free
         // slots), fail the job on submit.
-        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-          s"number of available slots is $numBarrierSlotsAvailable.")
+        logInfo(log"Skip current round of resource offers for barrier stage " +
+          log"${MDC(LogKeys.STAGE_ID, taskSet.stageId)} because the barrier taskSet requires " +
+          log"${MDC(LogKeys.TASK_SET_NAME, taskSet.numTasks)} slots, while the total " +
+          log"number of available slots is ${MDC(LogKeys.NUM_SLOTS, numBarrierSlotsAvailable)}.")
       } else {
         var launchedAnyTask = false
         var noDelaySchedulingRejects = true
@@ -617,18 +623,18 @@ private[spark] class TaskSchedulerImpl(
                   // in order to provision more executors to make them schedulable
                   if (Utils.isDynamicAllocationEnabled(conf)) {
                     if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                      logInfo("Notifying ExecutorAllocationManager to allocate more executors to" +
-                        " schedule the unschedulable task before aborting" +
-                        s" stage ${taskSet.stageId}.")
+                      logInfo(log"Notifying ExecutorAllocationManager to allocate more executors to" +
+                        log" schedule the unschedulable task before aborting" +
+                        log" stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
                       dagScheduler.unschedulableTaskSetAdded(taskSet.taskSet.stageId,
                         taskSet.taskSet.stageAttemptId)
                       updateUnschedulableTaskSetTimeoutAndStartAbortTimer(taskSet, taskIndex)
                     }
                   } else {
                     // Abort Immediately
-                    logInfo("Cannot schedule any task because all executors excluded from " +
-                      "failures. No idle executors can be found to kill. Aborting stage " +
-                      s"${taskSet.stageId}.")
+                    logInfo(log"Cannot schedule any task because all executors excluded from " +
+                      log"failures. No idle executors can be found to kill. Aborting stage " +
+                      log"${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
                     taskSet.abortSinceCompletelyExcludedOnFailure(taskIndex)
                   }
               }
@@ -641,8 +647,8 @@ private[spark] class TaskSchedulerImpl(
           // non-excluded executor and the abort timer doesn't kick in because of a constant
           // submission of new TaskSets. See the PR for more details.
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
-            logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
-              "recently scheduled.")
+            logInfo(log"Clearing the expiry times for all unschedulable taskSets as a task " +
+              log"was recently scheduled.")
             // Notify ExecutorAllocationManager as well as other subscribers that a task now
             // recently becomes schedulable
             dagScheduler.unschedulableTaskSetRemoved(taskSet.taskSet.stageId,
@@ -662,20 +668,23 @@ private[spark] class TaskSchedulerImpl(
               // always reject the offered resources. As a result, the barrier taskset can't get
               // launched. And if we retry the resourceOffer, we'd go through the same path again
               // and get into the endless loop in the end.
-              val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
-                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
-                s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
-                "you to use the non-legacy delay scheduling by setting " +
-                s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
-              logWarning(errorMsg)
-              taskSet.abort(errorMsg)
-              throw SparkCoreErrors.sparkError(errorMsg)
+              val logMsg = log"Fail resource offers for barrier stage " +
+                log"${MDC(STAGE_ID, taskSet.stageId)} because only " +
+                log"${MDC(NUM_PENDING_LAUNCH_TASKS, barrierPendingLaunchTasks.length)} " +
+                log"out of a total number " +
+                log"of ${MDC(NUM_TASKS, taskSet.numTasks)} tasks got resource offers. " +
+                log"We highly recommend you to use the non-legacy delay scheduling by setting " +
+                log"${MDC(CONFIG, LEGACY_LOCALITY_WAIT_RESET.key)} to false " +
+                log"to get rid of this error."
+              logWarning(logMsg)
+              taskSet.abort(logMsg.message)
+              throw SparkCoreErrors.sparkError(logMsg.message)
             } else {
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
                 TaskSetManager.BARRIER_LOGGING_INTERVAL) {
-                logInfo("Releasing the assigned resource offers since only partial tasks can " +
-                  "be launched. Waiting for later round resource offers.")
+                logInfo(log"Releasing the assigned resource offers since only partial tasks can " +
+                  log"be launched. Waiting for later round resource offers.")
                 taskSet.lastResourceOfferFailLogTime = curTime
               }
               barrierPendingLaunchTasks.foreach { task =>
@@ -717,8 +726,8 @@ private[spark] class TaskSchedulerImpl(
               .mkString(",")
             addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-            logInfo(s"Successfully scheduled all the ${addressesWithDescs.length} tasks for " +
-              s"barrier stage ${taskSet.stageId}.")
+            logInfo(log"Successfully scheduled all the ${MDC(LogKeys.NUM_TASKS, addressesWithDescs.length)} " +
+              log"tasks for barrier stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
           }
           taskSet.barrierPendingLaunchTasks.clear()
         }
@@ -738,8 +747,8 @@ private[spark] class TaskSchedulerImpl(
       taskIndex: Int): Unit = {
     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
     unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
-    logInfo(s"Waiting for $timeout ms for completely " +
-      s"excluded task to be schedulable again before aborting stage ${taskSet.stageId}.")
+    logInfo(log"Waiting for ${MDC(LogKeys.TIMEOUT, timeout)} ms for completely " +
+      log"excluded task to be schedulable again before aborting stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
     abortTimer.schedule(
       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout, TimeUnit.MILLISECONDS)
   }
@@ -751,8 +760,8 @@ private[spark] class TaskSchedulerImpl(
       override def run(): Unit = TaskSchedulerImpl.this.synchronized {
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
             unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()) {
-          logInfo("Cannot schedule any task because all executors excluded due to failures. " +
-            s"Wait time for scheduling expired. Aborting stage ${taskSet.stageId}.")
+          logInfo(log"Cannot schedule any task because all executors excluded due to failures. " +
+            log"Wait time for scheduling expired. Aborting stage ${MDC(LogKeys.STAGE_ID, taskSet.stageId)}.")
           taskSet.abortSinceCompletelyExcludedOnFailure(taskIndex)
         } else {
           this.cancel()
@@ -807,9 +816,10 @@ private[spark] class TaskSchedulerImpl(
               taskSet.taskInfos(tid).launchSucceeded()
             }
           case None =>
-            logError(
-              log"Ignoring update with state ${MDC(TASK_STATE, state)} for TID ${MDC(TID, tid)} because its task set is gone (this is " +
-                log"likely the result of receiving duplicate task finished status updates) or its executor has been marked as failed.")
+            logError(log"Ignoring update with state ${MDC(LogKeys.TASK_STATE, state)} for " +
+              log"TID ${MDC(LogKeys.TID, tid)} because its task set is gone (this is " +
+              log"likely the result of receiving duplicate task finished status updates) or its " +
+              log"executor has been marked as failed.")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -1024,7 +1034,8 @@ private[spark] class TaskSchedulerImpl(
             // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
-            logError(log"Lost an executor ${MDC(LogKey.EXECUTOR_ID, executorId)} (already removed): ${MDC(REASON, reason)}")
+            logError(log"Lost an executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} " +
+              log"(already removed): ${MDC(LogKeys.REASON, reason)}")
         }
       }
     }
@@ -1036,7 +1047,8 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {
-    logInfo(s"Handle removed worker $workerId: $message")
+    logInfo(log"Handle removed worker ${MDC(LogKeys.WORKER_ID, workerId)}: " +
+      log"${MDC(LogKeys.MESSAGE, message)}")
     dagScheduler.workerRemoved(workerId, host, message)
   }
 
@@ -1047,12 +1059,15 @@ private[spark] class TaskSchedulerImpl(
     case LossReasonPending =>
       logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
     case ExecutorKilled =>
-      logInfo(s"Executor $executorId on $hostPort killed by driver.")
+      logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
+        log"${MDC(LogKeys.HOST_PORT, hostPort)} killed by driver.")
     case _: ExecutorDecommission =>
-      logInfo(s"Executor $executorId on $hostPort is decommissioned" +
-        s"${getDecommissionDuration(executorId)}.")
+      logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
+        log"${MDC(LogKeys.HOST_PORT, hostPort)} is decommissioned" +
+        log"${MDC(DURATION, getDecommissionDuration(executorId))}.")
     case _ =>
-      logError(log"Lost executor ${MDC(LogKey.EXECUTOR_ID, executorId)} on ${MDC(LogKey.HOST, hostPort)}: ${MDC(REASON, reason)}")
+      logError(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
+        log"${MDC(LogKeys.HOST, hostPort)}: ${MDC(LogKeys.REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists

@@ -32,6 +32,8 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.internal.LogKeys.{COUNT, HOST_PORT, TOTAL}
+import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
@@ -255,9 +257,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
 
-        if (!running.list().getItems().isEmpty()) {
-          logInfo(s"Forcefully deleting ${running.list().getItems().size()} pods " +
-            s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
+        if (!running.list().getItems.isEmpty) {
+          logInfo(log"Forcefully deleting ${MDC(COUNT, running.list().getItems.size())} pods " +
+            log"(out of ${MDC(TOTAL, executorIds.size)}) that are still running after graceful " +
+            log"shutdown period.")
           running.delete()
         }
       }
@@ -353,7 +356,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               execIDRequester -= rpcAddress
               // Expected, executors re-establish a connection with an ID
             case _ =>
-              logInfo(s"No executor found for ${rpcAddress}")
+              logInfo(log"No executor found for ${MDC(HOST_PORT, rpcAddress)}")
           }
       }
     }

@@ -30,7 +30,7 @@ import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ExecutorDeadException
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, LogKeys, MDC}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
@@ -85,9 +85,11 @@ private[spark] class NettyBlockTransferService(
     appId = conf.getAppId
 
     if (hostName.equals(bindAddress)) {
-      logger.info(s"Server created on $hostName:${server.getPort}")
+      logger.info("Server created on {}:{}",
+        MDC(LogKeys.HOST, hostName), MDC(LogKeys.PORT, server.getPort))
     } else {
-      logger.info(s"Server created on $hostName $bindAddress:${server.getPort}")
+      logger.info("Server created on {} {}:{}", MDC(LogKeys.HOST, hostName),
+        MDC(LogKeys.BIND_ADDRESS, bindAddress), MDC(LogKeys.PORT, server.getPort))
     }
   }
 
@@ -193,7 +195,11 @@ private[spark] class NettyBlockTransferService(
       }
 
       override def onFailure(e: Throwable): Unit = {
-        logger.error(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
+        if (asStream) {
+          logger.error(s"Error while uploading {} as stream", e, MDC.of(LogKeys.BLOCK_ID, blockId))
+        } else {
+          logger.error(s"Error while uploading {}", e, MDC.of(LogKeys.BLOCK_ID, blockId))
+        }
         result.failure(e)
       }
     }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -362,5 +363,30 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         sql(query),
         Row("abc"))
     }
+  }
+
+  test("SPARK-48180: Analyzer bug with multiple ORDER BY items for input table argument") {
+    assume(shouldTestPythonUDFs)
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
+    checkError(
+      exception = intercept[ParseException](sql(
+        """
+          |SELECT * FROM testUDTF(
+          |  TABLE(SELECT 1 AS device_id, 2 AS data_ds)
+          |  WITH SINGLE PARTITION
+          |  ORDER BY device_id, data_ds)
+          |""".stripMargin)),
+      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" ->
+        ("The table function call includes a table argument with an invalid " +
+          "partitioning/ordering specification: the ORDER BY clause included multiple " +
+          "expressions without parentheses surrounding them; please add parentheses around these " +
+          "expressions and then retry the query again")),
+      context = ExpectedContext(
+        fragment = "TABLE(SELECT 1 AS device_id, 2 AS data_ds)\n  " +
+          "WITH SINGLE PARTITION\n  " +
+          "ORDER BY device_id, data_ds",
+        start = 27,
+        stop = 122))
   }
 }

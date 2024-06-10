@@ -466,7 +466,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t ADD COLUMNS $field double")
           },
-          errorClass = "FIELDS_ALREADY_EXISTS",
+          errorClass = "FIELD_ALREADY_EXISTS",
           parameters = expectedParameters,
           context = ExpectedContext(
             fragment = s"ALTER TABLE $t ADD COLUMNS $field double",
@@ -1116,7 +1116,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
           },
-          errorClass = "FIELDS_ALREADY_EXISTS",
+          errorClass = "FIELD_ALREADY_EXISTS",
           parameters = Map(
             "op" -> "rename",
             "fieldNames" -> s"${toSQLId(expectedName)}",

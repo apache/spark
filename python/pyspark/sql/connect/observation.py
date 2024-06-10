@@ -23,7 +23,7 @@ from pyspark.errors import (
     IllegalArgumentException,
     PySparkAssertionError,
 )
-from pyspark.sql.connect.column import Column
+from pyspark.sql.column import Column
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
 import pyspark.sql.connect.plan as plan

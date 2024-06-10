@@ -31,6 +31,8 @@ import org.apache.arrow.vector.{BigIntVector, Float8Vector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.mockito.Mockito.when
 import org.scalatest.Tag
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkContext, SparkEnv}
@@ -824,7 +826,9 @@ class SparkConnectServiceSuite
             when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
             SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
               SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None),
-              restartedQuery)
+              restartedQuery,
+              Set.empty[String],
+              "")
             f(verifyEvents)
           }
         }
@@ -884,8 +888,11 @@ class SparkConnectServiceSuite
       assert(executeHolder.eventsManager.hasError.isDefined)
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
-      assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)
+      // The eventsManager is closed asynchronously
+      Eventually.eventually(timeout(1.seconds)) {
+        assert(executeHolder.eventsManager.status == ExecuteStatus.Closed)
+      }
     }
     def onCanceled(): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.contains(true))

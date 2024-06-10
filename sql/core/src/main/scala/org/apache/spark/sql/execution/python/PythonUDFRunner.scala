@@ -80,7 +80,7 @@ abstract class BasePythonUDFRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Long],
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(

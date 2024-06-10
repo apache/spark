@@ -121,14 +121,14 @@ package object config extends Logging {
       "with the corresponding path in cluster machines.")
     .version("1.5.0")
     .stringConf
-    .createWithDefault(null)
+    .createOptional
 
   private[spark] val REPLACEMENT_ROOT_PATH = ConfigBuilder("spark.yarn.config.replacementPath")
     .doc(s"Path to use as a replacement for ${GATEWAY_ROOT_PATH.key} when launching processes " +
       "in the YARN cluster.")
     .version("1.5.0")
     .stringConf
-    .createWithDefault(null)
+    .createOptional
 
   private[spark] val QUEUE_NAME = ConfigBuilder("spark.yarn.queue")
     .version("1.0.0")

@@ -250,7 +250,7 @@ class ParseException private(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     start match {
-      case Origin(Some(l), Some(p), _, _, _, _, _, _) =>
+      case Origin(Some(l), Some(p), _, _, _, _, _, _, _) =>
         builder ++= s" (line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)

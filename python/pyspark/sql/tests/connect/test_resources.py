@@ -15,19 +15,16 @@
 # limitations under the License.
 #
 import unittest
+import os
 
-from pyspark.util import is_remote_only
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
 
 
-# TODO(SPARK-47757): Reeanble ResourceProfileTests for pyspark-connect
-if not is_remote_only():
-    from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
-
-    class ResourceProfileTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
-        @classmethod
-        def master(cls):
-            return "local-cluster[1, 4, 1024]"
+class ResourceProfileTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def master(cls):
+        return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[1, 4, 1024]")
 
 
 if __name__ == "__main__":

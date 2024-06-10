@@ -26,7 +26,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -59,7 +60,8 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -132,19 +134,7 @@ class QueryExecution(
 
   // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
   lazy val normalized: LogicalPlan = {
-    val normalizationRules = sparkSession.sessionState.planNormalizationRules
-    if (normalizationRules.isEmpty) {
-      commandExecuted
-    } else {
-      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
-      val normalized = normalizationRules.foldLeft(commandExecuted) { (p, rule) =>
-        val result = rule.apply(p)
-        planChangeLogger.logRule(rule.ruleName, p, result)
-        result
-      }
-      planChangeLogger.logBatch("Plan Normalization", commandExecuted, normalized)
-      normalized
-    }
+    QueryExecution.normalize(sparkSession, commandExecuted, Some(tracker))
   }
 
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
@@ -385,7 +375,8 @@ class QueryExecution(
           append(s"\n== Extended Information (${extension.title}) ==\n")
           append(extension.generateExtendedInfo(plan))
         } catch {
-          case NonFatal(e) => logWarning(s"Cannot use $extension to get extended information.", e)
+          case NonFatal(e) => logWarning(log"Cannot use " +
+            log"${MDC(EXTENDED_EXPLAIN_GENERATOR, extension)} to get extended information.", e)
         })
     }
   }
@@ -456,6 +447,22 @@ class QueryExecution(
 object CommandExecutionMode extends Enumeration {
   val SKIP, NON_ROOT, ALL = Value
 }
+
+/**
+ * Modes for shuffle dependency cleanup.
+ *
+ * DoNotCleanup: Do not perform any cleanup.
+ * SkipMigration: Shuffle dependencies will not be migrated at node decommissions.
+ * RemoveShuffleFiles: Shuffle dependency files are removed at the end of SQL executions.
+ */
+sealed trait ShuffleCleanupMode
+
+case object DoNotCleanup extends ShuffleCleanupMode
+
+case object SkipMigration extends ShuffleCleanupMode
+
+case object RemoveShuffleFiles extends ShuffleCleanupMode
+
 
 object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
@@ -592,6 +599,29 @@ object QueryExecution {
       block
     } catch {
       case e: Throwable => throw toInternalError(msg, e)
+    }
+  }
+
+  def normalize(
+      session: SparkSession,
+      plan: LogicalPlan,
+      tracker: Option[QueryPlanningTracker] = None): LogicalPlan = {
+    val normalizationRules = session.sessionState.planNormalizationRules
+    if (normalizationRules.isEmpty) {
+      plan
+    } else {
+      val planChangeLogger = new PlanChangeLogger[LogicalPlan]()
+      val normalized = normalizationRules.foldLeft(plan) { (p, rule) =>
+        val startTime = System.nanoTime()
+        val result = rule.apply(p)
+        val runTime = System.nanoTime() - startTime
+        val effective = !result.fastEquals(p)
+        tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+        planChangeLogger.logRule(rule.ruleName, p, result)
+        result
+      }
+      planChangeLogger.logBatch("Plan Normalization", plan, normalized)
+      normalized
     }
   }
 }

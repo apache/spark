@@ -32,8 +32,7 @@ class TestListStateProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING)
   }
 
@@ -90,8 +89,7 @@ class ToggleSaveAndEmitProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode): Unit = {
+      timeMode: TimeMode): Unit = {
     _listState = getHandle.getListState("testListState", Encoders.STRING)
     _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
   }
@@ -141,8 +139,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -162,8 +159,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -183,8 +179,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -204,8 +199,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -225,8 +219,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -246,8 +239,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -267,8 +259,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -307,7 +298,10 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, InputRow("k5", "append", "v4")),
         AddData(inputData, InputRow("k5", "put", "v5,v6")),
         AddData(inputData, InputRow("k5", "emitAllInState", "")),
-        CheckNewAnswer(("k5", "v5"), ("k5", "v6"))
+        CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
+        }
       )
     }
   }
@@ -320,8 +314,7 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new ToggleSaveAndEmitProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
+          TimeMode.None(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(

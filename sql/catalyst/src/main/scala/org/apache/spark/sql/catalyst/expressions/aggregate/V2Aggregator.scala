@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, UnsafeProjection}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 case class V2Aggregator[BUF <: java.io.Serializable, OUT](
     aggrFunc: V2AggregateFunction[BUF, OUT],
@@ -50,16 +49,11 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
   }
 
   override def serialize(buffer: BUF): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val out = new ObjectOutputStream(bos)
-    out.writeObject(buffer)
-    out.close()
-    bos.toByteArray
+    Utils.serialize(buffer)
   }
 
   override def deserialize(bytes: Array[Byte]): BUF = {
-    val in = new ObjectInputStream(new ByteArrayInputStream(bytes))
-    in.readObject().asInstanceOf[BUF]
+    Utils.deserialize(bytes)
   }
 
   def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): V2Aggregator[BUF, OUT] =

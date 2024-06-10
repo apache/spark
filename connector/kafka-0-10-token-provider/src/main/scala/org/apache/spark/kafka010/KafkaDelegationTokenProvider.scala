@@ -25,7 +25,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLUSTER_ID, SERVICE_NAME}
+import org.apache.spark.internal.LogKeys.{CLUSTER_ID, SERVICE_NAME}
 import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private[spark] class KafkaDelegationTokenProvider

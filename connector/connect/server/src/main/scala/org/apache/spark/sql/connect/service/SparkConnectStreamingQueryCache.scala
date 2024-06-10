@@ -23,11 +23,12 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NEW_VALUE, OLD_VALUE, QUERY_ID}
+import org.apache.spark.internal.LogKeys.{DURATION, NEW_VALUE, OLD_VALUE, QUERY_CACHE_VALUE, QUERY_ID, SESSION_ID}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
@@ -55,22 +56,36 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   import SparkConnectStreamingQueryCache._
 
-  def registerNewStreamingQuery(sessionHolder: SessionHolder, query: StreamingQuery): Unit = {
-    queryCacheLock.synchronized {
+  def registerNewStreamingQuery(
+      sessionHolder: SessionHolder,
+      query: StreamingQuery,
+      tags: Set[String],
+      operationId: String): Unit = queryCacheLock.synchronized {
+    taggedQueriesLock.synchronized {
       val value = QueryCacheValue(
         userId = sessionHolder.userId,
         sessionId = sessionHolder.sessionId,
         session = sessionHolder.session,
         query = query,
+        operationId = operationId,
         expiresAtMs = None)
 
-      queryCache.put(QueryCacheKey(query.id.toString, query.runId.toString), value) match {
+      val queryKey = QueryCacheKey(query.id.toString, query.runId.toString)
+      tags.foreach { tag =>
+        taggedQueries
+          .getOrElseUpdate(tag, new mutable.ArrayBuffer[QueryCacheKey])
+          .addOne(queryKey)
+      }
+
+      queryCache.put(queryKey, value) match {
         case Some(existing) => // Query is being replace. Not really expected.
           logWarning(log"Replacing existing query in the cache (unexpected). " +
             log"Query Id: ${MDC(QUERY_ID, query.id)}.Existing value ${MDC(OLD_VALUE, existing)}, " +
             log"new value ${MDC(NEW_VALUE, value)}.")
         case None =>
-          logInfo(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
+          logInfo(
+            log"Adding new query to the cache. Query Id ${MDC(QUERY_ID, query.id)}, " +
+              log"value ${MDC(QUERY_CACHE_VALUE, value)}.")
       }
 
       schedulePeriodicChecks() // Starts the scheduler thread if it hasn't started.
@@ -78,7 +93,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   }
 
   /**
-   * Returns [[StreamingQuery]] if it is cached and session matches the cached query. It ensures
+   * Returns [[QueryCacheValue]] if it is cached and session matches the cached query. It ensures
    * the session associated with it matches the session passed into the call. If the query is
    * inactive (i.e. it has a cache expiry time set), this access extends its expiry time. So if a
    * client keeps accessing a query, it stays in the cache.
@@ -86,8 +101,35 @@ private[connect] class SparkConnectStreamingQueryCache(
   def getCachedQuery(
       queryId: String,
       runId: String,
-      session: SparkSession): Option[StreamingQuery] = {
-    val key = QueryCacheKey(queryId, runId)
+      tags: Set[String],
+      session: SparkSession): Option[QueryCacheValue] = {
+    taggedQueriesLock.synchronized {
+      val key = QueryCacheKey(queryId, runId)
+      val result = getCachedQuery(QueryCacheKey(queryId, runId), session)
+      tags.foreach { tag =>
+        taggedQueries.getOrElseUpdate(tag, new mutable.ArrayBuffer[QueryCacheKey]).addOne(key)
+      }
+      result
+    }
+  }
+
+  /**
+   * Similar with [[getCachedQuery]] but it gets queries tagged previously.
+   */
+  def getTaggedQuery(tag: String, session: SparkSession): Seq[QueryCacheValue] = {
+    taggedQueriesLock.synchronized {
+      taggedQueries
+        .get(tag)
+        .map { k =>
+          k.flatMap(getCachedQuery(_, session)).toSeq
+        }
+        .getOrElse(Seq.empty[QueryCacheValue])
+    }
+  }
+
+  private def getCachedQuery(
+      key: QueryCacheKey,
+      session: SparkSession): Option[QueryCacheValue] = {
     queryCacheLock.synchronized {
       queryCache.get(key).flatMap { v =>
         if (v.session == session) {
@@ -96,7 +138,7 @@ private[connect] class SparkConnectStreamingQueryCache(
             val expiresAtMs = clock.getTimeMillis() + stoppedQueryInactivityTimeout.toMillis
             queryCache.put(key, v.copy(expiresAtMs = Some(expiresAtMs)))
           }
-          Some(v.query)
+          Some(v)
         } else None // Should be rare, may be client is trying access from a different session.
       }
     }
@@ -107,13 +149,23 @@ private[connect] class SparkConnectStreamingQueryCache(
    * the queryCache. This is used when session is expired and we need to cleanup resources of that
    * session.
    */
-  def cleanupRunningQueries(sessionHolder: SessionHolder): Unit = {
+  def cleanupRunningQueries(
+      sessionHolder: SessionHolder,
+      blocking: Boolean = true): Seq[String] = {
+    val operationIds = new mutable.ArrayBuffer[String]()
     for ((k, v) <- queryCache) {
       if (v.userId.equals(sessionHolder.userId) && v.sessionId.equals(sessionHolder.sessionId)) {
         if (v.query.isActive && Option(v.session.streams.get(k.queryId)).nonEmpty) {
-          logInfo(s"Stopping the query with id ${k.queryId} since the session has timed out")
+          logInfo(
+            log"Stopping the query with id ${MDC(QUERY_ID, k.queryId)} " +
+              log"since the session has timed out")
           try {
-            v.query.stop()
+            if (blocking) {
+              v.query.stop()
+            } else {
+              Future(v.query.stop())(ExecutionContext.global)
+            }
+            operationIds.addOne(v.operationId)
           } catch {
             case NonFatal(ex) =>
               logWarning(
@@ -124,6 +176,7 @@ private[connect] class SparkConnectStreamingQueryCache(
         }
       }
     }
+    operationIds.toSeq
   }
 
   // Visible for testing
@@ -143,6 +196,10 @@ private[connect] class SparkConnectStreamingQueryCache(
   private val queryCacheLock = new Object
 
   @GuardedBy("queryCacheLock")
+  private val taggedQueries = new mutable.HashMap[String, mutable.ArrayBuffer[QueryCacheKey]]
+  private val taggedQueriesLock = new Object
+
+  @GuardedBy("queryCacheLock")
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
 
   /** Schedules periodic checks if it is not already scheduled */
@@ -150,7 +207,9 @@ private[connect] class SparkConnectStreamingQueryCache(
     scheduledExecutor match {
       case Some(_) => // Already running.
       case None =>
-        logInfo(s"Starting thread for polling streaming sessions every $sessionPollingPeriod")
+        logInfo(
+          log"Starting thread for polling streaming sessions " +
+            log"every ${MDC(DURATION, sessionPollingPeriod.toMillis)}")
         scheduledExecutor = Some(Executors.newSingleThreadScheduledExecutor())
         scheduledExecutor.get.scheduleAtFixedRate(
           () => {
@@ -170,7 +229,7 @@ private[connect] class SparkConnectStreamingQueryCache(
    *   - Update status of query if it is inactive. Sets an expiry time for such queries
    *   - Drop expired queries from the cache.
    */
-  private def periodicMaintenance(): Unit = {
+  private def periodicMaintenance(): Unit = taggedQueriesLock.synchronized {
 
     queryCacheLock.synchronized {
       val nowMs = clock.getTimeMillis()
@@ -180,17 +239,23 @@ private[connect] class SparkConnectStreamingQueryCache(
         v.expiresAtMs match {
 
           case Some(ts) if nowMs >= ts => // Expired. Drop references.
-            logInfo(s"Removing references for $id in session ${v.sessionId} after expiry period")
+            logInfo(
+              log"Removing references for ${MDC(QUERY_ID, id)} in " +
+                log"session ${MDC(SESSION_ID, v.sessionId)} after expiry period")
             queryCache.remove(k)
 
           case Some(_) => // Inactive query waiting for expiration. Do nothing.
-            logInfo(s"Waiting for the expiration for $id in session ${v.sessionId}")
+            logInfo(
+              log"Waiting for the expiration for ${MDC(QUERY_ID, id)} in " +
+                log"session ${MDC(SESSION_ID, v.sessionId)}")
 
           case None => // Active query, check if it is stopped. Enable timeout if it is stopped.
             val isActive = v.query.isActive && Option(v.session.streams.get(id)).nonEmpty
 
             if (!isActive) {
-              logInfo(s"Marking query $id in session ${v.sessionId} inactive.")
+              logInfo(
+                log"Marking query ${MDC(QUERY_ID, id)} in " +
+                  log"session ${MDC(SESSION_ID, v.sessionId)} inactive.")
               val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
               queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
               // To consider: Clean up any runner registered for this query with the session holder
@@ -198,6 +263,18 @@ private[connect] class SparkConnectStreamingQueryCache(
               // seen in practice, especially when users have heavy processing inside listeners).
               // Currently such workers would be cleaned up when the connect session expires.
             }
+        }
+      }
+
+      taggedQueries.toArray.foreach { case (key, value) =>
+        value.zipWithIndex.toArray.foreach { case (queryKey, i) =>
+          if (queryCache.contains(queryKey)) {
+            value.remove(i)
+          }
+        }
+
+        if (value.isEmpty) {
+          taggedQueries.remove(key)
         }
       }
     }
@@ -213,6 +290,7 @@ private[connect] object SparkConnectStreamingQueryCache {
       sessionId: String,
       session: SparkSession, // Holds the reference to the session.
       query: StreamingQuery, // Holds the reference to the query.
+      operationId: String,
       expiresAtMs: Option[Long] = None // Expiry time for a stopped query.
   ) {
     override def toString(): String =

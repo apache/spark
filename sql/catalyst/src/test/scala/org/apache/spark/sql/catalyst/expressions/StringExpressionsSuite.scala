@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -488,6 +489,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(
       StringDecode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
+    checkEvaluation(
+      StringDecode(Encode(Literal("大千世界"), Literal("UTF-32")), Literal("UTF-32")), "大千世界")
     checkEvaluation(
       StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
@@ -1434,7 +1437,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("fmt"),
-          "inputType" -> toSQLType(wrongFmt.dataType),
+          "inputType" -> toSQLType(StringTypeAnyCollation),
           "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )

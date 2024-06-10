@@ -19,6 +19,7 @@ import unittest
 from pyspark.pandas.tests.indexes.test_default import DefaultIndexTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.util import is_remote_only
 
 
 class DefaultIndexParityTests(
@@ -26,7 +27,7 @@ class DefaultIndexParityTests(
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
-    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_index_distributed_sequence_cleanup(self):
         super().test_index_distributed_sequence_cleanup()
 

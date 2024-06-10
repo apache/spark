@@ -24,6 +24,8 @@ import scala.jdk.javaapi.CollectionConverters;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
  * A test stateful processor used with transformWithState arbitrary stateful operator in
  * Structured Streaming. The processor primarily aims to test various functionality of the Java API
@@ -38,8 +40,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
   @Override
   public void init(
       OutputMode outputMode,
-      TimeoutMode timeoutMode,
-      TTLMode ttlMode) {
+      TimeMode timeMode) {
     countState = this.getHandle().getValueState("countState",
       Encoders.LONG());
 
@@ -75,7 +76,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
         } else {
           keyCountMap.updateValue(value, 1L);
         }
-        assert(keyCountMap.containsKey(value));
+        assertTrue(keyCountMap.containsKey(value));
         keysList.appendValue(value);
         sb.append(value);
       }
@@ -83,13 +84,13 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       scala.collection.Iterator<String> keys = keysList.get();
       while (keys.hasNext()) {
         String keyVal = keys.next();
-        assert(keyCountMap.containsKey(keyVal));
-        assert(keyCountMap.getValue(keyVal) > 0);
+        assertTrue(keyCountMap.containsKey(keyVal));
+        assertTrue(keyCountMap.getValue(keyVal) > 0);
       }
 
       count += numRows;
       countState.update(count);
-      assert (countState.get() == count);
+      assertEquals(count, (long) countState.get());
 
       result.add(sb.toString());
     }

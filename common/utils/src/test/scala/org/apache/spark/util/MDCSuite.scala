@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EXIT_CODE, OFFSET, RANGE}
+import org.apache.spark.internal.LogKeys.{EXIT_CODE, OFFSET, RANGE}
 
 class MDCSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -39,6 +39,21 @@ class MDCSuite
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, cov)}"
     assert(log.message === "This is a log, exitcode CustomObjectValue: spark, 10086")
     assert(log.context === Map("exit_code" -> "CustomObjectValue: spark, 10086").asJava)
+  }
+
+  test("null as MDC value") {
+    val log = log"This is a log, exitcode ${MDC(EXIT_CODE, null)}"
+    assert(log.message === "This is a log, exitcode null")
+    assert(log.context === Map("exit_code" -> null).asJava)
+  }
+
+  test("the class of value cannot be MDC") {
+    val log = log"This is a log, exitcode ${MDC(EXIT_CODE, "123456")}"
+    val e = intercept[IllegalArgumentException] {
+      MDC(RANGE, log)
+    }
+    assert(e.getMessage ===
+      "requirement failed: the class of value cannot be MessageWithContext")
   }
 
   test("check MDC stripMargin") {

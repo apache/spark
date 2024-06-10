@@ -538,11 +538,11 @@ class GroupedAggPandasUDFTestsMixin:
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
         expected = [Row(id=1, sum=5), Row(id=2, x=4)]
         num_parts = len(data) + 1
-        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+        df = self.spark.createDataFrame(data).repartition(num_parts)
 
         f = pandas_udf(lambda x: x.sum(), "int", PandasUDFType.GROUPED_AGG)
 
-        result = df.groupBy("id").agg(f(df["x"]).alias("sum")).collect()
+        result = df.groupBy("id").agg(f(df["x"]).alias("sum")).sort("id").collect()
         self.assertEqual(result, expected)
 
     def test_grouped_without_group_by_clause(self):

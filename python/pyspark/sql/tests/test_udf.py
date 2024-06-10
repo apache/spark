@@ -22,6 +22,8 @@ import shutil
 import tempfile
 import unittest
 import datetime
+import io
+from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import col, udf, assert_true, lit, rand
@@ -817,14 +819,16 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1)
         df.select(udf(func)("id")).cache()
 
-        self.assertEqual(
-            df.select(udf(func)("id"))
-            ._jdf.queryExecution()
-            .withCachedData()
-            .getClass()
-            .getSimpleName(),
-            "InMemoryRelation",
-        )
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.select(udf(func)("id")).explain()
+            # == Physical Plan ==
+            # InMemoryTableScan [func(id)#30]
+            #    +- InMemoryRelation [func(id)#30], StorageLevel(...)
+            #          +- *(2) Project [pythonUDF0#5 AS func(id)#3]
+            #             +- BatchEvalPython [func(id#0L)#2], [pythonUDF0#5]
+            #                +- *(1) Range (0, 1, step=1, splits=12)
+            self.assertEqual(1, buf.getvalue().count("InMemoryTableScan"))
+            self.assertEqual(1, buf.getvalue().count("InMemoryRelation"))
 
     # SPARK-34545
     def test_udf_input_serialization_valuecompare_disabled(self):

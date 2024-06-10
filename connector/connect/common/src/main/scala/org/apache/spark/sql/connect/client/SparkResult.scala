@@ -27,10 +27,13 @@ import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
 import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -38,7 +41,8 @@ private[sql] class SparkResult[T](
     responses: CloseableIterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
-    timeZoneId: String)
+    timeZoneId: String,
+    setObservationMetricsOpt: Option[(Long, Map[String, Any]) => Unit] = None)
     extends AutoCloseable { self =>
 
   case class StageInfo(
@@ -79,6 +83,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
+  private val observedMetrics = mutable.Map.empty[String, Row]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
@@ -116,6 +121,9 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Collect metrics for this response
+      observedMetrics ++= processObservedMetrics(response.getObservedMetricsList)
 
       // Save and validate operationId
       if (opId == null) {
@@ -198,6 +206,29 @@ private[sql] class SparkResult[T](
     nonEmpty
   }
 
+  private def processObservedMetrics(
+      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Row)] = {
+    metrics.asScala.map { metric =>
+      assert(metric.getKeysCount == metric.getValuesCount)
+      var schema = new StructType()
+      val keys = mutable.ListBuffer.empty[String]
+      val values = mutable.ListBuffer.empty[Any]
+      (0 until metric.getKeysCount).map { i =>
+        val key = metric.getKeys(i)
+        val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
+        schema = schema.add(key, LiteralValueProtoConverter.toDataType(value.getClass))
+        keys += key
+        values += value
+      }
+      // If the metrics is registered by an Observation object, attach them and unblock any
+      // blocked thread.
+      setObservationMetricsOpt.foreach { setObservationMetrics =>
+        setObservationMetrics(metric.getPlanId, keys.zip(values).toMap)
+      }
+      metric.getName -> new GenericRowWithSchema(values.toArray, schema)
+    }
+  }
+
   /**
    * Returns the number of elements in the result.
    */
@@ -246,6 +277,15 @@ private[sql] class SparkResult[T](
       rows.close()
     }
     result
+  }
+
+  /**
+   * Returns all observed metrics in the result.
+   */
+  def getObservedMetrics: Map[String, Row] = {
+    // We need to process all responses to get all metrics.
+    processResponses()
+    observedMetrics.toMap
   }
 
   /**

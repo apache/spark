@@ -312,3 +312,80 @@ select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate 
 -- !query analysis
 Project [array_except(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
 +- OneRowRelation
+
+
+-- !query
+select 'a' collate unicode < 'A'
+-- !query analysis
+Project [(collate(a, unicode) < cast(A as string collate UNICODE)) AS (collate(a) < A)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate unicode_ci = 'A'
+-- !query analysis
+Project [(collate(a, unicode_ci) = cast(A as string collate UNICODE_CI)) AS (collate(a) = A)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate unicode_ai = 'å'
+-- !query analysis
+Project [(collate(a, unicode_ai) = cast(å as string collate UNICODE_AI)) AS (collate(a) = å)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate unicode_ci_ai = 'Å'
+-- !query analysis
+Project [(collate(a, unicode_ci_ai) = cast(Å as string collate UNICODE_CI_AI)) AS (collate(a) = Å)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate en < 'A'
+-- !query analysis
+Project [(collate(a, en) < cast(A as string collate en)) AS (collate(a) < A)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate en_ci = 'A'
+-- !query analysis
+Project [(collate(a, en_ci) = cast(A as string collate en_CI)) AS (collate(a) = A)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate en_ai = 'å'
+-- !query analysis
+Project [(collate(a, en_ai) = cast(å as string collate en_AI)) AS (collate(a) = å)#x]
++- OneRowRelation
+
+
+-- !query
+select 'a' collate en_ci_ai = 'Å'
+-- !query analysis
+Project [(collate(a, en_ci_ai) = cast(Å as string collate en_CI_AI)) AS (collate(a) = Å)#x]
++- OneRowRelation
+
+
+-- !query
+select 'Kypper' collate sv < 'Köpfe'
+-- !query analysis
+Project [(collate(Kypper, sv) < cast(Köpfe as string collate sv)) AS (collate(Kypper) < Köpfe)#x]
++- OneRowRelation
+
+
+-- !query
+select 'Kypper' collate de > 'Köpfe'
+-- !query analysis
+Project [(collate(Kypper, de) > cast(Köpfe as string collate de)) AS (collate(Kypper) > Köpfe)#x]
++- OneRowRelation
+
+
+-- !query
+select 'I' collate tr_ci = 'ı'
+-- !query analysis
+Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I) = ı)#x]
++- OneRowRelation

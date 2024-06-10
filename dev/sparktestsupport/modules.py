@@ -476,8 +476,9 @@ pyspark_sql = Module(
         "pyspark.sql.session",
         "pyspark.sql.conf",
         "pyspark.sql.catalog",
-        "pyspark.sql.column",
-        "pyspark.sql.dataframe",
+        "pyspark.sql.classic.column",
+        "pyspark.sql.classic.dataframe",
+        "pyspark.sql.classic.window",
         "pyspark.sql.datasource",
         "pyspark.sql.group",
         "pyspark.sql.functions.builtin",
@@ -488,7 +489,6 @@ pyspark_sql = Module(
         "pyspark.sql.streaming.listener",
         "pyspark.sql.udf",
         "pyspark.sql.udtf",
-        "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         "pyspark.sql.protobuf.functions",
         "pyspark.sql.pandas.conversion",
@@ -1009,6 +1009,7 @@ pyspark_connect = Module(
         # sql unittests
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_dataframe_property",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
@@ -1102,6 +1103,8 @@ pyspark_pandas_connect_part0 = Module(
         "python/pyspark/pandas",
     ],
     python_test_goals=[
+        # unittests dedicated for Spark Connect
+        "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",

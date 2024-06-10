@@ -25,7 +25,7 @@
 import sys
 from setuptools import setup
 import os
-from shutil import copyfile
+from shutil import copyfile, move
 import glob
 from pathlib import Path
 
@@ -70,6 +70,7 @@ if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.tests",  # for Memory profiler parity tests
         "pyspark.testing",
+        "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.connect",
         "pyspark.sql.tests.connect.streaming",
@@ -77,10 +78,44 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.sql.tests.connect.shell",
         "pyspark.sql.tests.pandas",
         "pyspark.sql.tests.streaming",
+        "pyspark.ml.tests.connect",
+        "pyspark.pandas.tests",
+        "pyspark.pandas.tests.computation",
+        "pyspark.pandas.tests.data_type_ops",
+        "pyspark.pandas.tests.diff_frames_ops",
+        "pyspark.pandas.tests.frame",
+        "pyspark.pandas.tests.groupby",
+        "pyspark.pandas.tests.indexes",
+        "pyspark.pandas.tests.io",
+        "pyspark.pandas.tests.plot",
+        "pyspark.pandas.tests.resample",
+        "pyspark.pandas.tests.reshape",
+        "pyspark.pandas.tests.series",
+        "pyspark.pandas.tests.window",
+        "pyspark.pandas.tests.connect",
+        "pyspark.pandas.tests.connect.computation",
+        "pyspark.pandas.tests.connect.data_type_ops",
+        "pyspark.pandas.tests.connect.diff_frames_ops",
+        "pyspark.pandas.tests.connect.frame",
+        "pyspark.pandas.tests.connect.groupby",
+        "pyspark.pandas.tests.connect.indexes",
+        "pyspark.pandas.tests.connect.io",
+        "pyspark.pandas.tests.connect.plot",
+        "pyspark.pandas.tests.connect.resample",
+        "pyspark.pandas.tests.connect.reshape",
+        "pyspark.pandas.tests.connect.series",
+        "pyspark.pandas.tests.connect.window",
     ]
 
 try:
     if in_spark:
+        # !!HACK ALTERT!!
+        # 1. `setup.py` has to be located with the same directory with the package.
+        #    Therefore, we copy the current file, and place it at `spark/python` directory.
+        #    After that, we remove it in the end.
+        # 2. Here it renames `lib` to `lib.ack` so MANIFEST.in does not pick `py4j` up.
+        #    We rename it back in the end.
+        move("lib", "lib.back")
         copyfile("packaging/connect/setup.py", "setup.py")
         copyfile("packaging/connect/setup.cfg", "setup.cfg")
 
@@ -89,7 +124,7 @@ try:
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst, and
     # python/packaging/classic/setup.py
-    _minimum_pandas_version = "1.4.4"
+    _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "10.0.0"
     _minimum_grpc_version = "1.59.3"
@@ -118,6 +153,7 @@ try:
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
         "pyspark.sql.connect.protobuf",
+        "pyspark.sql.connect.resource",
         "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",
@@ -151,6 +187,7 @@ try:
         author_email="dev@spark.apache.org",
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages + test_packages,
+        include_package_data=True,
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
@@ -162,11 +199,10 @@ try:
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
             "numpy>=%s" % _minimum_numpy_version,
         ],
-        python_requires=">=3.8",
+        python_requires=">=3.9",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
@@ -178,5 +214,6 @@ try:
     )
 finally:
     if in_spark:
+        move("lib.back", "lib")
         os.remove("setup.py")
         os.remove("setup.cfg")

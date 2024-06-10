@@ -249,6 +249,7 @@ if [ "$MAKE_PIP" == "true" ]; then
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
   python3 packaging/classic/setup.py sdist
+  python3 packaging/connect/setup.py sdist
   popd > /dev/null
 else
   echo "Skipping building python distribution package"

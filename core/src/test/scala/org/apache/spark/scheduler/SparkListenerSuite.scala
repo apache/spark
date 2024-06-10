@@ -176,6 +176,52 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(drained)
   }
 
+  test("allow bus.stop() to not wait for the event queue to completely drain") {
+    @volatile var drained = false
+
+    // When Listener has started
+    val listenerStarted = new Semaphore(0)
+
+    // Tells the listener to stop blocking
+    val listenerWait = new Semaphore(0)
+
+    // Make sure the event drained
+    val drainWait = new Semaphore(0)
+
+    class BlockingListener extends SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        listenerStarted.release()
+        listenerWait.acquire()
+        drained = true
+        drainWait.release()
+      }
+    }
+
+    val sparkConf = new SparkConf().set(LISTENER_BUS_EXIT_TIMEOUT, 100L)
+    val bus = new LiveListenerBus(sparkConf)
+    val blockingListener = new BlockingListener
+
+    bus.addToSharedQueue(blockingListener)
+    bus.start(mockSparkContext, mockMetricsSystem)
+    bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+
+    listenerStarted.acquire()
+    // if reach here, the dispatch thread should be blocked at onJobEnd
+
+    // stop the bus now, the queue will waiting for event drain with specified timeout
+    bus.stop()
+    // if reach here, the bus has exited without draining completely,
+    // otherwise it will hung here forever.
+
+    // the event dispatch thread should remain blocked after the bus has stopped.
+    // which means the bus exited upon reaching the timeout
+    // without all the events being completely drained
+    assert(!drained)
+
+    // unblock the dispatch thread
+    listenerWait.release()
+  }
+
   test("metrics for dropped listener events") {
     val bus = new LiveListenerBus(new SparkConf().set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1))
 

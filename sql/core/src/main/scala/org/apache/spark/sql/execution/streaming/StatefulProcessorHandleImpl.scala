@@ -24,8 +24,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLConfig, TTLMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -73,15 +74,17 @@ class QueryInfoImpl(
  * @param runId - unique id for the current run
  * @param keyEncoder - encoder for the key
  * @param isStreaming - defines whether the query is streaming or batch
+ * @param batchTimestampMs - timestamp for the current batch if available
+ * @param metrics - metrics to be updated as part of stateful processing
  */
 class StatefulProcessorHandleImpl(
     store: StateStore,
     runId: UUID,
     keyEncoder: ExpressionEncoder[Any],
-    ttlMode: TTLMode,
-    timeoutMode: TimeoutMode,
+    timeMode: TimeMode,
     isStreaming: Boolean = true,
-    batchTimestampMs: Option[Long] = None)
+    batchTimestampMs: Option[Long] = None,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -112,6 +115,10 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
+  private def incrementMetric(metricName: String): Unit = {
+    metrics.get(metricName).foreach(_.add(1))
+  }
+
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
@@ -122,8 +129,9 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-
-    new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    incrementMetric("numValueStateVars")
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    resultState
   }
 
   override def getValueState[T](
@@ -136,14 +144,14 @@ class StatefulProcessorHandleImpl(
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numValueStateWithTTLVars")
     ttlStates.add(valueStateWithTTL)
-
     valueStateWithTTL
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private lazy val timerState = new TimerStateImpl(store, timeoutMode, keyEncoder)
+  private lazy val timerState = new TimerStateImpl(store, timeMode, keyEncoder)
 
   private def verifyStateVarOperations(operationType: String): Unit = {
     if (currState != CREATED) {
@@ -153,9 +161,9 @@ class StatefulProcessorHandleImpl(
   }
 
   private def verifyTimerOperations(operationType: String): Unit = {
-    if (timeoutMode == NoTimeouts) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeoutMode(operationType,
-        timeoutMode.toString)
+    if (timeMode == NoTime) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
+        timeMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
@@ -170,6 +178,7 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
+    incrementMetric("numRegisteredTimers")
     timerState.registerTimer(expiryTimestampMs)
   }
 
@@ -179,6 +188,7 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
+    incrementMetric("numDeletedTimers")
     timerState.deleteTimer(expiryTimestampMs)
   }
 
@@ -210,8 +220,9 @@ class StatefulProcessorHandleImpl(
    * which is expired will be cleaned up from StateStore.
    */
   def doTtlCleanup(): Unit = {
+    val numValuesRemovedDueToTTLExpiry = metrics.get("numValuesRemovedDueToTTLExpiry").get
     ttlStates.forEach { s =>
-      s.clearExpiredState()
+      numValuesRemovedDueToTTLExpiry += s.clearExpiredState()
     }
   }
 
@@ -222,13 +233,48 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists")
-    store.removeColFamilyIfExists(stateName)
+    if (store.removeColFamilyIfExists(stateName)) {
+      incrementMetric("numDeletedStateVars")
+    }
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
+    incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
+  }
+
+  /**
+   * Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T] = {
+
+    verifyStateVarOperations("get_list_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numListStateWithTTLVars")
+    ttlStates.add(listStateWithTTL)
+
+    listStateWithTTL
   }
 
   override def getMapState[K, V](
@@ -236,14 +282,32 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
+    incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
 
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V],
+      ttlConfig: TTLConfig): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
+      valEncoder, ttlConfig, batchTimestampMs.get)
+    incrementMetric("numMapStateWithTTLVars")
+    ttlStates.add(mapStateWithTTL)
+
+    mapStateWithTTL
+  }
+
   private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
     val ttlDuration = ttlConfig.ttlDuration
-    if (ttlMode != TTLMode.ProcessingTimeTTL()) {
-      throw StateStoreErrors.cannotProvideTTLConfigForNoTTLMode(stateName)
+    if (timeMode != TimeMode.ProcessingTime()) {
+      throw StateStoreErrors.cannotProvideTTLConfigForTimeMode(stateName, timeMode.toString)
     } else if (ttlDuration == null || ttlDuration.isNegative || ttlDuration.isZero) {
       throw StateStoreErrors.ttlMustBePositive("update", stateName)
     }

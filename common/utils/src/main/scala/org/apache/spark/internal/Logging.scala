@@ -17,10 +17,9 @@
 
 package org.apache.spark.internal
 
-import java.util.Locale
-
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.text.StringEscapeUtils
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -29,15 +28,59 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
+
+/**
+ * Guidelines for the Structured Logging Framework - Scala Logging
+ * <p>
+ *
+ * Use the `org.apache.spark.internal.Logging` trait for logging in Scala code:
+ * Logging Messages with Variables:
+ *   When logging a message with variables, wrap all the variables with `MDC`s and they will be
+ *   automatically added to the Mapped Diagnostic Context (MDC).
+ * This allows for structured logging and better log analysis.
+ * <p>
+ *
+ * logInfo(log"Trying to recover app: ${MDC(LogKeys.APP_ID, app.id)}")
+ * <p>
+ *
+ * Constant String Messages:
+ *   If you are logging a constant string message, use the log methods that accept a constant
+ *   string.
+ * <p>
+ *
+ * logInfo("StateStore stopped")
+ * <p>
+ *
+ * Exceptions:
+ *   To ensure logs are compatible with Spark SQL and log analysis tools, avoid
+ *   `Exception.printStackTrace()`. Use `logError`, `logWarning`, and `logInfo` methods from
+ *   the `Logging` trait to log exceptions, maintaining structured and parsable logs.
+ * <p>
+ *
+ * If you want to output logs in `scala code` through the structured log framework,
+ * you can define `custom LogKey` and use it in `scala` code as follows:
+ * <p>
+ *
+ * // To add a `custom LogKey`, implement `LogKey`
+ * case object CUSTOM_LOG_KEY extends LogKey
+ * import org.apache.spark.internal.MDC;
+ * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
+ */
 
 /**
  * Mapped Diagnostic Context (MDC) that will be used in log messages.
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey, value: Any)
+case class MDC(key: LogKey, value: Any) {
+  require(!value.isInstanceOf[MessageWithContext],
+    "the class of value cannot be MessageWithContext")
+}
+
+object MDC {
+  def of(key: LogKey, value: Any): MDC = MDC(key, value)
+}
 
 /**
  * Wrapper class for log messages that include a logging context.
@@ -57,7 +100,7 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  def message: String = StringEscapeUtils.unescapeJava(messageWithContext.message)
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
@@ -105,9 +148,10 @@ trait Logging {
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
-        sb.append(mdc.value.toString)
+        val value = if (mdc.value != null) mdc.value.toString else null
+        sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
+          context.put(mdc.key.name, value)
         }
 
         if (processedParts.hasNext) {
@@ -153,8 +197,40 @@ trait Logging {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
+  protected def logDebug(entry: LogEntry): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        log.debug(entry.message)
+      }
+    }
+  }
+
+  protected def logDebug(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        log.debug(entry.message, throwable)
+      }
+    }
+  }
+
   protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
+  }
+
+  protected def logTrace(entry: LogEntry): Unit = {
+    if (log.isTraceEnabled) {
+      withLogContext(entry.context) {
+        log.trace(entry.message)
+      }
+    }
+  }
+
+  protected def logTrace(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isTraceEnabled) {
+      withLogContext(entry.context) {
+        log.trace(entry.message, throwable)
+      }
+    }
   }
 
   protected def logWarning(msg: => String): Unit = {

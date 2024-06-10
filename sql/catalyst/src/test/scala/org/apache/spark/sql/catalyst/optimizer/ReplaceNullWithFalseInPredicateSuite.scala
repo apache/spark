@@ -500,7 +500,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         mergeCondition = expr,
         matchedActions,
         notMatchedActions,
-        notMatchedBySourceActions)
+        notMatchedBySourceActions,
+        withSchemaEvolution = false)
     }
     val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
     val optimizedPlan = Optimize.execute(originalPlan)
@@ -522,7 +523,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         mergeCondition = expr,
         matchedActions,
         notMatchedActions,
-        Seq.empty)
+        notMatchedBySourceActions = Seq.empty,
+        withSchemaEvolution = false)
     }
     val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
     val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)

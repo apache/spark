@@ -191,7 +191,7 @@ Project [id#xL]
       +- GlobalLimit 5
          +- LocalLimit 5
             +- Project [id#xL]
-               +- Range (0, 10, step=1, splits=None)
+               +- Range (0, 10, step=1)
 
 
 -- !query

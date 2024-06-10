@@ -74,9 +74,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
-      + "yr YEAR)").executeUpdate()
-    conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24', "
-      + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001')").executeUpdate()
+      + "yr YEAR, t1 TIME(3))").executeUpdate()
+    conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24.123', "
+      + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001', '13:31:24.123')").executeUpdate()
 
     // TODO: Test locale conversion for strings.
     conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
@@ -139,7 +139,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row.getInt(3) == 77777)
     assert(row.getInt(4) == 123456789)
     assert(row.getLong(5) == 123456789012345L)
-    val bd = new BigDecimal("123456789012345.12345678901234500000")
+    val bd = new BigDecimal("123456789012345.123456789012345000")
     assert(row.getAs[BigDecimal](6).equals(bd))
     assert(row.getFloat(7) == 42.75)
     assert(row.getDouble(8) == 1.0000000000000002)
@@ -173,7 +173,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.getInt(2) === 16777215)
     assert(rows.getLong(3) === 4294967295L)
     assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
-    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.12345678901234500000")))
+    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.123456789012345000")))
     assert(rows.getDouble(6) === 1.0000000000000002)
     if (isMaria) {
       assert(rows.getBoolean(7) === false)
@@ -185,21 +185,13 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("Date types") {
     withDefaultTimeZone(UTC) {
       val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-      val rows = df.collect()
-      assert(rows.length == 1)
-      val types = rows(0).toSeq.map(x => x.getClass.toString)
-      assert(types.length == 5)
-      assert(types(0).equals("class java.sql.Date"))
-      assert(types(1).equals("class java.sql.Timestamp"))
-      assert(types(2).equals("class java.sql.Timestamp"))
-      assert(types(3).equals("class java.sql.Timestamp"))
-      assert(types(4).equals("class java.sql.Date"))
-      assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-      assert(
-        rows(0).getAs[Timestamp](1) === Timestamp.valueOf("1970-01-01 13:31:24"))
-      assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
-      assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
-      assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+      checkAnswer(df, Row(
+        Date.valueOf("1991-11-09"),
+        Timestamp.valueOf("1970-01-01 13:31:24"),
+        Timestamp.valueOf("1996-01-01 01:23:45"),
+        Timestamp.valueOf("2009-02-13 23:31:30"),
+        Date.valueOf("2001-01-01"),
+        Timestamp.valueOf("1970-01-01 13:31:24.123")))
     }
     val df = spark.read.format("jdbc")
       .option("url", jdbcUrl)
@@ -218,7 +210,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
         LocalDateTime.of(1970, 1, 1, 13, 31, 24),
         LocalDateTime.of(1996, 1, 1, 1, 23, 45),
         Timestamp.valueOf("2009-02-13 23:31:30"),
-        Date.valueOf("2001-01-01")))
+        Date.valueOf("2001-01-01"),
+        LocalDateTime.of(1970, 1, 1, 13, 31, 24, 123000000)))
     }
   }
 

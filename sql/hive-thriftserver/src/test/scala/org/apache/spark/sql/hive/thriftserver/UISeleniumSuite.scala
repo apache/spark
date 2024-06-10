@@ -108,7 +108,7 @@ class UISeleniumSuite
       val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
-        "CREATE TABLE test_map(key INT, value STRING)",
+        "CREATE TABLE test_map (key INT, value STRING) USING HIVE",
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)

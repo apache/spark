@@ -29,7 +29,8 @@ import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.Logger
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.NODE_LOCATION
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
@@ -77,8 +78,8 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
     if (rNameList == null || rNameList.isEmpty) {
       hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
-      logInfo(s"Got an error when resolving hostNames. " +
-        s"Falling back to ${NetworkTopology.DEFAULT_RACK} for all")
+      logInfo(log"Got an error when resolving hostNames. " +
+        log"Falling back to ${MDC(NODE_LOCATION, NetworkTopology.DEFAULT_RACK)} for all")
     } else {
       for ((hostName, rName) <- hostNames.zip(rNameList)) {
         if (Strings.isNullOrEmpty(rName)) {

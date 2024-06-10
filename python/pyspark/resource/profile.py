@@ -201,14 +201,15 @@ class ResourceProfileBuilder:
     """
 
     def __init__(self) -> None:
-        from pyspark.core.context import SparkContext
-
-        # TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
-        _jvm = SparkContext._jvm
-
         from pyspark.sql import is_remote
 
-        if _jvm is not None and not is_remote():
+        _jvm = None
+        if not is_remote():
+            from pyspark.core.context import SparkContext
+
+            _jvm = SparkContext._jvm
+
+        if _jvm is not None:
             self._jvm = _jvm
             self._java_resource_profile_builder = (
                 _jvm.org.apache.spark.resource.ResourceProfileBuilder()

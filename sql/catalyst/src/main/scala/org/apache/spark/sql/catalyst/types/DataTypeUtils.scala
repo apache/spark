@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -45,6 +45,31 @@ object DataTypeUtils {
    */
   def equalsIgnoreCaseAndNullability(from: DataType, to: DataType): Boolean = {
     DataType.equalsIgnoreCaseAndNullability(from, to)
+  }
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType, ignoring case
+   * sensitivity of field names in StructType as well as differences in collation for String types.
+   */
+  def equalsIgnoreCaseNullabilityAndCollation(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
+        equalsIgnoreCaseNullabilityAndCollation(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+        equalsIgnoreCaseNullabilityAndCollation(fromKey, toKey) &&
+          equalsIgnoreCaseNullabilityAndCollation(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (l, r) =>
+            l.name.equalsIgnoreCase(r.name) &&
+              equalsIgnoreCaseNullabilityAndCollation(l.dataType, r.dataType)
+          }
+
+      case (_: StringType, _: StringType) => true
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
   }
 
   private val SparkGeneratedName = """col\d+""".r

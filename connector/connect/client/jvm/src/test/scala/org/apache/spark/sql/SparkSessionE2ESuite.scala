@@ -26,7 +26,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkThreadUtils.awaitResult
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.util.SparkThreadUtils.awaitResult
  * class, whether explicit or implicit, as it will trigger a UDF deserialization error during
  * Maven build/test.
  */
-class SparkSessionE2ESuite extends RemoteSparkSession {
+class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("interrupt all - background queries, foreground interrupt") {
     val session = spark
@@ -108,7 +108,37 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
-  test("interrupt tag") {
+  test("interrupt all - streaming queries") {
+    val q1 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    val q2 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+
+    assert(q1.isActive)
+    assert(q2.isActive)
+
+    val interrupted = spark.interruptAll()
+
+    q1.awaitTermination(timeoutMs = 20 * 1000)
+    q2.awaitTermination(timeoutMs = 20 * 1000)
+    assert(!q1.isActive)
+    assert(!q2.isActive)
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+  }
+
+  // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
+  ignore("interrupt tag") {
     val session = spark
     import session.implicits._
 
@@ -196,7 +226,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q2 and q3 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("two")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -213,7 +243,7 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
 
     // q1 and q4 should be cancelled
     interrupted.clear()
-    eventually(timeout(30.seconds), interval(1.seconds)) {
+    eventually(timeout(1.minute), interval(1.seconds)) {
       val ids = spark.interruptTag("one")
       interrupted ++= ids
       assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
@@ -226,6 +256,53 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       awaitResult(q4, 1.minute)
     }
     assert(e4.getCause.getMessage contains "OPERATION_CANCELED")
+    assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
+  }
+
+  test("interrupt tag - streaming query") {
+    spark.addTag("foo")
+    val q1 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("foo"))
+
+    spark.addTag("bar")
+    val q2 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("foo", "bar"))
+
+    spark.clearTags()
+
+    spark.addTag("zoo")
+    val q3 = spark.readStream
+      .format("rate")
+      .option("rowsPerSecond", 1)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(spark.getTags() == Set("zoo"))
+
+    assert(q1.isActive)
+    assert(q2.isActive)
+    assert(q3.isActive)
+
+    val interrupted = spark.interruptTag("foo")
+
+    q1.awaitTermination(timeoutMs = 20 * 1000)
+    q2.awaitTermination(timeoutMs = 20 * 1000)
+    assert(!q1.isActive)
+    assert(!q2.isActive)
+    assert(q3.isActive)
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 

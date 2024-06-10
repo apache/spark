@@ -988,3 +988,26 @@ table.spark-config th:nth-child(4),
 table.spark-config td:nth-child(4) {
   width: 90px;
 }
+
+table#error-conditions {
+  table-layout: fixed;
+
+  span.error-condition-name {
+    /* Any error names that wrap will have the wrapped lines indented
+       relative to the first line thanks to these three rules.
+     */
+    padding-left: 2em;
+    text-indent: -2em;
+    display: block;
+  }
+
+  th:nth-child(1),
+  td:nth-child(1) {
+    /* width: 85px; */
+    width: 105px;
+  }
+
+  td.error-sub-condition {
+    padding-left: 2.5em;
+  }
+}

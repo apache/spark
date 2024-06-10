@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
@@ -235,6 +236,12 @@ case class InsertIntoHiveTable(
 }
 
 object InsertIntoHiveTable extends V1WritesHiveUtils {
+
+  /**
+   * A tag to identify if this command is created by a CTAS.
+   */
+  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
+
   def apply(
       table: CatalogTable,
       partition: Map[String, Option[String]],

@@ -25,7 +25,7 @@ import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{INDEX, OP_ID, TOTAL_TIME, WAIT_RESULT_TIME, WAIT_SEND_TIME}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE, CONNECT_PROGRESS_REPORT_INTERVAL}
@@ -183,9 +183,9 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    */
   def execute(lastConsumedStreamIndex: Long): Unit = {
     logInfo(
-      s"Starting for opId=${executeHolder.operationId}, " +
-        s"reattachable=${executeHolder.reattachable}, " +
-        s"lastConsumedStreamIndex=$lastConsumedStreamIndex")
+      log"Starting for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
+        log"reattachable=${MDC(REATTACHABLE, executeHolder.reattachable)}, " +
+        log"lastConsumedStreamIndex=${MDC(STREAM_ID, lastConsumedStreamIndex)}")
     val startTime = System.nanoTime()
 
     var nextIndex = lastConsumedStreamIndex + 1
@@ -211,7 +211,6 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     var sentResponsesSize: Long = 0
 
     while (!finished) {
-      enqueueProgressMessage()
       var response: Option[CachedStreamResponse[T]] = None
 
       // Conditions for exiting the inner loop (and helpers to compute them):
@@ -294,13 +293,14 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
-        enqueueProgressMessage()
         // Stream is finished and all responses have been sent
-        logInfo(
-          s"Stream finished for opId=${executeHolder.operationId}, " +
-            s"sent all responses up to last index ${nextIndex - 1}. " +
-            s"totalTime=${System.nanoTime - startTime}ns " +
-            s"waitingForResults=${consumeSleep}ns waitingForSend=${sendSleep}ns")
+        // scalastyle:off line.size.limit
+        logInfo(log"Stream finished for opId=${MDC(OP_ID, executeHolder.operationId)}, " +
+          log"sent all responses up to last index ${MDC(STREAM_ID, nextIndex - 1)}. " +
+          log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        // scalastyle:on line.size.limit
         executionObserver.getError() match {
           case Some(t) => grpcObserver.onError(t)
           case None => grpcObserver.onCompleted()
@@ -309,11 +309,14 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       } else if (deadlineLimitReached) {
         // The stream is not complete, but should be finished now.
         // The client needs to reattach with ReattachExecute.
-        logInfo(
-          s"Deadline reached, shutting down stream for opId=${executeHolder.operationId} " +
-            s"after index ${nextIndex - 1}. " +
-            s"totalTime=${System.nanoTime - startTime}ns " +
-            s"waitingForResults=${consumeSleep}ns waitingForSend=${sendSleep}ns")
+        // scalastyle:off line.size.limit
+        logInfo(log"Deadline reached, shutting down stream for " +
+          log"opId=${MDC(OP_ID, executeHolder.operationId)} " +
+          log"after index ${MDC(STREAM_ID, nextIndex - 1)}. " +
+          log"totalTime=${MDC(TOTAL_TIME, (System.nanoTime - startTime) / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep / NANOS_PER_MILLIS.toDouble)} ms " +
+          log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep / NANOS_PER_MILLIS.toDouble)} ms")
+        // scalastyle:on line.size.limit
         grpcObserver.onCompleted()
         finished = true
       }

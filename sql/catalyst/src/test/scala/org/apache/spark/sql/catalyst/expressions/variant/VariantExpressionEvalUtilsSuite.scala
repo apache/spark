@@ -25,9 +25,13 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson type coercion") {
     def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
+      // parse_json
       val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      // try_parse_json
+      val tryActual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        failOnError = false)
       val expected = new VariantVal(expectedValue, expectedMetadata)
-      assert(actual === expected)
+      assert(actual === expected && tryActual === expected)
     }
 
     // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
@@ -104,6 +108,8 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
 
   test("parseJson negative") {
     def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
+      val try_parse_json_output = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        failOnError = false)
       checkError(
         exception = intercept[SparkThrowable] {
           VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
@@ -111,6 +117,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
         errorClass = errorClass,
         parameters = parameters
       )
+      assert(try_parse_json_output === null)
     }
     for (json <- Seq("", "[", "+1", "1a", """{"a": 1, "b": 2, "a": "3"}""")) {
       checkException(json, "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -121,5 +128,43 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
       checkException(json, "VARIANT_SIZE_LIMIT",
         Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`parse_json`"))
     }
+  }
+
+  test("isVariantNull") {
+    def check(json: String, expected: Boolean): Unit = {
+      if (json != null) {
+        val parsedVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+        val actual = VariantExpressionEvalUtils.isVariantNull(parsedVariant)
+        assert(actual == expected)
+      } else {
+        val actual = VariantExpressionEvalUtils.isVariantNull(null)
+        assert(actual == expected)
+      }
+    }
+
+    // Primitive types
+    check("null", expected = true)
+    check(null, expected = false)
+    check("0", expected = false)
+    check("13", expected = false)
+    check("-54", expected = false)
+    check("2147483647", expected = false)
+    check("2147483648", expected = false)
+    check("238457328534848", expected = false)
+    check("342.769", expected = false)
+    check("true", expected = false)
+    check("false", expected = false)
+    check("false", expected = false)
+    check("65.43", expected = false)
+    check("\"" + "spark" * 100 + "\"", expected = false)
+    // Short String
+    check("\"\"", expected = false)
+    check("\"null\"", expected = false)
+    // Array
+    check("[]", expected = false)
+    check("[null, null]", expected = false)
+    check("[{\"a\" : 13}, \"spark\"]", expected = false)
+    // Object
+    check("[{\"a\" : 13, \"b\" : null}]", expected = false)
   }
 }

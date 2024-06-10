@@ -333,6 +333,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         from pyspark.sql.connect.observation import Observation
 
         class MockDF(DataFrame):
+            def __new__(cls, df: DataFrame) -> "DataFrame":
+                self = object.__new__(cls)
+                self.__init__(df)  # type: ignore[misc]
+                return self
+
             def __init__(self, df: DataFrame):
                 super().__init__(df._plan, df._session)
 
@@ -438,7 +443,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(plan.root.sample.lower_bound, 0.0)
         self.assertEqual(plan.root.sample.upper_bound, 0.3)
         self.assertEqual(plan.root.sample.with_replacement, False)
-        self.assertEqual(plan.root.sample.HasField("seed"), False)
+        self.assertEqual(plan.root.sample.HasField("seed"), True)
         self.assertEqual(plan.root.sample.deterministic_order, False)
 
         plan = (
@@ -548,13 +553,25 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(deduplicate_on_all_columns_plan.root.deduplicate.all_columns_as_keys, True)
         self.assertEqual(len(deduplicate_on_all_columns_plan.root.deduplicate.column_names), 0)
 
-        deduplicate_on_subset_columns_plan = df.dropDuplicates(["name", "height"])._plan.to_proto(
-            self.connect
+        deduplicate_on_subset_columns_plan_list_arg = df.dropDuplicates(
+            ["name", "height"]
+        )._plan.to_proto(self.connect)
+        self.assertEqual(
+            deduplicate_on_subset_columns_plan_list_arg.root.deduplicate.all_columns_as_keys, False
         )
         self.assertEqual(
-            deduplicate_on_subset_columns_plan.root.deduplicate.all_columns_as_keys, False
+            len(deduplicate_on_subset_columns_plan_list_arg.root.deduplicate.column_names), 2
         )
-        self.assertEqual(len(deduplicate_on_subset_columns_plan.root.deduplicate.column_names), 2)
+
+        deduplicate_on_subset_columns_plan_var_arg = df.dropDuplicates(
+            "name", "height"
+        )._plan.to_proto(self.connect)
+        self.assertEqual(
+            deduplicate_on_subset_columns_plan_var_arg.root.deduplicate.all_columns_as_keys, False
+        )
+        self.assertEqual(
+            len(deduplicate_on_subset_columns_plan_var_arg.root.deduplicate.column_names), 2
+        )
 
     def test_relation_alias(self):
         df = self.connect.readTable(table_name=self.tbl_name)
@@ -756,7 +773,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         # SPARK-41717: test print
         self.assertEqual(
             self.connect.sql("SELECT 1")._plan.print().strip(),
-            "<SQL query='SELECT 1', args='None', named_args='None'>",
+            "<SQL query='SELECT 1', args='None', named_args='None', views='None'>",
         )
         self.assertEqual(
             self.connect.range(1, 10)._plan.print().strip(),

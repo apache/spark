@@ -23,11 +23,12 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.errors.DataTypeErrors
-import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{Aggregator, ScalaUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.SparkClassUtils
@@ -75,6 +76,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname struct_funcs Struct functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
+ * @groupname variant_funcs VARIANT functions
  * @groupname xml_funcs XML functions
  * @groupname url_funcs URL functions
  * @groupname partition_transforms Partition transform functions
@@ -1930,6 +1932,14 @@ object functions {
    * @since 3.5.0
    */
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
+
+  /**
+   * Returns the remainder of `dividend``/``divisor`. Its result is always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
 
   /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
@@ -4203,6 +4213,20 @@ object functions {
    * @param str
    *   a string expression to split
    * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column): Column = Column.fn("split", str, pattern)
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
    *   a string representing a regular expression. The regex string should be a Java regular
    *   expression.
    * @param limit
@@ -4217,6 +4241,27 @@ object functions {
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
+
+  /**
+   * Splits str around matches of the given pattern.
+   *
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a column of string representing a regular expression. The regex string should be a Java
+   *   regular expression.
+   * @param limit
+   *   a column of integer expression which controls the number of times the regex is applied.
+   *   <ul> <li>limit greater than 0: The resulting array's length will not be more than limit,
+   *   and the resulting array's last entry will contain all input beyond the last matched
+   *   regex.</li> <li>limit less than or equal to 0: `regex` will be applied as many times as
+   *   possible, and the resulting array can be of any size.</li> </ul>
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def split(str: Column, pattern: Column, limit: Column): Column =
+    Column.fn("split", str, pattern, limit)
 
   /**
    * Substring starts at `pos` and is of length `len` when str is String type or returns the slice
@@ -5910,6 +5955,25 @@ object functions {
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
+   * Gets the difference between the timestamps in the specified units by truncating the fraction
+   * part.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_diff(unit: String, start: Column, end: Column): Column =
+    Column.fn("timestampdiff", lit(unit), start, end)
+
+  /**
+   * Adds the specified number of units to the given timestamp.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
+    Column.fn("timestampadd", lit(unit), quantity, ts)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -6965,15 +7029,91 @@ object functions {
   }
 
   /**
-   * Parses a JSON string and constructs a Variant value.
+   * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
+   * a valid JSON value.
    *
    * @param json
    *   a string column that contains JSON data.
    *
-   * @group json_funcs
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_parse_json(json: Column): Column = Column.fn("try_parse_json", json)
+
+  /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json
+   *   a string column that contains JSON data.
+   * @group variant_funcs
    * @since 4.0.0
    */
   def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
+   * Check if a variant value is a variant null. Returns true if and only if the input is a
+   * variant null and false otherwise (including in the case of SQL NULL).
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
+   * `targetType`. Returns null if the path does not exist or the cast fails..
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the extraction path. A valid path should start with `$` and is followed by zero or more
+   *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param targetType
+   *   the target data type to cast into, in a DDL-formatted string.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def try_variant_get(v: Column, path: String, targetType: String): Column =
+    Column.fn("try_variant_get", v, lit(path), lit(targetType))
+
+  /**
+   * Returns schema in the SQL format of a variant.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant(v: Column): Column = Column.fn("schema_of_variant", v)
+
+  /**
+   * Returns the merged schema in the SQL format of a variant column.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.0.0
+   */
+  def schema_of_variant_agg(v: Column): Column = Column.fn("schema_of_variant_agg", v)
 
   /**
    * Parses a JSON string and infers its schema in DDL format.
@@ -7078,9 +7218,9 @@ object functions {
   /**
    * Returns length of array or map.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input. With the
+   * default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.4.0
@@ -7556,9 +7696,9 @@ object functions {
   /**
    * Returns length of array or map. This is an alias of `size` function.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input. With the
+   * default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.5.0
@@ -7975,6 +8115,87 @@ object functions {
   // scalastyle:off line.size.limit
 
   /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
+   * {{{
+   *   val agg = // Aggregator[IN, BUF, OUT]
+   *
+   *   // declare a UDF based on agg
+   *   val aggUDF = udaf(agg)
+   *   val aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg))
+   * }}}
+   *
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
+   *
+   * @param agg
+   *   the typed Aggregator
+   *
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression.
+   *
+   * @group udf_funcs
+   * @note
+   *   The input encoder is inferred from the input type IN.
+   * @since 4.0.0
+   */
+  def udaf[IN: TypeTag, BUF, OUT](agg: Aggregator[IN, BUF, OUT]): UserDefinedFunction = {
+    udaf(agg, ScalaReflection.encoderFor[IN])
+  }
+
+  /**
+   * Obtains a `UserDefinedFunction` that wraps the given `Aggregator` so that it may be used with
+   * untyped Data Frames.
+   * {{{
+   *   Aggregator<IN, BUF, OUT> agg = // custom Aggregator
+   *   Encoder<IN> enc = // input encoder
+   *
+   *   // declare a UDF based on agg
+   *   UserDefinedFunction aggUDF = udaf(agg, enc)
+   *   DataFrame aggData = df.agg(aggUDF($"colname"))
+   *
+   *   // register agg as a named function
+   *   spark.udf.register("myAggName", udaf(agg, enc))
+   * }}}
+   *
+   * @tparam IN
+   *   the aggregator input type
+   * @tparam BUF
+   *   the aggregating buffer type
+   * @tparam OUT
+   *   the finalized output type
+   *
+   * @param agg
+   *   the typed Aggregator
+   * @param inputEncoder
+   *   a specific input encoder to use
+   *
+   * @return
+   *   a UserDefinedFunction that can be used as an aggregating expression
+   *
+   * @group udf_funcs
+   * @note
+   *   This overloading takes an explicit input encoder, to support UDAF declarations in Java.
+   * @since 4.0.0
+   */
+  def udaf[IN, BUF, OUT](
+      agg: Aggregator[IN, BUF, OUT],
+      inputEncoder: Encoder[IN]): UserDefinedFunction = {
+    ScalaUserDefinedFunction(
+      agg,
+      Seq(encoderFor(inputEncoder)),
+      encoderFor(agg.outputEncoder),
+      aggregate = true)
+  }
+
+  /**
    * Defines a Scala closure of 0 arguments as user-defined function (UDF). The data types are
    * automatically inferred based on the Scala closure's signature. By default the returned UDF is
    * deterministic. To change it to nondeterministic, call the API
@@ -7984,7 +8205,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag](f: () => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT])
+    ScalaUserDefinedFunction(f, typeTag[RT])
   }
 
   /**
@@ -7997,7 +8218,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag, A1: TypeTag](f: A1 => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1])
   }
 
   /**
@@ -8010,7 +8231,7 @@ object functions {
    * @since 3.4.0
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: (A1, A2) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2])
   }
 
   /**
@@ -8024,7 +8245,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](
       f: (A1, A2, A3) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3])
   }
 
   /**
@@ -8038,7 +8259,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](
       f: (A1, A2, A3, A4) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3], typeTag[A4])
+    ScalaUserDefinedFunction(f, typeTag[RT], typeTag[A1], typeTag[A2], typeTag[A3], typeTag[A4])
   }
 
   /**
@@ -8052,7 +8273,7 @@ object functions {
    */
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](
       f: (A1, A2, A3, A4, A5) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8079,7 +8300,7 @@ object functions {
       A4: TypeTag,
       A5: TypeTag,
       A6: TypeTag](f: (A1, A2, A3, A4, A5, A6) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8108,7 +8329,7 @@ object functions {
       A5: TypeTag,
       A6: TypeTag,
       A7: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8139,7 +8360,7 @@ object functions {
       A6: TypeTag,
       A7: TypeTag,
       A8: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8172,7 +8393,7 @@ object functions {
       A7: TypeTag,
       A8: TypeTag,
       A9: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8207,7 +8428,7 @@ object functions {
       A8: TypeTag,
       A9: TypeTag,
       A10: TypeTag](f: (A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) => RT): UserDefinedFunction = {
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       f,
       typeTag[RT],
       typeTag[A1],
@@ -8236,7 +8457,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8249,7 +8470,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF1[_, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8262,7 +8483,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF2[_, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8275,7 +8496,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF3[_, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8288,7 +8509,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF4[_, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8301,7 +8522,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF5[_, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8314,7 +8535,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF6[_, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8327,7 +8548,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF7[_, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8340,7 +8561,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF8[_, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8353,7 +8574,7 @@ object functions {
    * @since 3.5.0
    */
   def udf(f: UDF9[_, _, _, _, _, _, _, _, _, _], returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
 
   /**
@@ -8368,7 +8589,7 @@ object functions {
   def udf(
       f: UDF10[_, _, _, _, _, _, _, _, _, _, _],
       returnType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(UdfUtils.wrap(f), returnType)
+    ScalaUserDefinedFunction(UdfUtils.wrap(f), returnType)
   }
   // scalastyle:off line.size.limit
 
@@ -8398,7 +8619,7 @@ object functions {
       "Please use Scala `udf` method without return type parameter.",
     "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    ScalarUserDefinedFunction(f, dataType)
+    ScalaUserDefinedFunction(f, dataType)
   }
 
   /**

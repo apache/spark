@@ -23,21 +23,21 @@ org.apache.spark.sql.AnalysisException
 select * from range(6 + cos(3))
 -- !query analysis
 Project [id#xL]
-+- Range (0, 5, step=1, splits=None)
++- Range (0, 5, step=1)
 
 
 -- !query
 select * from range(5, 10)
 -- !query analysis
 Project [id#xL]
-+- Range (5, 10, step=1, splits=None)
++- Range (5, 10, step=1)
 
 
 -- !query
 select * from range(0, 10, 2)
 -- !query analysis
 Project [id#xL]
-+- Range (0, 10, step=2, splits=None)
++- Range (0, 10, step=2)
 
 
 -- !query
@@ -142,7 +142,7 @@ org.apache.spark.sql.AnalysisException
 select * from RaNgE(2)
 -- !query analysis
 Project [id#xL]
-+- Range (0, 2, step=1, splits=None)
++- Range (0, 2, step=1)
 
 
 -- !query
@@ -151,7 +151,7 @@ select i from range(0, 2) t(i)
 Project [i#xL]
 +- SubqueryAlias t
    +- Project [id#xL AS i#xL]
-      +- Range (0, 2, step=1, splits=None)
+      +- Range (0, 2, step=1)
 
 
 -- !query
@@ -430,7 +430,7 @@ select * from range(2) join explode(array(1, 2))
 -- !query analysis
 Project [id#xL, col#x]
 +- Join Inner
-   :- Range (0, 2, step=1, splits=None)
+   :- Range (0, 2, step=1)
    +- Generate explode(array(1, 2)), false, [col#x]
       +- OneRowRelation
 
@@ -440,7 +440,7 @@ select * from range(2) join explode_outer(array())
 -- !query analysis
 Project [id#xL, col#x]
 +- Join Inner
-   :- Range (0, 2, step=1, splits=None)
+   :- Range (0, 2, step=1)
    +- Generate explode(array()), true, [col#x]
       +- OneRowRelation
 

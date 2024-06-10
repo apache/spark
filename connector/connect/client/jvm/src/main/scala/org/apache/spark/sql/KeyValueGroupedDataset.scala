@@ -27,9 +27,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode, TTLMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -827,17 +827,14 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   The type of the output objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
-   * @param timeoutMode
-   *   The timeout mode of the stateful processor.
-   * @param ttlMode
-   *   The ttlMode to evict user state on ttl expiration.
+   * @param timeMode
+   *   The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode
    *   The output mode of the stateful processor.
    */
   def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode,
+      timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] = {
     throw new UnsupportedOperationException
   }
@@ -854,10 +851,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   The type of the output objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
-   * @param timeoutMode
-   *   The timeout mode of the stateful processor.
-   * @param ttlMode
-   *   The ttlMode to evict user state on ttl expiration.
+   * @param timeMode
+   *   The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param outputEncoder
@@ -865,8 +860,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    */
   def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       outputEncoder: Encoder[U]): Dataset[U] = {
     throw new UnsupportedOperationException
@@ -883,10 +877,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   The type of initial state objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
-   * @param timeoutMode
-   *   The timeout mode of the stateful processor.
-   * @param ttlMode
-   *   The ttlMode to evict user state on ttl expiration.
+   * @param timeMode
+   *   The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param initialState
@@ -897,8 +889,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    */
   def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     throw new UnsupportedOperationException
@@ -915,10 +906,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   The type of initial state objects. Must be encodable to Spark SQL types.
    * @param statefulProcessor
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
-   * @param timeoutMode
-   *   The timeout mode of the stateful processor.
-   * @param ttlMode
-   *   The ttlMode to evict user state on ttl expiration
+   * @param timeMode
+   *   The time mode semantics of the stateful processor for timers and TTL.
    * @param outputMode
    *   The output mode of the stateful processor.
    * @param initialState
@@ -933,8 +922,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
-      timeoutMode: TimeoutMode,
-      ttlMode: TTLMode,
+      timeMode: TimeMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
@@ -1043,7 +1031,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val inputEncoders = Seq(vEncoder, vEncoder)
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = f,
       inputEncoders = inputEncoders,
       outputEncoder = vEncoder)
@@ -1103,7 +1091,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
       inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
     val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = nf,
       inputEncoders = inputEncoders,
       outputEncoder = outputEncoder)
@@ -1122,7 +1110,7 @@ private object KeyValueGroupedDatasetImpl {
       ds: Dataset[V],
       kEncoder: AgnosticEncoder[K],
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
-    val gf = ScalarUserDefinedFunction(
+    val gf = ScalaUserDefinedFunction(
       function = groupingFunc,
       inputEncoders = ds.agnosticEncoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
@@ -1144,7 +1132,7 @@ private object KeyValueGroupedDatasetImpl {
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     // Use a dummy udf to pass the K V encoders
-    val dummyGroupingFunc = ScalarUserDefinedFunction(
+    val dummyGroupingFunc = ScalaUserDefinedFunction(
       function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
       outputEncoder = kEncoder).apply(col("*"))

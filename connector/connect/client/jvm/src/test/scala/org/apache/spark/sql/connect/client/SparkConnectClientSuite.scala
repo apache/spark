@@ -310,7 +310,14 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
         assert(client.userAgent.contains("scala/"))
         assert(client.userAgent.contains("jvm/"))
         assert(client.userAgent.contains("os/"))
-      }))
+      }),
+    TestPackURI(
+      "sc://SPARK-47694:123/;grpc_max_message_size=1860",
+      isCorrect = true,
+      client => {
+        assert(client.configuration.grpcMaxMessageSize == 1860)
+      }),
+    TestPackURI("sc://SPARK-47694:123/;grpc_max_message_size=abc", isCorrect = false))
 
   private def checkTestPack(testPack: TestPackURI): Unit = {
     val client = SparkConnectClient.builder().connectionString(testPack.connectionString).build()

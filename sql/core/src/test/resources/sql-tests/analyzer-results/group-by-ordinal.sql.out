@@ -16,7 +16,7 @@ CreateViewCommand `data`, select * from values
   (2, 2),
   (3, 1),
   (3, 2)
-  as data(a, b), false, false, LocalTempView, true
+  as data(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias data
          +- LocalRelation [a#x, b#x]

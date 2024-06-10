@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -95,9 +96,9 @@ trait BinaryArrayExpressionWithImplicitCast
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the size of an array or a map.
-    The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-    spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-    With the default settings, the function returns -1 for null input.
+    This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+    spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
+    With the default settings, the function returns null for null input.
   """,
   examples = """
     Examples:
@@ -712,6 +713,7 @@ case class MapConcat(children: Seq[Expression])
     }
   }
 
+  override def stateful: Boolean = true
   override def nullable: Boolean = children.exists(_.nullable)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
@@ -826,6 +828,8 @@ case class MapFromEntries(child: Expression)
   @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._3
 
   override def nullable: Boolean = child.nullable || nullEntries
+
+  override def stateful: Boolean = true
 
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
@@ -2003,9 +2007,9 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(ArrayType, StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation, StringTypeAnyCollation)
   } else {
-    Seq(ArrayType, StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
