@@ -30,8 +30,6 @@ class CollationStringExpressionsSuite
   with SharedSparkSession
   with ExpressionEvalHelper {
 
-  private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI")
-
   test("Support ConcatWs string expression with collation") {
     // Supported collations
     case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
