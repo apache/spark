@@ -220,7 +220,7 @@ public final class CollationFactory {
      * ---
      * Some illustrative examples of collation name to ID mapping:
      * - UTF8_BINARY       -> 0
-     * - UTF8_LCASE -> 1
+     * - UTF8_LCASE        -> 1
      * - UNICODE           -> 0x20000000
      * - UNICODE_AI        -> 0x20010000
      * - UNICODE_CI        -> 0x20020000
@@ -326,7 +326,7 @@ public final class CollationFactory {
       private static int collationNameToId(String collationName) throws SparkException {
         // Collation names provided by user are treated as case-insensitive.
         String collationNameUpper = collationName.toUpperCase();
-        if (collationNameUpper.startsWith("UTF8_BINARY")) {
+        if (collationNameUpper.startsWith("UTF8_")) {
           return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
