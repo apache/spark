@@ -165,8 +165,13 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   final protected def writeReplace(): Any = {
     if (atDriverSide) {
       if (!isRegistered) {
+        val printName = if (this.name.isDefined) {
+          s" '${this.name.get}' "
+        } else {
+          " "
+        }
         throw new UnsupportedOperationException(
-          s"Accumulator '${this.name.get}' must be registered before send to executor")
+          s"Accumulator${printName}must be registered before send to executor")
       }
       val copyAcc = copyAndReset()
       assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
