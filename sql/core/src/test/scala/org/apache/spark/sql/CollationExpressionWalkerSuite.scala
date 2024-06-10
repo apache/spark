@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, GenericInternalRow, Literal}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, ExpressionInfo, GenericInternalRow, Literal}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, Decimal, DecimalType, IntegerType, LongType, MapType, NumericType, StringType, StructType, TypeCollection}
@@ -177,19 +178,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }
   }
 
-  test("SPARK-48280: Expression Walker for Test") {
-    // This test does following:
-    // 1) Take all expressions
-    // 2) Find the ones that have at least one argument of StringType
-    // 3) Use reflection to create an instance of the expression using first constructor
-    //    (test other as well).
-    // 4) Check if the expression is of type ExpectsInputTypes (should make this a bit broader)
-    // 5) Run eval against literals with strings under:
-    //    a) UTF8_BINARY, "dummy string" as input.
-    //    b) UTF8_BINARY_LCASE, "DuMmY sTrInG" as input.
-    // 6) Check if both expressions throw an exception.
-    // 7) If no exception, check if the result is the same.
-    // 8) There is a list of allowed expressions that can differ (e.g. hex)
+  def extractRelevantExpressions(): (Array[ExpressionInfo], List[String]) = {
     var expressionCounter = 0
     var expectsExpressionCounter = 0;
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
@@ -226,11 +215,30 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "parse_url", // Parse URL cannot be generalized with ExpectInputTypes
       "hex" // Different inputs affect conversion
     )
-    // scalastyle:off println
-    println("Total number of expression: " + expressionCounter)
-    println("Total number of expression that expect input: " + expectsExpressionCounter)
-    println("Number of extracted expressions of relevance: " + (funInfos.length - toSkip.length))
-    // scalastyle:on println
+
+    logInfo("Total number of expression: " + expressionCounter)
+    logInfo("Total number of expression that expect input: " + expectsExpressionCounter)
+    logInfo("Number of extracted expressions of relevance: " + (funInfos.length - toSkip.length))
+
+    (funInfos, toSkip)
+  }
+
+  test("SPARK-48280: Expression Evaluator Test") {
+    // This test does following:
+    // 1) Take all expressions
+    // 2) Find the ones that have at least one argument of StringType
+    // 3) Use reflection to create an instance of the expression using first constructor
+    //    (test other as well).
+    // 4) Check if the expression is of type ExpectsInputTypes (should make this a bit broader)
+    // 5) Run eval against literals with strings under:
+    //    a) UTF8_BINARY, "dummy string" as input.
+    //    b) UTF8_BINARY_LCASE, "DuMmY sTrInG" as input.
+    // 6) Check if both expressions throw an exception.
+    // 7) If no exception, check if the result is the same.
+    // 8) There is a list of allowed expressions that can differ (e.g. hex)
+
+    val (funInfos, toSkip) = extractRelevantExpressions()
+
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors.head
@@ -288,6 +296,66 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       }
       else {
         assert(exceptionUtfBinary.get.getClass == exceptionLcase.get.getClass)
+      }
+    }
+  }
+
+  test("SPARK-48280: Expression Walker for SQL query examples") {
+    val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
+      spark.sessionState.catalog.lookupFunctionInfo(funcId)
+    }
+
+    // If expression is expected to return different results, it needs to be skipped
+    val toSkip = List(
+      // need to skip as these give timestamp/time related output
+      "current_timestamp",
+      "unix_timestamp",
+      "localtimestamp",
+      "now",
+      // need to skip as plans differ in STRING <-> STRING COLLATE UTF8_BINARY_LCASE
+      "current_timezone",
+      "schema_of_variant",
+      // need to skip as result is expected to differ
+      "collation",
+      "contains",
+      "aes_encrypt",
+      "translate",
+      "replace",
+      "grouping",
+      "grouping_id",
+      // need to skip as these are random functions
+      "rand",
+      "random",
+      "randn",
+      "uuid",
+      "shuffle",
+      // other functions which are not yet supported
+      "date_sub",
+      "date_add",
+      "dateadd",
+      "window",
+      "window_time",
+      "session_window",
+      "reflect",
+      "try_reflect",
+      "levenshtein",
+      "java_method"
+    )
+
+    for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      println("checking - " + funInfo.getName)
+      for (m <- "> .*;".r.findAllIn(funInfo.getExamples)) {
+        try {
+          val resultUTF8 = sql(m.substring(2))
+          withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY_LCASE") {
+            val resultUTF8Lcase = sql(m.substring(2))
+            assert(resultUTF8.collect() === resultUTF8Lcase.collect())
+          }
+        }
+        catch {
+          case e: SparkRuntimeException => assert(e.getErrorClass == "USER_RAISED_EXCEPTION")
+          case other: Throwable => other
+        }
       }
     }
   }
