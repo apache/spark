@@ -30,6 +30,8 @@ class CollationStringExpressionsSuite
   with SharedSparkSession
   with ExpressionEvalHelper {
 
+  private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI")
+
   test("Support ConcatWs string expression with collation") {
     // Supported collations
     case class ConcatWsTestCase[R](s: String, a: Array[String], c: String, result: R)
@@ -642,6 +644,28 @@ class CollationStringExpressionsSuite
       // Result & data type
       checkAnswer(sql(query), Row(t.r))
       assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+    })
+  }
+
+  test("Levenshtein string expression with collation") {
+    // Supported collations
+    case class LevenshteinTestCase(
+      left: String, right: String, collationName: String, threshold: Option[Int], result: Int
+    )
+    val testCases = Seq(
+      LevenshteinTestCase("kitten", "sitTing", "UTF8_BINARY", None, result = 4),
+      LevenshteinTestCase("kitten", "sitTing", "UTF8_BINARY_LCASE", None, result = 4),
+      LevenshteinTestCase("kitten", "sitTing", "UNICODE", Some(3), result = -1),
+      LevenshteinTestCase("kitten", "sitTing", "UNICODE_CI", Some(3), result = -1)
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collationName) {
+        val th = if (t.threshold.isDefined) s", ${t.threshold.get}" else ""
+        val query = s"select levenshtein('${t.left}', '${t.right}'$th)"
+        // Result & data type
+        checkAnswer(sql(query), Row(t.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      }
     })
   }
 
