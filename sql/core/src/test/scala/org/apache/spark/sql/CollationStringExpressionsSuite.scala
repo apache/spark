@@ -295,9 +295,11 @@ class CollationStringExpressionsSuite
       TranslateTestCase("abcdef", "abcde", "123", "UNICODE", "123f"),
       TranslateTestCase("abcdef", "abcde", "123", "UNICODE_CI", "123f"),
       // Case mapping edge cases
+      TranslateTestCase("İ", "i\u0307", "xy", "UTF8_BINARY", "İ"),
       TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_BINARY", "123"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_BINARY", "1i\u0307"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_BINARY", "İ23"),
+      TranslateTestCase("İ", "i\u0307", "xy", "UTF8_BINARY_LCASE", "İ"),
       TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_BINARY_LCASE", "123"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_BINARY_LCASE", "1i\u0307"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_BINARY_LCASE", "İ23"),
@@ -331,13 +333,6 @@ class CollationStringExpressionsSuite
         s"collate('Rnlt', 'UNICODE'), '1234')")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
-  }
-
-  test("Handling invalid UTF-8 sequences in StringTranslate") {
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
-      val query = s"SELECT translate(cast(unhex('C22C41') as string collate $collation), ',', 'X')"
-      checkAnswer(sql(query), Row("�XA"))
-    }
   }
 
   test("Support Replace string expression with collation") {
