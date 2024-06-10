@@ -185,7 +185,7 @@ class RocksDB(
           closeDB()
           val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
           loadedVersion = latestSnapshotVersion
-  
+
           // reset last snapshot version
           if (lastSnapshotVersion > latestSnapshotVersion) {
             // discard any newer snapshots
@@ -193,7 +193,7 @@ class RocksDB(
             latestSnapshot = None
           }
           openDB()
-  
+
           numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
               // we don't track the total number of rows - discard the number being track
               -1L
