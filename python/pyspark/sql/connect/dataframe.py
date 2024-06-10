@@ -49,7 +49,7 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
-from functools import cached_property
+import functools
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -82,7 +82,7 @@ from pyspark.sql.connect.expressions import (
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
 
@@ -208,6 +208,7 @@ class DataFrame(ParentDataFrame):
     def write(self) -> "DataFrameWriter":
         return DataFrameWriter(self._plan, self._session)
 
+    @functools.cache
     def isEmpty(self) -> bool:
         return len(self.select().take(1)) == 0
 
@@ -408,39 +409,54 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
 
-        if subset is None:
+        if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
-        else:
+        elif len(subset) == 1 and isinstance(subset[0], list):
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
-            )
-
-    drop_duplicates = dropDuplicates
-
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
-
-        if subset is None:
-            return DataFrame(
-                plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                plan.Deduplicate(child=self._plan, column_names=subset[0]),
                 session=self._session,
             )
         else:
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
+                session=self._session,
+            )
+
+    drop_duplicates = dropDuplicates
+
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
+
+        if not subset:
+            return DataFrame(
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                session=self._session,
+            )
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            return DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=subset[0], within_watermark=True),
+                session=self._session,
+            )
+        else:
+            return DataFrame(
+                plan.Deduplicate(
+                    child=self._plan,
+                    column_names=cast(List[str], subset),
+                    within_watermark=True,
+                ),
                 session=self._session,
             )
 
@@ -1770,8 +1786,9 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
+        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
         table, _ = self._to_table()
-        return table
+        return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
@@ -1789,13 +1806,14 @@ class DataFrame(ParentDataFrame):
             self._cached_schema = self._session.client.schema(query)
         return copy.deepcopy(self._cached_schema)
 
+    @functools.cache
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_local", plan=query).is_local
         assert result is not None
         return result
 
-    @cached_property
+    @functools.cached_property
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
@@ -1811,8 +1829,12 @@ class DataFrame(ParentDataFrame):
         return result
 
     def printSchema(self, level: Optional[int] = None) -> None:
-        print(self._tree_string(level))
+        if level:
+            print(self.schema.treeString(level))
+        else:
+            print(self.schema.treeString())
 
+    @functools.cache
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files
@@ -1821,10 +1843,12 @@ class DataFrame(ParentDataFrame):
 
     def to(self, schema: StructType) -> ParentDataFrame:
         assert schema is not None
-        return DataFrame(
+        res = DataFrame(
             plan.ToSchema(child=self._plan, schema=schema),
             session=self._session,
         )
+        res._cached_schema = schema
+        return res
 
     def toDF(self, *cols: str) -> ParentDataFrame:
         for col_ in cols:
@@ -1892,6 +1916,7 @@ class DataFrame(ParentDataFrame):
         query = self._plan.to_proto(self._session.client)
         return self._session.client.explain_string(query, explain_mode)
 
+    @functools.cache
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
@@ -2005,7 +2030,7 @@ class DataFrame(ParentDataFrame):
             evalType=evalType,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.MapPartitions(
                 child=self._plan,
                 function=udf_obj,
@@ -2015,6 +2040,9 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     def mapInPandas(
         self,
@@ -2084,6 +2112,7 @@ class DataFrame(ParentDataFrame):
             other=other._plan.to_proto(other._session.client),
         )
 
+    @functools.cache
     def semanticHash(self) -> int:
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),

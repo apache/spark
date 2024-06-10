@@ -564,10 +564,8 @@ private[spark] object Utils
         // Do nothing if the file contents are the same, i.e. this file has been copied
         // previously.
         logInfo(
-          "%s has been previously copied to %s".format(
-            sourceFile.getAbsolutePath,
-            destFile.getAbsolutePath
-          )
+          log"${MDC(SOURCE_PATH, sourceFile.getAbsolutePath)} has been previously" +
+            log" copied to ${MDC(DESTINATION_PATH, destFile.getAbsolutePath)}"
         )
         return
       }
@@ -577,7 +575,8 @@ private[spark] object Utils
     if (removeSourceFile) {
       Files.move(sourceFile.toPath, destFile.toPath)
     } else {
-      logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
+      logInfo(log"Copying ${MDC(SOURCE_PATH, sourceFile.getAbsolutePath)}" +
+        log" to ${MDC(DESTINATION_PATH, destFile.getAbsolutePath)}")
       copyRecursive(sourceFile, destFile)
     }
   }
@@ -1203,7 +1202,7 @@ private[spark] object Utils
     val process = builder.start()
     if (redirectStderr) {
       val threadName = "redirect stderr for command " + command(0)
-      def log(s: String): Unit = logInfo(s)
+      def log(s: String): Unit = logInfo(log"${MDC(LINE, s)}")
       processStreamByLine(threadName, process.getErrorStream, log)
     }
     process
@@ -2137,26 +2136,37 @@ private[spark] object Utils
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
-   *
-   * @param startPort The initial port to start the service on.
-   * @param startService Function to start service on a given port.
-   *                     This is expected to throw java.net.BindException on port collision.
-   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
-   * @param serviceName Name of the service.
-   * @return (service: T, port: Int)
+   * Use a shared configuration for the maximum number of port retries.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
+    startServiceOnPort(startPort, startService, portMaxRetries(conf), serviceName)
+  }
+
+  /**
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   *
+   * @param startPort The initial port to start the service on.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   * @param maxRetries The maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
+      startService: Int => (T, Int),
+      maxRetries: Int,
+      serviceName: String): (T, Int) = {
 
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -2166,7 +2176,8 @@ private[spark] object Utils
       }
       try {
         val (service, port) = startService(tryPort)
-        logInfo(s"Successfully started service$serviceString on port $port.")
+        logInfo(log"Successfully started service${MDC(SERVICE_NAME, serviceString)}" +
+          log" on port ${MDC(PORT, port)}.")
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
@@ -2219,6 +2230,9 @@ private[spark] object Utils
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+          isBindCollision(e.getCause)
+      case e: IOException =>
+        (e.getMessage != null && e.getMessage.startsWith("Failed to bind to address")) ||
           isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
@@ -2541,9 +2555,10 @@ private[spark] object Utils
       conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
       conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
 
-    logInfo(s"Using initial executors = $initialExecutors, max of " +
-      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key} and " +
-        s"${EXECUTOR_INSTANCES.key}")
+    logInfo(log"Using initial executors = ${MDC(NUM_EXECUTORS, initialExecutors)}, max of " +
+      log"${MDC(CONFIG, DYN_ALLOCATION_INITIAL_EXECUTORS.key)}," +
+      log"${MDC(CONFIG2, DYN_ALLOCATION_MIN_EXECUTORS.key)} and" +
+      log" ${MDC(CONFIG3, EXECUTOR_INSTANCES.key)}")
     initialExecutors
   }
 
@@ -2731,7 +2746,7 @@ private[spark] object Utils
           e.getCause() match {
             case uoe: UnsupportedOperationException =>
               logDebug(s"Extension $name not being initialized.", uoe)
-              logInfo(s"Extension $name not being initialized.")
+              logInfo(log"Extension ${MDC(CLASS_NAME, name)} not being initialized.")
               None
 
             case null => throw e
@@ -2755,8 +2770,8 @@ private[spark] object Utils
     // To handle master URLs, e.g., k8s://host:port.
     if (!masterWithoutK8sPrefix.contains("://")) {
       val resolvedURL = s"https://$masterWithoutK8sPrefix"
-      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-        s"URL is $resolvedURL.")
+      logInfo(log"No scheme specified for kubernetes master URL, so defaulting to https." +
+        log" Resolved URL is ${MDC(LogKeys.URL, resolvedURL)}.")
       return s"k8s://$resolvedURL"
     }
 
@@ -3009,7 +3024,7 @@ private[spark] object Utils
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
+      logInfo(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
       IOUtils.closeQuietly(in)

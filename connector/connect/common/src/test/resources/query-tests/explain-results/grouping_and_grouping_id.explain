@@ -1,4 +1,4 @@
-Aggregate [a#0, b#0, spark_grouping_id#0L], [a#0, b#0, cast(((spark_grouping_id#0L >> 1) & 1) as tinyint) AS grouping(a)#0, cast(((spark_grouping_id#0L >> 0) & 1) as tinyint) AS grouping(b)#0, spark_grouping_id#0L AS grouping_id(a, b)#0L]
+Aggregate [a#0, b#0, spark_grouping_id#0L], [a#0, b#0, cast((shiftright(spark_grouping_id#0L, 1) & 1) as tinyint) AS grouping(a)#0, cast((shiftright(spark_grouping_id#0L, 0) & 1) as tinyint) AS grouping(b)#0, spark_grouping_id#0L AS grouping_id(a, b)#0L]
 +- Expand [[id#0L, a#0, b#0, a#0, b#0, 0], [id#0L, a#0, b#0, a#0, null, 1], [id#0L, a#0, b#0, null, b#0, 2], [id#0L, a#0, b#0, null, null, 3]], [id#0L, a#0, b#0, a#0, b#0, spark_grouping_id#0L]
    +- Project [id#0L, a#0, b#0, a#0 AS a#0, b#0 AS b#0]
       +- LocalRelation <empty>, [id#0L, a#0, b#0]

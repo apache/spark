@@ -659,14 +659,14 @@ Project [id#xL]
 -- !query
 SELECT string(shiftleft(bigint(-1), 63))
 -- !query analysis
-Project [cast((cast(-1 as bigint) << 63) as string) AS (-1 << 63)#x]
+Project [cast(shiftleft(cast(-1 as bigint), 63) as string) AS shiftleft(-1, 63)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(int(shiftleft(bigint(-1), 63))+1)
 -- !query analysis
-Project [cast((cast((cast(-1 as bigint) << 63) as int) + 1) as string) AS ((-1 << 63) + 1)#x]
+Project [cast((cast(shiftleft(cast(-1 as bigint), 63) as int) + 1) as string) AS (shiftleft(-1, 63) + 1)#x]
 +- OneRowRelation
 
 

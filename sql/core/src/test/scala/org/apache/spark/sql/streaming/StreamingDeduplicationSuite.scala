@@ -491,7 +491,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDF()
       .select(col("_1")
-        .try_cast(StringType("UNICODE")).as("str"),
+        .try_cast(StringType("UTF8_BINARY")).as("str"),
         col("_2").as("int"))
       .dropDuplicates("str")
 
