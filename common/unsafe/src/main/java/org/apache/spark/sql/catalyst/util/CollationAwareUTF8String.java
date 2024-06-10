@@ -332,12 +332,58 @@ public class CollationAwareUTF8String {
     return buf.build();
   }
 
+  /**
+   * Convert the input string to uppercase using the ICU root locale rules.
+   *
+   * @param target the input string
+   * @return the uppercase string
+   */
+  public static UTF8String toUpperCase(final UTF8String target) {
+    return UTF8String.fromString(toUpperCase(target.toString()));
+  }
+
+  public static String toUpperCase(final String target) {
+    return UCharacter.toUpperCase(target);
+  }
+
+  /**
+   * Convert the input string to uppercase using the specified ICU collation rules.
+   *
+   * @param target the input string
+   * @return the uppercase string
+   */
+  public static UTF8String toUpperCase(final UTF8String target, final int collationId) {
+    return UTF8String.fromString(toUpperCase(target.toString(), collationId));
+  }
+
   public static String toUpperCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toUpperCase(locale, target);
   }
 
+  /**
+   * Convert the input string to lowercase using the ICU root locale rules.
+   *
+   * @param target the input string
+   * @return the lowercase string
+   */
+  public static UTF8String toLowerCase(final UTF8String target) {
+    return UTF8String.fromString(toLowerCase(target.toString()));
+  }
+  public static String toLowerCase(final String target) {
+    return UCharacter.toLowerCase(target);
+  }
+
+  /**
+   * Convert the input string to lowercase using the specified ICU collation rules.
+   *
+   * @param target the input string
+   * @return the lowercase string
+   */
+  public static UTF8String toLowerCase(final UTF8String target, final int collationId) {
+    return UTF8String.fromString(toLowerCase(target.toString(), collationId));
+  }
   public static String toLowerCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
