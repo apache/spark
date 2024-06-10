@@ -324,7 +324,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def getReadStore(startVersion: Long, endVersion: Long): StateStore = {
     try {
-      if (startVersion < 0) {
+      if (startVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
       }
       if (endVersion < startVersion) {

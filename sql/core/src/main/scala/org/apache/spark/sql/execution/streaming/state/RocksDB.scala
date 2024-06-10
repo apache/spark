@@ -180,10 +180,38 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
     try {
       if (loadedVersion != version) {
+        closeDB()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        loadFromCheckpoint(latestSnapshotVersion, version)
-      }
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
+        loadedVersion = latestSnapshotVersion
 
+        // reset last snapshot version
+        if (lastSnapshotVersion > latestSnapshotVersion) {
+          // discard any newer snapshots
+          lastSnapshotVersion = 0L
+          latestSnapshot = None
+        }
+        openDB()
+
+        numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+            // we don't track the total number of rows - discard the number being track
+            -1L
+          } else if (metadata.numKeys < 0) {
+            // we track the total number of rows, but the snapshot doesn't have tracking number
+            // need to count keys now
+            countKeys()
+          } else {
+            metadata.numKeys
+          }
+        if (loadedVersion != version) replayChangelog(version)
+        // After changelog replay the numKeysOnWritingVersion will be updated to
+        // the correct number of keys in the loaded version.
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+      }
+      if (conf.resetStatsOnLoad) {
+        nativeStats.reset
+      }
       logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
     } catch {
       case t: Throwable =>

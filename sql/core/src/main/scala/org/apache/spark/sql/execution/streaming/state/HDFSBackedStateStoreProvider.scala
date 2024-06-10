@@ -296,7 +296,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def getLoadedMapForStore(startVersion: Long, endVersion: Long):
     HDFSBackedStateStoreMap = synchronized {
     try {
-      if (startVersion < 0) {
+      if (startVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
       }
       if (endVersion < startVersion || endVersion < 0) {
@@ -304,7 +304,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
-      if (!(startVersion == 0 && endVersion == 0)) {
+      if (!(endVersion == 0)) {
         newMap.putAll(loadMap(startVersion, endVersion))
       }
       newMap
