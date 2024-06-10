@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.io.{File, FileWriter}
 
+import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInterna
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -373,64 +374,20 @@ class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
   }
 }
 
-class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
+class HDFSBackedStateDataSourceReadSuite
+  extends StateDataSourceReadSuite[HDFSBackedStateStoreProvider] {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[HDFSBackedStateStoreProvider].getName)
   }
 
-
-  test("ERROR: snapshot partition not found") {
-    val exc = intercept[SparkException] {
-      val checkpointPath = this.getClass.getResource(
-        "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
-      spark.read.format("statestore")
-        .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
-        .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 0)
-        .load(checkpointPath).show()
-    }
-    assert(exc.getCause.getMessage.contains(
-      "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS"))
-  }
-
-  test("reconstruct state from specific snapshot and partition") {
-    val checkpointPath = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
-    val stateFromBatch11 = spark.read.format("statestore")
-      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
-      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
-      .load(checkpointPath)
-    val stateFromBatch23 = spark.read.format("statestore")
-      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 23)
-      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
-      .load(checkpointPath)
-    val stateFromLatestBatch = spark.read.format("statestore").load(checkpointPath)
-    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
-      stateFromLatestBatch("partition_id") === 1)
-
-    checkAnswer(stateFromBatch23, stateFromLatestBatchPartition1)
-    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
-  }
-
-  test("use snapshotStartBatchId together with batchId") {
-    val checkpointPath = this.getClass.getResource(
-      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
-    val stateFromBatch11 = spark.read.format("statestore")
-      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
-      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
-      .option(StateSourceOptions.BATCH_ID, 20)
-      .load(checkpointPath)
-    val stateFromLatestBatch = spark.read.format("statestore")
-      .option(StateSourceOptions.BATCH_ID, 20).load(checkpointPath)
-    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
-      stateFromLatestBatch("partition_id") === 1)
-
-    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
-  }
+  override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
+    new HDFSBackedStateStoreProvider
 }
 
-class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
+class RocksDBStateDataSourceReadSuite
+  extends StateDataSourceReadSuite[RocksDBStateStoreProvider] {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
@@ -438,9 +395,13 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "false")
   }
+
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
 }
 
-class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends StateDataSourceReadSuite {
+class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite
+  extends StateDataSourceReadSuite[RocksDBStateStoreProvider] {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
@@ -448,10 +409,42 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends StateData
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "true")
   }
+
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
 }
 
-abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
+abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
+  extends StateDataSourceTestBase with Assertions {
 
+  import StateStoreTestsHelper._
+
+  protected val keySchema: StructType = StateStoreTestsHelper.keySchema
+  protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
+
+  protected def newStateStoreProvider(): storeProvider
+
+  protected def getNewStateStoreProvider(checkpointDir: String): storeProvider = {
+    val minDeltasForSnapshot = 1 // overwrites the default 10
+    val numOfVersToRetainInMemory = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, SQLConf.get.stateStoreCompressionCodec)
+
+    val provider = newStateStoreProvider()
+    provider.init(
+      StateStoreId(checkpointDir, 0, 0),
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      StateStoreConf(sqlConf),
+      new Configuration)
+    provider
+  }
+  
   test("simple aggregation, state ver 1") {
     testStreamingAggregation(1)
   }
@@ -917,5 +910,99 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       testForSide("left")
       testForSide("right")
     }
+  }
+
+  def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
+    store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
+  }
+
+  test("ERROR: snapshot partition not found") {
+    withTempDir(tempDir1 => {
+      val tempDir = new java.io.File("/tmp/state/test/")
+      val exc = intercept[SparkException] {
+        val provider = getNewStateStoreProvider(tempDir.getAbsolutePath + "/state/")
+        // val checker = new StateSchemaCompatibilityChecker(
+        //  new StateStoreProviderId(provider.stateStoreId, UUID.randomUUID()), new Configuration())
+        // checker.createSchemaFile(keySchema, valueSchema)
+        for (i <- 1 to 4) {
+          val store = provider.getStore(i - 1)
+          put(store, "a", 0, i)
+          store.commit()
+          provider.doMaintenance() // do cleanup
+        }
+        // val stateStore = provider.getStore(0)
+
+        // put(stateStore, "a", 1, 1)
+        // put(stateStore, "b", 2, 2)
+        // println(stateStore.hasCommitted)
+        // println(stateStore.getClass.toString)
+
+        // stateStore.commit()
+        provider.close()
+
+        //        println(stateStore.hasCommitted)
+
+        val df = spark.read.format("statestore")
+          .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
+          .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 0)
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .load(tempDir.getAbsolutePath)
+
+        println(df.rdd.getNumPartitions)
+
+
+        val result = provider.getReadStore(0, 1)
+
+
+      }
+      assert(exc.getCause.getMessage.contains(
+        "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS"))
+    })
+
+    val exc = intercept[SparkException] {
+      val checkpointPath = this.getClass.getResource(
+        "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+      spark.read.format("statestore")
+        .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
+        .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 0)
+        .load(checkpointPath).show()
+    }
+    assert(exc.getCause.getMessage.contains(
+      "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS"))
+  }
+
+  test("reconstruct state from specific snapshot and partition") {
+    val checkpointPath = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+    val stateFromBatch11 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .load(checkpointPath)
+    val stateFromBatch23 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 23)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .load(checkpointPath)
+    val stateFromLatestBatch = spark.read.format("statestore").load(checkpointPath)
+    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
+      stateFromLatestBatch("partition_id") === 1)
+
+    checkAnswer(stateFromBatch23, stateFromLatestBatchPartition1)
+    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
+  }
+
+  test("use snapshotStartBatchId together with batchId") {
+    val checkpointPath = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.0-state-source/").getPath
+    val stateFromBatch11 = spark.read.format("statestore")
+      .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 11)
+      .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 1)
+      .option(StateSourceOptions.BATCH_ID, 20)
+      .load(checkpointPath)
+    val stateFromLatestBatch = spark.read.format("statestore")
+      .option(StateSourceOptions.BATCH_ID, 20).load(checkpointPath)
+    val stateFromLatestBatchPartition1 = stateFromLatestBatch.filter(
+      stateFromLatestBatch("partition_id") === 1)
+
+    checkAnswer(stateFromBatch11, stateFromLatestBatchPartition1)
   }
 }
