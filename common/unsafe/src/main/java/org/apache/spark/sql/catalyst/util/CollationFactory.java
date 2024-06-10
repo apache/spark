@@ -633,7 +633,7 @@ public final class CollationFactory {
         // Locale ID remains after removing all other specifiers.
         int localeId = collationId;
         // Verify locale ID is valid against `ICULocaleNames` array.
-        assert (localeId < ICULocaleNames.length);
+        assert(localeId >= 0 && localeId < ICULocaleNames.length);
         CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
         AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
         String locale = ICULocaleNames[localeId];
