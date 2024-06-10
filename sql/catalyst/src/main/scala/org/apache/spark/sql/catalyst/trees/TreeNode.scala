@@ -127,7 +127,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
     _ineffectiveRules
   }
-  private def isIneffectiveRulesEmpty = _ineffectiveRules == null
+  private def isIneffectiveRulesEmpty = _ineffectiveRules eq null
 
   /**
    * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
