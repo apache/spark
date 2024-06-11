@@ -80,8 +80,12 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight) =>
+      _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
+      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight |
+      _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
+      _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
+      _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
+      _: ToNumber | _: TryToNumber) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
