@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.{EmptyRow, EvalMode, ExpectsInputTypes, Expression, ExpressionInfo, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, EmptyRow, EvalMode, ExpectsInputTypes, Expression, ExpressionInfo, GenericInternalRow, Literal}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, AnyTimestampType, ArrayType, BinaryType, BooleanType, DataType, DatetimeType, Decimal, DecimalType, IntegerType, LongType, MapType, NumericType, StringType, StructType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -52,6 +52,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     inputEntry.map(generateSingleEntry(_, collationType))
   }
 
+  def generateDataAsStrings(
+      inputEntry: Seq[AbstractDataType],
+      collationType: CollationType): Seq[Any] = {
+    inputEntry.map(generateInputAsString(_, collationType)))
+  }
+
   /**
    * Helper function to generate single entry of data.
    * @param inputEntry - Single input entry that requires generation
@@ -65,8 +71,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case e: Class[_] if e.isAssignableFrom(classOf[Expression]) =>
         generateLiterals(StringTypeAnyCollation, collationType)
       case se: Class[_] if se.isAssignableFrom(classOf[Seq[Expression]]) =>
-        Seq(generateLiterals(StringTypeAnyCollation, collationType),
-          generateLiterals(StringTypeAnyCollation, collationType))
+        CreateArray(Seq(generateLiterals(StringTypeAnyCollation, collationType),
+          generateLiterals(StringTypeAnyCollation, collationType)))
       case oe: Class[_] if oe.isAssignableFrom(classOf[Option[Any]]) => None
       case b: Class[_] if b.isAssignableFrom(classOf[Boolean]) => false
       case dt: Class[_] if dt.isAssignableFrom(classOf[DataType]) => StringType
@@ -100,7 +106,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case _: DecimalType => Literal(new Decimal)
       case IntegerType | NumericType => Literal(1)
       case LongType => Literal(1L)
-      case _: StringType | StringTypeAnyCollation | StringTypeBinaryLcase | AnyDataType =>
+      case _: StringType | AnyDataType | _: AbstractStringType =>
         collationType match {
           case Utf8Binary =>
             Literal.create("dummy string", StringType("UTF8_BINARY"))
@@ -143,6 +149,51 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         Literal.create(new GenericInternalRow(
           fields.map(f => generateLiterals(f.dataType, collationType).asInstanceOf[Any])),
           StructType(fields))
+    }
+
+  def generateInputAsString(
+      inputType: AbstractDataType,
+      collationType: CollationType): String =
+    inputType match {
+      // TODO: Try to make this a bit more random.
+      case AnyTimestampType => "'2009-07-30 12:58:59'"
+      case BinaryType => "X'0'"
+      case BooleanType => "true"
+      case _: DatetimeType => "date'2016-04-08'"
+      case _: DecimalType => "0.0"
+      case IntegerType | NumericType => "1"
+      case LongType => Literal(1L)
+      case _: StringType | AnyDataType | _: AbstractStringType =>
+        collationType match {
+          case Utf8Binary => "dummy string"
+          case Utf8BinaryLcase => "DuMmY sTrInG"
+        }
+      case TypeCollection(typeCollection) =>
+        val strTypes = typeCollection.filter(hasStringType)
+        if (strTypes.isEmpty) {
+          // Take first type
+          generateInputAsString(typeCollection.head, collationType)
+        } else {
+          // Take first string type
+          generateInputAsString(strTypes.head, collationType)
+        }
+      case AbstractArrayType(elementType) =>
+        "array(" + generateInputAsString(elementType, collationType) + ")"
+      case ArrayType(elementType, _) =>
+        "array(" + generateInputAsString(elementType, collationType) + ")"
+      case ArrayType =>
+        "array(" + generateInputAsString(StringTypeAnyCollation, collationType) + ")"
+      case MapType =>
+        "map(" + generateInputAsString(StringTypeAnyCollation,collationType) + ", " +
+          generateInputAsString(StringTypeAnyCollation, collationType) + ")"
+      case MapType(keyType, valueType, _) =>
+        "map(" + generateInputAsString(keyType, collationType) + ", " +
+          generateInputAsString(valueType, collationType) + ")"
+      case StructType =>
+        "struct(" + generateInputAsString(StringTypeAnyCollation, collationType) + ", " +
+          generateInputAsString(StringTypeAnyCollation, collationType) +")"
+      case StructType(fields) =>
+        "named_struct(" + ")" + fields.map(f => f.)
     }
 
   /**
@@ -223,7 +274,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     (funInfos, toSkip)
   }
 
-  test("SPARK-48280: Expression Evaluator Test") {
+  test("SPARK-48280: Expression Walker for expression evaluation") {
     // This test does following:
     // 1) Take all expressions
     // 2) Find the ones that have at least one argument of StringType
@@ -298,6 +349,64 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
         assert(exceptionUtfBinary.get.getClass == exceptionLcase.get.getClass)
       }
     }
+  }
+
+  test("SPARK-48280: Expression Walker for plan generation of expressions") {
+
+    var (funInfos, toSkip) = extractRelevantExpressions()
+    toSkip =
+      "element_at" ::
+      "try_element_at" ::
+      "reduce" ::
+      "aggregate" ::
+      "array_intersect" ::
+      toSkip
+
+    var typeList = List(
+      "date",
+      "map<struct<>,string>",
+      "string",
+      "array<string>",
+      "float",
+      "smallint",
+      "map<string,string>",
+      "map<struct<>,struct<>>",
+      "struct<dummy:string>",
+      "bigint",
+      "array<struct<>>",
+      "timestamp",
+      "array<array<string>>",
+      "array<struct<key:struct<>,value:struct<>>>",
+      "struct<start:string,end:string>",
+      "timestamp_ntz",
+      "decimal(0,0)",
+      "double",
+      "int",
+      "map<string,struct<>>",
+      "boolean",
+      "struct<>",
+      "binary"
+    )
+    val dt = collection.mutable.Set[String]()
+    for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      println("checking - " + f.getName)
+      val cl = Utils.classForName(f.getClassName)
+      val headConstructor = cl.getConstructors.head
+      val params = headConstructor.getParameters.map(p => p.getType)
+      val args = generateData(params.toSeq, Utf8Binary)
+      val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
+      val inputTypes = expr.inputTypes
+
+      val inputDataUtf8Binary = {
+        generateData(replaceExpressions(inputTypes, params.toSeq), Utf8BinaryLcase)
+      }
+      println(inputDataUtf8Binary.map(_.toString))
+      val instanceUtf8Binary = {
+        headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
+      }
+      dt += instanceUtf8Binary.dataType.simpleString
+    }
+    println(dt)
   }
 
   test("SPARK-48280: Expression Walker for SQL query examples") {
