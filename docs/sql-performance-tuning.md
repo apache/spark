@@ -495,9 +495,20 @@ The following SQL properties enable Storage Partition Join.
 
 If Storage Partition Join is performed, the query plan will not contain Exchange nodes prior to the join.
 
+The following example uses Iceberg (https://iceberg.apache.org/docs/nightly/spark-getting-started/), a Spark V2 DataSource that supports Storage Partition Join.
 ```sql
--- Plan without Storage Partition Join
+CREATE TABLE prod.db.target (id INT, salary INT, dep STRING)
+USING iceberg
+PARTITIONED BY (dep, bucket(8, id))
 
+CREATE TABLE prod.db.source (id INT, salary INT, dep STRING)
+USING iceberg
+PARTITIONED BY (dep, bucket(8, id))
+
+EXPLAIN SELECT * FROM target t INNER JOIN source s
+ON t.dep = s.dep AND t.id = s.id
+
+-- Plan without Storage Partition Join
 == Physical Plan ==
 * Project (12)
 +- * SortMergeJoin Inner (11)
@@ -512,8 +523,14 @@ If Storage Partition Join is performed, the query plan will not contain Exchange
             +- * ColumnarToRow (7)
                +- BatchScan (6)
 
--- Plan with Storage Partition Join
 
+SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
+SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
+SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
+SET 'spark.sql.requireAllClusterKeysForCoPartition' 'false'
+SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
+
+-- Plan with Storage Partition Join
 == Physical Plan ==
 * Project (10)
 +- * SortMergeJoin Inner (9)
