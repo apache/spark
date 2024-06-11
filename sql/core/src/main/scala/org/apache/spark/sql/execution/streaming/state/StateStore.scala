@@ -379,8 +379,8 @@ trait StateStoreProvider {
     new WrappedReadStateStore(getStore(version))
 
   /**
-   * This is an optional method, used by snapshotBatchId option when reading state as data source.
-   *
+   * This is an optional method, used by snapshotStartBatchId option when reading state as data
+   * source.
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
    * The State Store will be constructed from the batch at startVersion, and applying delta files
    * up to the endVersion. If there is no snapshot file of batch startVersion, an exception will
