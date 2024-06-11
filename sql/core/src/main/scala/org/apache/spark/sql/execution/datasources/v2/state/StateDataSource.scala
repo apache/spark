@@ -116,14 +116,15 @@ case class StateSourceOptions(
     batchId: Long,
     operatorId: Int,
     storeName: String,
-  joinSide: JoinSideValues,
-  snapshotStartBatchId: Option[Long],
-  snapshotPartitionId: Option[Int]) {
+    joinSide: JoinSideValues,
+    snapshotStartBatchId: Option[Long],
+    snapshotPartitionId: Option[Int]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide)"
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
+      s"snapshotStartBatchId=$snapshotStartBatchId, snapshotPartitionId=$snapshotPartitionId)"
   }
 }
 

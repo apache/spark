@@ -20,6 +20,7 @@ import java.io.{File, FileWriter}
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
+
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
@@ -428,7 +429,7 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
 
-  test("ERROR: snapshot partition not found") {
+  test("ERROR: snapshot of version not found") {
     testSnapshotNotFound()
   }
 
@@ -452,21 +453,12 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
 
   protected def newStateStoreProvider(): storeProvider
 
-  def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
-    store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
-  }
-
-  def get(store: ReadStateStore, key1: String, key2: Int): Option[Int] = {
-    Option(store.get(dataToKeyRow(key1, key2))).map(valueRowToData)
-  }
-
   /**
    * Calls the overridable [[newStateStoreProvider]] to create the state store provider instance.
-   * Initialize it with default settings except for STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.
+   * Initialize it with the configuration set by child classes.
    *
    * @param checkpointDir        path to store state information
-   * @param minDeltasForSnapshot one snapshot for minDeltasForSnapshot+1 delta files
-   * @return
+   * @return instance of class extending [[StateStoreProvider]]
    */
   private def getNewStateStoreProvider(checkpointDir: String): storeProvider = {
     val provider = newStateStoreProvider()
