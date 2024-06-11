@@ -78,7 +78,7 @@ object ExternalCatalogUtils {
     while (firstIndex < length && !needsEscaping(path.charAt(firstIndex))) {
       firstIndex += 1
     }
-    if (firstIndex == 0 && !needsEscaping(path.charAt(0))) {
+    if (firstIndex == length) {
       path
     } else {
       val sb = new java.lang.StringBuilder(length + 16)
