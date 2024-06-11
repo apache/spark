@@ -1656,7 +1656,6 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a")
     )
     testCases.foreach(t => {
-      println(s" TEST CASE: ${t}")
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
       }.mkString(",")
@@ -1698,8 +1697,9 @@ class CollationSQLExpressionsSuite
           // Input to function mode was a complex type with strings collated on non-binary
           // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
           val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a complex type with non-binary collated" +
-              " fields, which are currently not supported by 'mode'."),
+            ("msg", "The input to the function 'mode' was a " +
+              "type of binary-unstable type that is not currently " +
+              "supported by mode."),
             ("hint", "")).toMap
           checkError(
             exception = intercept[AnalysisException] {
