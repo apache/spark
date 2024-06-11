@@ -23,7 +23,7 @@ import threading
 import os
 import warnings
 from collections.abc import Sized
-from functools import reduce
+import functools
 from threading import RLock
 from typing import (
     Optional,
@@ -399,7 +399,7 @@ class SparkSession:
             "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
-        return reduce(
+        return functools.reduce(
             _merge_type,
             (
                 _infer_schema(
@@ -898,7 +898,7 @@ class SparkSession:
 
     dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
-    @property
+    @functools.cached_property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None

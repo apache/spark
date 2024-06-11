@@ -389,34 +389,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
-   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
-   */
-  public int compareLowerCase(UTF8String other) {
-    int curr;
-    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
-      byte left, right;
-      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
-        return compareLowerCaseSuffixSlow(other, curr);
-      }
-      int lowerLeft = Character.toLowerCase(left);
-      int lowerRight = Character.toLowerCase(right);
-      if (lowerLeft != lowerRight) {
-        return lowerLeft - lowerRight;
-      }
-    }
-    return numBytes - other.numBytes;
-  }
-
-  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
-    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
-      numBytes - pref);
-    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
-      other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
-  }
-
-  /**
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
@@ -427,7 +399,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
   }
 
-  private boolean isFullAscii() {
+  public boolean isFullAscii() {
     for (var i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         return false;

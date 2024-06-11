@@ -2136,26 +2136,37 @@ private[spark] object Utils
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
-   *
-   * @param startPort The initial port to start the service on.
-   * @param startService Function to start service on a given port.
-   *                     This is expected to throw java.net.BindException on port collision.
-   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
-   * @param serviceName Name of the service.
-   * @return (service: T, port: Int)
+   * Use a shared configuration for the maximum number of port retries.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
+    startServiceOnPort(startPort, startService, portMaxRetries(conf), serviceName)
+  }
+
+  /**
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   *
+   * @param startPort The initial port to start the service on.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   * @param maxRetries The maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
+      startService: Int => (T, Int),
+      maxRetries: Int,
+      serviceName: String): (T, Int) = {
 
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -2219,6 +2230,9 @@ private[spark] object Utils
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+          isBindCollision(e.getCause)
+      case e: IOException =>
+        (e.getMessage != null && e.getMessage.startsWith("Failed to bind to address")) ||
           isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false

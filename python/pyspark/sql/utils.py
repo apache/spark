@@ -27,7 +27,6 @@ from typing import (
     cast,
     TypeVar,
     Union,
-    Type,
 )
 
 # For backward compatibility.
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -415,17 +413,6 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

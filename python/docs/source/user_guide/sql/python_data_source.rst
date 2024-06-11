@@ -319,7 +319,7 @@ Start a query that read from fake python data source and write to console
 
 .. code-block:: python
 
-    query = spark.readStream.format("fake").load().writeStream().format("console").start()
+    query = spark.readStream.format("fake").load().writeStream.format("console").start()
 
     # +---+
     # | id|

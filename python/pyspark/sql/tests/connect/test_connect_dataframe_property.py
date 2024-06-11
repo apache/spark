@@ -37,6 +37,29 @@ if have_pandas:
 
 
 class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
+    def test_cached_property_is_copied(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+                StructField("age", IntegerType(), True),
+                StructField("city", StringType(), True),
+            ]
+        )
+        # Create some dummy data
+        data = [
+            (1, "Alice", 30, "New York"),
+            (2, "Bob", 25, "San Francisco"),
+            (3, "Cathy", 29, "Los Angeles"),
+            (4, "David", 35, "Chicago"),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        df_columns = df.columns
+        assert len(df.columns) == 4
+        for col in ["id", "name"]:
+            df_columns.remove(col)
+        assert len(df.columns) == 4
+
     def test_cached_schema_to(self):
         cdf = self.connect.read.table(self.tbl_name)
         sdf = self.spark.read.table(self.tbl_name)
@@ -269,6 +292,106 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf3.schema, sdf3.schema)
         self.assertEqual(cdf3.collect(), sdf3.collect())
+
+    def test_cached_schema_set_op(self):
+        data1 = [(1, 2, 3)]
+        data2 = [(6, 2, 5)]
+        data3 = [(6, 2, 5.0)]
+
+        cdf1 = self.connect.createDataFrame(data1, ["a", "b", "c"])
+        sdf1 = self.spark.createDataFrame(data1, ["a", "b", "c"])
+        cdf2 = self.connect.createDataFrame(data2, ["a", "b", "c"])
+        sdf2 = self.spark.createDataFrame(data2, ["a", "b", "c"])
+        cdf3 = self.connect.createDataFrame(data3, ["a", "b", "c"])
+        sdf3 = self.spark.createDataFrame(data3, ["a", "b", "c"])
+
+        # schema not yet cached
+        self.assertTrue(cdf1._cached_schema is None)
+        self.assertTrue(cdf2._cached_schema is None)
+        self.assertTrue(cdf3._cached_schema is None)
+
+        # no cached schema in result dataframe
+        self.assertTrue(cdf1.union(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.union(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.union(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.unionAll(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.unionAll(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.unionAll(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.unionByName(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.unionByName(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.unionByName(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.subtract(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.subtract(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.subtract(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.exceptAll(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.exceptAll(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.exceptAll(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.intersect(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.intersect(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.intersect(cdf3)._cached_schema is None)
+
+        self.assertTrue(cdf1.intersectAll(cdf1)._cached_schema is None)
+        self.assertTrue(cdf1.intersectAll(cdf2)._cached_schema is None)
+        self.assertTrue(cdf1.intersectAll(cdf3)._cached_schema is None)
+
+        # trigger analysis of cdf1.schema
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertTrue(cdf1._cached_schema is not None)
+
+        self.assertEqual(cdf1.union(cdf1)._cached_schema, cdf1._cached_schema)
+        # cannot infer when cdf2 doesn't cache schema
+        self.assertTrue(cdf1.union(cdf2)._cached_schema is None)
+        # cannot infer when cdf3 doesn't cache schema
+        self.assertTrue(cdf1.union(cdf3)._cached_schema is None)
+
+        # trigger analysis of cdf2.schema, cdf3.schema
+        self.assertEqual(cdf2.schema, sdf2.schema)
+        self.assertEqual(cdf3.schema, sdf3.schema)
+
+        # now all the schemas are cached
+        self.assertTrue(cdf1._cached_schema is not None)
+        self.assertTrue(cdf2._cached_schema is not None)
+        self.assertTrue(cdf3._cached_schema is not None)
+
+        self.assertEqual(cdf1.union(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.union(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.union(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.unionAll(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.unionAll(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.unionAll(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.unionByName(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.unionByName(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.unionByName(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.subtract(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.subtract(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.subtract(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.exceptAll(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.exceptAll(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.exceptAll(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.intersect(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.intersect(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.intersect(cdf3)._cached_schema is None)
+
+        self.assertEqual(cdf1.intersectAll(cdf1)._cached_schema, cdf1._cached_schema)
+        self.assertEqual(cdf1.intersectAll(cdf2)._cached_schema, cdf1._cached_schema)
+        # cannot infer when schemas mismatch
+        self.assertTrue(cdf1.intersectAll(cdf3)._cached_schema is None)
 
 
 if __name__ == "__main__":

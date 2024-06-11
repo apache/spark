@@ -79,7 +79,7 @@ private[hive] class SparkGetSchemasOperation(
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
 
-      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
+      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempDatabase
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (schemaName == null || schemaName.isEmpty ||
           databasePattern.matcher(globalTempViewDb).matches()) {
