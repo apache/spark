@@ -83,14 +83,16 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def testCreateTableWithProperty(tbl: String): Unit = {}
 
-  def checkErrorFailedLoadTable(e: AnalysisException, tbl: String): Unit = {
-    checkError(
+  private def checkErrorFailedJDBC(
+      e: AnalysisException,
+      errorClass: String,
+      tbl: String): Unit = {
+    checkErrorMatchPVals(
       exception = e,
-      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      errorClass = errorClass,
       parameters = Map(
-        "url" -> "jdbc:",
-        "message" -> s"Failed to load table: $tbl"
-      )
+        "url" -> "jdbc:.*",
+        "tableName" -> s"`$tbl`")
     )
   }
 
@@ -129,15 +131,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       )
     }
     // Add a column to not existing table
-    checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
-      },
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      parameters = Map(
-        "url" -> "jdbc:.*",
-        "tableName" -> "`not_existing_table`")
-    )
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
+    }
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -156,15 +153,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg.contains(s"Missing field bad_column in table $catalogName.alt_table"))
     }
     // Drop a column from a not existing table
-    checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
-      },
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      parameters = Map(
-        "url" -> "jdbc:.*",
-        "tableName" -> "`not_existing_table`")
-    )
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
+    }
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -177,15 +169,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(msg2.contains("Missing field bad_column"))
     }
     // Update column type in not existing table
-    checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
-      },
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      parameters = Map(
-        "url" -> "jdbc:.*",
-        "tableName" -> "`not_existing_table`")
-    )
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
+    }
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -210,15 +197,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       )
     }
     // Rename a column in a not existing table
-    checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
-      },
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      parameters = Map(
-        "url" -> "jdbc:.*",
-        "tableName" -> "`not_existing_table`")
-    )
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
+    }
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -226,15 +208,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       testUpdateColumnNullability(s"$catalogName.alt_table")
     }
     // Update column nullability in not existing table
-    checkErrorMatchPVals(
-      exception = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
-      },
-      errorClass = "FAILED_JDBC.LOAD_TABLE",
-      parameters = Map(
-        "url" -> "jdbc:.*",
-        "tableName" -> "`not_existing_table`")
-    )
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
+    }
+    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
   }
 
   test("CREATE TABLE with table comment") {
@@ -253,15 +230,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException] {
-          sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
-        },
-        errorClass = "FAILED_JDBC.CREATE_TABLE",
-        parameters = Map(
-          "url" -> "jdbc:.*",
-          "tableName" -> "`new_table`")
-      )
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
+      }
+      checkErrorFailedJDBC(e, "FAILED_JDBC.CREATE_TABLE", "new_table")
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
