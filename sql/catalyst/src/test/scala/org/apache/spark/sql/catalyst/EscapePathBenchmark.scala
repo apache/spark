@@ -19,6 +19,18 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 
+/**
+ * Benchmark for path escaping
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
+ *   2. build/sbt "catalyst/Test/runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/Test/runMain <this class>"
+ *      Results will be written to "benchmarks/EscapePathBenchmark-results.txt".
+ * }}}
+ */
 object EscapePathBenchmark extends BenchmarkBase {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 1000000

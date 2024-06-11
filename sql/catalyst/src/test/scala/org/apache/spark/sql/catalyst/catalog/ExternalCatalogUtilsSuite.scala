@@ -28,8 +28,13 @@ class ExternalCatalogUtilsSuite extends SparkFunSuite {
       assert(escapePathName(c.toString) === "%" + f"$c%02X",
         s"wrong escaping for $c")
     }
+    assert(escapePathName("") === "")
+    assert(escapePathName(" ") === " ")
+    assert(escapePathName("\n") === "%0A")
     assert(escapePathName("a b") === "a b")
     assert(escapePathName("a:b") === "a%3Ab")
+    assert(escapePathName(":ab") === "%3Aab")
+    assert(escapePathName("ab:") === "ab%3A")
     assert(escapePathName("a%b") === "a%25b")
     assert(escapePathName("a,b") === "a,b")
     assert(escapePathName("a/b") === "a%2Fb")
