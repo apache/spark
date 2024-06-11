@@ -3163,7 +3163,11 @@ class SparkConnectPlanner(
       }
 
     // Register the new query so that its reference is cached and is stopped on session timeout.
-    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
+      sessionHolder,
+      query,
+      executeHolder.sparkSessionTags,
+      executeHolder.operationId)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
       sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
@@ -3228,7 +3232,9 @@ class SparkConnectPlanner(
 
     // Find the query in connect service level cache, otherwise check session's active streams.
     val query = SparkConnectService.streamingSessionManager
-      .getCachedQuery(id, runId, session) // Common case: query is cached in the cache.
+      // Common case: query is cached in the cache.
+      .getCachedQuery(id, runId, executeHolder.sparkSessionTags, session)
+      .map(_.query)
       .orElse { // Else try to find it in active streams. Mostly will not be found here either.
         Option(session.streams.get(id))
       } match {

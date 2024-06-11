@@ -23,6 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
@@ -179,12 +180,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[service] def interruptAll(): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
+    val operationsIds =
+      SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = false)
     executions.asScala.values.foreach { execute =>
       if (execute.interrupt()) {
         interruptedIds += execute.operationId
       }
     }
-    interruptedIds.toSeq
+    interruptedIds.toSeq ++ operationsIds
   }
 
   /**
@@ -194,6 +197,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[service] def interruptTag(tag: String): Seq[String] = {
     val interruptedIds = new mutable.ArrayBuffer[String]()
+    val queries = SparkConnectService.streamingSessionManager.getTaggedQuery(tag, session)
+    queries.foreach(q => Future(q.query.stop())(ExecutionContext.global))
     executions.asScala.values.foreach { execute =>
       if (execute.sparkSessionTags.contains(tag)) {
         if (execute.interrupt()) {
@@ -201,7 +206,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
         }
       }
     }
-    interruptedIds.toSeq
+    interruptedIds.toSeq ++ queries.map(_.operationId)
   }
 
   /**
@@ -298,7 +303,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // Clean up running streaming queries.
     // Note: there can be concurrent streaming queries being started.
-    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
+    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
 

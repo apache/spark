@@ -1436,7 +1436,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM ${db}.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
@@ -1487,7 +1487,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM $db.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
@@ -1517,7 +1517,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     Seq(true, false).foreach { storeAnalyzed =>
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("global_tv") {
-          val db = spark.sharedState.globalTempViewManager.database
+          val db = spark.sharedState.globalTempDB
           testAlterTemporaryViewAsWithCache(TableIdentifier("global_tv", Some(db)), storeAnalyzed)
         }
       }
@@ -1575,7 +1575,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-34699: CREATE GLOBAL TEMP VIEW USING should uncache correctly") {
     withGlobalTempView("global_tv") {
-      val db = spark.sharedState.globalTempViewManager.database
+      val db = spark.sharedState.globalTempDB
       testCreateTemporaryViewUsingWithCache(TableIdentifier("global_tv", Some(db)))
     }
   }

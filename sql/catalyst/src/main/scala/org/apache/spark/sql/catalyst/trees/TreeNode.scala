@@ -120,7 +120,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * ineffective for subsequent apply calls on this tree because query plan structures are
    * immutable.
    */
-  private val ineffectiveRules: BitSet = new BitSet(RuleIdCollection.NumRules)
+  private[this] var _ineffectiveRules: BitSet = null
+  private def ineffectiveRules: BitSet = {
+    if (_ineffectiveRules eq null) {
+      _ineffectiveRules = new BitSet(RuleIdCollection.NumRules)
+    }
+    _ineffectiveRules
+  }
+  private def isIneffectiveRulesEmpty = _ineffectiveRules eq null
 
   /**
    * @return a sequence of tree pattern enums in a TreeNode T. It does not include propagated
@@ -149,7 +156,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    *         UnknownId, it returns false.
    */
   protected def isRuleIneffective(ruleId : RuleId): Boolean = {
-    if (ruleId eq UnknownRuleId) {
+    if (isIneffectiveRulesEmpty || (ruleId eq UnknownRuleId)) {
       return false
     }
     ineffectiveRules.get(ruleId.id)
