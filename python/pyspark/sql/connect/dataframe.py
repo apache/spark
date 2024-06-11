@@ -223,6 +223,11 @@ class DataFrame(ParentDataFrame):
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
+        if any(not isinstance(c, (str, Column)) for c in cols):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                message_parameters={"arg_name": "columns"},
+            )
         return DataFrame(
             plan.Project(self._plan, [F._to_col(c) for c in cols]),
             session=self._session,
