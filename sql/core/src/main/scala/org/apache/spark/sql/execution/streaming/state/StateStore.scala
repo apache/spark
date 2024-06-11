@@ -379,6 +379,8 @@ trait StateStoreProvider {
     new WrappedReadStateStore(getStore(version))
 
   /**
+   * This is an optional method, used by snapshotBatchId option when reading state as data source.
+   *
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
    * The State Store will be constructed from the batch at startVersion, and applying delta files
    * up to the endVersion. If there is no snapshot file of batch startVersion, an exception will
@@ -389,7 +391,7 @@ trait StateStoreProvider {
    */
   def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore =
     throw new SparkUnsupportedOperationException("getReadStore with startVersion and endVersion " +
-      "is not supported by this StateStoreProvider")
+      s"is not supported by ${this.getClass.toString}")
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
