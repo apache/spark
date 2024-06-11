@@ -126,6 +126,12 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsCommitted = 0L
 
+  // For testing only.
+  private[storage] def getSerializerWrappedStream: OutputStream = bs
+
+  // For testing only.
+  private[storage] def getSerializationStream: SerializationStream = objOut
+
   /**
    * Set the checksum that the checksumOutputStream should use
    */

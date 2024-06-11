@@ -17,7 +17,6 @@
 package org.apache.spark.storage
 
 import java.io.{File, InputStream, OutputStream}
-import java.lang.reflect.Field
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
@@ -204,26 +203,21 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite {
     for (i <- 1 to 500) {
       writer.write(i, i)
     }
-    val clazz: Class[_] = writer.getClass
-    val bsField: Field = clazz.getDeclaredField("bs")
-    bsField.setAccessible(true)
-    val bs = bsField.get(writer).asInstanceOf[OutputStreamWithCloseDetecting]
 
-    val objOutField: Field = clazz.getDeclaredField("objOut")
-    objOutField.setAccessible(true)
-    val objOut = objOutField.get(writer).asInstanceOf[SerializationStreamWithCloseDetecting]
+    val bs = writer.getSerializerWrappedStream.asInstanceOf[OutputStreamWithCloseDetecting]
+    val objOut = writer.getSerializationStream.asInstanceOf[SerializationStreamWithCloseDetecting]
 
     writer.closeAndDelete()
     assert(!file.exists())
     assert(writeMetrics.bytesWritten == 0)
     assert(writeMetrics.recordsWritten == 0)
-    assert(bs.closed)
-    assert(objOut.closed)
+    assert(bs.isClosed)
+    assert(objOut.isClosed)
   }
 }
 
 trait CloseDetecting {
-  var closed = false
+  var isClosed = false
 }
 
 class OutputStreamWithCloseDetecting(outputStream: OutputStream)
@@ -232,7 +226,7 @@ class OutputStreamWithCloseDetecting(outputStream: OutputStream)
   override def write(b: Int): Unit = outputStream.write(b)
 
   override def close(): Unit = {
-    closed = true
+    isClosed = true
     outputStream.close()
   }
 }
@@ -258,7 +252,7 @@ class SerializationStreamWithCloseDetecting(serializationStream: SerializationSt
     extends SerializationStream with CloseDetecting {
 
   override def close(): Unit = {
-    closed = true
+    isClosed = true
     serializationStream.close()
   }
 
