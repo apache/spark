@@ -645,6 +645,28 @@ class CollationStringExpressionsSuite
     })
   }
 
+  test("Levenshtein string expression with collation") {
+    // Supported collations
+    case class LevenshteinTestCase(
+      left: String, right: String, collationName: String, threshold: Option[Int], result: Int
+    )
+    val testCases = Seq(
+      LevenshteinTestCase("kitten", "sitTing", "UTF8_BINARY", None, result = 4),
+      LevenshteinTestCase("kitten", "sitTing", "UTF8_BINARY_LCASE", None, result = 4),
+      LevenshteinTestCase("kitten", "sitTing", "UNICODE", Some(3), result = -1),
+      LevenshteinTestCase("kitten", "sitTing", "UNICODE_CI", Some(3), result = -1)
+    )
+    testCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collationName) {
+        val th = if (t.threshold.isDefined) s", ${t.threshold.get}" else ""
+        val query = s"select levenshtein('${t.left}', '${t.right}'$th)"
+        // Result & data type
+        checkAnswer(sql(query), Row(t.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      }
+    })
+  }
+
   test("Support Left/Right/Substr with collation") {
     case class SubstringTestCase(
         method: String,
