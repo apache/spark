@@ -326,7 +326,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         ++byteIndex;
         continue;
       }
-      // 1B UTF-8 sequence (ASCII or invalid).
+      // 1B UTF-8 sequence (ASCII or truncated).
       if (codePointLen == 1) {
         if (firstByte >= 0) bytes.add(firstByte);
         else appendReplacementCharacter(bytes);
@@ -377,7 +377,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
       if (codePointLen == 0) return false;
-      // 1B UTF-8 sequence (ASCII or invalid).
+      // 1B UTF-8 sequence (ASCII or truncated).
       if (codePointLen == 1) {
         if (firstByte >= 0) {
           ++byteIndex;
