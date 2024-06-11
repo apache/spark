@@ -1167,6 +1167,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val blocksSem = new Semaphore(0)
     configureMockTransferForPushShuffle(blocksSem, blockChunks)
 
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2)).thenReturn(
+      new RoaringBitmap)
     val metaSem = new Semaphore(0)
     val pushMergedBlockMeta = mock(classOf[MergedBlockMeta])
     when(pushMergedBlockMeta.getNumChunks).thenReturn(2)
@@ -1358,6 +1360,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(mapOutputTracker.getMapSizesForMergeResult(0, 2, bitmaps(0)))
       .thenReturn(Seq((localBmId,
         toBlockList(Seq(ShuffleBlockId(0, 1, 2), ShuffleBlockId(0, 2, 2)), 1L, 1))).iterator)
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2)).thenReturn(
+      bitmaps(0))
     val pushMergedBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, localHost, 1)
     Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (localBmId, toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1)),
@@ -1450,6 +1454,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // Return valid buffer for chunk in partition 3
     doReturn(Seq(createMockManagedBuffer(2))).when(blockManager)
       .getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 3), localDirs)
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 3)).thenReturn(
+      bitmaps(0))
     val taskContext = TaskContext.empty()
     val shuffleMetrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val iterator = createShuffleBlockIteratorWithDefaults(
@@ -1661,6 +1667,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
           ShuffleBlockId(0, 5, 2)), 4L, 1)))
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(fallbackBlocksByAddr.iterator)
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2))
+      .thenReturn(bitmaps(1))
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "remote-client-1", 1) ->
         toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)),
@@ -1753,6 +1761,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)), 1L, 1)))
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(fallbackBlocksByAddr.iterator)
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2))
+      .thenReturn(new RoaringBitmap)
 
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-client-1", 2) ->
@@ -1823,6 +1833,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)), 1L, 1)))
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(fallbackBlocksByAddr.iterator)
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2))
+      .thenReturn(new RoaringBitmap)
 
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-client-1", 2) ->
@@ -1854,6 +1866,67 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
     assert(regularBlocks === Set[ShuffleBlockId](ShuffleBlockId(0, 3, 2), ShuffleBlockId(0, 4, 2),
       ShuffleBlockId(0, 5, 2), ShuffleBlockId(0, 6, 2)))
+  }
+
+  test("SPARK-48580: fallback to original blocks for missing mapIds during push-merged" +
+    "block meta consistency check") {
+    val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "push-merged-host", 1),
+        toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)),
+      (BlockManagerId("remote-client-1", "remote-host-1", 1),
+        toBlockList(Seq(ShuffleBlockId(0, 0, 2)), 1L, 0))
+    )
+    val blockChunks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 2) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 2) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 0) -> createMockManagedBuffer()
+    )
+    val blocksSem = new Semaphore(0)
+    configureMockTransferForPushShuffle(blocksSem, blockChunks)
+
+    val bitmap = new RoaringBitmap()
+    bitmap.add(1) // chunk 0 has mapId 1
+    when(mapOutputTracker.getMergeStatusMapTracker(0, 2)).thenReturn(bitmap)
+    val metaSem = new Semaphore(0)
+    val pushMergedBlockMeta = mock(classOf[MergedBlockMeta])
+    when(pushMergedBlockMeta.getNumChunks).thenReturn(1)
+    when(pushMergedBlockMeta.getChunksBitmapBuffer).thenReturn(mock(classOf[ManagedBuffer]))
+    // mock chunk 0 lost mapId 1
+    val roaringBitmaps = Array(new RoaringBitmap)
+    when(pushMergedBlockMeta.readChunkBitmaps()).thenReturn(roaringBitmaps)
+    when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
+        Future {
+          val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
+          val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
+          val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
+          logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
+            s"port = ${invocation.getArguments()(1)}, " +
+            s"shuffleId = $shuffleId, shuffleMergeId = $shuffleMergeId, reduceId = $reduceId")
+          metaSem.acquire()
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
+        }
+      })
+
+    // add fallback for chunk 0 mapId 1
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val fallbackBlocksByAddr = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (remoteBmId, toBlockList(Seq(ShuffleBlockId(0, 1, 2)), 1L, 1)))
+    when(mapOutputTracker.getMapSizesForMergeResult(0, 2, bitmap))
+      .thenReturn(fallbackBlocksByAddr.iterator)
+
+    val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
+    blocksSem.acquire()
+    val (id1, _) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 2))
+    metaSem.release()
+    val (id2, _) = iterator.next()
+    assert(id2 === ShuffleBlockId(0, 1, 2))
+    blocksSem.acquire()
+    val (id3, _) = iterator.next()
+    assert(id3 === ShuffleBlockChunkId(0, 0, 2, 0))
+    assert(!iterator.hasNext)
   }
 
   test("SPARK-38987: failure to fetch corrupted shuffle block chunk should " +

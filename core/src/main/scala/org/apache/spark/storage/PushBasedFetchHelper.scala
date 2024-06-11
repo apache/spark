@@ -288,6 +288,25 @@ private class PushBasedFetchHelper(
     }
   }
 
+  def checkPushMergedBlockMetaConsistency(
+      shuffleBlockId: ShuffleMergedBlockId,
+      address: BlockManagerId,
+      chunkBitmaps: Array[RoaringBitmap]): Unit = {
+    val mergeStatusMapTracker = mapOutputTracker.getMergeStatusMapTracker(
+      shuffleBlockId.shuffleId, shuffleBlockId.reduceId)
+    val mergedBlockBitmap = new RoaringBitmap()
+    chunkBitmaps.foreach(mergedBlockBitmap.or)
+    val missingBlock = RoaringBitmap.andNot(mergeStatusMapTracker, mergedBlockBitmap)
+    if (missingBlock.getCardinality > 0) {
+      logWarning(s"Found the meta of push-merged block for" +
+        s" $shuffleBlockId from ${address.host}:${address.port}" +
+        s" missing mapId $missingBlock")
+      val fallbackBlocksByAddr = mapOutputTracker.getMapSizesForMergeResult(
+        shuffleBlockId.shuffleId, shuffleBlockId.reduceId, missingBlock)
+      iterator.fallbackFetch(fallbackBlocksByAddr)
+    }
+  }
+
   /**
    * This is executed by the task thread when the `iterator.next()` is invoked and the iterator
    * processes a response of type:

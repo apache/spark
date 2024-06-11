@@ -670,6 +670,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId]
 
   /**
+   * Called from executors to get the partition level bitmap, for checking if there are any mapIds
+   * missing in the chunk level bitmap pulled from the server.
+   */
+  def getMergeStatusMapTracker(shuffleId: Int, partitionId: Int): RoaringBitmap
+
+  /**
    * Deletes map output status information for the specified shuffle stage.
    */
   def unregisterShuffle(shuffleId: Int): Unit
@@ -1252,6 +1258,10 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
   }
 
+  def getMergeStatusMapTracker(shuffleId: Int, partitionId: Int): RoaringBitmap = {
+    new RoaringBitmap()
+  }
+
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
@@ -1402,6 +1412,21 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
     shufflePushMergerLocations.getOrElse(shuffleId, getMergerLocations(shuffleId))
+  }
+
+  def getMergeStatusMapTracker(shuffleId: Int, partitionId: Int): RoaringBitmap = {
+    val (_, mergeResultStatuses) = getStatuses(shuffleId, conf, fetchMergeResult)
+    try {
+      val mergeStatus = mergeResultStatuses(partitionId)
+      MapOutputTracker.validateStatus(mergeStatus, shuffleId, partitionId)
+      mergeStatus.tracker
+    } catch {
+      // We experienced a fetch failure so our mapStatuses cache is outdated; clear it
+      case e: MetadataFetchFailedException =>
+        mapStatuses.clear()
+        mergeStatuses.clear()
+        throw e
+    }
   }
 
   private def getMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
