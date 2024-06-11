@@ -734,13 +734,13 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
 
 /**
  * A function that converts an invalid UTF8 string to a valid UTF8 string by replacing invalid
- * UTF-8 sequences with the Unicode replacement character (U+FFFD), according to the UNICODE
- * standard rules (Section 3.9, Paragraph D86, Table 3-7). Valid strings stay unchanged.
+ * UTF-8 byte sequences with the Unicode replacement character (U+FFFD), according to the UNICODE
+ * standard rules (Section 3.9, Paragraph D86, Table 3-7). Valid strings remain unchanged.
  */
 // scalastyle:off
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
-    "otherwise returns a new string whose invalid UTF8 bytes sequences are replaced using the " +
+    "otherwise returns a new string whose invalid UTF8 byte sequences are replaced using the " +
     "UNICODE replacement character U+FFFD.",
   arguments = """
     Arguments:
@@ -815,17 +815,17 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
 
   override def nullSafeEval(srcEval: Any): Any = {
     val utf8string = srcEval.asInstanceOf[UTF8String]
-    if (!utf8string.isValid) throw QueryExecutionErrors.invalidUTF8StringError(utf8string)
-    else utf8string
+    if (utf8string.isValid) utf8string
+    else throw QueryExecutionErrors.invalidUTF8StringError(utf8string)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-        if (!$c.isValid()) {
-          throw QueryExecutionErrors.invalidUTF8StringError($c);
-        } else {
+        if ($c.isValid()) {
           ${ev.value} = $c;
+        } else {
+          throw QueryExecutionErrors.invalidUTF8StringError($c);
         }
       """
     )
@@ -840,12 +840,12 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
 }
 
 /**
- * A function that tries to validate a UTF8 string, returning null if the string is invalid.
+ * A function that tries to validate a UTF8 string, returning NULL if the string is invalid.
  */
 // scalastyle:off
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
-    "otherwise returns null.",
+    "otherwise returns NULL.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -874,17 +874,17 @@ case class TryValidateUTF8(srcExpr: Expression) extends UnaryExpression with Imp
 
   override def nullSafeEval(srcEval: Any): Any = {
     val utf8string = srcEval.asInstanceOf[UTF8String]
-    if (!utf8string.isValid) null
-    else utf8string
+    if (utf8string.isValid) utf8string
+    else null
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-        if (!$c.isValid()) {
-          ${ev.isNull} = true;
-        } else {
+        if ($c.isValid()) {
           ${ev.value} = $c;
+        } else {
+          ${ev.isNull} = true;
         }
       """
     )

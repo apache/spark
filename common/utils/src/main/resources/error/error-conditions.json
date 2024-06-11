@@ -2888,7 +2888,7 @@
   },
   "INVALID_UTF8_STRING" : {
     "message" : [
-      "Invalid UTF8-sequence found in string: <str>."
+      "Invalid UTF8 byte sequence found in string: <str>."
     ],
     "sqlState" : "HV00A"
   },
