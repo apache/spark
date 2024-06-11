@@ -386,20 +386,16 @@ class HDFSBackedStateDataSourceReadSuite
   override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
     new HDFSBackedStateStoreProvider
 
-  test("ERROR: snapshot partition not found") {
-    testPartitionNotFound()
+  test("ERROR: snapshot of version not found") {
+    testSnapshotNotFound()
   }
 
   test("provider.getReadStore(startVersion, endVersion)") {
-    testGetReadStoreWithStart()
+    testGetReadStoreWithStartVersion()
   }
 
   test("option snapshotPartitionId") {
     testSnapshotPartitionId()
-  }
-
-  test("snapshotStartBatchId and snapshotPartitionId end to end") {
-    testSnapshotEndToEnd()
   }
 }
 
@@ -433,11 +429,11 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite
     new RocksDBStateStoreProvider
 
   test("ERROR: snapshot partition not found") {
-    testPartitionNotFound()
+    testSnapshotNotFound()
   }
 
   test("provider.getReadStore(startVersion, endVersion)") {
-    testGetReadStoreWithStart()
+    testGetReadStoreWithStartVersion()
   }
 
   test("option snapshotPartitionId") {
@@ -952,7 +948,7 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
     }
   }
 
-  protected def testPartitionNotFound(): Unit = {
+  protected def testSnapshotNotFound(): Unit = {
     withTempDir(tempDir => {
       val provider = getNewStateStoreProvider(tempDir.getAbsolutePath)
       for (i <- 1 to 4) {
@@ -969,7 +965,7 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
     })
   }
 
-  protected def testGetReadStoreWithStart(): Unit = {
+  protected def testGetReadStoreWithStartVersion(): Unit = {
     withTempDir(tempDir => {
       val provider = getNewStateStoreProvider(tempDir.getAbsolutePath)
       for (i <- 1 to 4) {
@@ -1007,7 +1003,23 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
         .option(StateSourceOptions.BATCH_ID, 0)
         .load(tempDir.getAbsolutePath)
 
+      // should result in only one partition && should not throw error in planning stage
       assert(stateDf.rdd.getNumPartitions == 1)
+
+      // should throw error when partition id is out of range
+      val stateDfError = spark.read.format("statestore")
+        .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 0)
+        .option(
+          StateSourceOptions.SNAPSHOT_PARTITION_ID,
+          spark.sessionState.conf.numShufflePartitions)
+        .option(StateSourceOptions.BATCH_ID, 0)
+        .load(tempDir.getAbsolutePath)
+
+      val exc = intercept[SparkException] {
+        stateDfError.show()
+      }
+      checkError(exc, "SNAPSHOT_PARTITION_ID_NOT_FOUND", "54054",
+        Map("snapshotPartitionId" -> spark.sessionState.conf.numShufflePartitions.toString))
     })
   }
 }
