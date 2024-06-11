@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.{escapePathName, unescapePathName}
 
 class ExternalCatalogUtilsSuite extends SparkFunSuite {
 
@@ -38,5 +38,29 @@ class ExternalCatalogUtilsSuite extends SparkFunSuite {
     assert(escapePathName("a%b") === "a%25b")
     assert(escapePathName("a,b") === "a,b")
     assert(escapePathName("a/b") === "a%2Fb")
+  }
+
+  test("SPARK-48551: unescapePathName") {
+    ExternalCatalogUtils.charToEscape.stream().toArray.map(_.asInstanceOf[Char]).foreach { c =>
+      // Check parity with old conversion technique:
+      assert(unescapePathName("%" + f"$c%02X") === c.toString,
+        s"wrong unescaping for $c")
+    }
+    assert(unescapePathName(null) === null)
+    assert(unescapePathName("") === "")
+    assert(unescapePathName(" ") === " ")
+    assert(unescapePathName("%0A") === "\n")
+    assert(unescapePathName("a b") === "a b")
+    assert(unescapePathName("a%3Ab") === "a:b")
+    assert(unescapePathName("%3Aab") === ":ab")
+    assert(unescapePathName("ab%3A") === "ab:")
+    assert(unescapePathName("a%25b") === "a%b")
+    assert(unescapePathName("a,b") === "a,b")
+    assert(unescapePathName("a%2Fb") === "a/b")
+    assert(unescapePathName("a%2") === "a%2")
+    assert(unescapePathName("a%F ") === "a%F ")
+    // scalastyle:off nonascii
+    assert(unescapePathName("a\u00FF") === "a\u00FF")
+    // scalastyle:on nonascii
   }
 }
