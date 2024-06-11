@@ -40,7 +40,7 @@ object ExternalCatalogUtils {
   // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
-  val charToEscape = {
+  final val (charToEscape, sizeOfCharToEscape) = {
     val bitSet = new java.util.BitSet(128)
 
     /**
@@ -60,27 +60,41 @@ object ExternalCatalogUtils {
       Array(' ', '<', '>', '|').foreach(bitSet.set(_))
     }
 
-    bitSet
+    (bitSet, bitSet.size)
   }
 
-  def needsEscaping(c: Char): Boolean = {
-    c < charToEscape.size() && charToEscape.get(c)
+  private final val HEX_CHARS = "0123456789ABCDEF".toCharArray
+
+  @inline final def needsEscaping(c: Char): Boolean = {
+    c < sizeOfCharToEscape && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02X")
-      } else {
-        builder.append(c)
-      }
+    if (path == null || path.isEmpty) {
+      return path
     }
-
-    builder.toString()
+    val length = path.length
+    var firstIndex = 0
+    while (firstIndex < length && !needsEscaping(path.charAt(firstIndex))) {
+      firstIndex += 1
+    }
+    if (firstIndex == length) {
+      path
+    } else {
+      val sb = new java.lang.StringBuilder(length + 16)
+      if (firstIndex != 0) sb.append(path, 0, firstIndex)
+      while(firstIndex < length) {
+        val c = path.charAt(firstIndex)
+        if (needsEscaping(c)) {
+          sb.append('%').append(HEX_CHARS((c & 0xF0) >> 4)).append(HEX_CHARS(c & 0x0F))
+        } else {
+          sb.append(c)
+        }
+        firstIndex += 1
+      }
+      sb.toString
+    }
   }
-
 
   def unescapePathName(path: String): String = {
     val sb = new StringBuilder
