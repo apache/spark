@@ -69,8 +69,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
-        dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to create index $indexName in ${name()}") {
+        dialect = JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
           conn, indexName, ident, columns, columnsProperties, properties, jdbcOptions)
       }
@@ -91,8 +90,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
           "tableName" -> toSQLId(name)),
-        dialect = JdbcDialects.get(jdbcOptions.url),
-        description = s"Failed to drop index $indexName in ${name()}") {
+        dialect = JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)
       }
     }

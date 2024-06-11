@@ -199,8 +199,7 @@ private[sql] case class H2Dialect() extends JdbcDialect {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      messageParameters: Map[String, String]): AnalysisException = {
     e match {
       case exception: SQLException =>
         // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
@@ -244,7 +243,7 @@ private[sql] case class H2Dialect() extends JdbcDialect {
         }
       case _ => // do nothing
     }
-    super.classifyException(e, errorClass, messageParameters, description)
+    super.classifyException(e, errorClass, messageParameters)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

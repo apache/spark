@@ -206,8 +206,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      messageParameters: Map[String, String]): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
@@ -216,9 +215,9 @@ private case class MsSqlServerDialect() extends JdbcDialect {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ => super.classifyException(e, errorClass, messageParameters)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters)
     }
   }
 

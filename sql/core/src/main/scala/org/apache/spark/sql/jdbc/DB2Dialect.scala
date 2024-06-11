@@ -156,8 +156,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      messageParameters: Map[String, String]): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
@@ -167,9 +166,9 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ => super.classifyException(e, errorClass, messageParameters)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters)
     }
   }
 
