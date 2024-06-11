@@ -1673,7 +1673,56 @@ class CollationSQLExpressionsSuite
     })
   }
 
-    test("CurrentTimeZone expression with collation") {
+  test("Support mode for string expression with collated strings in struct") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"named_struct('f1'," +
+          s" collate('$elt', '${t.collationId}'), 'f2', 1)").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRING COLLATE " +
+          t.collationId + ", f2: INT>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
+        if(t.collationId == "utf8_binary_lcase" || t.collationId == "unicode_ci") {
+          // Cannot resolve "mode(i)" due to data type mismatch:
+          // Input to function mode was a complex type with strings collated on non-binary
+          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
+          val params = Seq(("sqlExpr", "\"mode(i)\""),
+            ("msg", "The input to the function 'mode' was a complex type with non-binary collated" +
+              " fields, which are currently not supported by 'mode'."),
+            ("hint", "")).toMap
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query)
+            },
+            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            parameters = params,
+            queryContext = Array(
+              ExpectedContext(objectType = "",
+                objectName = "",
+                startIndex = 13,
+                stopIndex = 19,
+                fragment = "mode(i)")
+            )
+          )
+        } else {
+          checkAnswer(sql(query), Row(t.result))
+        }
+      }
+    })
+  }
+
+  test("CurrentTimeZone expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
       val query = "select current_timezone()"

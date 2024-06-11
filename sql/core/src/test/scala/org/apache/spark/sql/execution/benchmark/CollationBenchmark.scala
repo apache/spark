@@ -22,7 +22,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
+import org.apache.spark.sql.catalyst.expressions.aggregate.{CollationAwareFunctionRegistry, Mode}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -202,7 +202,10 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       output = output)
     collationTypes.foreach { collationType => {
       val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
-        x => x.hashCode())
+          CollationAwareFunctionRegistry.bytesToHashFunction(
+            StringType(CollationFactory.collationNameToId(collationType))),
+          CollationAwareFunctionRegistry.bytesToEqualFunction(
+            StringType(CollationFactory.collationNameToId(collationType))))
       value.foreach(v => {
         buffer.update(v, (v.hashCode() % 1000).toLong)
       })
@@ -229,7 +232,10 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
       output = output)
     collationTypes.foreach { collationType => {
       val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
-        x => x.hashCode())
+        CollationAwareFunctionRegistry.bytesToHashFunction(
+          StringType(CollationFactory.collationNameToId(collationType))),
+        CollationAwareFunctionRegistry.bytesToEqualFunction(
+          StringType(CollationFactory.collationNameToId(collationType))))
       value.foreach(v => {
         buffer.update(InternalRow.fromSeq(
           Seq(v, v, 3)),
@@ -251,6 +257,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
 
     benchmark.run()
   }
+
   protected def generateDataframeInput(l: Long): DataFrame = {
     spark.createDataFrame(generateSeqInput(l).map(_.toString).map(Tuple1.apply)).toDF("s1")
   }

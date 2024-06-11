@@ -22,7 +22,6 @@ import scala.reflect._
 import com.google.common.hash.Hashing
 
 import org.apache.spark.annotation.Private
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashSet.Hasher
 
 /**
@@ -347,11 +346,12 @@ object OpenHashSet {
 @Private
 class CollationAwareOpenHashSet[T: ClassTag, T2](
     initialCapacity: Int,
-    loadFactor: Double, hashFunc: AnyRef => Long)
+    loadFactor: Double, hashFunc: AnyRef => Long,
+    equalsFunction: (AnyRef, AnyRef) => Boolean)
   extends OpenHashSet[T](initialCapacity, loadFactor) {
 
   override def nonClassTagKeyExistsAtPos(k: T, dataAtPos: T): Boolean = {
-    dataAtPos.asInstanceOf[UTF8String].semanticEquals(k.asInstanceOf[UTF8String], 1)
+    equalsFunction(k.asInstanceOf[AnyRef], dataAtPos.asInstanceOf[AnyRef])
   }
 
   override def nonClassTagHasher(): OpenHashSet.Hasher[T] = {

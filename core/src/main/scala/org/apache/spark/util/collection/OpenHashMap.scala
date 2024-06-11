@@ -31,10 +31,12 @@ import scala.reflect.ClassTag
  */
 private[spark] class CollationAwareHashMap[K: ClassTag, V: ClassTag, X](
     initialCapacity: Int,
-    hashering: AnyRef => Long)
+    hashering: AnyRef => Long,
+    equalsFunction: (AnyRef, AnyRef) => Boolean
+)
   extends OpenHashMap[K, V](initialCapacity) {
   override def getOpenHashSet: OpenHashSet[K] =
-    new CollationAwareOpenHashSet[K, X](initialCapacity, 0.7, hashering)
+    new CollationAwareOpenHashSet[K, X](initialCapacity, 0.7, hashering, equalsFunction)
 }
 
 private[spark]
