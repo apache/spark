@@ -244,6 +244,11 @@
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
         ]
       },
+      "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
+        "message" : [
+          "Partition id <snapshotPartitionId> not found for given state source."
+        ]
+      },
       "UNCATEGORIZED" : {
         "message" : [
           ""
@@ -3620,12 +3625,6 @@
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ],
     "sqlState" : "42K08"
-  },
-  "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
-    "message" : [
-      "Partition id <snapshotPartitionId> not found for given state source."
-    ],
-    "sqlState" : "54054"
   },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [

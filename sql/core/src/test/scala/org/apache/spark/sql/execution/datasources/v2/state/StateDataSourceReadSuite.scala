@@ -1010,7 +1010,7 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
       val exc = intercept[SparkException] {
         stateDfError.show()
       }
-      checkError(exc, "SNAPSHOT_PARTITION_ID_NOT_FOUND", "54054",
+      checkError(exc, "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND", "58030",
         Map("snapshotPartitionId" -> spark.sessionState.conf.numShufflePartitions.toString))
     })
   }

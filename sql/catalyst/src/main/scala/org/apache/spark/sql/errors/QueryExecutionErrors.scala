@@ -2200,7 +2200,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def snapshotPartitionNotFoundError(snapshotPartitionId : Long): Throwable = {
     new SparkException(
-      errorClass = "SNAPSHOT_PARTITION_ID_NOT_FOUND",
+      errorClass = "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND",
       messageParameters = Map("snapshotPartitionId" -> snapshotPartitionId.toString()),
       cause = null)
   }
