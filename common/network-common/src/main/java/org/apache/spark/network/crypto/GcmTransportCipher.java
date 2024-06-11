@@ -20,9 +20,7 @@ package org.apache.spark.network.crypto;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Longs;
-import com.google.crypto.tink.subtle.AesGcmHkdfStreaming;
-import com.google.crypto.tink.subtle.StreamSegmentDecrypter;
-import com.google.crypto.tink.subtle.StreamSegmentEncrypter;
+import com.google.crypto.tink.subtle.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
@@ -55,6 +53,14 @@ public class GcmTransportCipher implements TransportCipher {
             aesKey.getEncoded().length,
             CIPHERTEXT_BUFFER_SIZE,
             0);
+    }
+
+    /*
+     * This method is for testing purposes only.
+     */
+    @VisibleForTesting
+    public String getKeyId() throws GeneralSecurityException {
+        return TransportCipherUtil.getKeyId(aesKey);
     }
 
     @VisibleForTesting
@@ -215,8 +221,10 @@ public class GcmTransportCipher implements TransportCipher {
                 int readLimit =
                         (int) Math.min(readableBytes, plaintextBuffer.remaining());
                 if (plaintextMessage instanceof ByteBuf byteBuf) {
+                    Preconditions.checkState(0 == plaintextBuffer.position());
                     plaintextBuffer.limit(readLimit);
                     byteBuf.readBytes(plaintextBuffer);
+                    Preconditions.checkState(readLimit == plaintextBuffer.position());
                 } else if (plaintextMessage instanceof FileRegion fileRegion) {
                     ByteBufferWriteableChannel plaintextChannel =
                             new ByteBufferWriteableChannel(plaintextBuffer);
@@ -277,9 +285,9 @@ public class GcmTransportCipher implements TransportCipher {
         private final ByteBuffer expectedLengthBuffer;
         private final ByteBuffer headerBuffer;
         private final ByteBuffer ciphertextBuffer;
-        private final ByteBuffer plaintextBuffer;
         private final AesGcmHkdfStreaming aesGcmHkdfStreaming;
         private final StreamSegmentDecrypter decrypter;
+        private final int plaintextSegmentSize;
         private boolean decrypterInit = false;
         private boolean completed = false;
         private int segmentNumber = 0;
@@ -290,11 +298,10 @@ public class GcmTransportCipher implements TransportCipher {
             aesGcmHkdfStreaming = getAesGcmHkdfStreaming();
             expectedLengthBuffer = ByteBuffer.allocate(LENGTH_HEADER_BYTES);
             headerBuffer = ByteBuffer.allocate(aesGcmHkdfStreaming.getHeaderLength());
-            plaintextBuffer =
-                    ByteBuffer.allocate(aesGcmHkdfStreaming.getPlaintextSegmentSize());
             ciphertextBuffer =
                     ByteBuffer.allocate(aesGcmHkdfStreaming.getCiphertextSegmentSize());
             decrypter = aesGcmHkdfStreaming.newStreamSegmentDecrypter();
+            plaintextSegmentSize = aesGcmHkdfStreaming.getPlaintextSegmentSize();
         }
 
         private boolean initalizeExpectedLength(ByteBuf ciphertextNettyBuf) {
@@ -362,9 +369,6 @@ public class GcmTransportCipher implements TransportCipher {
                     int readableBytes = Integer.min(
                             nettyBufReadableBytes,
                             ciphertextBuffer.remaining());
-                    if (readableBytes == 0) {
-                        return;
-                    }
                     int expectedRemaining = (int) (expectedLength - ciphertextRead);
                     int bytesToRead = Integer.min(readableBytes, expectedRemaining);
                     // The smallest ciphertext size is 16 bytes for the auth tag
@@ -380,7 +384,7 @@ public class GcmTransportCipher implements TransportCipher {
                     // If the ciphertext buffer is full, or this is the last segment,
                     // then decrypt it and fire a read.
                     if (ciphertextBuffer.limit() == ciphertextBuffer.capacity() || completed) {
-                        plaintextBuffer.clear();
+                        ByteBuffer plaintextBuffer = ByteBuffer.allocate(plaintextSegmentSize);
                         ciphertextBuffer.flip();
                         decrypter.decryptSegment(
                                 ciphertextBuffer,

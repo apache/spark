@@ -78,8 +78,18 @@ public class AuthIntegrationSuite {
   }
 
   @Test
-  public void testAuthFailure() throws Exception {
-    ctx = new AuthTestCtx();
+  public void testCtrAuthFailure() throws Exception {
+    ctx = new AuthTestCtx(new DummyRpcHandler(), "AES/CTR/NoPadding");
+    ctx.createServer("server");
+
+    assertThrows(Exception.class, () -> ctx.createClient("client"));
+    assertFalse(ctx.authRpcHandler.isAuthenticated());
+    assertFalse(ctx.serverChannel.isActive());
+  }
+
+  @Test
+  public void testGcmAuthFailure() throws Exception {
+    ctx = new AuthTestCtx(new DummyRpcHandler(), "AES/GCM/NoPadding");
     ctx.createServer("server");
 
     assertThrows(Exception.class, () -> ctx.createClient("client"));
@@ -110,7 +120,7 @@ public class AuthIntegrationSuite {
   }
 
   @Test
-  public void testAuthReplay() throws Exception {
+  public void testCtrAuthReplay() throws Exception {
     // This test covers the case where an attacker replays a challenge message sniffed from the
     // network, but doesn't know the actual secret. The server should close the connection as
     // soon as a message is sent after authentication is performed. This is emulated by removing

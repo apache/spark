@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
@@ -62,6 +63,14 @@ public class CtrTransportCipher implements TransportCipher {
     this.key = key;
     this.inIv = inIv;
     this.outIv = outIv;
+  }
+
+  /*
+   * This method is for testing purposes only.
+   */
+  @VisibleForTesting
+  public String getKeyId() throws GeneralSecurityException {
+    return TransportCipherUtil.getKeyId(key);
   }
 
   @VisibleForTesting
