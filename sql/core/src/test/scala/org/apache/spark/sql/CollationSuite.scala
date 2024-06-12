@@ -208,6 +208,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("[SPARK-46837] Enable reflect expressions with collated strings") {
+    Seq(
+      ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", true),
+      ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", true)
+    ).foreach {
+      case (left, collation, right, expected) =>
+        checkAnswer(sql(s"SELECT REFLECT('java.util.UUID', 'fromString'," +
+          s" collate('$left', '$collation'))=" +
+          s"'$right';"),
+          Row(expected))
+    }
+  }
+
   test("comparisons respect collation") {
     Seq(
       ("utf8_binary", "AAA", "aaa", true),

@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -26,6 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -59,11 +62,11 @@ import org.apache.spark.util.Utils
   since = "2.0.0",
   group = "misc_funcs")
 case class CallMethodViaReflection(
-      children: Seq[Expression],
-      failOnError: Boolean = true)
+                                    children: Seq[Expression],
+                                    failOnError: Boolean = true)
   extends Nondeterministic
-  with CodegenFallback
-  with QueryErrorsBase {
+    with CodegenFallback
+    with QueryErrorsBase {
 
   def this(children: Seq[Expression]) =
     this(children, true)
@@ -77,12 +80,12 @@ case class CallMethodViaReflection(
       )
     } else {
       val unexpectedParameter = children.zipWithIndex.collectFirst {
-        case (e, 0) if !(e.dataType == StringType && e.foldable) =>
+        case (e, 0) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("class"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(children.head)
             )
           )
@@ -90,12 +93,12 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
             messageParameters = Map("exprName" -> toSQLId("class")))
-        case (e, 1) if !(e.dataType == StringType && e.foldable) =>
+        case (e, 1) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
               "inputName" -> toSQLId("method"),
-              "inputType" -> toSQLType(StringType),
+              "inputType" -> toSQLType(StringTypeAnyCollation),
               "inputExpr" -> toSQLExpr(children(1))
             )
           )
@@ -103,14 +106,16 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",
             messageParameters = Map("exprName" -> toSQLId("method")))
-        case (e, idx) if idx > 1 && !CallMethodViaReflection.typeMapping.contains(e.dataType) =>
+        case (e, idx) if idx > 1 &&
+          (!CallMethodViaReflection.typeMapping.contains(e.dataType)
+            && !e.dataType.isInstanceOf[StringType]) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
-                  IntegerType, LongType, FloatType, DoubleType, StringType)),
+                  IntegerType, LongType, FloatType, DoubleType, StringTypeAnyCollation)),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
           )
@@ -134,7 +139,7 @@ case class CallMethodViaReflection(
   }
 
   override def nullable: Boolean = true
-  override val dataType: DataType = StringType
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): Any = {
@@ -177,7 +182,7 @@ case class CallMethodViaReflection(
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
+                                                  newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }
 
 object CallMethodViaReflection {
@@ -229,10 +234,13 @@ object CallMethodViaReflection {
       } else {
         // Argument type must match. That is, either the method's argument type matches one of the
         // acceptable types defined in typeMapping, or it is a super type of the acceptable types.
-        candidateTypes.zip(argTypes).forall { case (candidateType, argType) =>
+        candidateTypes.zip(argTypes).forall { case (candidateType, argType)
+          if (!argType.isInstanceOf[StringType]) =>
           typeMapping(argType).exists(candidateType.isAssignableFrom)
+        case _ => true
         }
       }
     }
   }
 }
+
