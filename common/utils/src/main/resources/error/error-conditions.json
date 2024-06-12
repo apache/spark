@@ -3732,7 +3732,7 @@
   },
   "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for value row.",
+      "The streaming query failed to validate written state for key row.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",
@@ -3778,7 +3778,7 @@
   },
   "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
     "message" : [
-      "The streaming query failed to validate written state for key row.",
+      "The streaming query failed to validate written state for value row.",
       "The following reasons may cause this:",
       "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
       "2. Corrupt checkpoint files",
