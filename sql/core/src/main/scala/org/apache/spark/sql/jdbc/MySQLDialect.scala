@@ -331,7 +331,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   override def classifyException(
       e: Throwable,
       errorClass: String,
-      messageParameters: Map[String, String]): AnalysisException = {
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {

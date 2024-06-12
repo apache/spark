@@ -21,6 +21,7 @@ import java.sql.Connection
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -87,4 +88,11 @@ private case class DatabricksDialect() extends JdbcDialect {
     }
     schemaBuilder.result()
   }
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException =
+    super.classifyException(e, errorClass, messageParameters)
 }

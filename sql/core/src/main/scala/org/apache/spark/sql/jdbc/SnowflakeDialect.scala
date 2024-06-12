@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
@@ -33,4 +34,11 @@ private case class SnowflakeDialect() extends JdbcDialect {
       Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException =
+    super.classifyException(e, errorClass, messageParameters)
 }

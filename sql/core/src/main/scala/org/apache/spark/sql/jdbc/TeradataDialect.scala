@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 
@@ -100,4 +101,11 @@ private case class TeradataDialect() extends JdbcDialect {
         case _ => None
     }
   }
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException =
+    super.classifyException(e, errorClass, messageParameters)
 }

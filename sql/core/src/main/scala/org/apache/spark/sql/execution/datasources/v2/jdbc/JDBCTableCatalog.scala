@@ -73,7 +73,8 @@ class JDBCTableCatalog extends TableCatalog
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "namespace" -> toSQLId(namespace.toSeq)),
-        dialect) {
+        dialect,
+        description = s"Failed get tables from: ${namespace.mkString(".")}") {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
@@ -92,7 +93,8 @@ class JDBCTableCatalog extends TableCatalog
       messageParameters = Map(
         "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
-      dialect) {
+      dialect,
+      description = s"Failed table existence check: $ident") {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
@@ -118,7 +120,8 @@ class JDBCTableCatalog extends TableCatalog
           "url" -> options.getRedactUrl(),
           "oldName" -> toSQLId(oldIdent),
           "newName" -> toSQLId(newIdent)),
-        dialect) {
+        dialect,
+        description = s"Failed table renaming from $oldIdent to $newIdent") {
         JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
@@ -133,7 +136,9 @@ class JDBCTableCatalog extends TableCatalog
       messageParameters = Map(
         "url" -> options.getRedactUrl(),
         "tableName" -> toSQLId(ident)),
-      dialect) {
+      dialect,
+      description = s"Failed to load table: $ident"
+    ) {
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     }
@@ -195,7 +200,8 @@ class JDBCTableCatalog extends TableCatalog
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
-        dialect) {
+        dialect,
+        description = s"Failed table creation: $ident") {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -211,7 +217,8 @@ class JDBCTableCatalog extends TableCatalog
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
           "tableName" -> toSQLId(ident)),
-        dialect) {
+        dialect,
+        description = s"Failed table altering: $ident") {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -226,7 +233,8 @@ class JDBCTableCatalog extends TableCatalog
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(namespace.toSeq)),
-          dialect) {
+          dialect,
+          description = s"Failed namespace exists: ${namespace.mkString}") {
           JdbcUtils.schemaExists(conn, options, db)
         }
       }
@@ -238,7 +246,8 @@ class JDBCTableCatalog extends TableCatalog
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.LIST_NAMESPACES",
         messageParameters = Map("url" -> options.getRedactUrl()),
-        dialect) {
+        dialect,
+        description = s"Failed list namespaces") {
         JdbcUtils.listSchemas(conn, options)
       }
     }
@@ -291,7 +300,8 @@ class JDBCTableCatalog extends TableCatalog
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
-          dialect) {
+          dialect,
+          description = s"Failed create name space: $db") {
           JdbcUtils.createSchema(conn, options, db, comment)
         }
       }
@@ -315,7 +325,8 @@ class JDBCTableCatalog extends TableCatalog
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
-                  dialect) {
+                  dialect,
+                  description = s"Failed create comment on name space: $db") {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
               }
@@ -331,7 +342,8 @@ class JDBCTableCatalog extends TableCatalog
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
                     "namespace" -> toSQLId(db)),
-                  dialect) {
+                  dialect,
+                  description = s"Failed remove comment on name space: $db") {
                   JdbcUtils.removeSchemaComment(conn, options, db)
                 }
               }
@@ -358,7 +370,8 @@ class JDBCTableCatalog extends TableCatalog
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
             "namespace" -> toSQLId(db)),
-          dialect) {
+          dialect,
+          description = s"Failed drop name space: $db") {
           JdbcUtils.dropSchema(conn, options, db, cascade)
           true
         }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
@@ -76,4 +77,11 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
       cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     dialects.head.getTruncateQuery(table, cascade)
   }
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException =
+    super.classifyException(e, errorClass, messageParameters)
 }

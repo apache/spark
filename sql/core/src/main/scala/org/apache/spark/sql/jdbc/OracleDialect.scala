@@ -23,6 +23,7 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -229,6 +230,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException =
+    super.classifyException(e, errorClass, messageParameters)
 }
 
 private[jdbc] object OracleDialect {
