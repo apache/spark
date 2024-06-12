@@ -255,13 +255,12 @@ class StateStoreValueSchemaNotCompatible(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
 
-class StateStoreKeyRowFormatValidationFailure(
-    errorMsg: String) extends SparkRuntimeException(
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
     errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
     messageParameters = Map("errorMsg" -> errorMsg))
 
-class StateStoreValueRowFormatValidationFailure(
-    errorMsg: String) extends SparkRuntimeException(
+class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
     errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
     messageParameters = Map("errorMsg" -> errorMsg))
-
