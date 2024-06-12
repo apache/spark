@@ -1558,6 +1558,36 @@ class ClientE2ETestSuite
     val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
+
+  test("MergeIntoWriter - update, insert, and delete") {
+
+    withTable("target") {
+      spark.range(10).withColumn("value", col("id") % 2).writeTo("target").create()
+
+      spark.range(0, 20, step = 2).withColumn("value", col("id") % 2).createOrReplaceTempView("source")
+      spark.table("source")
+        .mergeInto("target", col("source.id") === col("target.id"))
+        .whenMatched(col("target.value") === 0)
+        .delete()
+        .whenMatched(col("target.value") === 1)
+        .update(Map("value" -> lit(-1)))
+        .whenNotMatched()
+        .insert(Map("id" -> col("source.id"), "value" -> col("source.value")))
+        .merge()
+      assert(
+        spark.table("target").collect().toSet === Set(
+          Row(1, -1),
+          Row(3, -1),
+          Row(5, -1),
+          Row(7, -1),
+          Row(9, -1),
+          Row(0, 0),
+          Row(2, 0),
+          Row(4, 0),
+          Row(6, 0),
+          Row(8, 0)))
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
