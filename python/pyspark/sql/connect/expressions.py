@@ -914,7 +914,7 @@ class UnresolvedNamedLambdaVariable(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
+        return ", ".join(self._name_parts)
 
     @staticmethod
     def fresh_var_name(name: str) -> str:
@@ -959,7 +959,10 @@ class LambdaFunction(Expression):
         return expr
 
     def __repr__(self) -> str:
-        return f"(LambdaFunction({str(self._function)}, {', '.join(self._arguments)})"
+        return (
+            f"LambdaFunction({str(self._function)}, "
+            + f"{', '.join([str(arg) for arg in self._arguments])})"
+        )
 
 
 class WindowExpression(Expression):
