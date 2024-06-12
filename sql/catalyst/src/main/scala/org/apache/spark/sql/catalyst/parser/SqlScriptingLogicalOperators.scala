@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
@@ -28,18 +29,18 @@ sealed trait CompoundPlanStatement
 /**
  * Logical operator representing result of parsing a single SQL statement
  *   that is supposed to be executed against Spark.
- * It can also be a Spark expression that is wrapped in a statement.
  * @param parsedPlan Result of SQL statement parsing.
- * @param sourceStart Index of the first char of the statement in the original SQL script text.
- * @param sourceEnd Index of the last char of the statement in the original SQL script text.
  */
-case class SingleStatement(
-    parsedPlan: LogicalPlan,
-    sourceStart: Int,
-    sourceEnd: Int)
-  extends CompoundPlanStatement {
+case class SingleStatement(parsedPlan: LogicalPlan)
+  extends CompoundPlanStatement
+  with WithOrigin {
 
-  def getText(sqlScriptText: String): String = sqlScriptText.substring(sourceStart, sourceEnd)
+  override val origin: Origin = CurrentOrigin.get
+
+  def getText(sqlScriptText: String): String = sqlScriptText.substring(
+    origin.startIndex.getOrElse(0),
+    origin.stopIndex.getOrElse(0) + 1
+  )
 }
 
 /**

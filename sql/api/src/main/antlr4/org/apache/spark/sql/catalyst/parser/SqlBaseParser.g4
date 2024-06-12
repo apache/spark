@@ -56,7 +56,7 @@ beginEndCompoundBlock
     ;
 
 compoundBody
-    : (compoundStatement SEMICOLON)*
+    : (compoundStatements+=compoundStatement SEMICOLON)*
     ;
 
 compoundStatement

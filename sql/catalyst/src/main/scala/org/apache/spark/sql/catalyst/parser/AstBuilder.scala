@@ -27,7 +27,7 @@ import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode, TerminalNodeImpl}
+import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
@@ -119,15 +119,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = {
+      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(
-        parsedPlan = logicalPlan,
-        sourceStart = ctx.start.getStartIndex,
-        sourceEnd = ctx.stop.getStopIndex + 1)))
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
     }
   }
 
@@ -137,15 +134,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
-    for (i <- 0 until ctx.getChildCount) {
-      val child = ctx.getChild(i)
-      val visitedChild = visit(ctx.getChild(i))
-      visitedChild match {
-        case statement: CompoundPlanStatement => buff += statement
-        case null if child.isInstanceOf[TerminalNodeImpl] =>
-      }
-    }
-
+    ctx.compoundStatements.forEach(compoundStatement => {
+      buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
+    })
     CompoundBody(buff.toSeq)
   }
 
@@ -157,17 +148,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visitCompoundBodyImpl(ctx)
   }
 
-  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement = {
-    val child = visit(ctx.getChild(0))
-    child match {
-      case logicalPlan: LogicalPlan =>
-        SingleStatement(
-          parsedPlan = logicalPlan,
-          sourceStart = ctx.statement().start.getStartIndex,
-          sourceEnd = ctx.statement().stop.getStopIndex + 1)
-      case statement: CompoundPlanStatement => statement
+  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
+    withOrigin(ctx) {
+      Option(ctx.statement()).map {s =>
+        SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
+      }.getOrElse {
+        visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+      }
     }
-  }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     visit(ctx.statement).asInstanceOf[LogicalPlan]
