@@ -369,6 +369,21 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
+  test("null value for option exception") {
+    val df = spark.read
+      .option("pushDownOffset", null)
+      .table("h2.test.employee")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.NULL",
+      parameters = Map(
+        "parameter" -> "`pushDownOffset`",
+        "functionName" -> "`JDBCOptions`.`asProperties`")
+    )
+  }
+
   test("simple scan with OFFSET") {
     val df1 = spark.read
       .table("h2.test.employee")
