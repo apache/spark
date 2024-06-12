@@ -505,7 +505,7 @@ class StreamingQueryProgress(dict):
             else {},
         )
 
-    def __getitem__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
         # to string. But here they are UUID.
         # To prevent breaking change, also cast them to string when accessed with __getitem__.
@@ -514,7 +514,7 @@ class StreamingQueryProgress(dict):
         else:
             return getattr(self, key)
 
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         internal_key = "_" + key
         setattr(self, internal_key, value)
 
@@ -831,10 +831,10 @@ class StateOperatorProgress(dict):
     def __repr__(self) -> str:
         return self.prettyJson
 
-    def __getitem__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         internal_key = "_" + key
         setattr(self, internal_key, value)
 
@@ -984,10 +984,10 @@ class SourceProgress(dict):
     def __repr__(self) -> str:
         return self.prettyJson
 
-    def __getitem__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         internal_key = "_" + key
         setattr(self, internal_key, value)
 
@@ -1083,10 +1083,10 @@ class SinkProgress(dict):
     def __repr__(self) -> str:
         return self.prettyJson
 
-    def __getitem__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         internal_key = "_" + key
         setattr(self, internal_key, value)
 
