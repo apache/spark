@@ -32,7 +32,7 @@ class CollationSQLRegexpSuite
     case class LikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       LikeTestCase("ABC", "%B%", "UTF8_BINARY", true),
-      LikeTestCase("AḂC", "%ḃ%", "UTF8_BINARY_LCASE", true),
+      LikeTestCase("AḂC", "%ḃ%", "UTF8_LCASE", true),
       LikeTestCase("ABC", "%b%", "UTF8_BINARY", false)
     )
     testCases.foreach(t => {
@@ -60,7 +60,7 @@ class CollationSQLRegexpSuite
     case class ILikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       ILikeTestCase("ABC", "%b%", "UTF8_BINARY", true),
-      ILikeTestCase("AḂC", "%ḃ%", "UTF8_BINARY_LCASE", true),
+      ILikeTestCase("AḂC", "%ḃ%", "UTF8_LCASE", true),
       ILikeTestCase("ABC", "%b%", "UTF8_BINARY", true)
     )
     testCases.foreach(t => {
@@ -88,7 +88,7 @@ class CollationSQLRegexpSuite
     case class LikeAllTestCase[R](s: String, p: Seq[String], c: String, result: R)
     val testCases = Seq(
       LikeAllTestCase("foo", Seq("%foo%", "%oo"), "UTF8_BINARY", true),
-      LikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_BINARY_LCASE", true),
+      LikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_LCASE", true),
       LikeAllTestCase("foo", Seq("%foo%", "%bar%"), "UTF8_BINARY", false)
     )
     testCases.foreach(t => {
@@ -116,7 +116,7 @@ class CollationSQLRegexpSuite
     case class NotLikeAllTestCase[R](s: String, p: Seq[String], c: String, result: R)
     val testCases = Seq(
       NotLikeAllTestCase("foo", Seq("%foo%", "%oo"), "UTF8_BINARY", false),
-      NotLikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_BINARY_LCASE", false),
+      NotLikeAllTestCase("Foo", Seq("%foo%", "%oo"), "UTF8_LCASE", false),
       NotLikeAllTestCase("foo", Seq("%goo%", "%bar%"), "UTF8_BINARY", true)
     )
     testCases.foreach(t => {
@@ -144,7 +144,7 @@ class CollationSQLRegexpSuite
     case class LikeAnyTestCase[R](s: String, p: Seq[String], c: String, result: R)
     val testCases = Seq(
       LikeAnyTestCase("foo", Seq("%foo%", "%bar"), "UTF8_BINARY", true),
-      LikeAnyTestCase("Foo", Seq("%foo%", "%bar"), "UTF8_BINARY_LCASE", true),
+      LikeAnyTestCase("Foo", Seq("%foo%", "%bar"), "UTF8_LCASE", true),
       LikeAnyTestCase("foo", Seq("%goo%", "%hoo%"), "UTF8_BINARY", false)
     )
     testCases.foreach(t => {
@@ -172,7 +172,7 @@ class CollationSQLRegexpSuite
     case class NotLikeAnyTestCase[R](s: String, p: Seq[String], c: String, result: R)
     val testCases = Seq(
       NotLikeAnyTestCase("foo", Seq("%foo%", "%hoo"), "UTF8_BINARY", true),
-      NotLikeAnyTestCase("Foo", Seq("%foo%", "%hoo"), "UTF8_BINARY_LCASE", true),
+      NotLikeAnyTestCase("Foo", Seq("%foo%", "%hoo"), "UTF8_LCASE", true),
       NotLikeAnyTestCase("foo", Seq("%foo%", "%oo%"), "UTF8_BINARY", false)
     )
     testCases.foreach(t => {
@@ -200,7 +200,7 @@ class CollationSQLRegexpSuite
     case class RLikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RLikeTestCase("ABC", ".B.", "UTF8_BINARY", true),
-      RLikeTestCase("AḂC", ".ḃ.", "UTF8_BINARY_LCASE", true),
+      RLikeTestCase("AḂC", ".ḃ.", "UTF8_LCASE", true),
       RLikeTestCase("ABC", ".b.", "UTF8_BINARY", false)
     )
     testCases.foreach(t => {
@@ -228,7 +228,7 @@ class CollationSQLRegexpSuite
     case class StringSplitTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C")),
-      StringSplitTestCase("AḂC", "[ḃ]", "UTF8_BINARY_LCASE", Seq("A", "C")),
+      StringSplitTestCase("AḂC", "[ḃ]", "UTF8_LCASE", Seq("A", "C")),
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C"))
     )
     testCases.foreach(t => {
@@ -256,7 +256,7 @@ class CollationSQLRegexpSuite
     case class RegExpReplaceTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpReplaceTestCase("ABCDE", ".C.", "UTF8_BINARY", "AFFFE"),
-      RegExpReplaceTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "AFFFE"),
+      RegExpReplaceTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "AFFFE"),
       RegExpReplaceTestCase("ABCDE", ".c.", "UTF8_BINARY", "ABCDE")
     )
     testCases.foreach(t => {
@@ -272,7 +272,7 @@ class CollationSQLRegexpSuite
         Row(t.result))
     })
     // Collation mismatch
-    val (c1, c2) = ("UTF8_BINARY", "UTF8_BINARY_LCASE")
+    val (c1, c2) = ("UTF8_BINARY", "UTF8_LCASE")
     val collationMismatch = intercept[AnalysisException] {
       sql(s"SELECT regexp_replace(collate('ABCDE','$c1'), '.c.', collate('FFF','$c2'))")
     }
@@ -297,7 +297,7 @@ class CollationSQLRegexpSuite
     case class RegExpExtractTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpExtractTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
-      RegExpExtractTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "BĆD"),
+      RegExpExtractTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "BĆD"),
       RegExpExtractTestCase("ABCDE", ".c.", "UTF8_BINARY", "")
     )
     testCases.foreach(t => {
@@ -327,7 +327,7 @@ class CollationSQLRegexpSuite
     case class RegExpExtractAllTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpExtractAllTestCase("ABCDE", ".C.", "UTF8_BINARY", Seq("BCD")),
-      RegExpExtractAllTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", Seq("BĆD")),
+      RegExpExtractAllTestCase("ABĆDE", ".ć.", "UTF8_LCASE", Seq("BĆD")),
       RegExpExtractAllTestCase("ABCDE", ".c.", "UTF8_BINARY", Seq())
     )
     testCases.foreach(t => {
@@ -357,7 +357,7 @@ class CollationSQLRegexpSuite
     case class RegExpCountTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpCountTestCase("ABCDE", ".C.", "UTF8_BINARY", 1),
-      RegExpCountTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", 1),
+      RegExpCountTestCase("ABĆDE", ".ć.", "UTF8_LCASE", 1),
       RegExpCountTestCase("ABCDE", ".c.", "UTF8_BINARY", 0)
     )
     testCases.foreach(t => {
@@ -385,7 +385,7 @@ class CollationSQLRegexpSuite
     case class RegExpSubStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpSubStrTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
-      RegExpSubStrTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", "BĆD"),
+      RegExpSubStrTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "BĆD"),
       RegExpSubStrTestCase("ABCDE", ".c.", "UTF8_BINARY", null)
     )
     testCases.foreach(t => {
@@ -413,7 +413,7 @@ class CollationSQLRegexpSuite
     case class RegExpInStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
       RegExpInStrTestCase("ABCDE", ".C.", "UTF8_BINARY", 2),
-      RegExpInStrTestCase("ABĆDE", ".ć.", "UTF8_BINARY_LCASE", 2),
+      RegExpInStrTestCase("ABĆDE", ".ć.", "UTF8_LCASE", 2),
       RegExpInStrTestCase("ABCDE", ".c.", "UTF8_BINARY", 0)
     )
     testCases.foreach(t => {

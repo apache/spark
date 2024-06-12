@@ -223,6 +223,11 @@ class DataFrame(ParentDataFrame):
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
+        if any(not isinstance(c, (str, Column)) for c in cols):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                message_parameters={"arg_name": "columns"},
+            )
         return DataFrame(
             plan.Project(self._plan, [F._to_col(c) for c in cols]),
             session=self._session,
@@ -1836,14 +1841,6 @@ class DataFrame(ParentDataFrame):
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
-        assert result is not None
-        return result
-
-    def _tree_string(self, level: Optional[int] = None) -> str:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(
-            method="tree_string", plan=query, level=level
-        ).tree_string
         assert result is not None
         return result
 
