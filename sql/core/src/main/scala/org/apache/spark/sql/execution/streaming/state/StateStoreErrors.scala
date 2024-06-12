@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -39,17 +39,14 @@ object StateStoreErrors {
     )
   }
 
-  def stateFormatValidationFailure(errorMsg: String): SparkException = {
-    SparkException.internalError(
-      msg = "The streaming query failed to validate written state. " +
-        "The following reasons may cause this: " +
-        "1. An old Spark version wrote the checkpoint that is incompatible with the current one; " +
-        "2. Corrupt checkpoint files; " +
-        "3. The query changed in an incompatible way between restarts. " +
-        "For the first case, use a new checkpoint directory or use the original Spark version" +
-        s"to process the streaming state. Retrieved error_message=$errorMsg",
-      category = "STATE_STORE"
-    )
+  def keyRowFormatValidationFailure(errorMsg: String):
+    StateStoreKeyRowFormatValidationFailure = {
+    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+  }
+
+  def valueRowFormatValidationFailure(errorMsg: String):
+    StateStoreValueRowFormatValidationFailure = {
+    new StateStoreValueRowFormatValidationFailure(errorMsg)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -257,4 +254,14 @@ class StateStoreValueSchemaNotCompatible(
     messageParameters = Map(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
+
+class StateStoreKeyRowFormatValidationFailure(
+    errorMsg: String) extends SparkRuntimeException(
+    errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreValueRowFormatValidationFailure(
+    errorMsg: String) extends SparkRuntimeException(
+    errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
 

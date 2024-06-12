@@ -425,14 +425,14 @@ object StateStoreProvider {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
       validationError.foreach { error =>
-        throw StateStoreErrors.stateFormatValidationFailure(error)
+        throw StateStoreErrors.keyRowFormatValidationFailure(error)
       }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
         validationError.foreach { error =>
-          throw StateStoreErrors.stateFormatValidationFailure(error)
+          throw StateStoreErrors.valueRowFormatValidationFailure(error)
         }
       }
     }
