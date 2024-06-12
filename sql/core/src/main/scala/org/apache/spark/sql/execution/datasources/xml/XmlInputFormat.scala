@@ -119,7 +119,6 @@ private[xml] class XmlRecordReader extends RecordReader[LongWritable, Text] {
       fsin.seek(start)
       countingIn = BoundedInputStream.builder()
         .setInputStream(fsin)
-        .setMaxCount(fileSplit.getLength)
         .get()
       in = countingIn
       // don't use filePosition in this case. We have to count bytes read manually
