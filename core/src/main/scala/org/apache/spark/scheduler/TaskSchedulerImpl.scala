@@ -817,7 +817,7 @@ private[spark] class TaskSchedulerImpl(
             }
           case None =>
             logError(log"Ignoring update with state ${MDC(LogKeys.TASK_STATE, state)} for " +
-              log"TID ${MDC(LogKeys.TID, tid)} because its task set is gone (this is " +
+              log"TID ${MDC(LogKeys.TASK_ID, tid)} because its task set is gone (this is " +
               log"likely the result of receiving duplicate task finished status updates) or its " +
               log"executor has been marked as failed.")
         }

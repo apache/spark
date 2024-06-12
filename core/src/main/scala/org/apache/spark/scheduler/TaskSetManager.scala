@@ -990,7 +990,7 @@ private[spark] class TaskSetManager(
           // If we can not write to output file in the task, there's no point in trying to
           // re-execute it.
           logError(log"Task ${MDC(TASK_INFO_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
-            log"(TID ${MDC(TID, tid)}) can not write to output file: " +
+            log"(TID ${MDC(TASK_ID, tid)}) can not write to output file: " +
             log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)

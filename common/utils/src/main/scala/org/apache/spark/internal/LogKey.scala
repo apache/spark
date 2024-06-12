@@ -753,7 +753,6 @@ object LogKeys {
   case object THREAD_POOL_SIZE extends LogKey
   case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object THRESHOLD extends LogKey
-  case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
