@@ -579,9 +579,9 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.column
+    import pyspark.sql.column
 
-    globs = pyspark.sql.connect.column.__dict__.copy()
+    globs = pyspark.sql.column.__dict__.copy()
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.column tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
@@ -589,7 +589,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.column,
+        pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS
         | doctest.NORMALIZE_WHITESPACE

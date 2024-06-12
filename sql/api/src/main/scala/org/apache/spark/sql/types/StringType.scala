@@ -43,7 +43,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
     collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
 
   def isUTF8BinaryLcaseCollation: Boolean =
-    collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
+    collationId == CollationFactory.UTF8_LCASE_COLLATION_ID
 
   /**
    * Support for Binary Ordering implies that strings are considered equal only

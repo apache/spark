@@ -1036,7 +1036,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("SPARK-47144: Collated string") {
-    Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
       Seq(
         s"select 'abc' collate $collationName",
         s"select collation('abc' collate $collationName)").map(query =>

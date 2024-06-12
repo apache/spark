@@ -942,6 +942,34 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
       }
     }
   }
+
+  test("SPARK-48498: always do char padding in predicates") {
+    import testImplicits._
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTempPath { dir =>
+        withTable("t") {
+          Seq(
+            "12" -> "12",
+            "12" -> "12 ",
+            "12 " -> "12",
+            "12 " -> "12 "
+          ).toDF("c1", "c2").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (c1 CHAR(3), c2 STRING) USING $format LOCATION '$dir'")
+          // Comparing CHAR column with STRING column directly compares the stored value.
+          checkAnswer(
+            sql("SELECT c1 = c2 FROM t"),
+            Seq(Row(true), Row(false), Row(false), Row(true))
+          )
+          // No matter the CHAR type value is padded or not in the storage, we should always pad it
+          // before comparison with STRING literals.
+          checkAnswer(
+            sql("SELECT c1 = '12', c1 = '12 ', c1 = '12  ' FROM t WHERE c2 = '12'"),
+            Seq(Row(true, true, true), Row(true, true, true))
+          )
+        }
+      }
+    }
+  }
 }
 
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
