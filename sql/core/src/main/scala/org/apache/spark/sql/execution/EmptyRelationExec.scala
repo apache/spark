@@ -33,7 +33,9 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
     with InputRDDCodegen {
   private val rdd = sparkContext.emptyRDD[InternalRow]
 
-  override def output: Seq[Attribute] = logical.output
+  // Here we can not use def, because logical won't be serialized to executor while this method
+  // will be call in executor.
+  override val output: Seq[Attribute] = logical.output
 
   override protected def doExecute(): RDD[InternalRow] = rdd
 
@@ -52,15 +54,15 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
   protected override def stringArgs: Iterator[Any] = Iterator(s"[plan_id=$id]")
 
   override def generateTreeString(
-    depth: Int,
-    lastChildren: java.util.ArrayList[Boolean],
-    append: String => Unit,
-    verbose: Boolean,
-    prefix: String = "",
-    addSuffix: Boolean = false,
-    maxFields: Int,
-    printNodeId: Boolean,
-    indent: Int = 0): Unit = {
+      depth: Int,
+      lastChildren: java.util.ArrayList[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      indent: Int = 0): Unit = {
     super.generateTreeString(depth,
       lastChildren,
       append,
@@ -77,7 +79,7 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
   }
 
   override def doCanonicalize(): SparkPlan = {
-    this.copy(logical = LocalRelation(logical.output))
+    this.copy(logical = LocalRelation(logical.output).canonicalized)
   }
 
   override protected[sql] def cleanupResources(): Unit = {

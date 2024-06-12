@@ -53,10 +53,10 @@ class SparkPlanInfo(
 
 private[execution] object SparkPlanInfo {
 
-  private def fromSparkPlan(plan: LogicalPlan): SparkPlanInfo = {
+  private def fromLogicalPlan(plan: LogicalPlan): SparkPlanInfo = {
     val childrenInfo = plan match {
       case LogicalQueryStage(_, physical) => Seq(fromSparkPlan(physical))
-      case _ => (plan.children ++ plan.subqueries).map(fromSparkPlan)
+      case _ => (plan.children ++ plan.subqueries).map(fromLogicalPlan)
     }
     new SparkPlanInfo(
       plan.nodeName,
@@ -89,7 +89,7 @@ private[execution] object SparkPlanInfo {
       case child: SparkPlan =>
         Some(fromSparkPlan(child))
       case child: LogicalPlan =>
-        Some(fromSparkPlan(child))
+        Some(fromLogicalPlan(child))
       case _ => None
     }
     new SparkPlanInfo(
