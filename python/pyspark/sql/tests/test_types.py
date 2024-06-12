@@ -1840,7 +1840,7 @@ class TypesTestsMixin:
             NullType(),
             StringType(),
             StringType("UTF8_BINARY"),
-            StringType("UTF8_BINARY_LCASE"),
+            StringType("UTF8_LCASE"),
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
@@ -2217,18 +2217,18 @@ class TypesTestsMixin:
 
     def test_collated_string(self):
         dfs = [
-            self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
+            self.spark.sql("SELECT 'abc' collate UTF8_LCASE"),
             self.spark.createDataFrame(
-                [], StructType([StructField("id", StringType("UTF8_BINARY_LCASE"))])
+                [], StructType([StructField("id", StringType("UTF8_LCASE"))])
             ),
         ]
         for df in dfs:
             # performs both datatype -> proto & proto -> datatype conversions
             self.assertEqual(
-                df.to(StructType([StructField("new", StringType("UTF8_BINARY_LCASE"))]))
+                df.to(StructType([StructField("new", StringType("UTF8_LCASE"))]))
                 .schema[0]
                 .dataType,
-                StringType("UTF8_BINARY_LCASE"),
+                StringType("UTF8_LCASE"),
             )
 
     def test_infer_array_element_type_with_struct(self):
@@ -2378,7 +2378,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
-            ("", StringType("UTF8_BINARY_LCASE")),
+            ("", StringType("UTF8_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -2447,7 +2447,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
-            (None, StringType("UTF8_BINARY_LCASE"), ValueError),
+            (None, StringType("UTF8_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)

@@ -502,7 +502,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-47765: set collation") {
-    Seq("UNICODE", "UNICODE_CI", "utf8_binary_lcase", "utf8_binary").foreach { collation =>
+    Seq("UNICODE", "UNICODE_CI", "utf8_lcase", "utf8_binary").foreach { collation =>
       sql(s"set collation $collation")
       assert(spark.conf.get(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
     }
