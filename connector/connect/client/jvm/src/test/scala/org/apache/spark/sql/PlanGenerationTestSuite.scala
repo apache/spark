@@ -1780,15 +1780,7 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
-  functionTest("substring using start column") {
-    fn.substring(fn.col("g"), lit(4), 5)
-  }
-
-  functionTest("substring using len column") {
-    fn.substring(fn.col("g"), 4, lit(5))
-  }
-
-  functionTest("substring using start and len column") {
+  functionTest("substring using columns") {
     fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
   }
 
