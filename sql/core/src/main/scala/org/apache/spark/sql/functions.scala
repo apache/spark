@@ -4244,32 +4244,6 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def substring(str: Column, pos: Column, len: Int): Column =
-    Column.fn("substring", str, pos, lit(len))
-
-  /**
-   * Substring starts at `pos` and is of length `len` when str is String type or
-   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
-   * when str is Binary type
-   *
-   * @note The position is not zero based, but 1 based index.
-   *
-   * @group string_funcs
-   * @since 4.0.0
-   */
-  def substring(str: Column, pos: Int, len: Column): Column =
-    Column.fn("substring", str, lit(pos), len)
-
-  /**
-   * Substring starts at `pos` and is of length `len` when str is String type or
-   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
-   * when str is Binary type
-   *
-   * @note The position is not zero based, but 1 based index.
-   *
-   * @group string_funcs
-   * @since 4.0.0
-   */
   def substring(str: Column, pos: Column, len: Column): Column =
     Column.fn("substring", str, pos, len)
 

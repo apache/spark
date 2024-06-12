@@ -334,8 +334,6 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("string substring function using columns") {
     val df = Seq(("Spark", 2, 3)).toDF("a", "b", "c")
-    checkAnswer(df.select(substring($"a", $"b", 3)), Row("par"))
-    checkAnswer(df.select(substring($"a", 2, $"c")), Row("par"))
     checkAnswer(df.select(substring($"a", $"b", $"c")), Row("par"))
   }
 

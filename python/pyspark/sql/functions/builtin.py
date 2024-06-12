@@ -10962,12 +10962,10 @@ def substring(
     >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
     [Row(s='par')]
     """
-    # the native str type is shadowed by the function's `str` param
-    from builtins import str as StrType
     from pyspark.sql.classic.column import _to_java_column
 
-    pos = _to_java_column(pos) if isinstance(pos, (StrType, Column)) else pos
-    len = _to_java_column(len) if isinstance(len, (StrType, Column)) else len
+    pos = _to_java_column(lit(pos) if isinstance(pos, int) else pos)
+    len = _to_java_column(lit(len) if isinstance(len, int) else len)
     return _invoke_function("substring", _to_java_column(str), pos, len)
 
 
@@ -14068,7 +14066,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    value = value._jc if isinstance(value, Column) else value
+    value = _to_java_column(value) if isinstance(value, Column) else value
     return _invoke_function("array_position", _to_java_column(col), value)
 
 
@@ -14519,7 +14517,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    element = element._jc if isinstance(element, Column) else element
+    element = _to_java_column(element) if isinstance(element, Column) else element
     return _invoke_function("array_remove", _to_java_column(col), element)
 
 
@@ -17331,7 +17329,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    value = value._jc if isinstance(value, Column) else value
+    value = _to_java_column(value) if isinstance(value, Column) else value
     return _invoke_function("map_contains_key", _to_java_column(col), value)
 
 
