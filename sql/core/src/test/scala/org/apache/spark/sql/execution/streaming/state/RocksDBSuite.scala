@@ -892,9 +892,20 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Ensure checkpoint metrics are different
       assert(originalFileManager.latestSaveCheckpointMetrics.filesCopied == 3L)
       assert(originalFileManager.latestSaveCheckpointMetrics.bytesCopied == 30L)
-
       assert(copiedFileManager.latestSaveCheckpointMetrics.filesCopied == 0L)
       assert(copiedFileManager.latestSaveCheckpointMetrics.bytesCopied == 0L)
+
+      // Checkpoint the same files
+      saveCheckpointFiles(originalFileManager, cpFiles, 2, 101)
+      saveCheckpointFiles(copiedFileManager, cpFiles, 2, 101)
+
+      // Original file manager should skip since files already uploaded
+      assert(originalFileManager.latestSaveCheckpointMetrics.filesCopied == 0L)
+      assert(originalFileManager.latestSaveCheckpointMetrics.bytesCopied == 0L)
+
+      // Copied file manager should not skip since these are new files
+      assert(copiedFileManager.latestSaveCheckpointMetrics.filesCopied == 3L)
+      assert(copiedFileManager.latestSaveCheckpointMetrics.bytesCopied == 30L)
     }
   }
 
