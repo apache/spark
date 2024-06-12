@@ -380,7 +380,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       errorClass = "INVALID_PARAMETER_VALUE.NULL",
       parameters = Map(
         "parameter" -> "`pushDownOffset`",
-        "functionName" -> "`JDBCOptions`.`asProperties`")
+        "functionName" -> "`JDBC Options`")
     )
   }
 
