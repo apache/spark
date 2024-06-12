@@ -153,18 +153,18 @@ class CaseWhen(Expression):
 
 
 class ColumnAlias(Expression):
-    def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
+    def __init__(self, child: Expression, alias: Sequence[str], metadata: Any):
         super().__init__()
 
         self._alias = alias
         self._metadata = metadata
-        self._parent = parent
+        self._child = child
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
             exp = proto.Expression()
             exp.alias.name.append(self._alias[0])
-            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+            exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
             if self._metadata:
                 exp.alias.metadata = json.dumps(self._metadata)
@@ -177,11 +177,11 @@ class ColumnAlias(Expression):
                 )
             exp = proto.Expression()
             exp.alias.name.extend(self._alias)
-            exp.alias.expr.CopyFrom(self._parent.to_plan(session))
+            exp.alias.expr.CopyFrom(self._child.to_plan(session))
             return exp
 
     def __repr__(self) -> str:
-        return f"{self._parent} AS {','.join(self._alias)}"
+        return f"{self._child} AS {','.join(self._alias)}"
 
 
 class LiteralExpression(Expression):
