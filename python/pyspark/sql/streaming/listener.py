@@ -400,6 +400,7 @@ class QueryTerminatedEvent:
 class StreamingQueryProgress(dict):
     """
     .. versionadded:: 3.4.0
+
     .. versionchanged:: 4.0.0
         Becomes a subclass of dict
 
@@ -678,6 +679,8 @@ class StateOperatorProgress(dict):
     """
     .. versionadded:: 3.4.0
 
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
@@ -836,9 +839,10 @@ class StateOperatorProgress(dict):
         setattr(self, internal_key, value)
 
 
-class SourceProgress:
+class SourceProgress(dict):
     """
     .. versionadded:: 3.4.0
+
     .. versionchanged:: 4.0.0
         Becomes a subclass of dict
 
@@ -988,9 +992,10 @@ class SourceProgress:
         setattr(self, internal_key, value)
 
 
-class SinkProgress:
+class SinkProgress(dict):
     """
     .. versionadded:: 3.4.0
+
     .. versionchanged:: 4.0.0
         Becomes a subclass of dict
 

@@ -121,7 +121,7 @@ class StreamingListenerTestsMixin:
 
         self.assertTrue(isinstance(progress.sink, SinkProgress))
         self.check_sink_progress(progress.sink)
-        self.assertTrue(isinstance(progress.observedMetrics, Row))
+        self.assertTrue(isinstance(progress.observedMetrics, dict))
 
     def check_state_operator_progress(self, progress):
         """Check StateOperatorProgress"""
