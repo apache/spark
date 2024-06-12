@@ -310,9 +310,12 @@ class Column(ParentColumn):
                 message_parameters={},
             )
 
-        _branches = self._expr._branches + [(condition._expr, F.lit(value)._expr)]
-
-        return Column(CaseWhen(branches=_branches, else_value=None))
+        return Column(
+            CaseWhen(
+                branches=self._expr._branches + [(condition._expr, F.lit(value)._expr)],
+                else_value=None,
+            )
+        )
 
     def otherwise(self, value: Any) -> ParentColumn:
         if not isinstance(self._expr, CaseWhen):
