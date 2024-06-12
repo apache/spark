@@ -190,6 +190,8 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
+        // deep copy is needed to avoid race condition
+        // between maintenance and task threads
         fileManager = fileManager.deepCopy()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)

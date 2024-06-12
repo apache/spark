@@ -135,6 +135,7 @@ class RocksDBFileManager(
 
   private val versionToRocksDBFiles = new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
 
+
   // used to keep a mapping of the exact Dfs file that was used to create a local SST file.
   // The reason this is a separate map because versionToRocksDBFiles can contain multiple similar
   // SST files to a particular local file (for example 1.sst can map to 1-UUID1.sst in v1 and

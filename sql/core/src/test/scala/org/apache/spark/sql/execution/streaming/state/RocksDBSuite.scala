@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.nio.charset.Charset
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.language.implicitConversions
@@ -876,45 +875,27 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: deepCopy") {
-    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
-    val originalFileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val originalFileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      val copiedFileManager = originalFileManager.deepCopy()
 
-    val file1 = RocksDBSstFile("001.sst", "dfs1", 100L)
-    val file2 = RocksDBSstFile("002.sst", "dfs2", 100L)
+      // Save a version of checkpoint files
+      val cpFiles = Seq(
+        "001.sst" -> 10,
+        "002.sst" -> 10,
+        "003.sst" -> 10
+      )
+      saveCheckpointFiles(originalFileManager, cpFiles, 1, 101)
 
-    // Get access to the private ConcurrentHashMap
-    val origVersionToRocksDBFilesMap: ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
-    = getPrivateField(originalFileManager, "versionToRocksDBFiles")
+      // Ensure checkpoint metrics are different
+      assert(originalFileManager.latestSaveCheckpointMetrics.filesCopied == 3L)
+      assert(originalFileManager.latestSaveCheckpointMetrics.bytesCopied == 30L)
 
-    // Add sample files to hash maps
-    originalFileManager.localFilesToDfsFiles
-      .put("001.sst", file1)
-    origVersionToRocksDBFilesMap
-      .put(1L, Seq(file1))
-
-    // Check deepCopy duplicates the original hashmaps
-    val copiedFileManager = originalFileManager.deepCopy()
-    val copiedVersionToRocksDBFilesMap: ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
-    = getPrivateField(copiedFileManager, "versionToRocksDBFiles")
-
-    assert(origVersionToRocksDBFilesMap.equals(copiedVersionToRocksDBFilesMap))
-    assert(originalFileManager.localFilesToDfsFiles
-      .equals(copiedFileManager.localFilesToDfsFiles))
-
-    // Add new values to original file manager hash maps
-    originalFileManager.localFilesToDfsFiles
-      .put("002.sst", file2)
-
-    origVersionToRocksDBFilesMap
-      .put(2L, Seq(file2))
-
-    // Check deep copied and original file manager states differ
-    assert(origVersionToRocksDBFilesMap.containsKey(2L))
-    assert(!copiedVersionToRocksDBFilesMap.containsKey(2L))
-
-    assert(originalFileManager.localFilesToDfsFiles.containsKey("002.sst"))
-    assert(!copiedFileManager.localFilesToDfsFiles.containsKey("002.sst"))
+      assert(copiedFileManager.latestSaveCheckpointMetrics.filesCopied == 0L)
+      assert(copiedFileManager.latestSaveCheckpointMetrics.bytesCopied == 0L)
+    }
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
@@ -2346,12 +2327,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))
-
-  def getPrivateField[T](obj: Any, fieldName: String): T = {
-    val field = obj.getClass.getDeclaredField(fieldName)
-    field.setAccessible(true)
-    field.get(obj).asInstanceOf[T]
-  }
 }
 
 object RocksDBSuite {
