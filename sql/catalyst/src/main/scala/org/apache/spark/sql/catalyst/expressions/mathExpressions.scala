@@ -1051,7 +1051,7 @@ object Hex {
     val value = new Array[Byte](len)
     var i = len - 1
     while (i >= 0) {
-      value(i) = hexDigits((numBuf & 0xF).asInstanceOf[Int])
+      value(i) = hexDigits((numBuf & 0xF).toInt)
       numBuf >>>= 4
       i -= 1
     }
