@@ -731,6 +731,8 @@ object LogKeys {
   case object TARGET_PATH extends LogKey
   case object TASK_ATTEMPT_ID extends LogKey
   case object TASK_ID extends LogKey
+  case object TASK_INDEX extends LogKey
+  case object TASK_INFO_ID extends LogKey
   case object TASK_LOCALITY extends LogKey
   case object TASK_NAME extends LogKey
   case object TASK_REQUIREMENTS extends LogKey

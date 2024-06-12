@@ -989,7 +989,7 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
           // If we can not write to output file in the task, there's no point in trying to
           // re-execute it.
-          logError(log"Task ${MDC(TASK_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
+          logError(log"Task ${MDC(TASK_INFO_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
             log"(TID ${MDC(TID, tid)}) can not write to output file: " +
             log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
@@ -1057,7 +1057,7 @@ private[spark] class TaskSetManager(
         info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
+        logError(log"Task ${MDC(TASK_INDEX, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
           log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
           .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
