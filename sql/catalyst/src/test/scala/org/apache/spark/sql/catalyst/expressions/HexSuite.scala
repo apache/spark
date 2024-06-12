@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 
 class HexSuite extends SparkFunSuite {
-  test("SPARK-48596") {
+  test("SPARK-48596: hex long values") {
     assert(Hex.hex(0).toString === "0")
     assert(Hex.hex(1).toString === "1")
     assert(Hex.hex(15).toString === "F")
