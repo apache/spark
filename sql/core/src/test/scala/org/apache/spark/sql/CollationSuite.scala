@@ -211,14 +211,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("[SPARK-46837] Enable reflect expressions with collated strings") {
     Seq(
       ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", true),
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", true),
       ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", true)
+        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", false),
+      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true),
+      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
+        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true)
     ).foreach {
-      case (left, collation, right, expected) =>
+      case (left, leftCollation, right, rightCollation, expected) =>
         checkAnswer(sql(s"SELECT REFLECT('java.util.UUID', 'fromString'," +
-          s" collate('$left', '$collation'))=" +
-          s"'$right';"),
+          s" collate('$left', '$leftCollation'))=" +
+          s" collate('$right', '$rightCollation');"),
           Row(expected))
     }
   }
