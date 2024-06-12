@@ -37,10 +37,12 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 
   override val origin: Origin = CurrentOrigin.get
 
-  def getText(sqlScriptText: String): String = sqlScriptText.substring(
-    origin.startIndex.getOrElse(0),
-    origin.stopIndex.getOrElse(0) + 1
-  )
+  def getText(sqlScriptText: String): String = {
+    if (origin.startIndex.isEmpty || origin.stopIndex.isEmpty) {
+      return null
+    }
+    sqlScriptText.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  }
 }
 
 /**
