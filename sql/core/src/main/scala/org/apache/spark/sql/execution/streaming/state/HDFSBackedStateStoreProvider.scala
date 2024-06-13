@@ -267,6 +267,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param startVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @return [[HDFSBackedStateStore]]
    */
   override def getStore(startVersion: Long, endVersion: Long): StateStore = {
     val newMap = getLoadedMapForStore(startVersion, endVersion)
@@ -290,6 +291,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    *
    * @param startVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
+   * @return [[HDFSBackedReadStateStore]]
    */
   override def getReadStore(startVersion: Long, endVersion: Long): ReadStateStore = {
     val newMap = getLoadedMapForStore(startVersion, endVersion)
@@ -598,17 +600,20 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def loadMap(startVersion: Long, endVersion: Long): HDFSBackedStateStoreMap = {
 
     val (result, elapsedMs) = Utils.timeTakenMs {
-      val startVersionMap =
-        synchronized { Option(loadedMaps.get(startVersion)) }
-              .orElse{
-                logWarning(
-                  log"The state for version ${MDC(LogKeys.FILE_VERSION, startVersion)} doesn't " +
-                  log"exist in loadedMaps. Reading snapshot file and delta files if needed..." +
-                  log"Note that this is normal for the first batch of starting query.")
-                readSnapshotFile(startVersion)}
+      val startVersionMap = Option(loadedMaps.get(startVersion)) match {
+        case Some(value) =>
+          loadedMapCacheHitCount.increment()
+          Option(value)
+        case None =>
+          logWarning(
+            log"The state for version ${MDC(LogKeys.FILE_VERSION, startVersion)} doesn't " +
+              log"exist in loadedMaps. Reading snapshot file and delta files if needed..." +
+              log"Note that this is normal for the first batch of starting query.")
+          loadedMapCacheMissCount.increment()
+          readSnapshotFile(startVersion)
+      }
       if (startVersionMap.isEmpty) {
-        throw QueryExecutionErrors.failedToReadSnapshotFileNotExistsError(
-          snapshotFile(startVersion), toString(), null)
+        throw new StateStoreSnapshotFileNotFound(snapshotFile(startVersion).toString, toString())
       }
       synchronized { putStateIntoStateCacheMap(startVersion, startVersionMap.get) }
 
@@ -768,7 +773,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /**
   * try to read the snapshot file of the given version.
-  * If the snapshot file is not available, return None.
+   * If the snapshot file is not available, return [[None]].
    *
    * @param version the version of the snapshot file
   */

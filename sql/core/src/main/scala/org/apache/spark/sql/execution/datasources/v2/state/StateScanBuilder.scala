@@ -24,10 +24,9 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf
+import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, StateStoreSnapshotPartitionNotFound}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -90,7 +89,9 @@ class StateScan(
           if (partitionNums.contains(snapshotPartitionId)) {
             Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
           } else {
-            throw QueryExecutionErrors.snapshotPartitionNotFoundError(snapshotPartitionId)
+            throw new StateStoreSnapshotPartitionNotFound(
+              snapshotPartitionId, sourceOptions.operatorId,
+              sourceOptions.stateCheckpointLocation.toString)
           }
       }
     }

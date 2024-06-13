@@ -381,7 +381,7 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
-      classOf[HDFSBackedStateStoreProvider].getName)
+      newStateStoreProvider().getClass.getName)
     // make sure we have a snapshot for every two delta files
     // HDFS maintenance task will not count the latest delta file, which has the same version
     // as the snapshot version
@@ -408,7 +408,7 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
-      classOf[RocksDBStateStoreProvider].getName)
+      newStateStoreProvider().getClass.getName)
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "false")
   }
@@ -1007,11 +1007,10 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         .option(StateSourceOptions.BATCH_ID, 0)
         .load(tempDir.getAbsolutePath)
 
-      val exc = intercept[SparkException] {
+      val exc = intercept[StateStoreSnapshotPartitionNotFound] {
         stateDfError.show()
       }
-      checkError(exc, "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND", "58030",
-        Map("snapshotPartitionId" -> spark.sessionState.conf.numShufflePartitions.toString))
+      assert(exc.getErrorClass === "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND")
     })
   }
 }

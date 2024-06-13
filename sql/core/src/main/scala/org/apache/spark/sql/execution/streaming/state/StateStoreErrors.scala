@@ -245,3 +245,18 @@ class StateStoreValueSchemaNotCompatible(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
 
+class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS",
+    messageParameters = Map(
+      "fileToRead" -> fileToRead,
+      "clazz" -> clazz))
+
+class StateStoreSnapshotPartitionNotFound(
+  snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND",
+    messageParameters = Map(
+      "snapshotPartitionId" -> snapshotPartitionId.toString,
+      "operatorId" -> operatorId.toString,
+      "checkpointLocation" -> checkpointLocation))

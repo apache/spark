@@ -246,7 +246,7 @@
       },
       "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
         "message" : [
-          "Partition id <snapshotPartitionId> not found for given state source."
+          "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
         ]
       },
       "UNCATEGORIZED" : {
