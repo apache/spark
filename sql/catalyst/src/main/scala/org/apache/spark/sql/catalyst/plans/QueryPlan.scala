@@ -681,6 +681,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 object QueryPlan extends PredicateHelper {
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
 
+  /**
+   * A thread local map to store the mapping between the query plan and the query plan id.
+   * The scope of this thread local is within ExplainUtils.processPlan. The reason we define it here
+   * is because [[ QueryPlan ]] also needs this, and it doesn't have access to `execution` package
+   * from `catalyst`.
+   */
   val localIdMap: ThreadLocal[java.util.Map[QueryPlan[_], Int]] = ThreadLocal.withInitial(() =>
     new IdentityHashMap[QueryPlan[_], Int]())
 
