@@ -156,7 +156,7 @@ This file is divided into 3 sections:
   </check>
 
   <check customId="logInlineVariable" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">log(?:Info|Warning|Error)\(s".*(\$|\+\s*[^\s"]).*"\)</parameter></parameters>
+    <parameters><parameter name="regex">log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|s".*(?:\$|\+\s*[^\s"]).*"\))</parameter></parameters>
     <customMessage>
       Logging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
       Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.
