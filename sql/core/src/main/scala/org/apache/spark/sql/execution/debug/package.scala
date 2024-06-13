@@ -209,8 +209,8 @@ package object debug {
      * in a column.
      * @param columns The combination of columns to count the value occurrences for
      */
-    def inlineColumnsCount(columns: Expression *): Dataset[_] = {
-      val plan = DebugInlineColumnsCount(query.logicalPlan, columns)
+    def inlineColumnsCount(columns: Column *): Dataset[_] = {
+      val plan = DebugInlineColumnsCount(query.logicalPlan, columns.map(_.expr))
       Dataset.ofRows(query.sparkSession, plan)
     }
   }
@@ -314,6 +314,9 @@ package object debug {
     child: SparkPlan,
     sampleColumns: Seq[Expression]) extends UnaryExecNode {
 
+    val accumulator = new DebugAccumulator
+    accumulator.register(session.sparkContext, Some("top_keys"))
+
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
 
@@ -329,6 +332,8 @@ package object debug {
         counts.foreachEntry { (k, v) =>
           val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
           debugPrint(s"$values = $v (${v * 100 / rowCount}%)")
+
+          accumulator.add((values, v))
         }
       }
 
@@ -363,5 +368,54 @@ package object debug {
         case _ => Nil
       }
     }
+  }
+
+  class DebugAccumulator extends AccumulatorV2[(String, Long), java.util.Map[String, Long]]  {
+    val counts = new java.util.concurrent.ConcurrentSkipListMap[String, Long]()
+
+    /**
+     * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+     * value; for a list accumulator, Nil is zero value.
+     */
+    override def isZero: Boolean = counts.isEmpty
+
+    /**
+     * Creates a new copy of this accumulator.
+     */
+    override def copy(): DebugAccumulator = {
+      val newAcc = new DebugAccumulator()
+      newAcc.merge(this)
+      newAcc
+    }
+
+    /**
+     * Resets this accumulator, which is zero value. i.e. call `isZero` must
+     * return true.
+     */
+    override def reset(): Unit = counts.clear()
+
+    /**
+     * Takes the inputs and accumulates.
+     */
+    override def add(v: (String, Long)): Unit = {
+      counts.put(v._1, v._2)
+      // TODO drop below top N
+    }
+
+    /**
+     * Merges another same-type accumulator into this one and update its state, i.e. this should be
+     * merge-in-place.
+     */
+    override def merge(other: AccumulatorV2[(String, Long), java.util.Map[String, Long]]): Unit =
+      other match {
+        case o: DebugAccumulator => counts.putAll(o.counts)
+        case _ =>
+          throw new UnsupportedOperationException(s"Cannot merge with ${other.getClass.getName}")
+      }
+
+    /**
+     * Defines the current value of this accumulator
+     */
+    override def value: java.util.Map[String, Long] = counts
   }
 }
