@@ -4179,7 +4179,7 @@ object SQLConf {
     .internal()
     .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
       s"comparison predicates, when '${READ_SIDE_CHAR_PADDING.key}' is false.")
-    .version("4.0.0")
+    .version("3.5.2")
     .booleanConf
     .createWithDefault(false)
 
