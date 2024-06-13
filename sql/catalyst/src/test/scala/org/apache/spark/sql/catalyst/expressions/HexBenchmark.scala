@@ -22,9 +22,20 @@ import java.util.Locale
 import org.apache.commons.codec.binary.{Hex => ApacheHex}
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Benchmark for hex
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
+ *   2. build/sbt "catalyst/Test/runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/Test/runMain <this class>"
+ *      Results will be written to "benchmarks/HexBenchmark-results.txt".
+ * }}}
+ */
 object HexBenchmark extends BenchmarkBase {
 
   private val hexStrings = {
@@ -36,36 +47,33 @@ object HexBenchmark extends BenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Hex Comparison") {
-      Seq(1_000_000, 2_000_000, 4_000_000, 8_000_000).foreach { cardinality =>
-        val N = cardinality
-        val benchmark = new Benchmark(s"Cardinality $N", N, 3, output = output)
-        benchmark.addCase("Apache") { _ =>
-          (1 to N).foreach(_ => hexStrings.foreach(y => apacheDecodeHex(y)))
-        }
-
-        benchmark.addCase("Spark") { _ =>
-          (1 to N).foreach(_ => hexStrings.foreach(y => builtinUnHex(y)))
-        }
-        benchmark.addCase("Java") { _ =>
-          (1 to N).foreach(_ => hexStrings.foreach(y => javaUnhex(y)))
-        }
-        benchmark.run()
+      val N = 1_000_000
+      val benchmark = new Benchmark(s"Cardinality $N", N, 3, output = output)
+      benchmark.addCase("Apache") { _ =>
+        (1 to N).foreach(_ => hexStrings.foreach(y => apacheDecodeHex(y)))
       }
+
+      benchmark.addCase("Spark") { _ =>
+        (1 to N).foreach(_ => hexStrings.foreach(y => builtinUnHex(y)))
+      }
+      benchmark.addCase("Java") { _ =>
+        (1 to N).foreach(_ => hexStrings.foreach(y => javaUnhex(y)))
+      }
+      benchmark.run()
     }
   }
 
-  def apacheDecodeHex(value: String): Literal = {
+  def apacheDecodeHex(value: String): Array[Byte] = {
     val padding = if (value.length % 2 != 0) "0" else ""
-    Literal(ApacheHex.decodeHex(padding + value))
+    ApacheHex.decodeHex(padding + value)
   }
 
-  def builtinUnHex(value: String): Literal = {
-    val bytes = Hex.unhex(value)
-    Literal(bytes, BinaryType)
+  def builtinUnHex(value: String): Array[Byte] = {
+    Hex.unhex(value)
   }
 
-  def javaUnhex(value: String): Literal = {
-    val padding = if (value.length % 2 != 0) "0" else ""
-    Literal(java.util.HexFormat.of().parseHex(padding + value), BinaryType)
+  def javaUnhex(value: String) : Array[Byte] = {
+    val padding = if ((value.length & 0x1) != 0) "0" else ""
+    java.util.HexFormat.of().parseHex(padding + value)
   }
 }
