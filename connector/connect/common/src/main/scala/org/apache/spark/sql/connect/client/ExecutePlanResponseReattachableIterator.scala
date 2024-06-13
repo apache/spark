@@ -240,11 +240,11 @@ class ExecutePlanResponseReattachableIterator(
               ex.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND") ||
                 ex.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND")
             }) =>
-          if (lastReturnedResponseId.isDefined) {
-            throw new IllegalStateException(
-              "OPERATION_NOT_FOUND/SESSION_NOT_FOUND on the server but responses were already " +
-                "received from it.",
-              ex)
+        if (lastReturnedResponseId.isDefined) {
+          throw new IllegalStateException(
+            "OPERATION_NOT_FOUND/SESSION_NOT_FOUND on the server but responses were already " +
+              "received from it.",
+            ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
         iter = Some(rawBlockingStub.executePlan(initialRequest))
