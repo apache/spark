@@ -17,29 +17,41 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.MapSort
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, MapSort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.MapType
 
 /**
- * Adds MapSort to group expressions containing map columns, as the key/value paris need to be
- * in the correct order before grouping:
+ * Adds MapSort to group expressions containing map columns by pushing down the projection,
+ * as the key/value pairs need to be in the correct order before grouping:
  * SELECT COUNT(*) FROM TABLE GROUP BY map_column =>
- * SELECT COUNT(*) FROM TABLE GROUP BY map_sort(map_column)
+ * SELECT COUNT(*) FROM (SELECT map_sort(map_column) as map_sorted) GROUP BY map_sorted
+ *
+ * SELECT map_column FROM TABLE GROUP BY map_column =>
+ * SELECT map_sorted FROM (SELECT map_sort(map_column) as map_sorted) GROUP BY map_sorted
+ *
+ * We inject a new `Project` to ensure that we don't do recomputation, and so that we can reference
+ * the newly sorted map column in the aggregate expressions list.
  */
-object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
+object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] with AliasHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case a @ Aggregate(groupingExpr, _, _) =>
-      val newGrouping = groupingExpr.map { expr =>
-        if (!expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]) {
-          MapSort(expr)
-        } else {
-          expr
-        }
-      }
-      a.copy(groupingExpressions = newGrouping)
+    case a @ Aggregate(groupingExpr, aggregateExpr, child) =>
+      val toSort = groupingExpr.filter( expr =>
+        !expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]
+      )
+      val newChild = Project(toSort.map( expr =>
+        Alias(MapSort(expr), "map_sorted")()
+      ), child)
+      val sortedAliasMap = getAliasMap(newChild)
+      val newGroupingExpr = groupingExpr.map(expr => replaceAlias(expr, sortedAliasMap))
+      val newAggregateExpr = aggregateExpr.map(expr =>
+        replaceAliasButKeepName(expr, sortedAliasMap)
+      )
+
+      a.copy(groupingExpressions = newGroupingExpr,
+        aggregateExpressions = newAggregateExpr, child = child)
   }
 }

@@ -2202,6 +2202,36 @@ class DataFrameAggregateSuite extends QueryTest
     assertAggregateOnDataframe(dfDifferent, numRows, "m0")
   }
 
+  test("Fix reference error when grouping by MapType") {
+    val numRows = 50
+
+    val dfSingleColumn = (0 until numRows)
+      .map(_ => Tuple1(Map(1 -> 1)))
+      .toDF("m")
+    val resultSingleColumn = dfSingleColumn.groupBy("m")
+      .agg(count("*")).select("m", "count(1)")
+    checkAnswer(
+      resultSingleColumn,
+      Seq[Row](
+        Row(Map(1 -> 1), numRows)
+      )
+    )
+
+    val dfMultiColumn = (0 until numRows)
+      .map(_ => Tuple2(Map(1 -> 1), Map(2 -> 2)))
+      .toDF("m0", "m1")
+
+    val resultMultiColumn = dfMultiColumn.groupBy("m0", "m1")
+      .agg(count("*")).select("m0", "m1", "count(1)")
+    checkAnswer(
+      resultMultiColumn,
+      Seq[Row](
+        Row(Map(1 -> 1), Map(2 -> 2), numRows)
+      )
+    )
+
+  }
+
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
     val numRows = 50
 
