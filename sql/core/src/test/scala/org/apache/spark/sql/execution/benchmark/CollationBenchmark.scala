@@ -20,13 +20,8 @@ import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollationAwareFunctionRegistry, Mode}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.CollationAwareHashMap
 
 abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchmark {
   protected val collationTypes: Seq[String] =
