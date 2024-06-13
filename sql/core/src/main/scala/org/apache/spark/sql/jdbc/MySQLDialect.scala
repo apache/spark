@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSu
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
@@ -335,8 +335,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
+        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
+          case 1050 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")

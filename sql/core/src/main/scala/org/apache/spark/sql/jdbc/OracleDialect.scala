@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Date, SQLException, Timestamp, Types}
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
@@ -229,6 +230,19 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        logSQLException(sqlException, errorClass, messageParameters, description)
+        super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
+    }
+  }
 }
 
 private[jdbc] object OracleDialect {

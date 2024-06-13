@@ -210,6 +210,7 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
+        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getErrorCode match {
           case 3729 =>
             throw NonEmptyNamespaceException(
