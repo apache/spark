@@ -26,6 +26,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
@@ -239,7 +240,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
     e match {
       case sqlException: SQLException =>
         logSQLException(sqlException, errorClass, messageParameters, description)
-        super.classifyException(e, errorClass, messageParameters, description)
+        sqlException.getErrorCode match {
+          case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
+        }
       case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
