@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -356,6 +357,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
+  @nowarn("cat=deprecation")
   protected final def legacyWithNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
@@ -381,9 +383,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: LazyList[_] =>
-        // LazyList is lazy so we need to force materialization
+      case s: Stream[_] =>
+        // Stream is lazy so we need to force materialization
         s.map(mapChild).force
+      case l: LazyList[_] =>
+        // LazyList is lazy so we need to force materialization
+        l.map(mapChild).force
       case s: Seq[_] =>
         s.map(mapChild)
       case m: Map[_, _] =>
@@ -781,6 +786,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
+  @nowarn("cat=deprecation")
   override def clone(): BaseType = {
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) =>
@@ -813,7 +819,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         case (_, other) => other
       }
       case d: DataType => d // Avoid unpacking Structs
-      case args: LazyList[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: LazyList[_] => args.map(mapChild).force // Force materialization on LazyList
       case args: Iterable[_] => args.map(mapChild)
       case nonChild: AnyRef => nonChild
       case null => null

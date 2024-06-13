@@ -150,6 +150,7 @@ trait CodegenSupport extends SparkPlan {
    *
    * Note that `outputVars` and `row` can't both be null.
    */
+  @scala.annotation.nowarn("cat=deprecation")
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVarsCandidate =
       if (outputVars != null) {
@@ -166,7 +167,8 @@ trait CodegenSupport extends SparkPlan {
       }
 
     val inputVars = inputVarsCandidate match {
-      case stream: LazyList[ExprCode] => stream.force
+      case stream: Stream[ExprCode] => stream.force
+      case lazyList: LazyList[ExprCode] => lazyList.force
       case other => other
     }
 
