@@ -711,69 +711,69 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(StringType, IntegerType, expected = false)
   checkEqualsIgnoreCompatibleCollation(IntegerType, StringType, expected = false)
   // Collated `StringType`.
-  checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_BINARY_LCASE"),
+  checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
     expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), StringType("UTF8_BINARY_LCASE"), expected = true)
+    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
   // Complex types.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
-    ArrayType(StringType("UTF8_BINARY_LCASE")),
+    ArrayType(StringType("UTF8_LCASE")),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
-    ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
-    ArrayType(ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
-    MapType(StringType, StringType("UTF8_BINARY_LCASE")),
+    MapType(StringType, StringType("UTF8_LCASE")),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
-    MapType(StringType("UTF8_BINARY_LCASE"), StringType),
+    MapType(StringType("UTF8_LCASE"), StringType),
     MapType(StringType, StringType),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
-    MapType(StringType("UTF8_BINARY_LCASE"), ArrayType(StringType)),
-    MapType(StringType("UTF8_BINARY_LCASE"), ArrayType(StringType("UTF8_BINARY_LCASE"))),
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
-    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
-    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
-    MapType(ArrayType(StringType("UTF8_BINARY_LCASE")), IntegerType),
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
-    StructType(StructField("a", StringType("UTF8_BINARY_LCASE")) :: Nil),
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
-    StructType(StructField("a", ArrayType(StringType("UTF8_BINARY_LCASE"))) :: Nil),
+    StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
-    StructType(StructField("a", MapType(StringType("UTF8_BINARY_LCASE"), IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
-    StructType(StructField("b", StringType("UTF8_BINARY_LCASE")) :: Nil),
+    StructType(StructField("b", StringType("UTF8_LCASE")) :: Nil),
     expected = false
   )
   // Null compatibility checks.
@@ -784,7 +784,7 @@ class DataTypeSuite extends SparkFunSuite {
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType, containsNull = true),
-    ArrayType(StringType("UTF8_BINARY_LCASE"), containsNull = false),
+    ArrayType(StringType("UTF8_LCASE"), containsNull = false),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(

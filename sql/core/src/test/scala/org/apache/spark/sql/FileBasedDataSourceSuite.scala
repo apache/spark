@@ -1248,7 +1248,7 @@ class FileBasedDataSourceSuite extends QueryTest
       Seq(format, "").foreach { conf =>
         withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> conf) {
           withTempPath { path =>
-            val collation = "'UTF8_BINARY_LCASE'"
+            val collation = "'UTF8_LCASE'"
             val df = sql(
               s"""SELECT
                  |  COLLATE(c, $collation) as c1,

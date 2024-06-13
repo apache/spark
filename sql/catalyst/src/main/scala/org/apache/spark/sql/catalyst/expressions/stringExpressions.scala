@@ -2240,8 +2240,8 @@ case class Levenshtein(
   }
 
   override def inputTypes: Seq[AbstractDataType] = threshold match {
-    case Some(_) => Seq(StringType, StringType, IntegerType)
-    case _ => Seq(StringType, StringType)
+    case Some(_) => Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
+    case _ => Seq(StringTypeAnyCollation, StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = threshold match {

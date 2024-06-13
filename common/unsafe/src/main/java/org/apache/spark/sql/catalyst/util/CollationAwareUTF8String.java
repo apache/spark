@@ -44,14 +44,14 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
-   * to the UTF8_BINARY_LCASE collation. The method assumes that the prefix is already lowercased
+   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased
    * prior to method call to avoid the overhead of calling .toLowerCase() multiple times on the
    * same prefix string.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
-   * @return whether the target string starts with the specified prefix in UTF8_BINARY_LCASE
+   * @return whether the target string starts with the specified prefix in UTF8_LCASE
    */
   public static boolean lowercaseMatchFrom(
       final UTF8String target,
@@ -63,7 +63,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the length of the substring of the target string that starts with the specified
    * prefix, starting from the specified position (0-based index referring to character position
-   * in UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * in UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * prefix is already lowercased. The method only considers the part of target string that
    * starts from the specified (inclusive) position (that is, the method does not look at UTF8
    * characters of the target string at or after position `endPos`). If the prefix is not found,
@@ -90,7 +90,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
@@ -115,7 +115,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string ends with the specified suffix, ending at the specified
    * position (0-based index referring to character position in UTF8String), with respect to the
-   * UTF8_BINARY_LCASE collation. The method assumes that the suffix is already lowercased prior
+   * UTF8_LCASE collation. The method assumes that the suffix is already lowercased prior
    * to method call to avoid the overhead of calling .toLowerCase() multiple times on the same
    * suffix string.
    *
@@ -134,7 +134,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the length of the substring of the target string that ends with the specified
    * suffix, ending at the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * suffix is already lowercased. The method only considers the part of target string that ends
    * at the specified (non-inclusive) position (that is, the method does not look at UTF8
    * characters of the target string at or after position `endPos`). If the suffix is not found,
@@ -161,7 +161,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the last occurrence of the pattern string in the target string,
    * ending at the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
@@ -184,7 +184,7 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * Lowercase UTF8String comparison used for UTF8_BINARY_LCASE collation. While the default
+   * Lowercase UTF8String comparison used for UTF8_LCASE collation. While the default
    * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
    * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
    * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
@@ -489,7 +489,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. If the pattern is not found,
+   * UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
    * @param target the string to be searched in
