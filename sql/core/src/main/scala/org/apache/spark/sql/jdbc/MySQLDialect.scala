@@ -335,7 +335,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
-        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
           case 1050 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>

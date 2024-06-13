@@ -262,7 +262,6 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
-        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>

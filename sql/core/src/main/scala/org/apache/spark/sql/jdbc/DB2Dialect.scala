@@ -161,7 +161,6 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
-        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
           case "42893" =>

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
@@ -839,29 +839,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
-
-  def logSQLException(
-      sqlException: SQLException,
-      errorClass: String,
-      messageParameters: Map[String, String],
-      description: String): Unit = {
-    // scalastyle:off println
-    println(s"LOGSQLException, " +
-      s"errorCode: ${sqlException.getErrorCode}, " +
-      s"sqlState: ${sqlException.getSQLState}, " +
-      s"message: ${sqlException.getMessage}, " +
-      s"errorClass: $errorClass, " +
-      s"messageParameters: $messageParameters," +
-      s"description: $description")
-    // scalastyle:on println
-    logWarning(s"LOGSQLException, " +
-      s"errorCode: ${sqlException.getErrorCode}, " +
-      s"sqlState: ${sqlException.getSQLState}, " +
-      s"message: ${sqlException.getMessage}, " +
-      s"errorClass: $errorClass, " +
-      s"messageParameters: $messageParameters," +
-      s"description: $description")
-  }
 }
 
 /**

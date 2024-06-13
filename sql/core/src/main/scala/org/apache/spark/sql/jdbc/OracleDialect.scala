@@ -239,7 +239,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
       description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
-        logSQLException(sqlException, errorClass, messageParameters, description)
         sqlException.getErrorCode match {
           case 955 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
             val newTable = messageParameters("newName")

@@ -946,7 +946,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("FAILED_JDBC.RENAME_TABLE") {
     withTable(s"$catalogName.tbl1", s"$catalogName.tbl2") {
       sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
-      sql(s"CREATE TABLE $catalogName.tbl2 (col1 INT, col2 INT)")
+      sql(s"CREATE TABLE $catalogName.tbl2 (col3 INT, col4 INT)")
 
       checkError(
         exception = intercept[AnalysisException] {
