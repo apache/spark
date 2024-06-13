@@ -127,10 +127,8 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   @annotation.nowarn("cat=other-non-cooperative-equals")
   protected def keyExistsAtPos(k: T, pos: Int) = {
     classTag[T] match {
-      case ClassTag.Long => _data(pos) equals k
-      case ClassTag.Int => _data(pos) equals k
-      case ClassTag.Double => _data(pos) equals k
-      case ClassTag.Float => _data(pos) equals k
+      case ClassTag.Long | ClassTag.Int | ClassTag.Double | ClassTag.Float =>
+        _data(pos) equals k
       case _ => nonClassTagKeyExistsAtPos(k, _data(pos))
 
     }

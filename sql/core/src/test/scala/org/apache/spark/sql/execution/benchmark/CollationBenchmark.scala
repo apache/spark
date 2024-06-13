@@ -192,72 +192,6 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
     benchmark.run()
   }
 
-  def benchmarkMode(
-      collationTypes: Seq[String],
-      value: Seq[UTF8String]): Unit = {
-    val benchmark = new Benchmark(
-      s"collation unit benchmarks - mode - ${value.size} elements",
-      value.size * 10,
-      warmupTime = 10.seconds,
-      output = output)
-    collationTypes.foreach { collationType => {
-      val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
-          CollationAwareFunctionRegistry.bytesToHashFunction(
-            StringType(CollationFactory.collationNameToId(collationType))),
-          CollationAwareFunctionRegistry.bytesToEqualFunction(
-            StringType(CollationFactory.collationNameToId(collationType))))
-      value.foreach(v => {
-        buffer.update(v, (v.hashCode() % 1000).toLong)
-      })
-      val modeCurrent = Mode(child =
-        Literal.create("some_column_name", StringType(collationType)))
-      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
-        (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
-        }
-      }
-    }
-    }
-
-    benchmark.run()
-  }
-
-  def benchmarkModeStruct(
-      collationTypes: Seq[String],
-      value: Seq[UTF8String]): Unit = {
-    val benchmark = new Benchmark(
-      s"collation unit benchmarks - mode [struct] - ${value.size} elements",
-      value.size * 10,
-      warmupTime = 10.seconds,
-      output = output)
-    collationTypes.foreach { collationType => {
-      val buffer = new CollationAwareHashMap[AnyRef, Long, UTF8String](value.size,
-        CollationAwareFunctionRegistry.bytesToHashFunction(
-          StringType(CollationFactory.collationNameToId(collationType))),
-        CollationAwareFunctionRegistry.bytesToEqualFunction(
-          StringType(CollationFactory.collationNameToId(collationType))))
-      value.foreach(v => {
-        buffer.update(InternalRow.fromSeq(
-          Seq(v, v, 3)),
-          (v.hashCode() % 1000).toLong)
-      })
-      val st = StructType(Seq(
-        StructField("a", StringType(collationType)),
-        StructField("b", StringType(collationType)),
-        StructField("c", IntegerType)
-      ))
-      val modeCurrent = Mode(child = Literal.default(st))
-      benchmark.addCase(s"$collationType - mode struct - ${value.size} elements") { _ =>
-        (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
-        }
-      }
-    }
-    }
-
-    benchmark.run()
-  }
-
   protected def generateDataframeInput(l: Long): DataFrame = {
     spark.createDataFrame(generateSeqInput(l).map(_.toString).map(Tuple1.apply)).toDF("s1")
   }
@@ -341,9 +275,6 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
-    benchmarkModeStruct(collationTypes.filter(c => c == "UNICODE" || c == "UTF8_BINARY"),
-      generateBaseInputStringswithUniqueGroupNumber(10000L))
     benchmarkModeOnDataFrame(collationTypes, generateDataframeInput(10000L))
   }
 }
@@ -374,7 +305,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, inputs)
-    benchmarkModeStruct(collationTypes.filter(c => c == "UNICODE" || c == "UTF8_BINARY"), inputs)
+    benchmarkModeOnDataFrame(collationTypes, generateDataframeInput(4000L))
   }
 }
