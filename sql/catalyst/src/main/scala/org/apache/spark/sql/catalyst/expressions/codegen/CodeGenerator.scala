@@ -32,9 +32,8 @@ import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
@@ -1562,9 +1561,10 @@ object CodeGenerator extends Logging {
   private def logGeneratedCode(code: CodeAndComment): Unit = {
     val maxLines = SQLConf.get.loggingMaxLinesForCodegen
     if (Utils.isTesting) {
-      logError(s"\n${CodeFormatter.format(code, maxLines)}")
+      logError(log"\n${MDC(LogKeys.FORMATTED_CODE,
+        CodeFormatter.format(code, MDC(LogKeys.MAX_LINES, maxLines)))}")
     } else {
-      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+      logInfo(log"\n${MDC(LogKeys.FORMATTED_CODE, CodeFormatter.format(code, maxLines))}")
     }
   }
 
@@ -1593,9 +1593,10 @@ object CodeGenerator extends Logging {
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo("Generated method too long to be JIT compiled: " +
-                log"${MDC(CLASS_NAME, cf.getThisClassName)}.${MDC(METHOD_NAME, method.getName)} " +
-                log"is ${MDC(BYTECODE_SIZE, byteCodeSize)} bytes")
+              logInfo(log"Generated method too long to be JIT compiled: " +
+                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
+                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
+                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
             }
 
             byteCodeSize

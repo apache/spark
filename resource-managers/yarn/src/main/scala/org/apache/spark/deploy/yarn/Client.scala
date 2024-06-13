@@ -620,8 +620,9 @@ private[spark] class Client(
     // If we passed in a keytab, make sure we copy the keytab to the staging directory on
     // HDFS, and setup the relevant environment vars, so the AM can login again.
     amKeytabFileName.foreach { kt =>
-      logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
-        " via the YARN Secure Distributed Cache.")
+      logInfo(log"To enable the AM to login from keytab, " +
+        log"credentials are being copied over to the AM " +
+        log"via the YARN Secure Distributed Cache.")
       val (_, localizedPath) = distribute(keytab,
         destName = Some(kt),
         appMasterOnly = true)
@@ -1385,7 +1386,7 @@ private[spark] class Client(
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
+          logError(log"Application diagnostics message: ${MDC(LogKeys.MESSAGE, err)}")
         }
         throw new SparkException(s"Application $appId finished with failed status")
       }

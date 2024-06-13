@@ -85,7 +85,7 @@ private[streaming] class ReceiverSupervisorImpl(
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
-          logInfo(s"Received a new rate limit: $eps.")
+          logInfo(log"Received a new rate limit: ${MDC(LogKeys.RATE_LIMIT, eps)}.")
           registeredBlockGenerators.asScala.foreach { bg =>
             bg.updateRate(eps)
           }
@@ -195,10 +195,10 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = {
-    logInfo("Deregistering receiver " + streamId)
+    logInfo(log"Deregistering receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
-    logInfo("Stopped receiver " + streamId)
+    logInfo(log"Stopped receiver ${MDC(LogKeys.RECEIVER_ID, streamId)}")
   }
 
   override def createBlockGenerator(

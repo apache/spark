@@ -214,7 +214,8 @@ class PythonStreamingSourceRunner(
    * Stop the python worker process and invoke stop() on stream reader.
    */
   def stop(): Unit = {
-    logInfo(s"Stopping streaming runner for module: $workerModule.")
+    logInfo(log"Stopping streaming runner for module: " +
+      log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>

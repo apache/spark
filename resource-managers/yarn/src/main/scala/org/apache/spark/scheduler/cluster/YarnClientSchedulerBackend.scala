@@ -120,7 +120,7 @@ private[spark] class YarnClientSchedulerBackend(
         logError(log"YARN application has exited unexpectedly with state " +
           log"${MDC(APP_STATE, state)}! Check the YARN application logs for more details.")
         diags.foreach { err =>
-          logError(s"Diagnostics message: $err")
+          logError(log"Diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         allowInterrupt = false
         sc.stop()

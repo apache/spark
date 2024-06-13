@@ -436,8 +436,8 @@ private[spark] class IndexShuffleBlockResolver(
         if (checksumTmp.exists()) {
           try {
             if (!checksumTmp.delete()) {
-              logError(s"Failed to delete temporary checksum file " +
-                s"at ${checksumTmp.getAbsolutePath}")
+              logError(log"Failed to delete temporary checksum file at " +
+                log"${MDC(LogKeys.FILE_ABSOLUTE_PATH, checksumTmp.getAbsolutePath)}")
             }
           } catch {
             case e: Exception =>
