@@ -37,7 +37,8 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect()
+  extends JdbcDialect with SQLConfHelper with JdbcDialectHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -278,7 +279,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters)
+                super.classifyException(e, errorClass, messageParameters, description)
               }
             }
           case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
@@ -290,10 +291,10 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

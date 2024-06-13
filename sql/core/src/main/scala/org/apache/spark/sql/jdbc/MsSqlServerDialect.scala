@@ -34,7 +34,7 @@ import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private case class MsSqlServerDialect() extends JdbcDialect {
+private case class MsSqlServerDialect() extends JdbcDialect with JdbcDialectHelper {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
@@ -216,9 +216,9 @@ private case class MsSqlServerDialect() extends JdbcDialect {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

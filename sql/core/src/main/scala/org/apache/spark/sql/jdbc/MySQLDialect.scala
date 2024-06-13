@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
-private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with JdbcDialectHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -345,10 +345,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

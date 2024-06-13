@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
-private case class DB2Dialect() extends JdbcDialect with SQLConfHelper {
+private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with JdbcDialectHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
@@ -167,9 +167,9 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters)
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 
