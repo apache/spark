@@ -943,7 +943,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  test("FAILED_JDBC.RENAME_TABLE") {
+  test("SPARK-48618: Renaming the table to the name of an existing table") {
     withTable(s"$catalogName.tbl1", s"$catalogName.tbl2") {
       sql(s"CREATE TABLE $catalogName.tbl1 (col1 INT, col2 INT)")
       sql(s"CREATE TABLE $catalogName.tbl2 (col3 INT, col4 INT)")
