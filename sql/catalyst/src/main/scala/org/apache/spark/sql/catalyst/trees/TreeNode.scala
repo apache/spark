@@ -357,7 +357,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
-  @nowarn("cat=deprecation")
   protected final def legacyWithNewChildren(newChildren: Seq[BaseType]): BaseType = {
     assert(newChildren.size == children.size, "Incorrect number of children")
     var changed = false
@@ -380,6 +379,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case nonChild: AnyRef => nonChild
       case null => null
     }
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
@@ -786,7 +786,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
-  @nowarn("cat=deprecation")
   override def clone(): BaseType = {
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) =>
@@ -807,6 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       case other => other
     }
 
+    @nowarn("cat=deprecation")
     val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         arg.asInstanceOf[BaseType].clone()
