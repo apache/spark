@@ -235,7 +235,7 @@ object CallMethodViaReflection {
         // Argument type must match. That is, either the method's argument type matches one of the
         // acceptable types defined in typeMapping, or it is a super type of the acceptable types.
         candidateTypes.zip(argTypes).forall { case (candidateType, argType)
-          if (!argType.isInstanceOf[StringType]) =>
+          if !argType.isInstanceOf[StringType] =>
           typeMapping(argType).exists(candidateType.isAssignableFrom)
         case _ => true
         }
