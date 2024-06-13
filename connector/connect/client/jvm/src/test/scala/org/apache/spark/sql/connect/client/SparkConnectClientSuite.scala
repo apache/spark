@@ -540,7 +540,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     service.errorToThrowOnExecute = Some(new StatusRuntimeException(
       Status.INTERNAL.withDescription("INVALID_HANDLE.SESSION_NOT_FOUND")))
 
-    val plan = buildPlan("select * from range(10000000)")
+    val plan = buildPlan("select * from range(1)")
     val iter = client.execute(plan)
     val reattachableIter =
       ExecutePlanResponseReattachableIterator.fromIterator(iter)
