@@ -238,7 +238,7 @@ class ExecutePlanResponseReattachableIterator(
           if Option(StatusProto.fromThrowable(ex))
             .exists(ex => {
               ex.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND") ||
-                ex.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND")
+              ex.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND")
             }) =>
         if (lastReturnedResponseId.isDefined) {
           throw new IllegalStateException(
