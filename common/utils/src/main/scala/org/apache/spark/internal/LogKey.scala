@@ -738,7 +738,6 @@ object LogKeys {
   case object TASK_REQUIREMENTS extends LogKey
   case object TASK_RESOURCES extends LogKey
   case object TASK_RESOURCE_ASSIGNMENTS extends LogKey
-  case object TASK_SET_ID extends LogKey
   case object TASK_SET_MANAGER extends LogKey
   case object TASK_SET_NAME extends LogKey
   case object TASK_STATE extends LogKey
