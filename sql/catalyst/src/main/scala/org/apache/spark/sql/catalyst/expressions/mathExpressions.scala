@@ -1018,9 +1018,9 @@ case class Bin(child: Expression)
 }
 
 object Hex {
-  val hexDigits = Array[Char](
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-  ).map(_.toByte)
+  private final val hexDigits =
+    Array[Byte]('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F')
+  private final val ZERO_UTF8 = UTF8String.fromBytes(Array[Byte]('0'))
 
   // lookup table to translate '0' -> 0 ... 'F'/'f' -> 15
   val unhexDigits = {
@@ -1036,24 +1036,26 @@ object Hex {
     val value = new Array[Byte](length * 2)
     var i = 0
     while (i < length) {
-      value(i * 2) = Hex.hexDigits((bytes(i) & 0xF0) >> 4)
-      value(i * 2 + 1) = Hex.hexDigits(bytes(i) & 0x0F)
+      value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
+      value(i * 2 + 1) = hexDigits(bytes(i) & 0x0F)
       i += 1
     }
     UTF8String.fromBytes(value)
   }
 
   def hex(num: Long): UTF8String = {
-    // Extract the hex digits of num into value[] from right to left
-    val value = new Array[Byte](16)
+    val zeros = jl.Long.numberOfLeadingZeros(num)
+    if (zeros == jl.Long.SIZE) return ZERO_UTF8
+    val len = (jl.Long.SIZE - zeros + 3) / 4
     var numBuf = num
-    var len = 0
-    do {
-      len += 1
-      value(value.length - len) = Hex.hexDigits((numBuf & 0xF).toInt)
+    val value = new Array[Byte](len)
+    var i = len - 1
+    while (i >= 0) {
+      value(i) = hexDigits((numBuf & 0xF).toInt)
       numBuf >>>= 4
-    } while (numBuf != 0)
-    UTF8String.fromBytes(java.util.Arrays.copyOfRange(value, value.length - len, value.length))
+      i -= 1
+    }
+    UTF8String.fromBytes(value)
   }
 
   def unhex(bytes: Array[Byte]): Array[Byte] = {

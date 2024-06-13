@@ -743,7 +743,7 @@ public final class CollationSupport {
 
   public static boolean supportsLowercaseRegex(final int collationId) {
     // for regex, only Unicode case-insensitive matching is possible,
-    // so UTF8_BINARY_LCASE is treated as UNICODE_CI in this context
+    // so UTF8_LCASE is treated as UNICODE_CI in this context
     return CollationFactory.fetchCollation(collationId).supportsLowercaseEquality;
   }
 
