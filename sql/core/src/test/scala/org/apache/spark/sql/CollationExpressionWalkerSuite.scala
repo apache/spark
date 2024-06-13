@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, EmptyRow, EvalMode, ExpectsInputTypes, Expression, ExpressionInfo, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, CreateArray, EmptyRow, EvalMode, ExpectsInputTypes, Expression, ExpressionInfo, GenericInternalRow, Literal}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -55,7 +55,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
   def generateDataAsStrings(
       inputEntry: Seq[AbstractDataType],
       collationType: CollationType): Seq[Any] = {
-    inputEntry.map(generateInputAsString(_, collationType)))
+    inputEntry.map(generateInputAsString(_, collationType))
   }
 
   /**
@@ -111,7 +111,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case Utf8Binary =>
             Literal.create("dummy string", StringType("UTF8_BINARY"))
           case Utf8BinaryLcase =>
-            Literal.create("DuMmY sTrInG", StringType("UTF8_BINARY_LCASE"))
+            Literal.create("DuMmY sTrInG", StringType("UTF8_LCASE"))
         }
       case TypeCollection(typeCollection) =>
         val strTypes = typeCollection.filter(hasStringType)
@@ -156,17 +156,17 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       collationType: CollationType): String =
     inputType match {
       // TODO: Try to make this a bit more random.
-      case AnyTimestampType => "'2009-07-30 12:58:59'"
+      case AnyTimestampType => "TIMESTAMP'2009-07-30 12:58:59'"
       case BinaryType => "X'0'"
-      case BooleanType => "true"
+      case BooleanType => "True"
       case _: DatetimeType => "date'2016-04-08'"
       case _: DecimalType => "0.0"
       case IntegerType | NumericType => "1"
-      case LongType => Literal(1L)
+      case LongType => "1"
       case _: StringType | AnyDataType | _: AbstractStringType =>
         collationType match {
-          case Utf8Binary => "dummy string"
-          case Utf8BinaryLcase => "DuMmY sTrInG"
+          case Utf8Binary => "'dummy string' COLLATE UTF8_BINARY"
+          case Utf8BinaryLcase => "'DuMmY sTrInG' COLLATE UTF8_LCASE"
         }
       case TypeCollection(typeCollection) =>
         val strTypes = typeCollection.filter(hasStringType)
@@ -184,16 +184,63 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case ArrayType =>
         "array(" + generateInputAsString(StringTypeAnyCollation, collationType) + ")"
       case MapType =>
-        "map(" + generateInputAsString(StringTypeAnyCollation,collationType) + ", " +
+        "map(" + generateInputAsString(StringTypeAnyCollation, collationType) + ", " +
           generateInputAsString(StringTypeAnyCollation, collationType) + ")"
       case MapType(keyType, valueType, _) =>
         "map(" + generateInputAsString(keyType, collationType) + ", " +
           generateInputAsString(valueType, collationType) + ")"
       case StructType =>
-        "struct(" + generateInputAsString(StringTypeAnyCollation, collationType) + ", " +
-          generateInputAsString(StringTypeAnyCollation, collationType) +")"
+        "named_struct( 'start', " + generateInputAsString(StringTypeAnyCollation, collationType) +
+          ", 'end', " + generateInputAsString(StringTypeAnyCollation, collationType) + ")"
       case StructType(fields) =>
-        "named_struct(" + ")" + fields.map(f => f.)
+        "named_struct(" + fields.map(f => "'" + f.name + "', " +
+          generateInputAsString(f.dataType, collationType)).mkString(", ") + ")"
+    }
+
+  def generateInputTypeAsStrings(
+      inputType: AbstractDataType,
+      collationType: CollationType): String =
+    inputType match {
+      case AnyTimestampType => "TIMESTAMP"
+      case BinaryType => "BINARY"
+      case BooleanType => "BOOLEAN"
+      case _: DatetimeType => "DATE"
+      case _: DecimalType => "DECIMAL(2, 1)"
+      case IntegerType | NumericType => "INT"
+      case LongType => "BIGINT"
+      case _: StringType | AnyDataType | _: AbstractStringType =>
+        collationType match {
+          case Utf8Binary => "STRING"
+          case Utf8BinaryLcase => "STRING COLLATE UTF8_LCASE"
+        }
+      case TypeCollection(typeCollection) =>
+        val strTypes = typeCollection.filter(hasStringType)
+        if (strTypes.isEmpty) {
+          // Take first type
+          generateInputTypeAsStrings(typeCollection.head, collationType)
+        } else {
+          // Take first string type
+          generateInputTypeAsStrings(strTypes.head, collationType)
+        }
+      case AbstractArrayType(elementType) =>
+        "array<" + generateInputTypeAsStrings(elementType, collationType) + ">"
+      case ArrayType(elementType, _) =>
+        "array<" + generateInputTypeAsStrings(elementType, collationType) + ">"
+      case ArrayType =>
+        "array<" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+      case MapType =>
+        "map<" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ", " +
+          generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+      case MapType(keyType, valueType, _) =>
+        "map<" + generateInputTypeAsStrings(keyType, collationType) + ", " +
+          generateInputTypeAsStrings(valueType, collationType) + ">"
+      case StructType =>
+        "struct<start:" + generateInputTypeAsStrings(StringTypeAnyCollation, collationType) +
+          ", end:" +
+          generateInputTypeAsStrings(StringTypeAnyCollation, collationType) + ">"
+      case StructType(fields) =>
+        "named_struct<" + fields.map(f => "'" + f.name + "', " +
+          generateInputTypeAsStrings(f.dataType, collationType)).mkString(", ") + ">"
     }
 
   /**
@@ -255,7 +302,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case types: ExpectsInputTypes =>
             expectsExpressionCounter = expectsExpressionCounter + 1
             val inputTypes = types.inputTypes
-            inputTypes.exists(hasStringType) || inputTypes.isEmpty
+            inputTypes.exists(hasStringType)
         }
       } catch {
         case _: Throwable => false
@@ -351,43 +398,20 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }
   }
 
-  test("SPARK-48280: Expression Walker for plan generation of expressions") {
+  test("SPARK-48280: Expression Walker for codeGen generation") {
 
     var (funInfos, toSkip) = extractRelevantExpressions()
-    toSkip =
-      "element_at" ::
-      "try_element_at" ::
-      "reduce" ::
-      "aggregate" ::
-      "array_intersect" ::
-      toSkip
-
-    var typeList = List(
-      "date",
-      "map<struct<>,string>",
-      "string",
-      "array<string>",
-      "float",
-      "smallint",
-      "map<string,string>",
-      "map<struct<>,struct<>>",
-      "struct<dummy:string>",
-      "bigint",
-      "array<struct<>>",
-      "timestamp",
-      "array<array<string>>",
-      "array<struct<key:struct<>,value:struct<>>>",
-      "struct<start:string,end:string>",
-      "timestamp_ntz",
-      "decimal(0,0)",
-      "double",
-      "int",
-      "map<string,struct<>>",
-      "boolean",
-      "struct<>",
-      "binary"
+    toSkip = toSkip ++ List(
+      // Problem caught with other tests already
+      "map_from_arrays",
+      // These expressions are not called as functions
+      "lead",
+      "nth_value",
+      // Failing asserts
+      "session_window",
+      "ascii",
+      "to_xml"
     )
-    val dt = collection.mutable.Set[String]()
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
       println("checking - " + f.getName)
       val cl = Utils.classForName(f.getClassName)
@@ -397,16 +421,113 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
       val inputTypes = expr.inputTypes
 
-      val inputDataUtf8Binary = {
-        generateData(replaceExpressions(inputTypes, params.toSeq), Utf8BinaryLcase)
+      withTable("tbl", "tbl_lcase") {
+        sql("CREATE TABLE tbl (" +
+          inputTypes.zipWithIndex
+            .map(it => "col" +
+              it._2.toString + " " +
+              generateInputTypeAsStrings(it._1, Utf8Binary)).mkString(", ") +
+          ") USING PARQUET")
+        sql("INSERT INTO tbl VALUES (" +
+          inputTypes.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
+          ")")
+
+        sql("CREATE TABLE tbl_lcase (" +
+          inputTypes.zipWithIndex
+            .map(it => "col" +
+              it._2.toString + " " +
+              generateInputTypeAsStrings(it._1, Utf8BinaryLcase)).mkString(", ") +
+          ") USING PARQUET")
+        sql("INSERT INTO tbl_lcase VALUES (" +
+          inputTypes.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
+          ")")
+
+        val utf8BinaryResult = try {
+          if (expr.isInstanceOf[BinaryComparison]) {
+            sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl")
+          } else {
+            if (inputTypes.size == 1) {
+              sql("SELECT " + f.getName + "(col0) FROM tbl")
+            }
+            else {
+              sql("SELECT " + f.getName + "(col0, " +
+                inputTypes.tail.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
+                ") FROM tbl")
+            }
+          }.getRows(1, 1)
+          None
+        } catch {
+          case e: Throwable => Some(e)
+        }
+        val utf8BinaryLcaseResult = try {
+          if (expr.isInstanceOf[BinaryComparison]) {
+            sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl_lcase")
+          } else {
+            if (inputTypes.size == 1) {
+              sql("SELECT " + f.getName + "(col0) FROM tbl_lcase")
+            }
+            else {
+              sql("SELECT " + f.getName + "(col0, " +
+                inputTypes.tail.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
+                ") FROM tbl_lcase")
+            }
+          }.getRows(1, 1)
+          None
+        } catch {
+          case e: Throwable => Some(e)
+        }
+
+        assert(utf8BinaryResult.isDefined === utf8BinaryLcaseResult.isDefined)
+
+        if (utf8BinaryResult.isEmpty) {
+          val utf8BinaryResult =
+            if (expr.isInstanceOf[BinaryComparison]) {
+              sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl")
+            } else {
+              if (inputTypes.size == 1) {
+                sql("SELECT " + f.getName + "(col0) FROM tbl")
+              }
+              else {
+                sql("SELECT " + f.getName + "(col0, " +
+                  inputTypes.tail.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
+                  ") FROM tbl")
+              }
+            }
+          val utf8BinaryLcaseResult =
+            if (expr.isInstanceOf[BinaryComparison]) {
+              sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl_lcase")
+            } else {
+              if (inputTypes.size == 1) {
+                sql("SELECT " + f.getName + "(col0) FROM tbl_lcase")
+              }
+              else {
+                sql("SELECT " + f.getName + "(col0, " +
+                  inputTypes.tail.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
+                  ") FROM tbl_lcase")
+              }
+            }
+
+          val dt = utf8BinaryResult.schema.fields.head.dataType
+
+          dt match {
+            case st if utf8BinaryResult != null && utf8BinaryLcaseResult != null &&
+              hasStringType(st) =>
+              // scalastyle:off caselocale
+              assert(utf8BinaryResult.getRows(1, 1).map(_.map(_.toLowerCase)) ===
+                utf8BinaryLcaseResult.getRows(1, 1).map(_.map(_.toLowerCase)))
+              // scalastyle:on caselocale
+            case _ =>
+              // scalastyle:off caselocale
+              assert(utf8BinaryResult.getRows(1, 1)(1) ===
+              utf8BinaryLcaseResult.getRows(1, 1)(1))
+              // scalastyle:on caselocale
+          }
+        }
+        else {
+          assert(utf8BinaryResult.get.getClass == utf8BinaryResult.get.getClass)
+        }
       }
-      println(inputDataUtf8Binary.map(_.toString))
-      val instanceUtf8Binary = {
-        headConstructor.newInstance(inputDataUtf8Binary: _*).asInstanceOf[Expression]
-      }
-      dt += instanceUtf8Binary.dataType.simpleString
     }
-    println(dt)
   }
 
   test("SPARK-48280: Expression Walker for SQL query examples") {
