@@ -326,7 +326,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
-      if (!(endVersion == 0)) {
+      if (endVersion != 0) {
         newMap.putAll(loadMap(startVersion, endVersion))
       }
       newMap

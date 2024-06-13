@@ -93,12 +93,10 @@ class StatePartitionReader(
   }
 
   private lazy val store: ReadStateStore = {
-    if (partition.sourceOptions.snapshotStartBatchId.isEmpty) {
-      provider.getReadStore(partition.sourceOptions.batchId + 1)
-    }
-    else {
-      provider.getReadStore(
-        partition.sourceOptions.snapshotStartBatchId.get + 1,
+    partition.sourceOptions.snapshotStartBatchId match {
+      case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
+      case Some(snapshotStartBatchId) => provider.getReadStore(
+        snapshotStartBatchId + 1,
         partition.sourceOptions.batchId + 1)
     }
   }

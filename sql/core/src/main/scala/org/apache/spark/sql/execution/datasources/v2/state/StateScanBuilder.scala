@@ -82,18 +82,16 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      if (sourceOptions.snapshotPartitionId.isEmpty) {
-        partitionNums.map {
+      sourceOptions.snapshotPartitionId match {
+        case None => partitionNums.map {
           pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
         }.toArray
-      }
-      else {
-        val snapshotPartitionId = sourceOptions.snapshotPartitionId.get
-        if (partitionNums.contains(snapshotPartitionId)) {
-          Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
-        } else {
-          throw QueryExecutionErrors.snapshotPartitionNotFoundError(snapshotPartitionId)
-        }
+        case Some(snapshotPartitionId) =>
+          if (partitionNums.contains(snapshotPartitionId)) {
+            Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+          } else {
+            throw QueryExecutionErrors.snapshotPartitionNotFoundError(snapshotPartitionId)
+          }
       }
     }
   }

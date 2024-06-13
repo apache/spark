@@ -374,18 +374,19 @@ class StateDataSourceSQLConfigSuite extends StateDataSourceTestBase {
   }
 }
 
-class HDFSBackedStateDataSourceReadSuite
-  extends StateDataSourceReadSuite[HDFSBackedStateStoreProvider] {
+class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
+  override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
+    new HDFSBackedStateStoreProvider
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[HDFSBackedStateStoreProvider].getName)
     // make sure we have a snapshot for every two delta files
+    // HDFS maintenance task will not count the latest delta file, which has the same version
+    // as the snapshot version
     spark.conf.set(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, 1)
   }
-
-  override protected def newStateStoreProvider(): HDFSBackedStateStoreProvider =
-    new HDFSBackedStateStoreProvider
 
   test("ERROR: snapshot of version not found") {
     testSnapshotNotFound()
@@ -400,8 +401,10 @@ class HDFSBackedStateDataSourceReadSuite
   }
 }
 
-class RocksDBStateDataSourceReadSuite
-  extends StateDataSourceReadSuite[RocksDBStateStoreProvider] {
+class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
@@ -409,25 +412,23 @@ class RocksDBStateDataSourceReadSuite
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "false")
   }
-
-  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
-    new RocksDBStateStoreProvider
 }
 
-class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite
-  extends StateDataSourceReadSuite[RocksDBStateStoreProvider] {
+class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends
+StateDataSourceReadSuite {
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
-      classOf[RocksDBStateStoreProvider].getName)
+      newStateStoreProvider().getClass.getName)
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "true")
     // make sure we have a snapshot for every other checkpoint
+    // RocksDB maintenance task will count the latest checkpoint, so we need to set it to 2
     spark.conf.set(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, 2)
   }
-
-  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
-    new RocksDBStateStoreProvider
 
   test("ERROR: snapshot of version not found") {
     testSnapshotNotFound()
@@ -442,8 +443,7 @@ class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite
   }
 }
 
-abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
-  extends StateDataSourceTestBase with Assertions {
+abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
 
   import testImplicits._
   import StateStoreTestsHelper._
@@ -451,7 +451,7 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
   protected val keySchema: StructType = StateStoreTestsHelper.keySchema
   protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
 
-  protected def newStateStoreProvider(): storeProvider
+  protected def newStateStoreProvider(): StateStoreProvider
 
   /**
    * Calls the overridable [[newStateStoreProvider]] to create the state store provider instance.
@@ -460,7 +460,7 @@ abstract class StateDataSourceReadSuite[storeProvider <: StateStoreProvider]
    * @param checkpointDir        path to store state information
    * @return instance of class extending [[StateStoreProvider]]
    */
-  private def getNewStateStoreProvider(checkpointDir: String): storeProvider = {
+  private def getNewStateStoreProvider(checkpointDir: String): StateStoreProvider = {
     val provider = newStateStoreProvider()
     provider.init(
       StateStoreId(checkpointDir, 0, 0),
