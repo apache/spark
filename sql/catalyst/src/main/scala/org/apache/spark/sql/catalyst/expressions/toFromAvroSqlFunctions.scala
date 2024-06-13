@@ -26,17 +26,26 @@ import org.apache.spark.util.Utils
 /**
  * Converts a binary column of Avro format into its corresponding Catalyst value.
  * This is a thin wrapper over the [[AvroDataToCatalyst]] class to create a SQL function.
- * The specified schema must match actual schema of the read data, otherwise the behavior
- * is undefined: it may fail or return arbitrary result.
- * To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
- * set via the option avroSchema.
  *
  * @param child the Catalyst binary input column.
  * @param jsonFormatSchema the Avro schema in JSON string format.
- * @param options the options to use when performing the conversion
+ * @param options the options to use when performing the conversion.
  *
  * @since 4.0.0
  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child, jsonFormatSchema, options) - Converts a binary Avro value into a Catalyst value.
+    """,
+  note = """
+    The specified schema must match actual schema of the read data, otherwise the behavior
+    is undefined: it may fail or return arbitrary result.
+    To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+    set via the corresponding option.
+  """,
+  group = "misc_funcs",
+  since = "4.0.0"
+)
 case class FromAvroSqlFunction(child: Expression, jsonFormatSchema: Expression, options: Expression)
   extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
@@ -107,6 +116,14 @@ case class FromAvroSqlFunction(child: Expression, jsonFormatSchema: Expression, 
  *
  * @since 4.0.0
  */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child, jsonFormatSchema) - Converts a Catalyst binary input value into its corresponding
+      Avro format result.
+  """,
+  group = "misc_funcs",
+  since = "4.0.0"
+)
 case class ToAvroSqlFunction(child: Expression, jsonFormatSchema: Expression)
   extends BinaryExpression with RuntimeReplaceable {
   override def left: Expression = child
