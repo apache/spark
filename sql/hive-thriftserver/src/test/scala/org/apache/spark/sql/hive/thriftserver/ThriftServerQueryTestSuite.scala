@@ -105,6 +105,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-47264
     "collations.sql",
     "binary_hex.sql",
+    "binary_hex_discrete.sql",
     "binary_basic.sql",
     "binary_base64.sql"
   )
