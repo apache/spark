@@ -20,7 +20,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 
 /**
- * Benchmark for path escaping
+ * Benchmark for path escaping/unescaping
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -53,6 +53,30 @@ object EscapePathBenchmark extends BenchmarkBase {
       }
       benchmark.run()
     }
+
+    runBenchmark("Unescape") {
+      val benchmark = new Benchmark("Unescape Tests", N, 10, output = output)
+      val paths = Seq(
+        "https%3A%2F%2Fissues.apache.org%2Fjira%2Fbrowse%2FSPARK-48551",
+        "https:%2F%2Fissues.apache.org%2Fjira%2Fbrowse%2FSPARK-48551",
+        "https:/%2Fissues.apache.org%2Fjira%2Fbrowse%2FSPARK-48551",
+        "https://issues.apache.org%2Fjira%2Fbrowse%2FSPARK-48551",
+        "https://issues.apache.org/jira%2Fbrowse%2FSPARK-48551",
+        "https://issues.apache.org/jira%2Fbrowse%2FSPARK-48551",
+        "https://issues.apache.org/jira/browse%2FSPARK-48551",
+        "https://issues.apache.org/jira/browse%2SPARK-48551",
+        "https://issues.apache.org/jira/browse/SPARK-48551")
+      benchmark.addCase("Legacy") { _ =>
+        (1 to N).foreach(_ => paths.foreach(unescapePathNameLegacy))
+      }
+
+      benchmark.addCase("New") { _ =>
+        (1 to N).foreach(_ => {
+          paths.foreach(ExternalCatalogUtils.unescapePathName)
+        })
+      }
+      benchmark.run()
+    }
   }
 
   /**
@@ -70,5 +94,31 @@ object EscapePathBenchmark extends BenchmarkBase {
     }
 
     builder.toString()
+  }
+
+  def unescapePathNameLegacy(path: String): String = {
+    val sb = new StringBuilder
+    var i = 0
+    while (i < path.length) {
+      val c = path.charAt(i)
+      if (c == '%' && i + 2 < path.length) {
+        val code: Int = try {
+          Integer.parseInt(path.substring(i + 1, i + 3), 16)
+        } catch {
+          case _: Exception => -1
+        }
+        if (code >= 0) {
+          sb.append(code.asInstanceOf[Char])
+          i += 3
+        } else {
+          sb.append(c)
+          i += 1
+        }
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+    sb.toString()
   }
 }
