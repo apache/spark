@@ -83,7 +83,7 @@ private[hive] class SparkExecuteStatementOperation(
       val sparkType = new StructType().add("Result", "string")
       SparkExecuteStatementOperation.toTTableSchema(sparkType)
     } else {
-      logInfo(s"Result Schema: ${result.schema.sql}")
+      logInfo(log"Result Schema: ${MDC(SCHEMA, result.schema.sql)}")
       SparkExecuteStatementOperation.toTTableSchema(result.schema)
     }
   }

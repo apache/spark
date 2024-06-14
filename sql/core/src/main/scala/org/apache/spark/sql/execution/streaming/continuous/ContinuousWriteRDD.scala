@@ -89,9 +89,9 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
       })(catchBlock = {
         // If there is an error, abort this writer. We enter this callback in the middle of
         // rethrowing an exception, so compute() will stop executing at this point.
-        logError(s"Writer for partition ${context.partitionId()} is aborting.")
+        logError(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} is aborting.")
         if (dataWriter != null) dataWriter.abort()
-        logError(s"Writer for partition ${context.partitionId()} aborted.")
+        logError(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} aborted.")
       }, finallyBlock = {
         if (dataWriter != null) dataWriter.close()
       })

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsUtil extends Logging {
@@ -61,8 +61,10 @@ object ShufflePartitionsUtil extends Logging {
     val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
-    logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
-      s"actual target size $targetSize, minimum partition size: $minPartitionSize")
+    logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_ID, shuffleIds)}), " +
+      log"advisory target size: ${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, " +
+      log"actual target size ${MDC(LogKeys.ACTUAL_TARGET_SIZE, targetSize)}, " +
+      log"minimum partition size: ${MDC(LogKeys.MIN_PARTITION_SIZE, minPartitionSize)}")
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {

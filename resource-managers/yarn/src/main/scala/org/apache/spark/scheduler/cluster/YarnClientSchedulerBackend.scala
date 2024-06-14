@@ -26,8 +26,7 @@ import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicati
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnAppReport}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.{APP_ID, APP_STATE}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -99,7 +98,7 @@ private[spark] class YarnClientSchedulerBackend(
       throw new SparkException(exceptionMsg)
     }
     if (state == YarnApplicationState.RUNNING) {
-      logInfo(log"Application ${MDC(APP_ID, appId.get)} has started running.")
+      logInfo(log"Application ${MDC(LogKeys.APP_ID, appId.get)} has started running.")
     }
   }
 
@@ -118,17 +117,17 @@ private[spark] class YarnClientSchedulerBackend(
         val YarnAppReport(_, state, diags) =
           client.monitorApplication(logApplicationReport = false)
         logError(log"YARN application has exited unexpectedly with state " +
-          log"${MDC(APP_STATE, state)}! Check the YARN application logs for more details.")
+          log"${MDC(LogKeys.APP_STATE, state)}! Check the YARN application logs for more details.")
         diags.foreach { err =>
-          logError(s"Diagnostics message: $err")
+          logError(log"Diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         allowInterrupt = false
         sc.stop()
         state match {
           case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
             if conf.get(AM_CLIENT_MODE_EXIT_ON_ERROR) =>
-            logWarning(log"ApplicationMaster finished with status ${MDC(APP_STATE, state)}, " +
-              log"SparkContext should exit with code 1.")
+            logWarning(log"ApplicationMaster finished with status " +
+              log"${MDC(LogKeys.APP_STATE, state)}, SparkContext should exit with code 1.")
             System.exit(1)
           case _ =>
         }

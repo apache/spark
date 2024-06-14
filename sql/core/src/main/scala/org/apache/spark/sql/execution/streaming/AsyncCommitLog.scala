@@ -22,6 +22,7 @@ import java.util.concurrent.{CompletableFuture, ConcurrentLinkedDeque, ThreadPoo
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -125,7 +126,8 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
             }
           } catch {
             case e: Throwable =>
-              logError(s"Encountered error while writing batch ${batchId} to commit log", e)
+              logError(log"Encountered error while writing batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} to commit log", e)
               future.completeExceptionally(e)
           }
         }

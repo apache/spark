@@ -445,7 +445,7 @@ class ContinuousExecution(
    */
   def stopInNewThread(error: Throwable): Unit = {
     if (failure.compareAndSet(null, error)) {
-      logError(s"Query $prettyIdString received exception $error")
+      logError(log"Query ${MDC(QUERY_ID, prettyIdString)} received exception", error)
       stopInNewThread()
     }
   }
