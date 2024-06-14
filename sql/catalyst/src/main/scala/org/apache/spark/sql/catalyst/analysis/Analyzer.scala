@@ -4137,8 +4137,8 @@ object DebugInlineColumnsCountInference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transform {
       case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
-      _, _, _), sampleColumns) if sampleColumns.isEmpty =>
-          DebugInlineColumnsCount(j, leftKeys ++ rightKeys)
+      _, _, _), sampleColumns, _) if sampleColumns.isEmpty =>
+          DebugInlineColumnsCount(j, leftKeys, Some("join output"))
     }
   }
 }

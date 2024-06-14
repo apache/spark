@@ -312,12 +312,13 @@ package object debug {
   case class DebugInlineColumnsCountExec(
     child: SparkPlan,
     sampleColumns: Seq[Expression],
-    name: String = "TODO") extends UnaryExecNode {
+    name: Option[String] = None) extends UnaryExecNode {
 
     val accumulator = new DebugAccumulator
     accumulator.register(
       session.sparkContext,
-      Some(s"[$name] top values for ${sampleColumns.mkString(",")}"))
+      Some(s"${name.map(n => s"[$n] ").getOrElse("")}top values " +
+        s"for ${sampleColumns.mkString(",")}"))
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
@@ -325,43 +326,10 @@ package object debug {
     override protected def doExecute(): RDD[InternalRow] = {
       val exprs = bindReferences[Expression](sampleColumns, child.output)
 
-//      var rowCount = 0L
-//
-//      val counts = new mutable.HashMap[Seq[Any], Long]
-//
-//      def incrementKey(keyValues: Seq[Any]): Unit = {
-//        val count = counts.getOrElse(keyValues, 0L)
-//        counts.put(keyValues, count + 1)
-//
-//        if (counts.size > maxKeys) {
-//          // TODO this needs to be a better data structure for removing the lowest key
-//          counts.toSeq.sortBy(_._2).headOption.foreach(kv => counts.remove(kv._1))
-//        }
-//      }
-//
-//      def printVals(): Unit = {
-//        debugPrint(s"Column value counts after processing $rowCount rows")
-//        counts.foreachEntry { (k, v) =>
-//          val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
-//          debugPrint(s"$values = $v (${v * 100 / rowCount}%)")
-//
-//          accumulator.add((values, v))
-//        }
-//      }
-
       child.execute().mapPartitions { iter =>
         iter.map { row =>
           val sampleVals = exprs.map(_.eval(row))
-          val values = sampleColumns.zip(sampleVals).map(z => s"${z._1}: ${z._2}").mkString(",")
-          accumulator.add(values)
-//
-//          incrementKey(sampleVals)
-//
-//          rowCount += 1
-//          // TODO make configurable
-//          if (rowCount % 10 == 0) {
-//            printVals()
-//          }
+          accumulator.add(sampleVals.mkString(","))
 
           row
         }
@@ -376,8 +344,8 @@ package object debug {
   object DebugPlanner extends SparkStrategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case DebugInlineColumnsCount(child, sampleColumns) =>
-          DebugInlineColumnsCountExec(planLater(child), sampleColumns) :: Nil
+        case DebugInlineColumnsCount(child, sampleColumns, name) =>
+          DebugInlineColumnsCountExec(planLater(child), sampleColumns, name) :: Nil
         case _ => Nil
       }
     }
