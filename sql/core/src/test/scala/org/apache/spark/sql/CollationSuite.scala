@@ -208,7 +208,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("[SPARK-46837] Enable reflect expressions with collated strings") {
+  test("[SPARK-48472] Enable reflect expressions with collated strings") {
     // be aware that output of java.util.UUID.fromString is always lowercase
     Seq(
       ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
