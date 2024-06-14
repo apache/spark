@@ -335,6 +335,28 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     tMemManager.releaseExecutionMemory(500L, c)
     assert(tMemManager.getMemoryConsumptionForThisTask === 0L)
   }
+
+  test("task peak execution memory usage") {
+    val memoryManager = createMemoryManager(
+      maxOnHeapExecutionMemory = 1000L,
+      maxOffHeapExecutionMemory = 1000L)
+
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
+    val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
+    val onHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.ON_HEAP)
+
+    val result1 = Future {
+      tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
+    }
+    val result2 = Future {
+      tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
+    }
+    assert(ThreadUtils.awaitResult(result1, 200.millis) === 500L)
+    assert(ThreadUtils.awaitResult(result2, 200.millis) === 400L)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 900L)
+    assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
+    assert(tMemManager.getPeakOffHeapExecutionMemory === 500L)
+  }
 }
 
 private object MemoryManagerSuite {

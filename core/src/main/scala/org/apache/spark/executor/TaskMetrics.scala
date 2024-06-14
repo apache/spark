@@ -57,6 +57,8 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _memoryBytesSpilled = new LongAccumulator
   private val _diskBytesSpilled = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
+  private val _peakOnHeapExecutionMemory = new LongAccumulator
+  private val _peakOffHeapExecutionMemory = new LongAccumulator
   private val _updatedBlockStatuses = new CollectionAccumulator[(BlockId, BlockStatus)]
 
   /**
@@ -111,7 +113,13 @@ class TaskMetrics private[spark] () extends Serializable {
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
    */
+  // TODO: SPARK-48789: the naming is confusing since this does not really reflect the whole
+  //  execution memory. We'd better deprecate this once we have a replacement.
   def peakExecutionMemory: Long = _peakExecutionMemory.sum
+
+  def peakOnHeapExecutionMemory: Long = _peakOnHeapExecutionMemory.sum
+
+  def peakOffHeapExecutionMemory: Long = _peakOffHeapExecutionMemory.sum
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -140,6 +148,10 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def setResultSerializationTime(v: Long): Unit =
     _resultSerializationTime.setValue(v)
   private[spark] def setPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.setValue(v)
+  private[spark] def setPeakOnHeapExecutionMemory(v: Long): Unit =
+    _peakOnHeapExecutionMemory.setValue(v)
+  private[spark] def setPeakOffHeapExecutionMemory(v: Long): Unit =
+    _peakOffHeapExecutionMemory.setValue(v)
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
@@ -221,6 +233,8 @@ class TaskMetrics private[spark] () extends Serializable {
     MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
     DISK_BYTES_SPILLED -> _diskBytesSpilled,
     PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
+    PEAK_ON_HEAP_EXECUTION_MEMORY -> _peakOnHeapExecutionMemory,
+    PEAK_OFF_HEAP_EXECUTION_MEMORY -> _peakOffHeapExecutionMemory,
     UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
     shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,

@@ -1453,6 +1453,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     t.setExecutorRunTime(b)
     t.setExecutorCpuTime(b)
     t.setPeakExecutionMemory(c)
+    t.setPeakOnHeapExecutionMemory(c)
+    t.setPeakOffHeapExecutionMemory(c)
     t.setResultSize(c)
     t.setJvmGCTime(d)
     t.setResultSerializationTime(a + b)
