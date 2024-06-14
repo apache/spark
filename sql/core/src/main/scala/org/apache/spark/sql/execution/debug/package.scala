@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.Collections
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -312,10 +311,13 @@ package object debug {
 
   case class DebugInlineColumnsCountExec(
     child: SparkPlan,
-    sampleColumns: Seq[Expression]) extends UnaryExecNode {
+    sampleColumns: Seq[Expression],
+    name: String = "TODO") extends UnaryExecNode {
 
     val accumulator = new DebugAccumulator
-    accumulator.register(session.sparkContext, Some("top_keys"))
+    accumulator.register(
+      session.sparkContext,
+      Some(s"[$name] top values for ${sampleColumns.mkString(",")}"))
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
@@ -323,32 +325,43 @@ package object debug {
     override protected def doExecute(): RDD[InternalRow] = {
       val exprs = bindReferences[Expression](sampleColumns, child.output)
 
-      var rowCount = 0L
-      // TODO only keep top K based on count
-      val counts = new mutable.HashMap[Seq[Any], Long]
-
-      def printVals(): Unit = {
-        debugPrint(s"Column value counts after processing $rowCount rows")
-        counts.foreachEntry { (k, v) =>
-          val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
-          debugPrint(s"$values = $v (${v * 100 / rowCount}%)")
-
-          accumulator.add((values, v))
-        }
-      }
+//      var rowCount = 0L
+//
+//      val counts = new mutable.HashMap[Seq[Any], Long]
+//
+//      def incrementKey(keyValues: Seq[Any]): Unit = {
+//        val count = counts.getOrElse(keyValues, 0L)
+//        counts.put(keyValues, count + 1)
+//
+//        if (counts.size > maxKeys) {
+//          // TODO this needs to be a better data structure for removing the lowest key
+//          counts.toSeq.sortBy(_._2).headOption.foreach(kv => counts.remove(kv._1))
+//        }
+//      }
+//
+//      def printVals(): Unit = {
+//        debugPrint(s"Column value counts after processing $rowCount rows")
+//        counts.foreachEntry { (k, v) =>
+//          val values = sampleColumns.zip(k).map(z => s"${z._1}: ${z._2}").mkString(",")
+//          debugPrint(s"$values = $v (${v * 100 / rowCount}%)")
+//
+//          accumulator.add((values, v))
+//        }
+//      }
 
       child.execute().mapPartitions { iter =>
         iter.map { row =>
           val sampleVals = exprs.map(_.eval(row))
-
-          val count = counts.getOrElse(sampleVals, 0L)
-          counts.put(sampleVals, count + 1)
-
-          rowCount += 1
-          // TODO make configurable
-          if (rowCount % 10 == 0) {
-            printVals()
-          }
+          val values = sampleColumns.zip(sampleVals).map(z => s"${z._1}: ${z._2}").mkString(",")
+          accumulator.add(values)
+//
+//          incrementKey(sampleVals)
+//
+//          rowCount += 1
+//          // TODO make configurable
+//          if (rowCount % 10 == 0) {
+//            printVals()
+//          }
 
           row
         }
@@ -370,7 +383,7 @@ package object debug {
     }
   }
 
-  class DebugAccumulator extends AccumulatorV2[(String, Long), java.util.Map[String, Long]]  {
+  class DebugAccumulator extends AccumulatorV2[String, java.util.Map[String, Long]]  {
     val counts = new java.util.concurrent.ConcurrentSkipListMap[String, Long]()
 
     /**
@@ -397,8 +410,12 @@ package object debug {
     /**
      * Takes the inputs and accumulates.
      */
-    override def add(v: (String, Long)): Unit = {
-      counts.put(v._1, v._2)
+    override def add(v: String): Unit = add(v, 1)
+
+    private def add(v: String, add: Long): Unit = {
+      // TODO thread safe
+      val count = counts.getOrDefault(v, 0)
+      counts.put(v, count + add)
       // TODO drop below top N
     }
 
@@ -406,9 +423,9 @@ package object debug {
      * Merges another same-type accumulator into this one and update its state, i.e. this should be
      * merge-in-place.
      */
-    override def merge(other: AccumulatorV2[(String, Long), java.util.Map[String, Long]]): Unit =
+    override def merge(other: AccumulatorV2[String, java.util.Map[String, Long]]): Unit =
       other match {
-        case o: DebugAccumulator => counts.putAll(o.counts)
+        case o: DebugAccumulator => o.counts.forEach { (k, v) => add(k, v) }
         case _ =>
           throw new UnsupportedOperationException(s"Cannot merge with ${other.getClass.getName}")
       }
