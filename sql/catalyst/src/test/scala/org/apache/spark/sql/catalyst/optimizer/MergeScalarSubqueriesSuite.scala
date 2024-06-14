@@ -38,7 +38,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
   val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").string)
   val testRelationWithNonBinaryCollation = LocalRelation(
     Symbol("utf8_binary").string("UTF8_BINARY"),
-    Symbol("utf8_binary_lcase").string("UTF8_BINARY_LCASE"))
+    Symbol("utf8_lcase").string("UTF8_LCASE"))
 
   private def definitionNode(plan: LogicalPlan, cteIndex: Int) = {
     CTERelationDef(plan, cteIndex, underSubquery = true)
@@ -204,7 +204,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     val subquery1 = ScalarSubquery(testRelationWithNonBinaryCollation.groupBy(
       Symbol("utf8_binary"))(max(Symbol("utf8_binary")).as("max_utf8_binary")))
     val subquery2 = ScalarSubquery(testRelationWithNonBinaryCollation.groupBy(
-      Symbol("utf8_binary_lcase"))(max(Symbol("utf8_binary_lcase")).as("utf8_binary_lcase")))
+      Symbol("utf8_lcase"))(max(Symbol("utf8_lcase")).as("utf8_lcase")))
     val originalQuery = testRelationWithNonBinaryCollation.select(subquery1, subquery2)
     Optimize.execute(originalQuery.analyze).collect {
       case WithCTE(_, _) => fail("Should not have merged")

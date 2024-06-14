@@ -2790,7 +2790,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case BINARY_HEX =>
         val padding = if (value.length % 2 != 0) "0" else ""
         try {
-          Literal(Hex.decodeHex(padding + value))
+          Literal(Hex.decodeHex(padding + value), BinaryType)
         } catch {
           case e: DecoderException =>
             val ex = QueryParsingErrors.cannotParseValueTypeError("X", value, ctx)

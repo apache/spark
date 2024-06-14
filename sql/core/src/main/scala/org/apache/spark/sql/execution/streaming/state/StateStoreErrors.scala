@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -37,6 +37,16 @@ object StateStoreErrors {
       msg = s"Failed to find time values for timeMode=$timeMode",
       category = "TWS"
     )
+  }
+
+  def keyRowFormatValidationFailure(errorMsg: String):
+    StateStoreKeyRowFormatValidationFailure = {
+    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+  }
+
+  def valueRowFormatValidationFailure(errorMsg: String):
+    StateStoreValueRowFormatValidationFailure = {
+    new StateStoreValueRowFormatValidationFailure(errorMsg)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -245,3 +255,12 @@ class StateStoreValueSchemaNotCompatible(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
 
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))

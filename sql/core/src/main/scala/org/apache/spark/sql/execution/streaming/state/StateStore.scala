@@ -279,16 +279,6 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-/**
- * An exception thrown when an invalid UnsafeRow is detected in state store.
- */
-class InvalidUnsafeRowException(error: String)
-  extends RuntimeException("The streaming query failed by state format invalidation. " +
-    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
-    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
-    "among restart. For the first case, you can try to restart the application without " +
-    s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
-
 sealed trait KeyStateEncoderSpec
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
@@ -434,12 +424,16 @@ object StateStoreProvider {
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
-      validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+      validationError.foreach { error =>
+        throw StateStoreErrors.keyRowFormatValidationFailure(error)
+      }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
-        validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+        validationError.foreach { error =>
+          throw StateStoreErrors.valueRowFormatValidationFailure(error)
+        }
       }
     }
   }
