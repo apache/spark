@@ -196,7 +196,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     }
   }
 
-  test("ERROR: snapshotStartBatchId specified to negative") {
+  test("ERROR: snapshotStartBatchId specified as a negative value") {
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
@@ -210,7 +210,7 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     }
   }
 
-  test("ERROR: snapshotPartitionId specified to negative") {
+  test("ERROR: snapshotPartitionId specified as a negative value") {
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
@@ -257,7 +257,6 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
       val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
           // trick to bypass getting the last committed batch before validating operator ID
-          .option(StateSourceOptions.BATCH_ID, 0)
           .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, startBatchId)
           .option(StateSourceOptions.BATCH_ID, endBatchId)
           .load(tempDir.getAbsolutePath)

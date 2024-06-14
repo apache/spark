@@ -613,7 +613,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           readSnapshotFile(startVersion)
       }
       if (startVersionMap.isEmpty) {
-        throw new StateStoreSnapshotFileNotFound(snapshotFile(startVersion).toString, toString())
+        throw StateStoreErrors.stateStoreSnapshotFileNotFound(
+          snapshotFile(startVersion).toString, toString())
       }
       synchronized { putStateIntoStateCacheMap(startVersion, startVersionMap.get) }
 
@@ -772,7 +773,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /**
-  * try to read the snapshot file of the given version.
+   * try to read the snapshot file of the given version.
    * If the snapshot file is not available, return [[None]].
    *
    * @param version the version of the snapshot file

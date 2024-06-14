@@ -209,10 +209,12 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
     }
 
+    // both snapshotPartitionId and snapshotStartBatchId are required at the same time, because
+    // each partition may have different checkpoint status
     if (snapshotPartitionId.isDefined && snapshotStartBatchId.isEmpty) {
-      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID.toString)
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID)
     } else if (snapshotPartitionId.isEmpty && snapshotStartBatchId.isDefined) {
-      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID.toString)
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
     }
 
     StateSourceOptions(

@@ -149,6 +149,17 @@ object StateStoreErrors {
       newValueSchema: String): StateStoreValueSchemaNotCompatible = {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
+
+  def stateStoreSnapshotFileNotFound(fileToRead: String, clazz: String):
+  StateStoreSnapshotFileNotFound = {
+    new StateStoreSnapshotFileNotFound(fileToRead, clazz)
+  }
+
+  def stateStoreSnapshotPartitionNotFound(
+    snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String):
+  StateStoreSnapshotPartitionNotFound = {
+    new StateStoreSnapshotPartitionNotFound(snapshotPartitionId, operatorId, checkpointLocation)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)

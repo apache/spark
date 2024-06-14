@@ -494,8 +494,7 @@ class SymmetricHashJoinStateManager(
           useMultipleValuesPerKey = false)
         if (snapshotStartVersion.isDefined) {
           stateStoreProvider.getStore(snapshotStartVersion.get, stateInfo.get.storeVersion)
-        }
-        else {
+        } else {
           stateStoreProvider.getStore(stateInfo.get.storeVersion)
         }
       }
