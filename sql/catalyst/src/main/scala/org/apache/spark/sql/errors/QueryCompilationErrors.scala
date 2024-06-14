@@ -2998,7 +2998,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
       table: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNNECESSARY_SERDE_PARAMETER",
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE",
       messageParameters = Map("table" -> table.toString))
   }
 

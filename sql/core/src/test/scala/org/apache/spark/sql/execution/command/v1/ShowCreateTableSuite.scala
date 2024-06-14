@@ -162,7 +162,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         exception = intercept[AnalysisException] {
           getShowCreateDDL(t, true)
         },
-        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNNECESSARY_SERDE_PARAMETER",
+        errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE",
         sqlState = "0A000",
         parameters = Map("table" -> "`spark_catalog`.`ns1`.`tbl`")
       )
