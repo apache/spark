@@ -45,19 +45,26 @@ object HexBenchmark extends BenchmarkBase {
     tmp.map(UTF8String.fromString(_).toString)
   }
 
+  private val hexBin = hexStrings.map(_.getBytes)
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("Hex Comparison") {
+    runBenchmark("UnHex Comparison") {
       val N = 1_000_000
       val benchmark = new Benchmark(s"Cardinality $N", N, 3, output = output)
-      benchmark.addCase("Apache") { _ =>
+      benchmark.addCase("Common Codecs") { _ =>
         (1 to N).foreach(_ => hexStrings.foreach(y => apacheDecodeHex(y)))
+      }
+
+      benchmark.addCase("Java") { _ =>
+        (1 to N).foreach(_ => hexStrings.foreach(y => javaUnhex(y)))
       }
 
       benchmark.addCase("Spark") { _ =>
         (1 to N).foreach(_ => hexStrings.foreach(y => builtinUnHex(y)))
       }
-      benchmark.addCase("Java") { _ =>
-        (1 to N).foreach(_ => hexStrings.foreach(y => javaUnhex(y)))
+
+      benchmark.addCase("Spark Binary") { _ =>
+        (1 to N).foreach(_ => hexBin.foreach(y => builtinUnHex(y)))
       }
       benchmark.run()
     }
@@ -69,6 +76,10 @@ object HexBenchmark extends BenchmarkBase {
   }
 
   def builtinUnHex(value: String): Array[Byte] = {
+    Hex.unhex(value)
+  }
+
+  def builtinUnHex(value: Array[Byte]): Array[Byte] = {
     Hex.unhex(value)
   }
 

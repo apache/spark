@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
-import java.nio.charset.StandardCharsets
-import java.util.{HexFormat, Locale}
+import java.util.HexFormat.fromHexDigit
+import java.util.Locale
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1058,16 +1058,35 @@ object Hex {
     }
     UTF8String.fromBytes(value)
   }
-  def unhex(str: String): Array[Byte] = {
-    val padded = if ((str.length & 0x1) != 0) {
-      "0" + str
-    } else {
-      str
+
+  def unhex(bytes: Array[Byte]): Array[Byte] = {
+    val length = bytes.length
+    if (length == 0) {
+      return Array.emptyByteArray
     }
-    HexFormat.of().parseHex(padded)
+    if ((length & 0x1) != 0) {
+      // while length of bytes is odd, loop from the end to beginning w/o the head
+      val result = new Array[Byte](length / 2  + 1)
+      var i = result.length - 1
+      while (i > 0) {
+        result(i) = ((fromHexDigit(bytes(i * 2 - 1)) << 4) | fromHexDigit(bytes(i * 2))).toByte
+        i -= 1
+      }
+      // add it 'tailing' head
+      result(0) = fromHexDigit(bytes(0)).toByte
+      result
+    } else {
+      val result = new Array[Byte](length / 2)
+      var i = 0
+      while (i < result.length) {
+        result(i) = ((fromHexDigit(bytes(2 * i)) << 4) | fromHexDigit(bytes(2 * i + 1))).toByte
+        i += 1
+      }
+      result
+    }
   }
 
-  def unhex(bytes: Array[Byte]): Array[Byte] = unhex(new String(bytes, StandardCharsets.UTF_8))
+  def unhex(str: String): Array[Byte] = unhex(str.getBytes())
 }
 
 /**
@@ -1141,7 +1160,7 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
 
   protected override def nullSafeEval(num: Any): Any = {
     try {
-      Hex.unhex(num.asInstanceOf[UTF8String].toString)
+      Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
     } catch {
       case _: IllegalArgumentException if !failOnError => null
       case _: IllegalArgumentException =>
@@ -1152,7 +1171,6 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
           "try_to_binary")
     }
   }
-
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
