@@ -5015,6 +5015,11 @@
       "Unsupported show create table command."
     ],
     "subClass" : {
+      "ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
+        "message" : [
+          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
+        ]
+      },
       "ON_TEMPORARY_VIEW" : {
         "message" : [
           "SHOW CREATE TABLE is not supported on a temporary view: <table>."
@@ -5023,11 +5028,6 @@
       "ON_TRANSACTIONAL_HIVE_TABLE" : {
         "message" : [
           "SHOW CREATE TABLE doesn't support transactional Hive table. Please use `SHOW CREATE TABLE <table> AS SERDE` to show Hive DDL instead."
-        ]
-      },
-      "ON_SPARK_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
-        "message" : [
-          "<table> is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead."
         ]
       },
       "WITH_UNSUPPORTED_FEATURE" : {
