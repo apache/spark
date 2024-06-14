@@ -57,7 +57,7 @@ trait LogKey {
  * Various keys used for mapped diagnostic contexts(MDC) in logging. All structured logging keys
  * should be defined here for standardization.
  */
-object LogKeys {
+private[spark] object LogKeys {
   case object ACCUMULATOR_ID extends LogKey
   case object ACL_ENABLED extends LogKey
   case object ACTUAL_NUM_FILES extends LogKey
