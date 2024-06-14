@@ -40,6 +40,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 import org.mockito.Mockito.doReturn
+import org.scalatest.PrivateMethodTester
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -50,7 +51,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
-class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMethodTester {
 
   test("timeConversion") {
     // Test -1
@@ -1106,7 +1107,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
       .when(task2T).toString
 
-    val sorted = Seq(mainT, driverT, task1T, task2T).sorted(Utils.threadInfoOrdering)
+    val threadInfoOrderingMethod =
+      PrivateMethod[Ordering[ThreadInfo]](Symbol("threadInfoOrdering"))
+    val sorted = Seq(mainT, driverT, task1T, task2T)
+      .sorted(Utils.invokePrivate(threadInfoOrderingMethod()))
     assert(sorted === Seq(task1T, task2T, driverT, mainT))
   }
 

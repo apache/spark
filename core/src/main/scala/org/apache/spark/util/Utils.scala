@@ -2019,7 +2019,7 @@ private[spark] object Utils
     }
   }
 
-  private[util] val threadInfoOrdering = Ordering.fromLessThan {
+  private val threadInfoOrdering = Ordering.fromLessThan {
     (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
       def priority(ti: ThreadInfo): Int = ti.getThreadName match {
         case name if name.contains(TASK_THREAD_NAME_PREFIX) => 3
