@@ -480,8 +480,9 @@ class SessionCatalog(
     val catalogTable = externalCatalog.getTable(db, table)
     val oldDataSchema = catalogTable.dataSchema
     // not supporting dropping columns yet
+    val resolver = conf.resolver
     val nonExistentColumnNames =
-      oldDataSchema.map(_.name).filterNot(columnNameResolved(newDataSchema, _))
+      oldDataSchema.map(_.name).filterNot(columnNameResolved(resolver, newDataSchema, _))
     if (nonExistentColumnNames.nonEmpty) {
       throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
     }
@@ -489,8 +490,11 @@ class SessionCatalog(
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
 
-  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
-    schema.fields.map(_.name).exists(conf.resolver(_, colName))
+  private def columnNameResolved(
+      resolver: Resolver,
+      schema: StructType,
+      colName: String): Boolean = {
+    schema.fields.exists(f => resolver(f.name, colName))
   }
 
   /**
