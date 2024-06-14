@@ -282,6 +282,7 @@ object LogKeys {
   case object FINAL_OUTPUT_PATH extends LogKey
   case object FINAL_PATH extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FORMATTED_CODE extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
@@ -381,6 +382,7 @@ object LogKeys {
   case object MAX_EXECUTOR_FAILURES extends LogKey
   case object MAX_FILE_VERSION extends LogKey
   case object MAX_JVM_METHOD_PARAMS_LENGTH extends LogKey
+  case object MAX_LINES extends LogKey
   case object MAX_MEMORY_SIZE extends LogKey
   case object MAX_METHOD_CODE_SIZE extends LogKey
   case object MAX_NUM_BINS extends LogKey
