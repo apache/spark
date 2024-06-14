@@ -85,6 +85,7 @@ class StreamingTestsMixin:
             self.assertTrue(lastProgress.sources[0].numInputRows > 0)
             self.assertTrue(lastProgress["sources"][0]["numInputRows"] > 0)
             self.assertTrue(lastProgress.sink.numOutputRows > 0)
+            self.assertTrue(lastProgress["sink"]["numOutputRows"] > 0)
 
         except Exception as e:
             self.fail(
