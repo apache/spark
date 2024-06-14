@@ -68,6 +68,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.Executor.TASK_THREAD_NAME_PREFIX
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
@@ -119,6 +120,9 @@ private[spark] object Utils
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  /** Thread name used in YARN cluster mode to run user's main method in ApplicationMaster. */
+  val DRIVER_USER_THREAD_NAME = "Driver"
 
   private val weakStringInterner = Interners.newWeakInterner[String]()
 
@@ -2018,8 +2022,8 @@ private[spark] object Utils
   private[util] val threadInfoOrdering = Ordering.fromLessThan {
     (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
       def priority(ti: ThreadInfo): Int = ti.getThreadName match {
-        case name if name.contains("Executor task launch") => 3
-        case "Driver" => 2
+        case name if name.contains(TASK_THREAD_NAME_PREFIX) => 3
+        case DRIVER_USER_THREAD_NAME => 2
         case "main" => 1
         case _ => 0
       }

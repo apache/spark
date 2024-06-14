@@ -770,7 +770,7 @@ private[spark] class ApplicationMaster(
       }
     }
     userThread.setContextClassLoader(userClassLoader)
-    userThread.setName("Driver")
+    userThread.setName(Utils.DRIVER_USER_THREAD_NAME)
     userThread.start()
     userThread
   }
