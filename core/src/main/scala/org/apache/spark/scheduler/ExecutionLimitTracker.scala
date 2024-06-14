@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.config.EXECUTION_CORES_LIMIT_NUMBER
 
 @DeveloperApi
 object ExecutionLimitTracker {
@@ -31,6 +30,8 @@ object ExecutionLimitTracker {
 
   val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
 
+  val EXECUTION_CORES_LIMIT_NUMBER = "spark.sql.execution.coresLimitNumber"
+
   def shouldLimit(taskSet: TaskSet): Boolean = {
     if (!hasLegalConfig(taskSet)) {
       return false
@@ -39,7 +40,7 @@ object ExecutionLimitTracker {
       .getProperty(SQL_EXECUTION_ID_KEY).toLong
     val runningTasks = RUNNING_TASKS.getOrDefault(executionId, new AtomicInteger(0)).get()
     val restrictNumber = taskSet.properties
-      .getProperty(EXECUTION_CORES_LIMIT_NUMBER.key).toInt
+      .getProperty(EXECUTION_CORES_LIMIT_NUMBER).toInt
     runningTasks >= restrictNumber
   }
 
@@ -76,8 +77,8 @@ object ExecutionLimitTracker {
       return false
     }
     var legalRestrictNumber = false
-    if (taskSet.properties.containsKey(EXECUTION_CORES_LIMIT_NUMBER.key) &&
-      taskSet.properties.getProperty(EXECUTION_CORES_LIMIT_NUMBER.key).toInt > 0) {
+    if (taskSet.properties.containsKey(EXECUTION_CORES_LIMIT_NUMBER) &&
+      taskSet.properties.getProperty(EXECUTION_CORES_LIMIT_NUMBER).toInt > 0) {
       legalRestrictNumber = true
     }
     taskSet.properties.containsKey(SQL_EXECUTION_ID_KEY) && legalRestrictNumber

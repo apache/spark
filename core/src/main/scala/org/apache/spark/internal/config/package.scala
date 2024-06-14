@@ -2746,16 +2746,4 @@ package object config {
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
-
-  private[spark] val EXECUTION_CORES_LIMIT_NUMBER =
-    ConfigBuilder("spark.sql.execution.coresLimitNumber")
-      .internal()
-      .doc("""
-             |Limit the maximum number of cores occupied during SQL execution to
-             |avoid a single SQL consuming too many core resources and affecting
-             |the execution of other tasks.
-             |""".stripMargin)
-      .version("3.5.0")
-      .intConf
-      .createOptional
 }

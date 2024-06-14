@@ -4972,6 +4972,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val EXECUTION_CORES_LIMIT_NUMBER =
+    buildConf("spark.sql.execution.coresLimitNumber")
+      .internal()
+      .doc("""
+             |Limit the maximum number of cores occupied during SQL execution to
+             |avoid a single SQL consuming too many core resources and affecting
+             |the execution of other tasks.
+             |""".stripMargin)
+      .version("4.0.0")
+      .intConf
+      .createOptional
+
   /**
    * Holds information about keys that have been deprecated.
    *
