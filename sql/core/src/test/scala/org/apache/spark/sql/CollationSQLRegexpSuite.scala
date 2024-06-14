@@ -71,14 +71,17 @@ class CollationSQLRegexpSuite
       SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Contains], true),
       SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[EqualTo], true)
     )
-    sql("CREATE TABLE IF NOT EXISTS t(c STRING) using PARQUET")
-    sql("INSERT INTO t(c) VALUES('ABC')")
-    testCases.foreach(t => {
-      val query = sql(s"select c collate ${t.collation} like '${t.str}' FROM t")
-      checkAnswer(query, Row(t.result))
-      val optimizedPlan = query.queryExecution.optimizedPlan.asInstanceOf[Project]
-      assert(optimizedPlan.projectList.head.asInstanceOf[Alias].child.getClass == t.cls)
-    })
+    val tableName = "T"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName(c STRING) using PARQUET")
+      sql(s"INSERT INTO $tableName(c) VALUES('ABC')")
+      testCases.foreach { t =>
+        val query = sql(s"select c collate ${t.collation} like '${t.str}' FROM t")
+        checkAnswer(query, Row(t.result))
+        val optimizedPlan = query.queryExecution.optimizedPlan.asInstanceOf[Project]
+        assert(optimizedPlan.projectList.head.asInstanceOf[Alias].child.getClass == t.cls)
+      }
+    }
   }
 
   test("Like simplification should work with collated strings (for default collation)") {
