@@ -429,23 +429,25 @@ class StreamingQueryProgress(dict):
         jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ):
+        super().__init__(
+            id=id,
+            runId=runId,
+            name=name,
+            timestamp=timestamp,
+            batchId=batchId,
+            batchDuration=batchDuration,
+            durationMs=durationMs,
+            eventTime=eventTime,
+            stateOperators=stateOperators,
+            sources=sources,
+            sink=sink,
+            numInputRows=numInputRows,
+            inputRowsPerSecond=inputRowsPerSecond,
+            processedRowsPerSecond=processedRowsPerSecond,
+            observedMetrics=observedMetrics,
+        )
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
-        self._id: uuid.UUID = id
-        self._runId: uuid.UUID = runId
-        self._name: Optional[str] = name
-        self._timestamp: str = timestamp
-        self._batchId: int = batchId
-        self._batchDuration: int = batchDuration
-        self._durationMs: Dict[str, int] = durationMs
-        self._eventTime: Dict[str, str] = eventTime
-        self._stateOperators: List[StateOperatorProgress] = stateOperators
-        self._sources: List[SourceProgress] = sources
-        self._sink: SinkProgress = sink
-        self._numInputRows: int = numInputRows
-        self._inputRowsPerSecond: float = inputRowsPerSecond
-        self._processedRowsPerSecond: float = processedRowsPerSecond
-        self._observedMetrics: Dict[str, Row] = observedMetrics
 
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
@@ -505,26 +507,13 @@ class StreamingQueryProgress(dict):
             else {},
         )
 
-    def __getitem__(self, key: str) -> Any:
-        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
-        # to string. But here they are UUID.
-        # To prevent breaking change, also cast them to string when accessed with __getitem__.
-        if key == "id" or key == "runId":
-            return str(getattr(self, key))
-        else:
-            return getattr(self, key)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        internal_key = "_" + key
-        setattr(self, internal_key, value)
-
     @property
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
         py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
-        return self._id
+        return self["id"]
 
     @property
     def runId(self) -> uuid.UUID:
@@ -532,21 +521,21 @@ class StreamingQueryProgress(dict):
         A query id that is unique for every start/restart. See
         py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
-        return self._runId
+        return self["runId"]
 
     @property
     def name(self) -> Optional[str]:
         """
         User-specified name of the query, `None` if not specified.
         """
-        return self._name
+        return self["name"]
 
     @property
     def timestamp(self) -> str:
         """
         The timestamp to start a query.
         """
-        return self._timestamp
+        return self["timestamp"]
 
     @property
     def batchId(self) -> int:
@@ -556,21 +545,21 @@ class StreamingQueryProgress(dict):
         Similarly, when there is no data to be processed, the batchId will not be
         incremented.
         """
-        return self._batchId
+        return self["batchId"]
 
     @property
     def batchDuration(self) -> int:
         """
         The process duration of each batch.
         """
-        return self._batchDuration
+        return self["batchDuration"]
 
     @property
     def durationMs(self) -> Dict[str, int]:
         """
         The amount of time taken to perform various operations in milliseconds.
         """
-        return self._durationMs
+        return self["durationMs"]
 
     @property
     def eventTime(self) -> Dict[str, str]:
@@ -588,21 +577,21 @@ class StreamingQueryProgress(dict):
 
         All timestamps are in ISO8601 format, i.e. UTC timestamps.
         """
-        return self._eventTime
+        return self["eventTime"]
 
     @property
     def stateOperators(self) -> List["StateOperatorProgress"]:
         """
         Information about operators in the query that store state.
         """
-        return self._stateOperators
+        return self["stateOperators"]
 
     @property
     def sources(self) -> List["SourceProgress"]:
         """
         detailed statistics on data being read from each of the streaming sources.
         """
-        return self._sources
+        return self["sources"]
 
     @property
     def sink(self) -> "SinkProgress":
@@ -610,19 +599,19 @@ class StreamingQueryProgress(dict):
         A unique query id that persists across restarts. See
         py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
-        return self._sink
+        return self["sink"]
 
     @property
     def observedMetrics(self) -> Dict[str, Row]:
-        return self._observedMetrics
+        return self["observedMetrics"]
 
     @property
     def numInputRows(self) -> int:
         """
         The aggregate (across all sources) number of records processed in a trigger.
         """
-        if self._numInputRows is not None:
-            return self._numInputRows
+        if self["numInputRows"] is not None:
+            return self["numInputRows"]
         else:
             return sum(s.numInputRows for s in self.sources)
 
@@ -631,8 +620,8 @@ class StreamingQueryProgress(dict):
         """
         The aggregate (across all sources) rate of data arriving.
         """
-        if self._inputRowsPerSecond is not None:
-            return self._inputRowsPerSecond
+        if self["inputRowsPerSecond"] is not None:
+            return self["inputRowsPerSecond"]
         else:
             return sum(s.inputRowsPerSecond for s in self.sources)
 
@@ -641,8 +630,8 @@ class StreamingQueryProgress(dict):
         """
         The aggregate (across all sources) rate at which Spark is processing data.
         """
-        if self._processedRowsPerSecond is not None:
-            return self._processedRowsPerSecond
+        if self["processedRowsPerSecond"] is not None:
+            return self["processedRowsPerSecond"]
         else:
             return sum(s.processedRowsPerSecond for s in self.sources)
 
@@ -667,6 +656,15 @@ class StreamingQueryProgress(dict):
             return self._jprogress.prettyJson()
         else:
             return json.dumps(self._jdict, indent=4)
+
+    def __getitem__(self, key: str) -> Any:
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, also cast them to string when accessed with __getitem__.
+        if key == "id" or key == "runId":
+            return str(super().__getitem__(key))
+        else:
+            return super().__getitem__(key)
 
     def __str__(self) -> str:
         return self.prettyJson
@@ -704,20 +702,22 @@ class StateOperatorProgress(dict):
         jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ):
+        super().__init__(
+            operatorName=operatorName,
+            numRowsTotal=numRowsTotal,
+            numRowsUpdated=numRowsUpdated,
+            numRowsRemoved=numRowsRemoved,
+            allUpdatesTimeMs=allUpdatesTimeMs,
+            allRemovalsTimeMs=allRemovalsTimeMs,
+            commitTimeMs=commitTimeMs,
+            memoryUsedBytes=memoryUsedBytes,
+            numRowsDroppedByWatermark=numRowsDroppedByWatermark,
+            numShufflePartitions=numShufflePartitions,
+            numStateStoreInstances=numStateStoreInstances,
+            customMetrics=customMetrics,
+        )
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
-        self._operatorName: str = operatorName
-        self._numRowsTotal: int = numRowsTotal
-        self._numRowsUpdated: int = numRowsUpdated
-        self._numRowsRemoved: int = numRowsRemoved
-        self._allUpdatesTimeMs: int = allUpdatesTimeMs
-        self._allRemovalsTimeMs: int = allRemovalsTimeMs
-        self._commitTimeMs: int = commitTimeMs
-        self._memoryUsedBytes: int = memoryUsedBytes
-        self._numRowsDroppedByWatermark: int = numRowsDroppedByWatermark
-        self._numShufflePartitions: int = numShufflePartitions
-        self._numStateStoreInstances: int = numStateStoreInstances
-        self._customMetrics: Dict[str, int] = customMetrics
 
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "StateOperatorProgress":
@@ -757,51 +757,51 @@ class StateOperatorProgress(dict):
 
     @property
     def operatorName(self) -> str:
-        return self._operatorName
+        return self["operatorName"]
 
     @property
     def numRowsTotal(self) -> int:
-        return self._numRowsTotal
+        return self["numRowsTotal"]
 
     @property
     def numRowsUpdated(self) -> int:
-        return self._numRowsUpdated
+        return self["numRowsUpdated"]
 
     @property
     def allUpdatesTimeMs(self) -> int:
-        return self._allUpdatesTimeMs
+        return self["allUpdatesTimeMs"]
 
     @property
     def numRowsRemoved(self) -> int:
-        return self._numRowsRemoved
+        return self["numRowsRemoved"]
 
     @property
     def allRemovalsTimeMs(self) -> int:
-        return self._allRemovalsTimeMs
+        return self["allRemovalsTimeMs"]
 
     @property
     def commitTimeMs(self) -> int:
-        return self._commitTimeMs
+        return self["commitTimeMs"]
 
     @property
     def memoryUsedBytes(self) -> int:
-        return self._memoryUsedBytes
+        return self["memoryUsedBytes"]
 
     @property
     def numRowsDroppedByWatermark(self) -> int:
-        return self._numRowsDroppedByWatermark
+        return self["numRowsDroppedByWatermark"]
 
     @property
     def numShufflePartitions(self) -> int:
-        return self._numShufflePartitions
+        return self["numShufflePartitions"]
 
     @property
     def numStateStoreInstances(self) -> int:
-        return self._numStateStoreInstances
+        return self["numStateStoreInstances"]
 
     @property
-    def customMetrics(self) -> Dict[str, int]:
-        return self._customMetrics
+    def customMetrics(self) -> dict:
+        return self["customMetrics"]
 
     @property
     def json(self) -> str:
@@ -831,13 +831,6 @@ class StateOperatorProgress(dict):
     def __repr__(self) -> str:
         return self.prettyJson
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        internal_key = "_" + key
-        setattr(self, internal_key, value)
-
 
 class SourceProgress(dict):
     """
@@ -864,16 +857,18 @@ class SourceProgress(dict):
         jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
+        super().__init__(
+            description=description,
+            startOffset=startOffset,
+            endOffset=endOffset,
+            latestOffset=latestOffset,
+            numInputRows=numInputRows,
+            inputRowsPerSecond=inputRowsPerSecond,
+            processedRowsPerSecond=processedRowsPerSecond,
+            metrics=metrics,
+        )
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
-        self._description: str = description
-        self._startOffset: str = startOffset
-        self._endOffset: str = endOffset
-        self._latestOffset: str = latestOffset
-        self._numInputRows: int = numInputRows
-        self._inputRowsPerSecond: float = inputRowsPerSecond
-        self._processedRowsPerSecond: float = processedRowsPerSecond
-        self._metrics: Dict[str, str] = metrics
 
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "SourceProgress":
@@ -908,53 +903,53 @@ class SourceProgress(dict):
         """
         Description of the source.
         """
-        return self._description
+        return self["description"]
 
     @property
     def startOffset(self) -> str:
         """
         The starting offset for data being read.
         """
-        return self._startOffset
+        return self["startOffset"]
 
     @property
     def endOffset(self) -> str:
         """
         The ending offset for data being read.
         """
-        return self._endOffset
+        return self["endOffset"]
 
     @property
     def latestOffset(self) -> str:
         """
         The latest offset from this source.
         """
-        return self._latestOffset
+        return self["latestOffset"]
 
     @property
     def numInputRows(self) -> int:
         """
         The number of records read from this source.
         """
-        return self._numInputRows
+        return self["numInputRows"]
 
     @property
     def inputRowsPerSecond(self) -> float:
         """
         The rate at which data is arriving from this source.
         """
-        return self._inputRowsPerSecond
+        return self["inputRowsPerSecond"]
 
     @property
     def processedRowsPerSecond(self) -> float:
         """
         The rate at which data from this source is being processed by Spark.
         """
-        return self._processedRowsPerSecond
+        return self["processedRowsPerSecond"]
 
     @property
-    def metrics(self) -> Dict[str, str]:
-        return self._metrics
+    def metrics(self) -> dict:
+        return self["metrics"]
 
     @property
     def json(self) -> str:
@@ -984,13 +979,6 @@ class SourceProgress(dict):
     def __repr__(self) -> str:
         return self.prettyJson
 
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        internal_key = "_" + key
-        setattr(self, internal_key, value)
-
 
 class SinkProgress(dict):
     """
@@ -1012,11 +1000,13 @@ class SinkProgress(dict):
         jprogress: Optional["JavaObject"] = None,
         jdict: Optional[Dict[str, Any]] = None,
     ) -> None:
+        super().__init__(
+            description=description,
+            numOutputRows=numOutputRows,
+            metrics=metrics,
+        )
         self._jprogress: Optional["JavaObject"] = jprogress
         self._jdict: Optional[Dict[str, Any]] = jdict
-        self._description: str = description
-        self._numOutputRows: int = numOutputRows
-        self._metrics: Dict[str, str] = metrics
 
     @classmethod
     def fromJObject(cls, jprogress: "JavaObject") -> "SinkProgress":
@@ -1041,7 +1031,7 @@ class SinkProgress(dict):
         """
         Description of the source.
         """
-        return self._description
+        return self["description"]
 
     @property
     def numOutputRows(self) -> int:
@@ -1049,11 +1039,11 @@ class SinkProgress(dict):
         Number of rows written to the sink or -1 for Continuous Mode (temporarily)
         or Sink V1 (until decommissioned).
         """
-        return self._numOutputRows
+        return self["numOutputRows"]
 
     @property
     def metrics(self) -> Dict[str, str]:
-        return self._metrics
+        return self["metrics"]
 
     @property
     def json(self) -> str:
@@ -1082,13 +1072,6 @@ class SinkProgress(dict):
 
     def __repr__(self) -> str:
         return self.prettyJson
-
-    def __getitem__(self, key: str) -> Any:
-        return getattr(self, key)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        internal_key = "_" + key
-        setattr(self, internal_key, value)
 
 
 def _test() -> None:
