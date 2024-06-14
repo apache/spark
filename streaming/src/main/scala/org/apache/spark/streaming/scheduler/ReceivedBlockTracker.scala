@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{RECEIVED_BLOCK_INFO, RECEIVED_BLOCK_TRACKER_LOG_EVENT}
+import org.apache.spark.internal.LogKeys.{BATCH_TIME, BATCH_TIMES, PATH, RECEIVED_BLOCK_INFO, RECEIVED_BLOCK_TRACKER_LOG_EVENT, RECORD}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
@@ -127,7 +127,8 @@ private[streaming] class ReceivedBlockTracker(
         timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
         lastAllocatedBatchTime = batchTime
       } else {
-        logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
+        logInfo(log"Possibly processed batch ${MDC(BATCH_TIME, batchTime)} needs to be processed " +
+          log"again in WAL recovery")
       }
     } else {
       // This situation occurs when:
@@ -137,7 +138,8 @@ private[streaming] class ReceivedBlockTracker(
       // 2. Slow checkpointing makes recovered batch time older than WAL recovered
       // lastAllocatedBatchTime.
       // This situation will only occurs in recovery time.
-      logInfo(s"Possibly processed batch $batchTime needs to be processed again in WAL recovery")
+      logInfo(log"Possibly processed batch ${MDC(BATCH_TIME, batchTime)} needs to be processed " +
+        log"again in WAL recovery")
     }
   }
 
@@ -175,7 +177,7 @@ private[streaming] class ReceivedBlockTracker(
   def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
     require(cleanupThreshTime.milliseconds < clock.getTimeMillis())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
-    logInfo(s"Deleting batches: ${timesToCleanup.mkString(" ")}")
+    logInfo(log"Deleting batches: ${MDC(BATCH_TIMES, timesToCleanup.mkString(" "))}")
     if (writeToLog(BatchCleanupEvent(timesToCleanup))) {
       timeToAllocatedBlocks --= timesToCleanup
       writeAheadLogOption.foreach(_.clean(cleanupThreshTime.milliseconds, waitForCompletion))
@@ -221,9 +223,9 @@ private[streaming] class ReceivedBlockTracker(
     }
 
     writeAheadLogOption.foreach { writeAheadLog =>
-      logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
+      logInfo(log"Recovering from write ahead logs in ${MDC(PATH, checkpointDirOption.get)}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
-        logInfo("Recovering record " + byteBuffer)
+        logInfo(log"Recovering record ${MDC(RECORD, byteBuffer)}")
         Utils.deserialize[ReceivedBlockTrackerLogEvent](
           JavaUtils.bufferToArray(byteBuffer), Thread.currentThread().getContextClassLoader) match {
           case BlockAdditionEvent(receivedBlockInfo) =>

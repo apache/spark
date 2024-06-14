@@ -66,6 +66,8 @@ object LogKeys {
   case object ADMIN_ACLS extends LogKey
   case object ADMIN_ACL_GROUPS extends LogKey
   case object AGGREGATE_FUNCTIONS extends LogKey
+  case object ALIGNED_FROM_TIME extends LogKey
+  case object ALIGNED_TO_TIME extends LogKey
   case object ALPHA extends LogKey
   case object ANALYSIS_ERROR extends LogKey
   case object APP_ATTEMPT_ID extends LogKey
@@ -79,11 +81,14 @@ object LogKeys {
   case object ARGS extends LogKey
   case object ATTRIBUTE_MAP extends LogKey
   case object AUTH_ENABLED extends LogKey
+  case object AVG_BATCH_PROCESS_TIME extends LogKey
   case object BACKUP_FILE extends LogKey
   case object BARRIER_EPOCH extends LogKey
   case object BARRIER_ID extends LogKey
   case object BATCH_ID extends LogKey
   case object BATCH_NAME extends LogKey
+  case object BATCH_TIME extends LogKey
+  case object BATCH_TIMES extends LogKey
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BIND_ADDRESS extends LogKey
@@ -108,7 +113,9 @@ object LogKeys {
   case object CANCEL_FUTURE_JOBS extends LogKey
   case object CATALOG_NAME extends LogKey
   case object CATEGORICAL_FEATURES extends LogKey
+  case object CHECKPOINT_DURATION extends LogKey
   case object CHECKPOINT_FILE extends LogKey
+  case object CHECKPOINT_FILES extends LogKey
   case object CHECKPOINT_LOCATION extends LogKey
   case object CHECKPOINT_PATH extends LogKey
   case object CHECKPOINT_ROOT extends LogKey
@@ -121,6 +128,7 @@ object LogKeys {
   case object CLASS_PATHS extends LogKey
   case object CLAUSES extends LogKey
   case object CLEANUP_LOCAL_DIRS extends LogKey
+  case object CLEANUP_THRESH_TIME extends LogKey
   case object CLUSTER_CENTROIDS extends LogKey
   case object CLUSTER_ID extends LogKey
   case object CLUSTER_LABEL extends LogKey
@@ -186,17 +194,20 @@ object LogKeys {
   case object DELEGATE extends LogKey
   case object DELTA extends LogKey
   case object DEPRECATED_KEY extends LogKey
+  case object DERIVATIVE extends LogKey
   case object DESCRIPTION extends LogKey
   case object DESIRED_NUM_PARTITIONS extends LogKey
   case object DESIRED_TREE_DEPTH extends LogKey
   case object DESTINATION_PATH extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
+  case object DIFF_TIME extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
   case object DRIVER_ID extends LogKey
   case object DRIVER_MEMORY_SIZE extends LogKey
   case object DRIVER_STATE extends LogKey
   case object DROPPED_PARTITIONS extends LogKey
+  case object DSTREAM extends LogKey
   case object DURATION extends LogKey
   case object EARLIEST_LOADED_VERSION extends LogKey
   case object EFFECTIVE_STORAGE_LEVEL extends LogKey
@@ -288,9 +299,8 @@ object LogKeys {
   case object HIVE_OPERATION_STATE extends LogKey
   case object HIVE_OPERATION_TYPE extends LogKey
   case object HOST extends LogKey
+  case object HOSTS extends LogKey
   case object HOST_LOCAL_BLOCKS_SIZE extends LogKey
-  case object HOST_NAME extends LogKey
-  case object HOST_NAMES extends LogKey
   case object HOST_PORT extends LogKey
   case object HOST_PORT2 extends LogKey
   case object HUGE_METHOD_LIMIT extends LogKey
@@ -307,6 +317,7 @@ object LogKeys {
   case object INIT_MODE extends LogKey
   case object INPUT extends LogKey
   case object INPUT_SPLIT extends LogKey
+  case object INTEGRAL extends LogKey
   case object INTERVAL extends LogKey
   case object ISOLATION_LEVEL extends LogKey
   case object ISSUE_DATE extends LogKey
@@ -394,6 +405,7 @@ object LogKeys {
   case object MIN_COMPACTION_BATCH_ID extends LogKey
   case object MIN_NUM_FREQUENT_PATTERN extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
+  case object MIN_RATE extends LogKey
   case object MIN_SHARE extends LogKey
   case object MIN_SIZE extends LogKey
   case object MIN_TIME extends LogKey
@@ -490,6 +502,7 @@ object LogKeys {
   case object NUM_PREFIXES extends LogKey
   case object NUM_PRUNED extends LogKey
   case object NUM_PUSH_MERGED_LOCAL_BLOCKS extends LogKey
+  case object NUM_RECEIVER extends LogKey
   case object NUM_RECORDS_READ extends LogKey
   case object NUM_RELEASED_LOCKS extends LogKey
   case object NUM_REMAINED extends LogKey
@@ -575,6 +588,7 @@ object LogKeys {
   case object PROCESSING_TIME extends LogKey
   case object PRODUCER_ID extends LogKey
   case object PROPERTY_NAME extends LogKey
+  case object PROPORTIONAL extends LogKey
   case object PROTOCOL_VERSION extends LogKey
   case object PROVIDER extends LogKey
   case object PUSHED_FILTERS extends LogKey
@@ -595,6 +609,9 @@ object LogKeys {
   case object QUERY_PLAN_LENGTH_MAX extends LogKey
   case object QUERY_RUN_ID extends LogKey
   case object RANGE extends LogKey
+  case object RATE_LIMIT extends LogKey
+  case object RATIO extends LogKey
+  case object RDD extends LogKey
   case object RDD_CHECKPOINT_DIR extends LogKey
   case object RDD_DEBUG_STRING extends LogKey
   case object RDD_DESCRIPTION extends LogKey
@@ -606,6 +623,7 @@ object LogKeys {
   case object RECEIVED_BLOCK_TRACKER_LOG_EVENT extends LogKey
   case object RECEIVER_ID extends LogKey
   case object RECEIVER_IDS extends LogKey
+  case object RECORD extends LogKey
   case object RECORDS extends LogKey
   case object RECOVERY_STATE extends LogKey
   case object REDACTED_STATEMENT extends LogKey
@@ -618,6 +636,7 @@ object LogKeys {
   case object RELATIVE_TOLERANCE extends LogKey
   case object RELEASED_LOCKS extends LogKey
   case object REMAINING_PARTITIONS extends LogKey
+  case object REMEMBER_DURATION extends LogKey
   case object REMOTE_ADDRESS extends LogKey
   case object REMOTE_BLOCKS_SIZE extends LogKey
   case object REMOVE_FROM_MASTER extends LogKey
@@ -646,6 +665,9 @@ object LogKeys {
   case object RULE_NAME extends LogKey
   case object RUN_ID extends LogKey
   case object SCALA_VERSION extends LogKey
+  case object SCALING_DOWN_RATIO extends LogKey
+  case object SCALING_INTERVAL extends LogKey
+  case object SCALING_UP_RATIO extends LogKey
   case object SCHEDULER_POOL_NAME extends LogKey
   case object SCHEDULING_MODE extends LogKey
   case object SCHEMA extends LogKey
@@ -702,6 +724,7 @@ object LogKeys {
   case object STATS extends LogKey
   case object STATUS extends LogKey
   case object STDERR extends LogKey
+  case object STOP_GRACEFULLY_ON_SHUTDOWN extends LogKey
   case object STOP_SITE_SHORT_FORM extends LogKey
   case object STORAGE_LEVEL extends LogKey
   case object STORAGE_LEVEL_DESERIALIZED extends LogKey
@@ -751,6 +774,7 @@ object LogKeys {
   case object THREAD_POOL_SIZE extends LogKey
   case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object THRESHOLD extends LogKey
+  case object THRESH_TIME extends LogKey
   case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
@@ -810,8 +834,10 @@ object LogKeys {
   case object WORKER_PORT extends LogKey
   case object WORKER_URL extends LogKey
   case object WRITE_AHEAD_LOG_INFO extends LogKey
+  case object WRITE_AHEAD_LOG_RECORD_HANDLE extends LogKey
   case object WRITE_JOB_UUID extends LogKey
   case object XML_SCHEDULING_MODE extends LogKey
   case object XSD_PATH extends LogKey
   case object YOUNG_GENERATION_GC extends LogKey
+  case object ZERO_TIME extends LogKey
 }
