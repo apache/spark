@@ -25,7 +25,7 @@ import scala.util.{Failure, Success}
 
 import org.apache.spark._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CLEANUP_THRESH_TIME, ERROR, HOST_PORT, MESSAGE, NUM_RECEIVER, RECEIVER_ID, RECEIVER_IDS, STREAM_ID}
+import org.apache.spark.internal.LogKeys.{CLEANUP_THRESH_TIME, ERROR, HOST_PORT, MESSAGE, NUM_RECEIVERS, RECEIVER_ID, RECEIVER_IDS, STREAM_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
@@ -448,7 +448,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     runDummySparkJob()
 
-    logInfo(log"Starting ${MDC(NUM_RECEIVER, receivers.length)} receivers")
+    logInfo(log"Starting ${MDC(NUM_RECEIVERS, receivers.length)} receivers")
     endpoint.send(StartAllReceivers(receivers.toImmutableArraySeq))
   }
 
@@ -661,7 +661,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     /** Send stop signal to the receivers. */
     private def stopReceivers(): Unit = {
       receiverTrackingInfos.values.flatMap(_.endpoint).foreach { _.send(StopReceiver) }
-      logInfo(log"Sent stop signal to all ${MDC(NUM_RECEIVER, receiverTrackingInfos.size)} " +
+      logInfo(log"Sent stop signal to all ${MDC(NUM_RECEIVERS, receiverTrackingInfos.size)} " +
         log"receivers")
     }
   }

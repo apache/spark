@@ -502,7 +502,7 @@ object LogKeys {
   case object NUM_PREFIXES extends LogKey
   case object NUM_PRUNED extends LogKey
   case object NUM_PUSH_MERGED_LOCAL_BLOCKS extends LogKey
-  case object NUM_RECEIVER extends LogKey
+  case object NUM_RECEIVERS extends LogKey
   case object NUM_RECORDS_READ extends LogKey
   case object NUM_RELEASED_LOCKS extends LogKey
   case object NUM_REMAINED extends LogKey
@@ -636,7 +636,6 @@ object LogKeys {
   case object RELATIVE_TOLERANCE extends LogKey
   case object RELEASED_LOCKS extends LogKey
   case object REMAINING_PARTITIONS extends LogKey
-  case object REMEMBER_DURATION extends LogKey
   case object REMOTE_ADDRESS extends LogKey
   case object REMOTE_BLOCKS_SIZE extends LogKey
   case object REMOVE_FROM_MASTER extends LogKey

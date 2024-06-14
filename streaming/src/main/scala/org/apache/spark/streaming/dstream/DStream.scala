@@ -280,7 +280,7 @@ abstract class DStream[T: ClassTag] (
     logInfo(log"Slide time = ${MDC(LogKeys.SLIDE_DURATION, slideDuration)}")
     logInfo(log"Storage level = ${MDC(LogKeys.STORAGE_LEVEL, storageLevel.description)}")
     logInfo(log"Checkpoint interval = ${MDC(LogKeys.CHECKPOINT_DURATION, checkpointDuration)}")
-    logInfo(log"Remember interval = ${MDC(LogKeys.REMEMBER_DURATION, rememberDuration)}")
+    logInfo(log"Remember interval = ${MDC(LogKeys.DURATION, rememberDuration)}")
     logInfo(log"Initialized and validated ${MDC(LogKeys.DSTREAM, this)}")
   }
 
@@ -305,7 +305,7 @@ abstract class DStream[T: ClassTag] (
     if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
       logInfo(log"Duration for remembering RDDs set to " +
-        log"${MDC(LogKeys.REMEMBER_DURATION, rememberDuration)} for ${MDC(LogKeys.DSTREAM, this)}")
+        log"${MDC(LogKeys.DURATION, rememberDuration)} for ${MDC(LogKeys.DSTREAM, this)}")
     }
     dependencies.foreach(_.remember(parentRememberDuration))
   }

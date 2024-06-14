@@ -78,7 +78,7 @@ private[streaming] class ExecutorAllocationManager(
     logInfo(log"ExecutorAllocationManager started with " +
       log"ratios = [${MDC(LogKeys.SCALING_UP_RATIO, scalingUpRatio)}, " +
       log"${MDC(LogKeys.SCALING_DOWN_RATIO, scalingDownRatio)}] and " +
-      log"interval = ${MDC(LogKeys.SCALING_INTERVAL, scalingIntervalSecs * 1000)} ms")
+      log"interval = ${MDC(LogKeys.SCALING_INTERVAL, scalingIntervalSecs * 1000 * 1000)} ms")
   }
 
   def stop(): Unit = {
@@ -98,7 +98,7 @@ private[streaming] class ExecutorAllocationManager(
       val averageBatchProcTime = batchProcTimeSum / batchProcTimeCount
       val ratio = averageBatchProcTime.toDouble / batchDurationMs
       logInfo(log"Average: ${MDC(LogKeys.AVG_BATCH_PROCESS_TIME, averageBatchProcTime)}, " +
-        log"ratio = ${MDC(LogKeys.RATIO, ratio)}" )
+        log"ratio = ${MDC(LogKeys.RATIO, ratio)}")
       if (ratio >= scalingUpRatio) {
         logDebug("Requesting executors")
         val numNewExecutors = math.max(math.round(ratio).toInt, 1)
