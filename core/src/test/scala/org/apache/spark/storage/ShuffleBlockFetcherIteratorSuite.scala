@@ -374,7 +374,6 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .when(blockManager)
         .getHostLocalShuffleData(meq(blockId.asInstanceOf[ShuffleBlockId]), any())
     }
-    val hostLocalBmId = BlockManagerId("test-host-local-client-1", "test-local-host", 3)
 
     val mockExternalBlockStoreClient = mock(classOf[ExternalBlockStoreClient])
     val hostLocalDirManager = new HostLocalDirManager(
@@ -392,7 +391,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     configureMockTransfer(Map())
     val iterator = createShuffleBlockIteratorWithDefaults(
-      Map(hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1))
+      Map(blockManager.blockManagerId -> toBlockList(hostLocalBlocks.keys, 1L, 1))
     )
     intercept[FetchFailedException] { iterator.next() }
   }
