@@ -501,15 +501,23 @@ def standardize_jira_ref(text):
     >>> standardize_jira_ref(
     ...     "[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
     '[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.'
+    >>> standardize_jira_ref(
+    ...     'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"')
+    'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"'
     >>> standardize_jira_ref("Additional information for users building from source code")
     'Additional information for users building from source code'
     """
     jira_refs = []
     components = []
 
+    is_revert = False
+    if text.startswith('Revert "') and text.endswith('"'):
+        is_revert = True
+        text = text[8:-1]
+
     # If the string is compliant, no need to process any further
     if re.search(r"^\[SPARK-[0-9]{3,6}\](\[[A-Z0-9_\s,]+\] )+\S+", text):
-        return text
+        return f'Revert "{text}"' if is_revert else text
 
     # Extract JIRA ref(s):
     pattern = re.compile(r"(SPARK[-\s]*[0-9]{3,6})+", re.IGNORECASE)
@@ -537,7 +545,7 @@ def standardize_jira_ref(text):
     # included
     clean_text = re.sub(r"\s+", " ", clean_text.strip())
 
-    return clean_text
+    return f'Revert "{clean_text}"' if is_revert else clean_text
 
 
 def get_current_ref():
