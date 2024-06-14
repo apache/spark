@@ -4664,12 +4664,6 @@
     ],
     "sqlState" : "42K0E"
   },
-  "UNSUPPORTED_JOIN_TYPE" : {
-    "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
-    ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_INSERT" : {
     "message" : [
       "Can't insert into the target."
@@ -4702,6 +4696,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
