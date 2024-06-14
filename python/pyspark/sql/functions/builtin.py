@@ -10928,9 +10928,6 @@ def substring(
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    .. versionchanged:: 4.0.0
-        `pos` and `len` now also accept Columns or names of Columns.
-
     Notes
     -----
     The position is not zero based, but 1 based index.
@@ -10943,6 +10940,9 @@ def substring(
         starting position in str.
     len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
+
+        .. versionchanged:: 4.0.0
+            `pos` and `len` now also accept Columns or names of Columns.
 
     Returns
     -------
@@ -13973,9 +13973,6 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    .. versionchanged:: 4.0.0
-        `value` now also accepts a Column type.
-
     Notes
     -----
     The position is not zero based, but 1 based index. Returns 0 if the given
@@ -13987,6 +13984,9 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
         target column to work on.
     value : Any
         value or a :class:`~pyspark.sql.Column` expression to look for.
+
+        .. versionchanged:: 4.0.0
+            `value` now also accepts a Column type.
 
     Returns
     -------
@@ -14427,15 +14427,15 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    .. versionchanged:: 4.0.0
-        `element` now also accepts a Column type.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         name of column containing array
     element :
         element or a :class:`~pyspark.sql.Column` expression to be removed from the array
+
+        .. versionchanged:: 4.0.0
+            `element` now also accepts a Column type.
 
     Returns
     -------
@@ -17277,15 +17277,15 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
-    .. versionchanged:: 4.0.0
-        `value` now also accepts a Column type.
-
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or an expression that represents the map.
     value :
         A literal value, or a :class:`~pyspark.sql.Column` expression.
+
+        .. versionchanged:: 4.0.0
+            `value` now also accepts a Column type.
 
     Returns
     -------
