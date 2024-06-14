@@ -568,7 +568,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_print_schema(self):
         # SPARK-41216: Test print schema
-        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y").schema.treeString()
         # root
         #  |-- X: integer (nullable = false)
         #  |-- Y: integer (nullable = false)

@@ -4,7 +4,7 @@ SELECT X''
 -- !query schema
 struct<X'':binary>
 -- !query output
-
+[]
 
 
 -- !query
@@ -12,7 +12,7 @@ SELECT X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333'
 -- !query schema
 struct<X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333':binary>
 -- !query output
-Eason Yao 2018-11-17:13:33:33
+[45 61 73 6F 6E 20 59 61 6F 20 32 30 31 38 2D 31 31 2D 31 37 3A 31 33 3A 33 33 3A 33 33]
 
 
 -- !query
@@ -20,7 +20,7 @@ SELECT CAST('Spark' as BINARY)
 -- !query schema
 struct<CAST(Spark AS BINARY):binary>
 -- !query output
-Spark
+[53 70 61 72 6B]
 
 
 -- !query
@@ -28,7 +28,7 @@ SELECT array( X'', X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333'
 -- !query schema
 struct<array(X'', X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333', CAST(Spark AS BINARY)):array<binary>>
 -- !query output
-[,Eason Yao 2018-11-17:13:33:33,Spark]
+[[],[45 61 73 6F 6E 20 59 61 6F 20 32 30 31 38 2D 31 31 2D 31 37 3A 31 33 3A 33 33 3A 33 33],[53 70 61 72 6B]]
 
 
 -- !query
@@ -36,4 +36,4 @@ SELECT to_csv(named_struct('n', 1, 'info', X'4561736F6E2059616F20323031382D31312
 -- !query schema
 struct<to_csv(named_struct(n, 1, info, X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333')):string>
 -- !query output
-1,Eason Yao 2018-11-17:13:33:33
+1,[45 61 73 6F 6E 20 59 61 6F 20 32 30 31 38 2D 31 31 2D 31 37 3A 31 33 3A 33 33 3A 33 33]
