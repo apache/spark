@@ -215,7 +215,9 @@ private[spark] object MavenUtils extends Logging {
         if (artifactInfo.getExt == "jar") {
           true
         } else {
-          logInfo(log"Skipping non-jar dependency ${MDC(LogKeys.ARTIFACT_ID, artifactInfo.getId)}")
+          // scalastyle:off
+          logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+          // scalastyle:on
           false
         }
       }

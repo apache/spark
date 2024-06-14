@@ -199,6 +199,7 @@ object LogKeys {
   case object DESIRED_NUM_PARTITIONS extends LogKey
   case object DESIRED_TREE_DEPTH extends LogKey
   case object DESTINATION_PATH extends LogKey
+  case object DESTROY_SITE extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
   case object DIRECTORY extends LogKey
@@ -545,7 +546,7 @@ object LogKeys {
   case object OLD_VALUE extends LogKey
   case object OPEN_COST_IN_BYTES extends LogKey
   case object OPERATION_HANDLE extends LogKey
-  case object OPERATION_HANDLE_IDENTIFIER extends LogKey
+  case object OPERATION_ID extends LogKey
   case object OPTIMIZED_PLAN_COLUMNS extends LogKey
   case object OPTIMIZER_CLASS_NAME extends LogKey
   case object OPTIONS extends LogKey
@@ -828,7 +829,6 @@ object LogKeys {
   case object VOCAB_SIZE extends LogKey
   case object WAIT_RESULT_TIME extends LogKey
   case object WAIT_SEND_TIME extends LogKey
-  case object WAIT_TIME extends LogKey
   case object WATERMARK_CONSTRAINT extends LogKey
   case object WEB_URL extends LogKey
   case object WEIGHT extends LogKey

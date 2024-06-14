@@ -529,7 +529,7 @@ private[spark] class ApplicationMaster(
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
         logError(
           log"""SparkContext did not initialize after waiting for
-          |${MDC(LogKeys.WAIT_TIME, totalWaitTime)} ms.
+          |${MDC(LogKeys.TIMEOUT, totalWaitTime)} ms.
           | Please check earlier log output for errors. Failing the application.""".stripMargin)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
