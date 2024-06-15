@@ -887,7 +887,7 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise IllegalArgumentException(
+            raise AnalysisException(
                 error_class="UNSUPPORTED_JOIN_TYPE",
                 message_parameters={"join_type": how},
             )
