@@ -857,8 +857,8 @@ object FunctionRegistry {
     expression[StructsToXml]("to_xml"),
 
     // Avro
-    expression[FromAvroSqlFunction]("from_avro"),
-    expression[ToAvroSqlFunction]("to_avro")
+    expression[FromAvro]("from_avro"),
+    expression[ToAvro]("to_avro")
   )
 
   val builtin: SimpleFunctionRegistry = {

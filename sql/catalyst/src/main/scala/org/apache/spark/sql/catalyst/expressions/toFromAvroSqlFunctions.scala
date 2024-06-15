@@ -33,13 +33,15 @@ import org.apache.spark.util.Utils
  *
  * @since 4.0.0
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(child, jsonFormatSchema, options) - Converts a binary Avro value into a Catalyst value.
     """,
   examples = """
-    > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}')) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
-     [false]
+    Examples:
+      > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}')) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
+       [false]
   """,
   note = """
     The specified schema must match actual schema of the read data, otherwise the behavior
@@ -47,10 +49,11 @@ import org.apache.spark.util.Utils
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
   """,
-  group = "misc_funcs",
+  group = "avro_funcs",
   since = "4.0.0"
 )
-case class FromAvroSqlFunction(child: Expression, jsonFormatSchema: Expression, options: Expression)
+// scalastyle:on line.size.limit
+case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Expression)
   extends TernaryExpression with RuntimeReplaceable {
   override def first: Expression = child
   override def second: Expression = jsonFormatSchema
@@ -120,19 +123,22 @@ case class FromAvroSqlFunction(child: Expression, jsonFormatSchema: Expression, 
  *
  * @since 4.0.0
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(child, jsonFormatSchema) - Converts a Catalyst binary input value into its corresponding
       Avro format result.
   """,
   examples = """
-    > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP() ).u FROM (SELECT FROM_AVRO(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}' ) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1)));
-     [false]
+    Examples:
+      > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP() ).u FROM (SELECT FROM_AVRO(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}' ) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1)));
+       [false]
   """,
-  group = "misc_funcs",
+  group = "avro_funcs",
   since = "4.0.0"
 )
-case class ToAvroSqlFunction(child: Expression, jsonFormatSchema: Expression)
+// scalastyle:on line.size.limit
+case class ToAvro(child: Expression, jsonFormatSchema: Expression)
   extends BinaryExpression with RuntimeReplaceable {
   override def left: Expression = child
 
