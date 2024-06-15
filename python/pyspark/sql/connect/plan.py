@@ -55,9 +55,9 @@ from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
+    AnalysisException,
     PySparkValueError,
     PySparkPicklingError,
-    IllegalArgumentException,
 )
 
 if TYPE_CHECKING:
