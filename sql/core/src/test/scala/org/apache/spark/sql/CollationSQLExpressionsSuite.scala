@@ -1854,6 +1854,25 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("ExtractValue expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val query =
+          s"""
+             |select col['Field1']
+             |from values (named_struct('Field1', 'Spark', 'Field2', 5)) as tab(col);
+             |""".stripMargin
+        // Result & data type check
+        val testQuery = sql(query)
+        val dataType = StringType(collationName)
+        val expectedResult = "Spark"
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, Row(expectedResult))
+      }
+    })
+  }
+
   test("DatePart expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
