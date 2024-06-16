@@ -101,6 +101,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+    from pyspark.sql.metrics import QueryExecution
 
 
 class DataFrame(ParentDataFrame):
@@ -137,6 +138,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._query_execution: Optional["QueryExecution"] = None
 
     def __reduce__(self) -> Tuple:
         """
@@ -1836,7 +1838,9 @@ class DataFrame(ParentDataFrame):
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query, self._plan.observations)
+        table, schema, self._query_execution = self._session.client.to_table(
+            query, self._plan.observations
+        )
         assert table is not None
         return (table, schema)
 
@@ -2201,6 +2205,19 @@ class DataFrame(ParentDataFrame):
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": "rdd"},
             )
+
+    @property
+    def queryExecution(self) -> Optional["QueryExecution"]:
+        """
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution has happened will return None.
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+        """
+        return self._query_execution
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

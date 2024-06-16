@@ -45,6 +45,13 @@ except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
+graphviz_requirement_message = None
+try:
+    import graphviz
+except ImportError as e:
+    graphviz_requirement_message = str(e)
+have_graphviz = graphviz_requirement_message is None
+
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils

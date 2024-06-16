@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.metrics import QueryExecution
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -6279,6 +6280,10 @@ class DataFrame:
         0    2  Alice
         1    5    Bob
         """
+        ...
+
+    @property
+    def queryExecution(self) -> Optional["QueryExecution"]:
         ...
 
 
