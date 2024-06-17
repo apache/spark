@@ -1780,6 +1780,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
