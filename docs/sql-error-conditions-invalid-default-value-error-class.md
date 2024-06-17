@@ -29,6 +29,10 @@ This error class has the following derived error classes:
 
 which requires `<expectedType>` type, but the statement provided a value of incompatible `<actualType>` type.
 
+## NOT_CONSTANT
+
+which is not a constant expression whose equivalent value is known at query planning time.
+
 ## SUBQUERY_EXPRESSION
 
 which contains subquery expressions.

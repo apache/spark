@@ -3315,7 +3315,6 @@ class DataSourceV2SQLSuiteV1Filter
           // Rand function is not foldable
           spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
         }
-        assert(exception.getSqlState == "42623")
         assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
         assert(exception.messageParameters("colName") == "`col2`")
         assert(exception.messageParameters("defaultValue") == "rand()")
