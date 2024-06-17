@@ -43,8 +43,8 @@ class StreamingTestsMixin:
             self.assertEqual(query.exception(), None)
             self.assertFalse(query.awaitTermination(1))
             query.processAllAvailable()
-            recentProgress = query.recentProgress
             lastProgress = query.lastProgress
+            recentProgress = query.recentProgress
             self.assertEqual(lastProgress["name"], query.name)
             self.assertEqual(lastProgress["id"], query.id)
             self.assertTrue(any(p == lastProgress for p in recentProgress))
@@ -68,16 +68,15 @@ class StreamingTestsMixin:
         query = df.writeStream.format("noop").start()
         try:
             query.processAllAvailable()
-            recentProgress = query.recentProgress
             lastProgress = query.lastProgress
+            recentProgress = query.recentProgress
             self.assertEqual(lastProgress["name"], query.name)
+            # Return str when accessed using dict get.
             self.assertEqual(lastProgress["id"], query.id)
             # SPARK-48567 Use attribute to access fields in q.lastProgress
             self.assertEqual(lastProgress.name, query.name)
+            # Return uuid when accessed using attribute.
             self.assertEqual(str(lastProgress.id), query.id)
-            new_name = "myNewQuery"
-            lastProgress["name"] = new_name
-            self.assertEqual(lastProgress.name, new_name)
             self.assertTrue(any(p == lastProgress for p in recentProgress))
             self.assertTrue(lastProgress.numInputRows > 0)
             # Also access source / sink progress with attributes
@@ -86,6 +85,11 @@ class StreamingTestsMixin:
             self.assertTrue(lastProgress["sources"][0]["numInputRows"] > 0)
             self.assertTrue(lastProgress.sink.numOutputRows > 0)
             self.assertTrue(lastProgress["sink"]["numOutputRows"] > 0)
+            # In Python, for historical reasons, changing field value
+            # in StreamingQueryProgress is allowed.
+            new_name = "myNewQuery"
+            lastProgress["name"] = new_name
+            self.assertEqual(lastProgress.name, new_name)
 
         except Exception as e:
             self.fail(

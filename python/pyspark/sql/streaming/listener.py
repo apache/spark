@@ -513,7 +513,10 @@ class StreamingQueryProgress(dict):
         A unique query id that persists across restarts. See
         py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
-        return self["id"]
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, do not cast them to string when accessed with attribute.
+        return super().__getitem__("id")
 
     @property
     def runId(self) -> uuid.UUID:
@@ -521,7 +524,10 @@ class StreamingQueryProgress(dict):
         A query id that is unique for every start/restart. See
         py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
-        return self["runId"]
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, do not cast them to string when accessed with attribute.
+        return super().__getitem__("runId")
 
     @property
     def name(self) -> Optional[str]:
