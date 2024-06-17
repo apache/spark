@@ -40,6 +40,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
@@ -1163,6 +1164,7 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name_parts", b"name_parts"]
         ) -> None: ...
 
+    COMMON_FIELD_NUMBER: builtins.int
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
@@ -1181,7 +1183,8 @@ class Expression(google.protobuf.message.Message):
     CALL_FUNCTION_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
-    ORIGIN_FIELD_NUMBER: builtins.int
+    @property
+    def common(self) -> global___ExpressionCommon: ...
     @property
     def literal(self) -> global___Expression.Literal: ...
     @property
@@ -1223,12 +1226,10 @@ class Expression(google.protobuf.message.Message):
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
         """
-    @property
-    def origin(self) -> global___Origin:
-        """(Optional) Keep the information of the origin for this expression such as stacktrace."""
     def __init__(
         self,
         *,
+        common: global___ExpressionCommon | None = ...,
         literal: global___Expression.Literal | None = ...,
         unresolved_attribute: global___Expression.UnresolvedAttribute | None = ...,
         unresolved_function: global___Expression.UnresolvedFunction | None = ...,
@@ -1248,7 +1249,6 @@ class Expression(google.protobuf.message.Message):
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
-        origin: global___Origin | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1259,6 +1259,8 @@ class Expression(google.protobuf.message.Message):
             b"call_function",
             "cast",
             b"cast",
+            "common",
+            b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
             "expr_type",
@@ -1273,8 +1275,6 @@ class Expression(google.protobuf.message.Message):
             b"literal",
             "named_argument_expression",
             b"named_argument_expression",
-            "origin",
-            b"origin",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1304,6 +1304,8 @@ class Expression(google.protobuf.message.Message):
             b"call_function",
             "cast",
             b"cast",
+            "common",
+            b"common",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
             "expr_type",
@@ -1318,8 +1320,6 @@ class Expression(google.protobuf.message.Message):
             b"literal",
             "named_argument_expression",
             b"named_argument_expression",
-            "origin",
-            b"origin",
             "sort_order",
             b"sort_order",
             "unresolved_attribute",
@@ -1367,6 +1367,25 @@ class Expression(google.protobuf.message.Message):
     ): ...
 
 global___Expression = Expression
+
+class ExpressionCommon(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ORIGIN_FIELD_NUMBER: builtins.int
+    @property
+    def origin(self) -> pyspark.sql.connect.proto.common_pb2.Origin:
+        """(Required) Keep the information of the origin for this expression such as stacktrace."""
+    def __init__(
+        self,
+        *,
+        origin: pyspark.sql.connect.proto.common_pb2.Origin | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["origin", b"origin"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["origin", b"origin"]) -> None: ...
+
+global___ExpressionCommon = ExpressionCommon
 
 class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1634,54 +1653,3 @@ class NamedArgumentExpression(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NamedArgumentExpression = NamedArgumentExpression
-
-class Origin(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    PYTHON_ORIGIN_FIELD_NUMBER: builtins.int
-    @property
-    def python_origin(self) -> global___PythonOrigin: ...
-    def __init__(
-        self,
-        *,
-        python_origin: global___PythonOrigin | None = ...,
-    ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function", b"function", "python_origin", b"python_origin"
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "function", b"function", "python_origin", b"python_origin"
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_origin"] | None: ...
-
-global___Origin = Origin
-
-class PythonOrigin(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    FRAGMENT_FIELD_NUMBER: builtins.int
-    CALL_SITE_FIELD_NUMBER: builtins.int
-    fragment: builtins.str
-    """(Required) Name of the origin, for example, the name of the function"""
-    call_site: builtins.str
-    """(Required) Callsite to show to end users, for example, stacktrace."""
-    def __init__(
-        self,
-        *,
-        fragment: builtins.str = ...,
-        call_site: builtins.str = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal["call_site", b"call_site", "fragment", b"fragment"],
-    ) -> None: ...
-
-global___PythonOrigin = PythonOrigin

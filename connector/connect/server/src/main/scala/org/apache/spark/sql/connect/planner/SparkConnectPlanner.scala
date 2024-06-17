@@ -1472,11 +1472,12 @@ class SparkConnectPlanner(
    *   Catalyst expression
    */
   @DeveloperApi
-  def transformExpression(exp: proto.Expression): Expression = if (exp.hasOrigin) {
+  def transformExpression(exp: proto.Expression): Expression = if (exp.hasCommon) {
     try {
+      val origin = exp.getCommon.getOrigin
       PySparkCurrentOrigin.set(
-        exp.getOrigin.getPythonOrigin.getFragment,
-        exp.getOrigin.getPythonOrigin.getCallSite)
+        origin.getPythonOrigin.getFragment,
+        origin.getPythonOrigin.getCallSite)
       withOrigin { doTransformExpression(exp) }
     } finally {
       PySparkCurrentOrigin.clear()

@@ -45,7 +45,7 @@ def set_current_origin(fragment: Optional[str], call_site: Optional[str]) -> Non
     global _current_origin
 
     _current_origin.fragment = fragment
-    _current_origin.fragment = call_site
+    _current_origin.call_site = call_site
 
 
 class ErrorClassesReader:
