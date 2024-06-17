@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
  * @param dialects List of dialects.
  */
 private class AggregatedDialect(dialects: List[JdbcDialect])
-  extends JdbcDialect with JdbcDialectHelper {
+  extends JdbcDialect with NoLegacyJDBCError {
 
   require(dialects.nonEmpty)
 

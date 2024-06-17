@@ -844,7 +844,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 /**
  * Make the `classifyException` method throw out the original exception
  */
-trait JdbcDialectHelper extends JdbcDialect {
+trait NoLegacyJDBCError extends JdbcDialect {
 
   override def classifyException(
       e: Throwable,
