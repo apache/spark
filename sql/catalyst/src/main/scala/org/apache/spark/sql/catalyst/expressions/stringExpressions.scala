@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -708,26 +708,26 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   """,
   since = "4.0.0",
   group = "string_funcs")
-case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
-  with NullIntolerant {
+case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
 
-  override def child: Expression = srcExpr
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UTF8String],
+    BooleanType,
+    "isValid",
+    Seq(input),
+    inputTypes)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
-  override def dataType: DataType = BooleanType
+
+  override def nodeName: String = "is_valid_utf8"
+
   override def nullable: Boolean = true
 
-  override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].isValid
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.isValid();")
-  }
-
-  override def prettyName: String = "is_valid_utf8"
+  override def child: Expression = input
 
   override protected def withNewChildInternal(newChild: Expression): IsValidUTF8 = {
-    copy(srcExpr = newChild)
+    copy(input = newChild)
   }
 
 }
@@ -760,26 +760,26 @@ case class IsValidUTF8(srcExpr: Expression) extends UnaryExpression with Implici
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class MakeValidUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
-  with NullIntolerant {
+case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
 
-  override def child: Expression = srcExpr
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UTF8String],
+    SQLConf.get.defaultStringType,
+    "makeValid",
+    Seq(input),
+    inputTypes)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
-  override def dataType: DataType = child.dataType
+
+  override def nodeName: String = "make_valid_utf8"
+
   override def nullable: Boolean = true
 
-  override def nullSafeEval(srcEval: Any): Any = {
-    srcEval.asInstanceOf[UTF8String].makeValid
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"${ev.value} = $c.makeValid();")
-  }
-
-  override def prettyName: String = "make_valid_utf8"
+  override def child: Expression = input
 
   override protected def withNewChildInternal(newChild: Expression): MakeValidUTF8 = {
-    copy(srcExpr = newChild)
+    copy(input = newChild)
   }
 
 }
