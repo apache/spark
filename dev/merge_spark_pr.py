@@ -510,14 +510,13 @@ def standardize_jira_ref(text):
     jira_refs = []
     components = []
 
-    is_revert = False
+    # If this is a Revert PR, no need to process any further
     if text.startswith('Revert "') and text.endswith('"'):
-        is_revert = True
-        text = text[8:-1]
+        return text
 
     # If the string is compliant, no need to process any further
     if re.search(r"^\[SPARK-[0-9]{3,6}\](\[[A-Z0-9_\s,]+\] )+\S+", text):
-        return f'Revert "{text}"' if is_revert else text
+        return text
 
     # Extract JIRA ref(s):
     pattern = re.compile(r"(SPARK[-\s]*[0-9]{3,6})+", re.IGNORECASE)
@@ -545,7 +544,7 @@ def standardize_jira_ref(text):
     # included
     clean_text = re.sub(r"\s+", " ", clean_text.strip())
 
-    return f'Revert "{clean_text}"' if is_revert else clean_text
+    return clean_text
 
 
 def get_current_ref():
