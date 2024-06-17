@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
+import org.apache.spark.sql.execution.streaming.state.StateStoreValueRowFormatValidationFailure
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1606,12 +1607,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
     val valueRow = dataToValueRow(2)
-    val e = intercept[InvalidUnsafeRowException] {
+    val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
         keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
     }
-    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+    assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
     // When sqlConf.stateStoreFormatValidationEnabled is set to false and
     // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
