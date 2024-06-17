@@ -1447,6 +1447,7 @@ ansiNonReserved
     | BY
     | BYTE
     | CACHE
+    | CALLED
     | CASCADE
     | CATALOG
     | CATALOGS
@@ -1466,6 +1467,7 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONTAINS
     | COST
     | CUBE
     | CURRENT
@@ -1486,10 +1488,12 @@ ansiNonReserved
     | DECLARE
     | DEFAULT
     | DEFINED
+    | DEFINER
     | DELETE
     | DELIMITED
     | DESC
     | DESCRIBE
+    | DETERMINISTIC
     | DFS
     | DIRECTORIES
     | DIRECTORY
@@ -1530,13 +1534,16 @@ ansiNonReserved
     | INDEX
     | INDEXES
     | INPATH
+    | INPUT
     | INPUTFORMAT
     | INSERT
     | INT
     | INTEGER
     | INTERVAL
+    | INVOKER
     | ITEMS
     | KEYS
+    | LANGUAGE
     | LAST
     | LAZY
     | LIKE
@@ -1561,6 +1568,7 @@ ansiNonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODIFIES
     | MONTH
     | MONTHS
     | MSCK
@@ -1594,6 +1602,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READS
     | REAL
     | RECORDREADER
     | RECORDWRITER
@@ -1607,6 +1616,8 @@ ansiNonReserved
     | RESET
     | RESPECT
     | RESTRICT
+    | RETURN
+    | RETURNS
     | REVOKE
     | RLIKE
     | ROLE
@@ -1619,6 +1630,7 @@ ansiNonReserved
     | SCHEMAS
     | SECOND
     | SECONDS
+    | SECURITY
     | SEMI
     | SEPARATED
     | SERDE
@@ -1634,6 +1646,7 @@ ansiNonReserved
     | SORT
     | SORTED
     | SOURCE
+    | SPECIFIC
     | START
     | STATISTICS
     | STORED
