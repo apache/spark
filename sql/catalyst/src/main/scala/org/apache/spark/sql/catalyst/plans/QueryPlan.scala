@@ -226,12 +226,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       }
     }
 
+    @scala.annotation.nowarn("cat=deprecation")
     def recursiveTransform(arg: Any): AnyRef = arg match {
       case e: Expression => transformExpression(e)
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case stream: LazyList[_] => stream.map(recursiveTransform).force
+      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case lazyList: LazyList[_] => lazyList.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
