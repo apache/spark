@@ -2208,15 +2208,6 @@ class DataFrame(ParentDataFrame):
 
     @property
     def queryExecution(self) -> Optional["QueryExecution"]:
-        """
-        The queryExecution method allows to introspect information about the actual
-        query execution after the successful execution. Accessing this member before
-        the query execution has happened will return None.
-
-        Returns
-        -------
-        An instance of QueryExecution or None when the value is not set yet.
-        """
         return self._query_execution
 
 

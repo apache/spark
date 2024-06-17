@@ -6284,6 +6284,19 @@ class DataFrame:
 
     @property
     def queryExecution(self) -> Optional["QueryExecution"]:
+        """
+        Returns a QueryExecution object after the query was executed.
+
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution will return None.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+        """
         ...
 
 

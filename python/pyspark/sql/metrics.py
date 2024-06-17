@@ -19,9 +19,10 @@ import dataclasses
 from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING, Sequence
 
 from pyspark.errors import PySparkValueError
-from pyspark.testing.connectutils import have_graphviz
 
 if TYPE_CHECKING:
+    from pyspark.testing.connectutils import have_graphviz
+
     if have_graphviz:
         import graphviz  # type: ignore
 
