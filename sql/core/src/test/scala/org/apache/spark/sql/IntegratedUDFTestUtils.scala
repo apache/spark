@@ -660,6 +660,49 @@ object IntegratedUDFTestUtils extends SQLHelper {
       orderBy = "OrderingColumn(\"input\")",
       select = "SelectedColumn(\"partition_col\")")
 
+  object UDTFPartitionByIndexingBug extends TestUDTF {
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import (
+         |    AnalyzeArgument,
+         |    AnalyzeResult,
+         |    PartitioningColumn,
+         |    SelectedColumn,
+         |    udtf
+         |)
+         |from pyspark.sql.types import (
+         |    DoubleType,
+         |    StringType,
+         |    StructType,
+         |)
+         |class $name:
+         |    @staticmethod
+         |    def analyze(observed: AnalyzeArgument) -> AnalyzeResult:
+         |        out_schema = StructType()
+         |        out_schema.add("partition_col", StringType())
+         |        out_schema.add("double_col", DoubleType())
+         |
+         |        return AnalyzeResult(
+         |            schema=out_schema,
+         |            partitionBy=[PartitioningColumn("partition_col")],
+         |            select=[
+         |                SelectedColumn("partition_col"),
+         |                SelectedColumn("double_col"),
+         |            ],
+         |        )
+         |
+         |    def eval(self, *args, **kwargs):
+         |        pass
+         |
+         |    def terminate(self):
+         |        for _ in range(5):
+         |            yield {
+         |                "partition_col": None,
+         |                "double_col": 1.0,
+         |            }
+         |""".stripMargin
+  }
+
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "PartitioningColumn(\"unparsable\")",
@@ -1216,6 +1259,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBySelectExpr,
     UDTFPartitionByOrderBySelectComplexExpr,
     UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
+    UDTFPartitionByIndexingBug,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,
