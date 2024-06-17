@@ -879,5 +879,4 @@ public class UTF8StringSuite {
       assertEquals(1, fromBytes(c).numChars());
     }
   }
-
 }
