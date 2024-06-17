@@ -654,7 +654,7 @@ class DataSourceWriter(ABC):
         Parameters
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
-            A list of commit messages. Can contain `None` values if any task failed.
+            A list of commit messages.
         """
         ...
 
