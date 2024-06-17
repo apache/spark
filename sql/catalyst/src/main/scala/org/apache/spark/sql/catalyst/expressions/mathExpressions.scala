@@ -1032,9 +1032,19 @@ object Hex {
     array
   }
 
+  private def maxArraySize(length: Long): Int = {
+    if (length > Int.MaxValue) {
+      throw QueryExecutionErrors.tooManyArrayElementsError(length, Int.MaxValue)
+    }
+    length.toInt
+  }
+
   def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
-    val value = new Array[Byte](length * 2)
+    if (length == 0) {
+      return UTF8String.EMPTY_UTF8
+    }
+    val value = new Array[Byte](maxArraySize(length * 2L))
     var i = 0
     while (i < length) {
       value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
