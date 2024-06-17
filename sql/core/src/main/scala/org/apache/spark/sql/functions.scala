@@ -4235,6 +4235,19 @@ object functions {
     Column.fn("substring", str, lit(pos), lit(len))
 
   /**
+   * Substring starts at `pos` and is of length `len` when str is String type or
+   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
+   * when str is Binary type
+   *
+   * @note The position is not zero based, but 1 based index.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def substring(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substring", str, pos, len)
+
+  /**
    * Returns the substring from string str before count occurrences of the delimiter delim.
    * If count is positive, everything the left of the final delimiter (counting from left) is
    * returned. If count is negative, every to the right of the final delimiter (counting from the
