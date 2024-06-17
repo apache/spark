@@ -27,7 +27,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.InvalidUnsafeRowException
+import org.apache.spark.sql.execution.streaming.state.{StateStoreKeyRowFormatValidationFailure, StateStoreValueRowFormatValidationFailure}
 import org.apache.spark.sql.functions._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -254,7 +254,8 @@ class StreamingStateStoreFormatCompatibilitySuite extends StreamTest {
   private def findStateSchemaException(exc: Throwable): Boolean = {
     exc match {
       case _: SparkUnsupportedOperationException => true
-      case _: InvalidUnsafeRowException => true
+      case _: StateStoreKeyRowFormatValidationFailure => true
+      case _: StateStoreValueRowFormatValidationFailure => true
       case e1 if e1.getCause != null => findStateSchemaException(e1.getCause)
       case _ => false
     }

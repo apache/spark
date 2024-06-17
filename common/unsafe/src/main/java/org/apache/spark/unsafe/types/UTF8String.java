@@ -21,6 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -112,6 +113,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return null;
     }
+  }
+
+  private static UTF8String fromBytes(ArrayList<Byte> bytes) {
+    byte[] byteArray = new byte[bytes.size()];
+    for (int i = 0; i < bytes.size(); i++) {
+      byteArray[i] = bytes.get(i);
+    }
+    return fromBytes(byteArray);
   }
 
   /**
@@ -268,6 +277,129 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
       return bytes;
     }
+  }
+
+  /**
+   * Utility methods and constants for UTF-8 string validation.
+   */
+
+  private static boolean isValidContinuationByte(byte b) {
+     return b >= (byte) 0x80 && b <= (byte) 0xBF;
+  }
+
+  private static boolean isValidSecondByte(byte b, byte firstByte) {
+    return switch (firstByte) {
+      case (byte) 0xE0 -> b >= (byte) 0xA0 && b <= (byte) 0xBF;
+      case (byte) 0xED -> b >= (byte) 0x80 && b <= (byte) 0x9F;
+      case (byte) 0xF0 -> b >= (byte) 0x90 && b <= (byte) 0xBF;
+      case (byte) 0xF4 -> b >= (byte) 0x80 && b <= (byte) 0x8F;
+      default -> isValidContinuationByte(b);
+    };
+  }
+
+  private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
+    new byte[] { (byte) 0xEF, (byte) 0xBF, (byte) 0xBD };
+
+  private static void appendReplacementCharacter(ArrayList<Byte> bytes) {
+    for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) bytes.add(b);
+  }
+
+  /**
+   * Returns a validated version of the current UTF-8 string by replacing invalid UTF-8 sequences
+   * with the Unicode replacement character (U+FFFD), as per the rules defined in the Unicode
+   * standard 15, Section 3.9, Paragraph D86, Table 3-7. This behaviour is consistent with the
+   * behaviour of `UnicodeString` in ICU4C.
+   *
+   * @return A new UTF8String that is a valid UTF8 string.
+   */
+  public UTF8String makeValid() {
+    ArrayList<Byte> bytes = new ArrayList<>();
+    int byteIndex = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) {
+        appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // 1B UTF-8 sequence (ASCII or truncated).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) bytes.add(firstByte);
+        else appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) {
+        appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) {
+          break;
+        }
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) {
+        appendReplacementCharacter(bytes);
+        byteIndex += continuationBytes;
+        continue;
+      }
+      // Valid UTF-8 sequence.
+      for (int i = 0; i < codePointLen; ++i) {
+        bytes.add(getByte(byteIndex + i));
+      }
+      byteIndex += codePointLen;
+    }
+    return UTF8String.fromBytes(bytes);
+  }
+
+  /**
+   * Checks if the current UTF8String is valid.
+   *
+   * @return If string represents a valid UTF8 string.
+   */
+  public boolean isValid() {
+    int byteIndex = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) return false;
+      // 1B UTF-8 sequence (ASCII or truncated).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) {
+          ++byteIndex;
+          continue;
+        }
+        else return false;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) return false;
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) return false;
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) return false;
+      // Valid UTF-8 sequence.
+      byteIndex += codePointLen;
+    }
+    return true;
   }
 
   /**
