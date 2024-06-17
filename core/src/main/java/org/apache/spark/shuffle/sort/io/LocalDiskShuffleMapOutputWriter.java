@@ -74,7 +74,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     this.blockResolver = blockResolver;
     this.bufferSize =
       (int) (long) sparkConf.get(
-        package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
+        package$.MODULE$.SHUFFLE_LOCAL_DISK_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     this.partitionLengths = new long[numPartitions];
     this.outputFile = blockResolver.getDataFile(shuffleId, mapId);
     this.outputTempFile = null;
