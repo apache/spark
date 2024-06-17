@@ -1724,8 +1724,8 @@ class CollationSQLExpressionsSuite
           // Input to function mode was a complex type with strings collated on non-binary
           // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
           val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a complex type with non-binary collated" +
-              " fields, which are currently not supported by 'mode'."),
+            ("msg", "The input to the function 'mode'" +
+              " was a type of binary-unstable type that is not currently supported by mode."),
             ("hint", "")).toMap
           checkError(
             exception = intercept[AnalysisException] {
@@ -1773,8 +1773,8 @@ class CollationSQLExpressionsSuite
           // Input to function mode was a complex type with strings collated on non-binary
           // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
           val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a complex type with non-binary collated" +
-              " fields, which are currently not supported by 'mode'."),
+            ("msg", "The input to the function 'mode' " +
+              "was a type of binary-unstable type that is not currently supported by mode."),
             ("hint", "")).toMap
           checkError(
             exception = intercept[AnalysisException] {
@@ -1820,8 +1820,8 @@ class CollationSQLExpressionsSuite
         val query = s"SELECT lower(element_at(element_at(mode(i), 1).s1.a2, 1)) FROM ${tableName}"
         if(t.collationId == "utf8_binary_lcase" || t.collationId == "unicode_ci") {
           val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a complex type with non-binary collated" +
-              " fields, which are currently not supported by 'mode'."),
+            ("msg", "The input to the function 'mode' was a type" +
+              " of binary-unstable type that is not currently supported by mode."),
             ("hint", "")).toMap
           checkError(
             exception = intercept[AnalysisException] {

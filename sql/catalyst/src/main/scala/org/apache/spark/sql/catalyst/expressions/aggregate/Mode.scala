@@ -53,7 +53,8 @@ case class Mode(
     if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
       super.checkInputDataTypes()
     } else {
-      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was a type of binary-unstable type that is " +
+      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was" +
+        " a type of binary-unstable type that is " +
         s"not currently supported by ${prettyName}.")
     }
   }
