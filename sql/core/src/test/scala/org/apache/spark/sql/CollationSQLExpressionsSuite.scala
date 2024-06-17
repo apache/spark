@@ -1872,7 +1872,7 @@ class CollationSQLExpressionsSuite
       }
     })
   }
-    
+
   test("Lag expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
