@@ -63,6 +63,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
     @classmethod  # type: ignore[misc]
     @property
     def _release_thread_pool(cls) -> ThreadPool:
+        # Perform a first check outside the critical path.
+        if not cls._release_thread_pool_instance is None:
+          return cls._release_thread_pool_instance
         with cls._lock:
             if cls._release_thread_pool_instance is None:
                 cls._release_thread_pool_instance = ThreadPool(
