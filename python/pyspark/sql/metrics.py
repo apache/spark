@@ -157,16 +157,16 @@ class CollectedMetrics:
 
         Parameters
         ----------
-        filename - str, optional
+        filename : str, optional
             The filename to save the graph to given an output format. The path can be
             relative or absolute.
 
-        out_format - str
+        out_format : str
             The output format of the graph. The default is 'png'.
 
         Returns
         -------
-
+        An instance of the graphviz.Digraph object.
         """
         try:
             import graphviz

@@ -50,7 +50,7 @@ try:
     import graphviz
 except ImportError as e:
     graphviz_requirement_message = str(e)
-have_graphviz = graphviz_requirement_message is None
+have_graphviz: bool = graphviz_requirement_message is None
 
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
