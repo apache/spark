@@ -1854,6 +1854,40 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("Lag expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query =
+        s"""
+           |SELECT lag(a, -1, 'default' collate $collationName) OVER (PARTITION BY b ORDER BY a)
+           |FROM VALUES ('A1', 2), ('A2', 1), ('A2', 3), ('A1', 1) tab(a, b);
+           |""".stripMargin
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = StringType(collationName)
+      val expectedResult = Seq("A2", "default", "default", "default")
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, expectedResult.map(Row(_)))
+    })
+  }
+
+  test("Lead expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query =
+        s"""
+           |SELECT lead(a, -1, 'default' collate $collationName) OVER (PARTITION BY b ORDER BY a)
+           |FROM VALUES ('A1', 2), ('A2', 1), ('A2', 3), ('A1', 1) tab(a, b);
+           |""".stripMargin
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = StringType(collationName)
+      val expectedResult = Seq("A1", "default", "default", "default")
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, expectedResult.map(Row(_)))
+    })
+  }
+
   test("DatePart expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {

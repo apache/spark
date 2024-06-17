@@ -78,6 +78,11 @@ object CollationTypeCasts extends TypeCoercionRule {
       }
       raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
 
+    case framelessOffsetWindow @ (_: Lag | _: Lead) =>
+      val Seq(input, offset, default) = framelessOffsetWindow.children
+      val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
+      framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: BinaryExpression | _: ConcatWs | _: Mask | _: StringReplace |
