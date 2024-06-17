@@ -107,7 +107,7 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
     _isValid = false
     _destroySite = Utils.getCallSite().shortForm
     logInfo(log"Destroying ${MDC(LogKeys.BROADCAST, toString)} " +
-      log"(from ${MDC(LogKeys.DESTROY_SITE, _destroySite)})")
+      log"(from ${MDC(LogKeys.CALL_SITE_SHORT_FORM, _destroySite)})")
     doDestroy(blocking)
   }
 

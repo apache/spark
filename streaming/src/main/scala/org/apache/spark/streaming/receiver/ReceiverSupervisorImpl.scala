@@ -198,7 +198,7 @@ private[streaming] class ReceiverSupervisorImpl(
     logInfo(log"Deregistering receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
-    logInfo(log"Stopped receiver ${MDC(LogKeys.RECEIVER_ID, streamId)}")
+    logInfo(log"Stopped receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
   }
 
   override def createBlockGenerator(

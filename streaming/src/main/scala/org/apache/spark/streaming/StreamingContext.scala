@@ -726,7 +726,7 @@ class StreamingContext private[streaming] (
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
     logInfo(log"Invoking stop(stopGracefully=" +
-      log"${MDC(LogKeys.STOP_SITE_SHORT_FORM, stopGracefully)}) from shutdown hook")
+      log"${MDC(LogKeys.VALUE, stopGracefully)}) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }

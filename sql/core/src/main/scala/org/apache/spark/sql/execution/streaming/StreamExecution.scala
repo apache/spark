@@ -323,7 +323,7 @@ abstract class StreamExecution(
           // Log logical plan at the start of the query to help debug issues related to
           // plan changes.
           logInfo(log"Finish initializing with logical plan:\n" +
-            log"${MDC(LogKeys.LOGICAL_PLAN_LEAVES, logicalPlan)}")
+            log"${MDC(LogKeys.QUERY_PLAN, logicalPlan)}")
 
           // Unblock `awaitInitialization`
           initializationLatch.countDown()

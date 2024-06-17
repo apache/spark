@@ -78,7 +78,7 @@ private[streaming] class ExecutorAllocationManager(
     logInfo(log"ExecutorAllocationManager started with ratios = " +
       log"[${MDC(LogKeys.SCALING_UP_RATIO, scalingUpRatio)}, " +
       log"${MDC(LogKeys.SCALING_DOWN_RATIO, scalingDownRatio)}] and interval = " +
-      log"${MDC(LogKeys.SCALING_INTERVAL_SECS, scalingIntervalSecs)} sec")
+      log"${MDC(LogKeys.INTERVAL, scalingIntervalSecs)} sec")
   }
 
   def stop(): Unit = {
@@ -124,7 +124,7 @@ private[streaming] class ExecutorAllocationManager(
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
       Map.empty)
-    logInfo(log"Requested total ${MDC(LogKeys.TARGET_NUM_EXECUTOR,
+    logInfo(log"Requested total ${MDC(LogKeys.NUM_EXECUTORS,
       targetTotalExecutors)} executors")
   }
 

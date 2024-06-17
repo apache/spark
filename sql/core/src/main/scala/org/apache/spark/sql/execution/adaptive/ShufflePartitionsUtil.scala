@@ -62,7 +62,7 @@ object ShufflePartitionsUtil extends Logging {
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_ID, shuffleIds)}, advisory target size: " +
-      log"${MDC(LogKeys.TARGET_SIZE, advisoryTargetSize)}, actual target size " +
+      log"${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, actual target size " +
       log"${MDC(LogKeys.TARGET_SIZE, targetSize)}, minimum partition size: " +
       log"${MDC(LogKeys.PARTITION_SIZE, minPartitionSize)}")
 

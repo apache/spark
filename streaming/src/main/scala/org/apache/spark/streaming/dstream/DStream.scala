@@ -320,7 +320,7 @@ abstract class DStream[T: ClassTag] (
       logInfo(log"Time ${MDC(LogKeys.TIME, time)} is invalid as zeroTime is " +
         log"${MDC(LogKeys.ZERO_TIME, zeroTime)}, slideDuration is " +
         log"${MDC(LogKeys.SLIDE_DURATION, slideDuration)} and difference is " +
-        log"${MDC(LogKeys.TIME, time - zeroTime)}")
+        log"${MDC(LogKeys.TIME_DURATION, time - zeroTime)}")
       false
     } else {
       logDebug(s"Time $time is valid")

@@ -58,7 +58,7 @@ object UDTRegistration extends Serializable with Logging {
    */
   def register(userClass: String, udtClass: String): Unit = {
     if (udtMap.contains(userClass)) {
-      logWarning(log"Cannot register UDT for ${MDC(LogKeys.USER_CLASS, userClass)}, " +
+      logWarning(log"Cannot register UDT for ${MDC(LogKeys.CLASS_NAME, userClass)}, " +
         log"which is already registered.")
     } else {
       // When register UDT with class name, we can't check if the UDT class is an UserDefinedType,

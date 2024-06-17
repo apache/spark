@@ -36,7 +36,7 @@ import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.ArrayImplicits._
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -215,9 +215,7 @@ private[spark] object MavenUtils extends Logging {
         if (artifactInfo.getExt == "jar") {
           true
         } else {
-          // scalastyle:off
           logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
-          // scalastyle:on
           false
         }
       }
@@ -517,9 +515,8 @@ private[spark] object MavenUtils extends Logging {
           val failedReports = rr.getArtifactsReports(DownloadStatus.FAILED, true)
           if (failedReports.nonEmpty && noCacheIvySettings.isDefined) {
             val failedArtifacts = failedReports.map(r => r.getArtifact)
-            logInfo(log"Download failed: ${MDC(LogKeys.FAILED_ARTIFACTS,
-              failedArtifacts.mkString("[", ", ", "]"))}, " +
-              log"attempt to retry while skipping local-m2-cache.")
+            logInfo(s"Download failed: ${failedArtifacts.mkString("[", ", ", "]")}, " +
+              s"attempt to retry while skipping local-m2-cache.")
             failedArtifacts.foreach(artifact => {
               clearInvalidIvyCacheFiles(artifact.getModuleRevisionId, ivySettings.getDefaultCache)
             })

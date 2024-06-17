@@ -308,7 +308,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       receiverTrackingInfos.put(streamId, receiverTrackingInfo)
       listenerBus.post(StreamingListenerReceiverStarted(receiverTrackingInfo.toReceiverInfo))
       logInfo(log"Registered receiver for stream ${MDC(LogKeys.STREAM_ID, streamId)} " +
-        log"from ${MDC(LogKeys.SENDER_ADDRESS, senderAddress)}")
+        log"from ${MDC(LogKeys.RPC_ADDRESS, senderAddress)}")
       true
     }
   }
