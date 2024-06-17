@@ -165,8 +165,10 @@ trait CodegenSupport extends SparkPlan {
         }
       }
 
+    @scala.annotation.nowarn("cat=deprecation")
     val inputVars = inputVarsCandidate match {
-      case stream: LazyList[ExprCode] => stream.force
+      case stream: Stream[ExprCode] => stream.force
+      case lazyList: LazyList[ExprCode] => lazyList.force
       case other => other
     }
 

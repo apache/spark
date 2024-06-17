@@ -103,7 +103,7 @@ object ExternalCatalogUtils {
     }
     var plaintextEndIdx = path.indexOf('%')
     val length = path.length
-    if (plaintextEndIdx == -1 || plaintextEndIdx + 2 > length) {
+    if (plaintextEndIdx == -1 || plaintextEndIdx + 2 >= length) {
       // fast path, no %xx encoding found then return the string identity
       path
     } else {

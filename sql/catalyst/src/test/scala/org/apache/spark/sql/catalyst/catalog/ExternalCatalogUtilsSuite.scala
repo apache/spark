@@ -59,6 +59,8 @@ class ExternalCatalogUtilsSuite extends SparkFunSuite {
     assert(unescapePathName("a%2Fb") === "a/b")
     assert(unescapePathName("a%2") === "a%2")
     assert(unescapePathName("a%F ") === "a%F ")
+    assert(unescapePathName("%0") === "%0")
+    assert(unescapePathName("0%") === "0%")
     // scalastyle:off nonascii
     assert(unescapePathName("a\u00FF") === "a\u00FF")
     // scalastyle:on nonascii
