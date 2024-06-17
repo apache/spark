@@ -753,6 +753,7 @@ object LogKeys {
   case object TABLE_TYPE extends LogKey
   case object TABLE_TYPES extends LogKey
   case object TAG extends LogKey
+  case object TARGET_NUM_EXECUTOR extends LogKey
   case object TARGET_NUM_EXECUTOR_DELTA extends LogKey
   case object TARGET_PATH extends LogKey
   case object TARGET_SIZE extends LogKey
