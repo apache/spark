@@ -2019,7 +2019,7 @@ private[spark] class DAGScheduler(
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo(log"Ignoring fetch failure from ${MDC(TASK_ID, task)} of " +
+            logInfo(log"Ignoring fetch failure from ${MDC(TASK_NAME, task)} of " +
               log"${MDC(STAGE, failedStage)} attempt " +
               log"${MDC(STAGE_ATTEMPT, task.stageAttemptId)} when count " +
               log"${MDC(MAX_ATTEMPTS, config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key)} " +
@@ -2243,7 +2243,7 @@ private[spark] class DAGScheduler(
         // Always fail the current stage and retry all the tasks when a barrier task fail.
         val failedStage = stageIdToStage(task.stageId)
         if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
-          logInfo(log"Ignoring task failure from ${MDC(TASK_ID, task)} as it's from " +
+          logInfo(log"Ignoring task failure from ${MDC(TASK_NAME, task)} as it's from " +
             log"${MDC(FAILED_STAGE, failedStage)} attempt ${MDC(STAGE_ATTEMPT, task.stageAttemptId)} " +
             log"and there is a more recent attempt for that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
@@ -2629,7 +2629,7 @@ private[spark] class DAGScheduler(
   }
 
   private def handleResubmittedFailure(task: Task[_], stage: Stage): Unit = {
-              logInfo(log"Resubmitted ${MDC(TASK_ID, task)}, so marking it as still running.")
+              logInfo(log"Resubmitted ${MDC(TASK_NAME, task)}, so marking it as still running.")
     stage match {
       case sms: ShuffleMapStage =>
         sms.pendingPartitions += task.partitionId

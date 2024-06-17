@@ -731,12 +731,13 @@ private[spark] object LogKeys {
   case object TARGET_PATH extends LogKey
   case object TASK_ATTEMPT_ID extends LogKey
   case object TASK_ID extends LogKey
+  case object TASK_INDEX extends LogKey
+  case object TASK_INFO_ID extends LogKey
   case object TASK_LOCALITY extends LogKey
   case object TASK_NAME extends LogKey
   case object TASK_REQUIREMENTS extends LogKey
   case object TASK_RESOURCES extends LogKey
   case object TASK_RESOURCE_ASSIGNMENTS extends LogKey
-  case object TASK_SET_ID extends LogKey
   case object TASK_SET_MANAGER extends LogKey
   case object TASK_SET_NAME extends LogKey
   case object TASK_STATE extends LogKey
@@ -751,7 +752,6 @@ private[spark] object LogKeys {
   case object THREAD_POOL_SIZE extends LogKey
   case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object THRESHOLD extends LogKey
-  case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
