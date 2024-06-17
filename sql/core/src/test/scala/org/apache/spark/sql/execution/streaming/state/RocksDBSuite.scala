@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.nio.charset.Charset
+import java.util.concurrent.Executors
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
@@ -973,6 +976,38 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         e1._3 === e2._3 && e1._4 === e2._4)
     }
   }
+
+  testWithChangelogCheckpointingEnabled("MyRocksDBFileManager: eliminate lock contention") {
+    // Create a custom ExecutionContext
+    implicit val ec: ExecutionContext = ExecutionContext
+      .fromExecutor(Executors.newSingleThreadExecutor())
+
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(lockAcquireTimeoutMs = 10000, minDeltasForSnapshot = 0)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(0)
+      db.put("0", "0")
+      db.commit()
+
+      // Acquire lock
+      db.load(1)
+
+      // Run doMaintenance in another thread
+      val maintenanceFuture = Future {
+        db.doMaintenance()
+      }
+
+      val timeout = 5.seconds
+
+      // Ensure that maintenance task runs without being blocked by task thread
+      ThreadUtils.awaitResult(maintenanceFuture, timeout)
+
+      // Release lock
+      db.commit()
+    }
+}
 
   testWithChangelogCheckpointingEnabled(
     "RocksDBFileManager: read and write v2 changelog with multiple col families") {
