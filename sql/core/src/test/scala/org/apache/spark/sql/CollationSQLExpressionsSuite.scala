@@ -1854,7 +1854,6 @@ class CollationSQLExpressionsSuite
     })
   }
 
-<<<<<<< SPARK-48574
   test("ExtractValue expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
@@ -1871,7 +1870,9 @@ class CollationSQLExpressionsSuite
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
         checkAnswer(testQuery, Row(expectedResult))
       }
-=======
+    })
+  }
+    
   test("Lag expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
@@ -1903,7 +1904,6 @@ class CollationSQLExpressionsSuite
       val expectedResult = Seq("A1", "default", "default", "default")
       assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       checkAnswer(testQuery, expectedResult.map(Row(_)))
->>>>>>> master
     })
   }
 
