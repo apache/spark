@@ -23,7 +23,7 @@ from pyspark.testing.connectutils import have_graphviz
 
 if TYPE_CHECKING:
     if have_graphviz:
-        import graphviz # type: ignore
+        import graphviz  # type: ignore
 
 
 class ObservedMetrics(abc.ABC):
