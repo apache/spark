@@ -607,8 +607,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         case None =>
           logWarning(
             log"The state for version ${MDC(LogKeys.FILE_VERSION, startVersion)} doesn't " +
-              log"exist in loadedMaps. Reading snapshot file and delta files if needed..." +
-              log"Note that this is normal for the first batch of starting query.")
+            log"exist in loadedMaps. Reading snapshot file and delta files if needed..." +
+            log"Note that this is normal for the first batch of starting query.")
           loadedMapCacheMissCount.increment()
           readSnapshotFile(startVersion)
       }
