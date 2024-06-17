@@ -18449,7 +18449,7 @@ def aggregate(
         initial value. Name of column or expression
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
-        of the same type as ``zero``
+        of the same type as ``initialValue``
     finish : function, optional
         an optional unary function ``(x: Column) -> Column: ...``
         used to convert accumulated value.
