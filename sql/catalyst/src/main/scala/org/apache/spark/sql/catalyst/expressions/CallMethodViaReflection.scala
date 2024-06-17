@@ -1,4 +1,3 @@
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -62,11 +61,11 @@ import org.apache.spark.util.Utils
   since = "2.0.0",
   group = "misc_funcs")
 case class CallMethodViaReflection(
-                                    children: Seq[Expression],
-                                    failOnError: Boolean = true)
+      children: Seq[Expression],
+      failOnError: Boolean = true)
   extends Nondeterministic
-    with CodegenFallback
-    with QueryErrorsBase {
+  with CodegenFallback
+  with QueryErrorsBase {
 
   def this(children: Seq[Expression]) =
     this(children, true)
@@ -182,7 +181,7 @@ case class CallMethodViaReflection(
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 
   override protected def withNewChildrenInternal(
-                                                  newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
+    newChildren: IndexedSeq[Expression]): CallMethodViaReflection = copy(children = newChildren)
 }
 
 object CallMethodViaReflection {
@@ -234,13 +233,13 @@ object CallMethodViaReflection {
       } else {
         // Argument type must match. That is, either the method's argument type matches one of the
         // acceptable types defined in typeMapping, or it is a super type of the acceptable types.
-        candidateTypes.zip(argTypes).forall { case (candidateType, argType)
-          if !argType.isInstanceOf[StringType] =>
-          typeMapping(argType).exists(candidateType.isAssignableFrom)
-        case _ => true
+        candidateTypes.zip(argTypes).forall { case (candidateType, argType) =>
+          if (!argType.isInstanceOf[StringType]) {
+            typeMapping(argType).exists(candidateType.isAssignableFrom)
+          }
+          else candidateType.isAssignableFrom(classOf[String])
         }
       }
     }
   }
 }
-

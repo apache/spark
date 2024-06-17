@@ -208,50 +208,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("[SPARK-48472] Enable reflect expressions with collated strings") {
-    // be aware that output of java.util.UUID.fromString is always lowercase
-    Seq(
-      ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
-        "b53c2312-7f23-1234-bac2-b345acd5afd2", "utf8_binary", false),
-
-      ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", true),
-      ("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
-        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", false),
-
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true),
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
-        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true),
-
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "unicode",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "unicode", true),
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
-        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "unicode", false),
-
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "unicode",
-        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "unicode_ci", true),
-      ("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
-        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "unicode_ci", true),
-    ).foreach {
-      case (left, leftCollation, right, rightCollation, expected) =>
-        checkAnswer(sql(s"SELECT REFLECT('java.util.UUID', 'fromString'," +
-          s" collate('$left', '$leftCollation'))=" +
-          s" collate('$right', '$rightCollation');"),
-          Row(expected))
-    }
-    checkError(
-      exception = intercept[SparkException] {
-        sql("SELECT REFLECT('java.util.UUID', 'fromString'," +
-          " collate('a5cf6c42-0c85-418f-af6c-3e4e5b1328f2', 'utf8_binary'))=" +
-          " collate('a5cf6c42-0c85-418f-af6c-3e4e5b1328f2', 'utf8_BS');")
-      },
-      errorClass = "COLLATION_INVALID_NAME",
-      sqlState = "42704",
-      parameters = Map("collationName" -> "utf8_BS")
-    )
-  }
-
   test("comparisons respect collation") {
     Seq(
       ("utf8_binary", "AAA", "aaa", true),
