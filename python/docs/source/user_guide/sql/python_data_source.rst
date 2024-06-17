@@ -87,7 +87,7 @@ Method that needs to be implemented for a capability:
             return FakeStreamWriter(self.options)
 
 Implementing Batch Reader and Writer for Python Data Source
-------------------------------------------
+-----------------------------------------------------------
 **Implement the Reader**
 
 Define the reader logic to generate synthetic data. Use the `faker` library to populate each field in the schema.
@@ -121,6 +121,7 @@ prints the total count of rows after a successful write or the number of failed 
 
     from dataclasses import dataclass
     from typing import Iterator, List
+
     from pyspark.sql.types import Row
     from pyspark.sql.datasource import DataSource, DataSourceWriter, WriterCommitMessage
 
@@ -140,7 +141,7 @@ prints the total count of rows after a successful write or the number of failed 
             return SimpleCommitMessage(partition_id=partition_id, count=cnt)
 
         def commit(self, messages: List[SimpleCommitMessage]) -> None:
-            total_count = sum([message.count for message in messages])
+            total_count = sum(message.count for message in messages)
             print(f"Total number of rows: {total_count}")
 
         def abort(self, messages: List[SimpleCommitMessage]) -> None:
@@ -306,6 +307,8 @@ After defining your data source, it must be registered before usage.
 
     spark.dataSource.register(FakeDataSource)
 
+**Read From a Python Data Source**
+
 Read from the fake datasource with the default schema and options:
 
 .. code-block:: python
@@ -350,9 +353,9 @@ Read from the fake datasource with a different number of rows:
     # | Douglas James|2007-01-18|  46226|     Alabama|
     # +--------------+----------+-------+------------+
 
-Write to the fake datasource:
+**Write To a Python Data Source**
 
-To write data to a custom sink, make sure that you specify the `mode()` clause. Supported modes are `append` and `overwrite`.
+To write data to a custom location, make sure that you specify the `mode()` clause. Supported modes are `append` and `overwrite`.
 
 .. code-block:: python
 
