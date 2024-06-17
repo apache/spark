@@ -71,6 +71,13 @@ private[sql] class SparkConnectClient(
     stubState.responseValidator.hijackServerSideSessionIdForTesting(suffix)
   }
 
+  /**
+   * Checks if the session has received an `INVALID_HANDLE.SESSION_CHANGED` error.
+   */
+  private[sql] def hasSessionChanged: Boolean = {
+    stubState.responseValidator.hasSessionChanged
+  }
+
   private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
   }

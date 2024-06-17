@@ -30,6 +30,10 @@ class ResponseValidator extends Logging {
   // do not use server-side streaming.
   private var serverSideSessionId: Option[String] = None
 
+  // Indicates whether the server side session ID has changed. This flag being true usually means
+  // that the session is unusable and the user should establish a new connection to the server.
+  private var hasServerSideSessionIDChanged: Boolean = false
+
   // Returns the server side session ID, used to send it back to the server in the follow-up
   // requests so the server can validate it session id against the previous requests.
   def getServerSideSessionId: Option[String] = serverSideSessionId
@@ -40,6 +44,13 @@ class ResponseValidator extends Logging {
    */
   private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
     serverSideSessionId = Some(serverSideSessionId.getOrElse("") + suffix)
+  }
+
+  /**
+   * Returns true if the server side session ID has changed.
+   */
+  private[sql] def hasSessionChanged: Boolean = {
+    hasServerSideSessionIDChanged
   }
 
   def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
@@ -54,6 +65,7 @@ class ResponseValidator extends Logging {
         serverSideSessionId match {
           case Some(id) =>
             if (value != id) {
+              hasServerSideSessionIDChanged = true
               throw new IllegalStateException(
                 s"Server side session ID changed from $id to $value")
             }

@@ -972,7 +972,7 @@ object SparkSession extends Logging {
     def appName(name: String): Builder = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
-      if (client != null) {
+      if (client != null && !client.hasSessionChanged) {
         Option(new SparkSession(client, planIdGenerator))
       } else {
         None
@@ -1024,7 +1024,14 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(sessions.get(builder.configuration))
+        .getOrElse({
+          var existingSession = sessions.get(builder.configuration)
+          while (existingSession.client != null && existingSession.client.hasSessionChanged) {
+            sessions.refresh(builder.configuration)
+            existingSession = sessions.get(builder.configuration)
+          }
+          existingSession
+        })
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
