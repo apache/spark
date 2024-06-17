@@ -138,7 +138,7 @@ private[streaming] class FileBasedWriteAheadLog(
   def readAll(): JIterator[ByteBuffer] = synchronized {
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo(log"Reading from the logs:\n" +
-      log"${MDC(LogKeys.LOG_FILES, logFilesToRead.mkString("\n"))}")
+      log"${MDC(LogKeys.PATHS, logFilesToRead.mkString("\n"))}")
     def readFile(file: String): Iterator[ByteBuffer] = {
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
@@ -173,7 +173,7 @@ private[streaming] class FileBasedWriteAheadLog(
     }
     logInfo(log"Attempting to clear ${MDC(LogKeys.NUM_RECORDS_READ, oldLogFiles.size)} " +
       log"old log files in " +
-      log"${MDC(LogKeys.DIRECTORY, logDirectory)} older than " +
+      log"${MDC(LogKeys.PATH, logDirectory)} older than " +
       log"${MDC(LogKeys.THRESHOLD, threshTime)}: " +
       log"${MDC(LogKeys.FILES, oldLogFiles.map(_.path).mkString("\n"))}")
 

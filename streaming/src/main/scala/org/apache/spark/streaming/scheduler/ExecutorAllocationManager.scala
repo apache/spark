@@ -135,7 +135,7 @@ private[streaming] class ExecutorAllocationManager(
 
     if (allExecIds.nonEmpty && allExecIds.size > minNumExecutors) {
       val execIdsWithReceivers = receiverTracker.allocatedExecutors().values.flatten.toSeq
-      logInfo(log"Executors with receivers (${MDC(LogKeys.EXECUTOR_IDS,
+      logInfo(log"Executors with receivers (${MDC(LogKeys.NUM_EXECUTORS,
         execIdsWithReceivers.size)}): " +
         log"${MDC(LogKeys.EXECUTOR_IDS, execIdsWithReceivers)}")
 

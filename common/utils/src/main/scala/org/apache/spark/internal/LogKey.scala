@@ -115,7 +115,6 @@ private[spark] object LogKeys {
   case object CANCEL_FUTURE_JOBS extends LogKey
   case object CATALOG_NAME extends LogKey
   case object CATEGORICAL_FEATURES extends LogKey
-  case object CHECKPOINT_DIR extends LogKey
   case object CHECKPOINT_FILE extends LogKey
   case object CHECKPOINT_INTERVAL extends LogKey
   case object CHECKPOINT_LOCATION extends LogKey
@@ -202,7 +201,6 @@ private[spark] object LogKeys {
   case object DESTINATION_PATH extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
-  case object DIRECTORY extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
   case object DRIVER_ID extends LogKey
   case object DRIVER_MEMORY_SIZE extends LogKey
@@ -254,7 +252,6 @@ private[spark] object LogKeys {
   case object EXPR extends LogKey
   case object EXPR_TERMS extends LogKey
   case object EXTENDED_EXPLAIN_GENERATOR extends LogKey
-  case object FAILED_ARTIFACTS extends LogKey
   case object FAILED_STAGE extends LogKey
   case object FAILED_STAGE_NAME extends LogKey
   case object FAILURES extends LogKey
@@ -362,7 +359,6 @@ private[spark] object LogKeys {
   case object LOCATION extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey
   case object LOGICAL_PLAN_LEAVES extends LogKey
-  case object LOG_FILES extends LogKey
   case object LOG_ID extends LogKey
   case object LOG_KEY_FILE extends LogKey
   case object LOG_LEVEL extends LogKey
@@ -380,7 +376,6 @@ private[spark] object LogKeys {
   case object MAX_EXECUTOR_FAILURES extends LogKey
   case object MAX_FILE_VERSION extends LogKey
   case object MAX_JVM_METHOD_PARAMS_LENGTH extends LogKey
-  case object MAX_LINES extends LogKey
   case object MAX_MEMORY_SIZE extends LogKey
   case object MAX_METHOD_CODE_SIZE extends LogKey
   case object MAX_NUM_BINS extends LogKey
@@ -735,6 +730,7 @@ private[spark] object LogKeys {
   case object STORAGE_LEVEL_REPLICATION extends LogKey
   case object STORAGE_MEMORY_SIZE extends LogKey
   case object STORE_ID extends LogKey
+  case object STREAMING_CONTEXT extends LogKey
   case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
   case object STREAMING_DATA_SOURCE_NAME extends LogKey
   case object STREAMING_OFFSETS_END extends LogKey
@@ -781,12 +777,10 @@ private[spark] object LogKeys {
   case object THREAD_POOL_WAIT_QUEUE_SIZE extends LogKey
   case object THRESHOLD extends LogKey
   case object THRESH_TIME extends LogKey
-  case object TID extends LogKey
   case object TIME extends LogKey
   case object TIMEOUT extends LogKey
   case object TIMER extends LogKey
   case object TIMESTAMP extends LogKey
-  case object TIME_DURATION extends LogKey
   case object TIME_UNITS extends LogKey
   case object TIP extends LogKey
   case object TOKEN extends LogKey

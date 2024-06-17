@@ -226,7 +226,7 @@ private[streaming] class ReceivedBlockTracker(
 
     writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(log"Recovering from write ahead logs in " +
-        log"${MDC(LogKeys.CHECKPOINT_DIR, checkpointDirOption.get)}")
+        log"${MDC(LogKeys.PATH, checkpointDirOption.get)}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
         logInfo(log"Recovering record ${MDC(LogKeys.BYTE_BUFFER, byteBuffer)}")
         Utils.deserialize[ReceivedBlockTrackerLogEvent](

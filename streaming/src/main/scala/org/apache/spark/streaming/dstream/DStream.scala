@@ -280,7 +280,7 @@ abstract class DStream[T: ClassTag] (
 
     logInfo(log"Slide time = ${MDC(LogKeys.SLIDE_DURATION, slideDuration)}")
     logInfo(log"Storage level = ${MDC(LogKeys.STORAGE_LEVEL, storageLevel.description)}")
-      logInfo(log"Checkpoint interval = ${MDC(LogKeys.CHECKPOINT_INTERVAL, checkpointDuration)}")
+    logInfo(log"Checkpoint interval = ${MDC(LogKeys.CHECKPOINT_INTERVAL, checkpointDuration)}")
     logInfo(log"Remember interval = ${MDC(LogKeys.INTERVAL, rememberDuration)}")
     logInfo(log"Initialized and validated ${MDC(LogKeys.DSTREAM, this)}")
   }
@@ -290,7 +290,7 @@ abstract class DStream[T: ClassTag] (
       throw new SparkException(s"Context must not be set again for $this")
     }
     ssc = s
-    logInfo(log"Set context for ${MDC(LogKeys.CONTEXT, this)}")
+    logInfo(log"Set context for ${MDC(LogKeys.STREAMING_CONTEXT, this)}")
     dependencies.foreach(_.setContext(ssc))
   }
 
@@ -320,7 +320,7 @@ abstract class DStream[T: ClassTag] (
       logInfo(log"Time ${MDC(LogKeys.TIME, time)} is invalid as zeroTime is " +
         log"${MDC(LogKeys.ZERO_TIME, zeroTime)}, slideDuration is " +
         log"${MDC(LogKeys.SLIDE_DURATION, slideDuration)} and difference is " +
-        log"${MDC(LogKeys.TIME_DURATION, time - zeroTime)}")
+        log"${MDC(LogKeys.DURATION, time - zeroTime)}")
       false
     } else {
       logDebug(s"Time $time is valid")
