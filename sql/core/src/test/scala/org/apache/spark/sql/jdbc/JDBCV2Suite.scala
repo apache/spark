@@ -377,10 +377,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[AnalysisException] {
         df.collect()
       },
-      errorClass = "INVALID_PARAMETER_VALUE.NULL",
+      errorClass = "NULL_DATA_SOURCE_OPTION",
       parameters = Map(
-        "parameter" -> "`pushDownOffset`",
-        "functionName" -> "`JDBC Options`")
+        "option" -> "pushDownOffset")
     )
   }
 

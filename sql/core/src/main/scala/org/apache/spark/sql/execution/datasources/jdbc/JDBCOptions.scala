@@ -56,7 +56,7 @@ class JDBCOptions(
       // If an option value is `null`, throw a user-friendly error. Keys here cannot be null, as
       // scala's implementation of Maps prohibits null keys.
       if (v == null) {
-        throw QueryCompilationErrors.nullArgumentError("JDBC Options", k)
+        throw QueryCompilationErrors.nullDataSourceOption(k)
       }
       properties.setProperty(k, v)
     }

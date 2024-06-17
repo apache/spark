@@ -2597,6 +2597,12 @@
     },
     "sqlState" : "22023"
   },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "JDBC Option value <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
+  },
   "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
     "message" : [
       "Cannot use <type> for partition column."
