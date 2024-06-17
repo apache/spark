@@ -697,6 +697,7 @@ private[spark] object LogKeys {
   case object SHUFFLE_SERVICE_NAME extends LogKey
   case object SIGMAS_LENGTH extends LogKey
   case object SIGNAL extends LogKey
+  case object SINK extends LogKey
   case object SIZE extends LogKey
   case object SLEEP_TIME extends LogKey
   case object SLIDE_DURATION extends LogKey
