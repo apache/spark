@@ -58,14 +58,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     # Lock to manage the pool
     _lock: ClassVar[RLock] = RLock()
-    _release_thread_pool_instance = None
+    _release_thread_pool_instance: Optional[ThreadPool] = None
 
     @classmethod  # type: ignore[misc]
     @property
     def _release_thread_pool(cls) -> ThreadPool:
         # Perform a first check outside the critical path.
         if not cls._release_thread_pool_instance is None:
-          return cls._release_thread_pool_instance
+            return cls._release_thread_pool_instance
         with cls._lock:
             if cls._release_thread_pool_instance is None:
                 cls._release_thread_pool_instance = ThreadPool(
