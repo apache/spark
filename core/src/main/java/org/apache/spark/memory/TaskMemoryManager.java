@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
+import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.util.Arrays;
@@ -242,7 +243,7 @@ public class TaskMemoryManager {
         cList.remove(idx);
         return 0;
       }
-    } catch (ClosedByInterruptException e) {
+    } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
       logger.error("error while calling spill() on " + consumerToSpill, e);
       throw new RuntimeException(e.getMessage());
