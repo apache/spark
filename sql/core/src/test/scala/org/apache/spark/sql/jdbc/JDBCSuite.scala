@@ -1255,6 +1255,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val password = "testPass"
     val tableName = "tab1"
     val dbTable = "TEST.PEOPLE"
+    val testOpt = "hourly"
     withTable(tableName) {
       sql(
         s"""
@@ -1264,7 +1265,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
            | url '$urlWithUserAndPass',
            | dbtable '$dbTable',
            | user '$userName',
-           | password '$password')
+           | password '$password',
+           | testOpt '$testOpt')
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
@@ -1272,6 +1274,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
         assert(r.toString.contains(userName))
+        assert(r.toString.contains(userName))
+        assert(r.toString.contains(testOpt))
       }
 
       sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>

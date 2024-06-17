@@ -3293,7 +3293,7 @@ object SQLConf {
       s"configuration defined by ${SECRET_REDACTION_PATTERN.key}.")
     .version("2.2.2")
     .regexConf
-    .createWithDefault("(?i)url".r)
+    .createWithDefault("(?i)^url$".r)
 
   val SQL_STRING_REDACTION_PATTERN =
     buildConf("spark.sql.redaction.string.regex")
