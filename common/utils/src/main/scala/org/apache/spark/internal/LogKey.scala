@@ -362,7 +362,6 @@ private[spark] object LogKeys {
   case object LOCATION extends LogKey
   case object LOGICAL_PLAN_COLUMNS extends LogKey
   case object LOGICAL_PLAN_LEAVES extends LogKey
-  case object LOG_DIRECTORY extends LogKey
   case object LOG_FILES extends LogKey
   case object LOG_ID extends LogKey
   case object LOG_KEY_FILE extends LogKey

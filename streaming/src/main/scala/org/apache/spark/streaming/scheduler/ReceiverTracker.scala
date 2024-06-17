@@ -627,7 +627,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           if (!shouldStartReceiver) {
             onReceiverJobFinish(receiverId)
           } else {
-            logInfo(log"Restarting Receiver ${MDC(LogKeys.RECEIVER_ID, receiverId)}")
+            logInfo(log"Restarting Receiver ${MDC(LogKeys.STREAM_ID, receiverId)}")
             self.send(RestartReceiver(receiver))
           }
         case Failure(e) =>
@@ -635,11 +635,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             onReceiverJobFinish(receiverId)
           } else {
             logError("Receiver has been stopped. Try to restart it.", e)
-            logInfo(log"Restarting Receiver ${MDC(LogKeys.RECEIVER_ID, receiverId)}")
+            logInfo(log"Restarting Receiver ${MDC(LogKeys.STREAM_ID, receiverId)}")
             self.send(RestartReceiver(receiver))
           }
       }(ThreadUtils.sameThread)
-      logInfo(log"Receiver ${MDC(LogKeys.RECEIVER_ID, receiver.streamId)} started")
+      logInfo(log"Receiver ${MDC(LogKeys.STREAM_ID, receiver.streamId)} started")
     }
 
     override def onStop(): Unit = {

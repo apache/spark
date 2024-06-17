@@ -188,7 +188,7 @@ private[streaming] class FileBasedWriteAheadLog(
           logWarning(log"Error clearing write ahead log file " +
             log"${MDC(WRITE_AHEAD_LOG_INFO, walInfo)}", ex)
       }
-      logInfo(log"Cleared log files in ${MDC(LogKeys.LOG_DIRECTORY, logDirectory)} older than " +
+      logInfo(log"Cleared log files in ${MDC(LogKeys.PATH, logDirectory)} older than " +
         log"${MDC(LogKeys.THRESH_TIME, threshTime)}")
     }
     oldLogFiles.foreach { logInfo =>
@@ -259,7 +259,7 @@ private[streaming] class FileBasedWriteAheadLog(
         pastLogs ++= logFileInfo
         logInfo(log"Recovered ${MDC(LogKeys.NUM_FILES, logFileInfo.size)} " +
           log"write ahead log files from " +
-          log"${MDC(LogKeys.LOG_DIRECTORY, logDirectory)}")
+          log"${MDC(LogKeys.PATH, logDirectory)}")
         logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
       }
     } catch {
