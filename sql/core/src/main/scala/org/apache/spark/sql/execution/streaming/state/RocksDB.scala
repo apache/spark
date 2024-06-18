@@ -201,7 +201,6 @@ class RocksDB(
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
           lastSnapshotVersion = 0L
-          latestSnapshot = None
         }
         openDB()
 

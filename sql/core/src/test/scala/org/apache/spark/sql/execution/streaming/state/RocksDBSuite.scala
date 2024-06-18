@@ -977,7 +977,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("MyRocksDBFileManager: eliminate lock contention") {
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: eliminate lock contention") {
     // Create a custom ExecutionContext
     implicit val ec: ExecutionContext = ExecutionContext
       .fromExecutor(Executors.newSingleThreadExecutor())
@@ -993,6 +993,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
       // Acquire lock
       db.load(1)
+      db.put("1", "1")
 
       // Run doMaintenance in another thread
       val maintenanceFuture = Future {
@@ -2036,6 +2037,48 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     // reload version 2 - should succeed
     withDB(remoteDir, version = 2, conf = conf) { db =>
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDB: eliminate lastSnapshot race condition") {
+    // Ensure commit doesn't modify the latestSnapshot that doMaintenance will upload
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.commit()
+
+        // load previous version
+        db.load(0)
+        db.put("a", "1")
+
+        // upload version 1 snapshot created above
+        // lastSnapshot is a newer snapshot when old version
+        // is loaded so it is not discarded
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        db.commit() // create snapshot again
+
+        // load version 1 - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+
+        // upload recently created snapshot
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        // load version 1 again - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+      }
     }
   }
 
