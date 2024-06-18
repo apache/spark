@@ -21,15 +21,40 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
+/**
+ * Trait for all SQL scripting execution nodes used during interpretation phase.
+ */
 sealed trait CompoundStatementExec extends Logging {
+  /**
+   * Whether the statement originates from the script or it is created during the interpretation.
+   * Example: DropVariable statements are automatically created at the end of each compound.
+   */
   val isInternal: Boolean = false
+
+  /**
+   * Reset execution of the current node.
+   */
   def reset(): Unit
 }
 
+/**
+ * Leaf node in the execution tree.
+ */
 trait LeafStatementExec extends CompoundStatementExec
 
+/**
+ * Non-leaf node in the execution tree.
+ * It is an iterator over executable child nodes.
+ */
 trait NonLeafStatementExec extends CompoundStatementExec with Iterator[CompoundStatementExec]
 
+/**
+ * Executable node for SingleStatement.
+ * @param parsedPlan Logical plan of the parsed statement.
+ * @param origin Origin descriptor for the statement.
+ * @param isInternal Whether the statement originates from the script
+ *                   or it is created during the interpretation.
+ */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
@@ -37,10 +62,16 @@ class SingleStatementExec(
   extends LeafStatementExec
   with WithOrigin {
 
+  /**
+   * Whether this statement had to be executed during the interpretation phase.
+   * Example: Statements in conditions of If/Else, While, etc.
+   */
   var consumed = false
 
+  /** @inheritdoc */
   override def reset(): Unit = consumed = false
 
+  /** Get the SQL query text corresponding to this statement. */
   def getText(sqlScriptText: String): String = {
     if (origin.startIndex.isEmpty || origin.stopIndex.isEmpty) {
       return null
@@ -49,6 +80,11 @@ class SingleStatementExec(
   }
 }
 
+/**
+ * Abstract class for all statements that contain nested statements.
+ * Implements recursive iterator logic over all child execution nodes.
+ * @param collection Collection of child execution nodes.
+ */
 abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
   extends NonLeafStatementExec {
 
@@ -90,5 +126,9 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
   }
 }
 
+/**
+ * Executable node for CompoundBody.
+ * @param statements Executable nodes for nested statements within the CompoundBody.
+ */
 class CompoundBodyExec(statements: Seq[CompoundStatementExec])
   extends CompoundNestedStatementIteratorExec(statements)

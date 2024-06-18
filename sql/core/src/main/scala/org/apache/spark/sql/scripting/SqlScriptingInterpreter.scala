@@ -22,21 +22,44 @@ import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
+/**
+ * Trait for SQL Scripting interpreters.
+ */
 trait ProceduralLanguageInterpreter {
+  /**
+   * Build execution plan and return statements that need to be executed,
+   *  wrapped in the execution node.
+   * @param compound CompoundBody for which to build the plan.
+   * @return Iterator through collection of statements to be executed.
+   */
   def buildExecutionPlan(compound: CompoundBody) : Iterator[CompoundStatementExec]
 }
 
+/**
+ * Concrete implementation of the interpreter for SQL scripting.
+ */
 case class SqlScriptingInterpreter() extends ProceduralLanguageInterpreter {
+  /** @inheritdoc */
   override def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
   }
 
+  /**
+   * Fetch the name of the Create Variable plan.
+   * @param plan Plan to fetch the name from.
+   * @return Name of the variable.
+   */
   private def getDeclareVarNameFromPlan(plan: LogicalPlan): Option[UnresolvedIdentifier] =
     plan match {
       case CreateVariable(name: UnresolvedIdentifier, _, _) => Some(name)
       case _ => None
     }
 
+  /**
+   * Transform the parsed tree to the executable node.
+   * @param node Root node of the parsed tree.
+   * @return Executable statement.
+   */
   private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
