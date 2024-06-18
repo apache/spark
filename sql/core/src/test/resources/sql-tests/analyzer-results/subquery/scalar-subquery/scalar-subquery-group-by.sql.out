@@ -78,6 +78,38 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x] AS scalarsubquery(x1)#xL]
+:  +- Aggregate [y2#x], [count(1) AS count(1)#xL]
+:     +- Filter ((outer(x1#x) = y1#x) AND (y2#x = 1))
+:        +- SubqueryAlias y
+:           +- View (`y`, [y1#x, y2#x])
+:              +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) from x
+-- !query analysis
+Project [x1#x, x2#x, scalar-subquery#x [x1#x && x1#x] AS scalarsubquery(x1, x1)#xL]
+:  +- Aggregate [y2#x], [count(1) AS count(1)#xL]
+:     +- Filter ((outer(x1#x) = y1#x) AND (y2#x = (outer(x1#x) + 1)))
+:        +- SubqueryAlias y
+:           +- View (`y`, [y1#x, y2#x])
+:              +- Project [cast(col1#x as int) AS y1#x, cast(col2#x as int) AS y2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias x
+   +- View (`x`, [x1#x, x2#x])
+      +- Project [cast(col1#x as int) AS x1#x, cast(col2#x as int) AS x2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -113,26 +145,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 11,
     "stopIndex" : 65,
     "fragment" : "(select count(*) from y where y1 + y2 = x1 group by y1)"
-  } ]
-}
-
-
--- !query
-select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "value" : "y2"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 11,
-    "stopIndex" : 71,
-    "fragment" : "(select count(*) from y where x1 = y1 and y2 = 1 group by y2)"
   } ]
 }
 
