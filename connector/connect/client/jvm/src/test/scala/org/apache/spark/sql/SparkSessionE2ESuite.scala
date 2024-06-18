@@ -383,28 +383,44 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     }
   }
 
-  test("get or create") {
+  test("get or create after session changed") {
     val remote = s"sc://localhost:$serverPort"
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
     val session1 = SparkSession
       .builder()
       .remote(remote)
       .getOrCreate()
+
+    assert(session1 eq SparkSession.getActiveSession.get)
+    assert(session1 eq SparkSession.getDefaultSession.get)
     assert(session1.range(3).collect().length == 3)
 
     session1.client.hijackServerSideSessionIdForTesting("-testing")
 
     try {
-      session1.range(3).collect()
+      session1.range(3).analyze
       fail("unreachable")
     } catch {
       case t: Throwable => assert(t.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
     }
 
+    assert(SparkSession.getActiveSession.isEmpty)
+    assert(SparkSession.getDefaultSession.isEmpty)
+
     val session2 = SparkSession
       .builder()
       .remote(remote)
       .getOrCreate()
+
     assert(session1 ne session2)
+    assert(!session2.client.hasSessionChanged)
+    assert(session2 eq SparkSession.getActiveSession.get)
+    assert(session2 eq SparkSession.getDefaultSession.get)
     assert(session2.range(3).collect().length == 3)
+
+    session2.client.hijackServerSideSessionIdForTesting("")
   }
+
 }

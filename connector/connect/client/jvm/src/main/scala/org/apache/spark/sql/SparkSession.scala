@@ -829,11 +829,21 @@ object SparkSession extends Logging {
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet.
+   * they are not set yet or the associated [[SparkConnectClient]] is unusable.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    defaultSession.compareAndSet(null, session)
-    if (getActiveSession.isEmpty) {
+    var oldDefault = defaultSession.getAcquire
+    var swapped = false
+    while ((oldDefault == null || oldDefault.client.hasSessionChanged) && !swapped) {
+      val currentDefault = defaultSession.compareAndExchangeRelease(oldDefault, session)
+      if (currentDefault == oldDefault) {
+        swapped = true
+      } else {
+        oldDefault = currentDefault
+      }
+    }
+
+    if (getActiveSession.isEmpty || getActiveSession.get.client.hasSessionChanged) {
       setActiveSession(session)
     }
   }
@@ -1043,7 +1053,8 @@ object SparkSession extends Logging {
    *
    * @since 3.5.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get())
+  def getDefaultSession: Option[SparkSession] =
+    Option(defaultSession.get()).filterNot(_.client.hasSessionChanged)
 
   /**
    * Sets the default SparkSession.
@@ -1068,7 +1079,8 @@ object SparkSession extends Logging {
    *
    * @since 3.5.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get())
+  def getActiveSession: Option[SparkSession] =
+    Option(activeThreadSession.get()).filterNot(_.client.hasSessionChanged)
 
   /**
    * Changes the SparkSession that will be returned in this thread and its children when

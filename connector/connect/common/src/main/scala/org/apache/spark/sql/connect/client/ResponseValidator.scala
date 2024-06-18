@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client
 
 import com.google.protobuf.GeneratedMessageV3
+import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
@@ -43,6 +44,7 @@ class ResponseValidator extends Logging {
    * sure that server is validating the session ID.
    */
   private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
+    hasServerSideSessionIDChanged = false // Reset the flag as invoking it implies a new test.
     serverSideSessionId = Some(serverSideSessionId.getOrElse("") + suffix)
   }
 
@@ -54,7 +56,15 @@ class ResponseValidator extends Logging {
   }
 
   def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
-    val response = fn
+    val response = try {
+      fn
+    } catch {
+      case e: StatusRuntimeException
+        if e.getStatus.getCode == Status.Code.INTERNAL &&
+          e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]") =>
+        hasServerSideSessionIDChanged = true
+        throw e
+    }
     val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
     // If the field does not exist, we ignore it. New / Old message might not contain it and this
     // behavior allows us to be compatible.
