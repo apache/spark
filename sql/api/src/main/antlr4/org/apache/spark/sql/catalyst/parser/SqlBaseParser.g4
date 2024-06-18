@@ -42,6 +42,28 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean double_quoted_identifiers = false;
 }
 
+compoundOrSingleStatement
+    : singleStatement
+    | singleCompoundStatement
+    ;
+
+singleCompoundStatement
+    : beginEndCompoundBlock SEMICOLON? EOF
+    ;
+
+beginEndCompoundBlock
+    : BEGIN compoundBody END
+    ;
+
+compoundBody
+    : (compoundStatements+=compoundStatement SEMICOLON)*
+    ;
+
+compoundStatement
+    : statement
+    | beginEndCompoundBlock
+    ;
+
 singleStatement
     : statement SEMICOLON* EOF
     ;
@@ -1360,6 +1382,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY
@@ -1662,6 +1685,7 @@ nonReserved
     | ASC
     | AT
     | AUTHORIZATION
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY
