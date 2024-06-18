@@ -4850,6 +4850,18 @@
     ],
     "sqlState" : "42K0E"
   },
+  "UPSERT_KEY_COLUMNS_REQUIRED" : {
+    "message" : [
+      "Upsert requires key columns.",
+    "sqlState" : "42703"
+    ]
+  },
+  "UPSERT_NOT_ALLOWED" : {
+    "message" : [
+      "Upsert is not allowed for table <table>: <reason>."
+    ],
+    "sqlState" : "0A000"
+  },
   "USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
