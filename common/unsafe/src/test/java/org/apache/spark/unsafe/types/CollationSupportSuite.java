@@ -135,7 +135,7 @@ public class CollationSupportSuite {
       Boolean useCodePoints) {
     if (useCodePoints) {
       assertEquals(expected.toString(),
-        CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
+        CollationAwareUTF8String.lowerCaseCodePoints(target));
     } else {
       assertEquals(expected, target.toLowerCase());
     }
