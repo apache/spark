@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
@@ -2057,11 +2057,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("UTF8String validation") {
     def isValidUTF8(str: Any, expected: Any): Unit = {
       val input = Literal.create(str, StringType)
-      val isValidUtf8Expr = StaticInvoke(
-        classOf[UTF8String],
-        BooleanType,
-        "isValid",
-        Seq(input))
+      val isValidUtf8Expr = Invoke(input, "isValid", BooleanType)
       checkEvaluation(isValidUtf8Expr, expected)
     }
     isValidUTF8(null, null)
@@ -2080,11 +2076,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     def makeValidUTF8(str: Any, expected: String): Unit = {
       val input = Literal.create(str, StringType)
-      val makeValidUtf8Expr = StaticInvoke(
-        classOf[UTF8String],
-        SQLConf.get.defaultStringType,
-        "makeValid",
-        Seq(input))
+      val makeValidUtf8Expr = Invoke(input, "makeValid", SQLConf.get.defaultStringType)
       checkEvaluation(makeValidUtf8Expr, expected)
     }
     makeValidUTF8(null, null)
