@@ -153,6 +153,24 @@ def _capture_call_site(
     in the user code that led to the error.
     """
     stack = list(reversed(inspect.stack()))
+
+    # We try import here since IPython is not a required dependency
+    try:
+        from IPython import get_ipython
+
+        if get_ipython():
+            import pyspark
+
+            # Filtering out PySpark code and keeping user code only
+            pyspark_root = os.path.dirname(pyspark.__file__)
+            stack = [
+                frame_info
+                for frame_info in inspect.stack()
+                if pyspark_root not in frame_info.filename
+            ]
+    except ImportError:
+        pass
+
     depth = int(
         spark_session.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
     )
