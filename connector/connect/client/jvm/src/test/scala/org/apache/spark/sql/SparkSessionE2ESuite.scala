@@ -419,8 +419,6 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     assert(session2 eq SparkSession.getActiveSession.get)
     assert(session2 eq SparkSession.getDefaultSession.get)
     assert(session2.range(3).collect().length == 3)
-
-    session2.client.hijackServerSideSessionIdForTesting("")
   }
 
 }

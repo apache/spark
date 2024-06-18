@@ -44,7 +44,6 @@ class ResponseValidator extends Logging {
    * sure that server is validating the session ID.
    */
   private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
-    hasServerSideSessionIDChanged = false // Reset the flag as invoking it implies a new test.
     serverSideSessionId = Some(serverSideSessionId.getOrElse("") + suffix)
   }
 
