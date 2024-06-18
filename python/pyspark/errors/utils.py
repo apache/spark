@@ -153,29 +153,37 @@ def _capture_call_site(
     in the user code that led to the error.
     """
     stack = list(reversed(inspect.stack()))
+    ipython = None
 
     # We try import here since IPython is not a required dependency
     try:
         from IPython import get_ipython
 
-        if get_ipython():
-            import pyspark
-
-            # Filtering out PySpark code and keeping user code only
-            pyspark_root = os.path.dirname(pyspark.__file__)
-            stack = [
-                frame_info
-                for frame_info in inspect.stack()
-                if pyspark_root not in frame_info.filename
-            ]
+        ipython = get_ipython()
     except ImportError:
         pass
+
+    if ipython:
+        import pyspark
+
+        # Filtering out PySpark code and keeping user code only
+        pyspark_root = os.path.dirname(pyspark.__file__)
+        stack = [
+            frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
+        ]
 
     depth = int(
         spark_session.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
     )
     selected_frames = stack[:depth]
-    call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+
+    # Identifying the cell is useful when the error is generated from IPython Notebook
+    if ipython:
+        call_sites = [
+            f"line {frame.lineno} in cell [{ipython.execution_count}]" for frame in selected_frames
+        ]
+    else:
+        call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
     call_sites_str = "\n".join(call_sites)
 
     pyspark_origin.set(fragment, call_sites_str)
