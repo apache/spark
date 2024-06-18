@@ -961,7 +961,7 @@ class AdaptiveQueryExecSuite
       spark.range(10).toDF("col1").createTempView("t1")
       spark.range(5).coalesce(2).toDF("col2").createTempView("t2")
       spark.range(15).toDF("col3").filter(Symbol("col3") >= 2).createTempView("t3")
-      sql("SELECT * FROM (SELECT /*+ BROADCAST(t2) */ * FROM t1 " +
+      sql("SELECT /*+ BROADCAST(t3) */ * FROM (SELECT /*+ BROADCAST(t2) */ * FROM t1 " +
         "INNER JOIN t2 ON t1.col1 = t2.col2) t JOIN t3 ON t.col1 = t3.col3;")
     }
     withTempView("t1", "t2", "t3") {
