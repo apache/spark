@@ -1036,7 +1036,7 @@ and one should be configured with:
   spark.shuffle.service.port = <other value>
 ```
 
-# Configuring different JDK for Spark Applications
+# Configuring different JDKs for Spark Applications
 
 In some cases it may be desirable to use a different JDK from YARN node manager to run Spark applications,
 this can be achieved by setting the `JAVA_HOME` environment variable for YARN containers and the `spark-submit`
