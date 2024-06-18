@@ -474,8 +474,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
 
     var (funInfos, toSkip) = extractRelevantExpressions()
     toSkip = toSkip ++ List(
-      // Problem caught with other tests already
-      "map_from_arrays",
       // These expressions are not called as functions
       "lead",
       "nth_value",
@@ -600,136 +598,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     }
   }
 
-  test("SPARK-48280: Expression Walker for codeGen generation with photonization") {
-
-    var (funInfos, toSkip) = extractRelevantExpressions()
-    toSkip = toSkip ++ List(
-      // Problem caught with other tests already
-      "map_from_arrays",
-      // These expressions are not called as functions
-      "lead",
-      "nth_value",
-      "session_window",
-      // Unexpected to fail
-      "to_xml"
-    )
-    for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      val cl = Utils.classForName(f.getClassName)
-      val headConstructor = cl.getConstructors.head
-      val params = headConstructor.getParameters.map(p => p.getType)
-      val args = generateData(params.toSeq, Utf8Binary)
-      val expr = headConstructor.newInstance(args: _*).asInstanceOf[ExpectsInputTypes]
-      val inputTypes = expr.inputTypes
-
-      withTable("tbl", "tbl_lcase") {
-        sql("CREATE TABLE tbl (" +
-          inputTypes.zipWithIndex
-            .map(it => "col" +
-              it._2.toString + " " +
-              generateInputTypeAsStrings(it._1, Utf8Binary)).mkString(", ") +
-          ") USING PARQUET")
-        sql("INSERT INTO tbl VALUES (" +
-          inputTypes.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
-          ")")
-
-        sql("CREATE TABLE tbl_lcase (" +
-          inputTypes.zipWithIndex
-            .map(it => "col" +
-              it._2.toString + " " +
-              generateInputTypeAsStrings(it._1, Utf8BinaryLcase)).mkString(", ") +
-          ") USING PARQUET")
-        sql("INSERT INTO tbl_lcase VALUES (" +
-          inputTypes.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
-          ")")
-
-        val utf8BinaryResult = try {
-          if (expr.isInstanceOf[BinaryComparison]) {
-            sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl")
-          } else {
-            if (inputTypes.size == 1) {
-              sql("SELECT " + f.getName + "(col0) FROM tbl")
-            }
-            else {
-              sql("SELECT " + f.getName + "(col0, " +
-                inputTypes.tail.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
-                ") FROM tbl")
-            }
-          }.getRows(1, 0)
-          None
-        } catch {
-          case e: Throwable => Some(e)
-        }
-        val utf8BinaryLcaseResult = try {
-          if (expr.isInstanceOf[BinaryComparison]) {
-            sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl_lcase")
-          } else {
-            if (inputTypes.size == 1) {
-              sql("SELECT " + f.getName + "(col0) FROM tbl_lcase")
-            }
-            else {
-              sql("SELECT " + f.getName + "(col0, " +
-                inputTypes.tail.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
-                ") FROM tbl_lcase")
-            }
-          }.getRows(1, 0)
-          None
-        } catch {
-          case e: Throwable => Some(e)
-        }
-
-        assert(utf8BinaryResult.isDefined === utf8BinaryLcaseResult.isDefined)
-
-        if (utf8BinaryResult.isEmpty) {
-          val utf8BinaryResult =
-            if (expr.isInstanceOf[BinaryComparison]) {
-              sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl")
-            } else {
-              if (inputTypes.size == 1) {
-                sql("SELECT " + f.getName + "(col0) FROM tbl")
-              }
-              else {
-                sql("SELECT " + f.getName + "(col0, " +
-                  inputTypes.tail.map(generateInputAsString(_, Utf8Binary)).mkString(", ") +
-                  ") FROM tbl")
-              }
-            }
-          val utf8BinaryLcaseResult =
-            if (expr.isInstanceOf[BinaryComparison]) {
-              sql("SELECT " + "(col0 " + f.getName + "col1) FROM tbl_lcase")
-            } else {
-              if (inputTypes.size == 1) {
-                sql("SELECT " + f.getName + "(col0) FROM tbl_lcase")
-              }
-              else {
-                sql("SELECT " + f.getName + "(col0, " +
-                  inputTypes.tail.map(generateInputAsString(_, Utf8BinaryLcase)).mkString(", ") +
-                  ") FROM tbl_lcase")
-              }
-            }
-
-          val dt = utf8BinaryResult.schema.fields.head.dataType
-
-          dt match {
-            case st if utf8BinaryResult != null && utf8BinaryLcaseResult != null &&
-              hasStringType(st) =>
-              // scalastyle:off caselocale
-              assert(utf8BinaryResult.getRows(1, 0).map(_.map(_.toLowerCase)) ===
-                utf8BinaryLcaseResult.getRows(1, 0).map(_.map(_.toLowerCase)))
-            // scalastyle:on caselocale
-            case _ =>
-              // scalastyle:off caselocale
-              assert(utf8BinaryResult.getRows(1, 0)(1) ===
-                utf8BinaryLcaseResult.getRows(1, 0)(1))
-            // scalastyle:on caselocale
-          }
-        }
-        else {
-          assert(utf8BinaryResult.get.getClass == utf8BinaryResult.get.getClass)
-        }
-      }
-    }
-  }
-
   test("SPARK-48280: Expression Walker for SQL query examples") {
     val funInfos = spark.sessionState.functionRegistry.listFunction().map { funcId =>
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -760,15 +628,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "uuid",
       "shuffle",
       // other functions which are not yet supported
-      "date_sub",
-      "date_add",
-      "dateadd",
-      "window",
-      "window_time",
-      "session_window",
       "reflect",
       "try_reflect",
-      "levenshtein",
       "java_method"
     )
 
