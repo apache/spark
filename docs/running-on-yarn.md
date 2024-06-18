@@ -1063,6 +1063,6 @@ then submit a Spark application:
     $ ./bin/spark-submit --class path.to.your.Class \
         --master yarn \
         --archives path/to/openjdk-21.tar.gz \
-        --conf spark.yarn.appMasterEnv.JAVA_HOME=./openjdk-21 \
-        --conf spark.executorEnv.JAVA_HOME=./openjdk-21 \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
+        --conf spark.executorEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
         <app jar> [app options]
