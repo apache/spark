@@ -32,7 +32,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
-from pyspark.sql.datasource import DataSource, InputPartition
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
@@ -108,7 +108,7 @@ def records_to_arrow_batches(
                 # Check if the names are the same as the schema.
                 if set(result.__fields__) != col_name_set:
                     raise PySparkRuntimeError(
-                        error_class="PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH",
+                        error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
                         message_parameters={
                             "expected": str(column_names),
                             "actual": str(result.__fields__),
@@ -187,7 +187,7 @@ def main(infile: IO, outfile: IO) -> None:
         schema = _parse_datatype_json_string(schema_json)
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "an output schema of type 'StructType'",
                     "actual": f"'{type(schema).__name__}'",
@@ -204,11 +204,19 @@ def main(infile: IO, outfile: IO) -> None:
         is_streaming = read_bool(infile)
 
         # Instantiate data source reader.
-        reader = (
-            _streamReader(data_source, schema)
-            if is_streaming
-            else data_source.reader(schema=schema)
-        )
+        if is_streaming:
+            reader = _streamReader(data_source, schema)
+        else:
+            reader = data_source.reader(schema=schema)
+            # Validate the reader.
+            if not isinstance(reader, DataSourceReader):
+                raise PySparkAssertionError(
+                    error_class="DATA_SOURCE_TYPE_MISMATCH",
+                    message_parameters={
+                        "expected": "an instance of DataSourceReader",
+                        "actual": f"'{type(reader).__name__}'",
+                    },
+                )
 
         # Create input converter.
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
