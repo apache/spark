@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
@@ -2055,44 +2054,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   // scalastyle:off nonascii
   test("UTF8String validation") {
-    def isValidUTF8(str: Any, expected: Any): Unit = {
-      val input = Literal.create(str, StringType)
-      val isValidUtf8Expr = Invoke(input, "isValid", BooleanType)
-      checkEvaluation(isValidUtf8Expr, expected)
-    }
-    isValidUTF8(null, null)
-    isValidUTF8("", true)
-    isValidUTF8("aa", true)
-    isValidUTF8("\u0061", true)
-    isValidUTF8(UTF8String.EMPTY_UTF8, true)
-    isValidUTF8(UTF8String.fromString(""), true)
-    isValidUTF8(UTF8String.fromString("abc"), true)
-    isValidUTF8(UTF8String.fromString("hello"), true)
-    isValidUTF8(UTF8String.fromBytes(Array.empty[Byte]), true)
-    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x41)), true)
-    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x61)), true)
-    isValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), false)
-    isValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), false)
-
-    def makeValidUTF8(str: Any, expected: String): Unit = {
-      val input = Literal.create(str, StringType)
-      val makeValidUtf8Expr = Invoke(input, "makeValid", SQLConf.get.defaultStringType)
-      checkEvaluation(makeValidUtf8Expr, expected)
-    }
-    makeValidUTF8(null, null)
-    makeValidUTF8("", "")
-    makeValidUTF8("aa", "aa")
-    makeValidUTF8("\u0061", "\u0061")
-    makeValidUTF8(UTF8String.EMPTY_UTF8, "")
-    makeValidUTF8(UTF8String.fromString(""), "")
-    makeValidUTF8(UTF8String.fromString("abc"), "abc")
-    makeValidUTF8(UTF8String.fromString("hello"), "hello")
-    makeValidUTF8(UTF8String.fromBytes(Array.empty[Byte]), "")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x41)), "A")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x61)), "a")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)), "\uFFFD")
-    makeValidUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)), "\uFFFD")
-
     def validateUTF8(str: Any, expected: String, except: Boolean): Unit = {
       if (except) {
         checkError(
