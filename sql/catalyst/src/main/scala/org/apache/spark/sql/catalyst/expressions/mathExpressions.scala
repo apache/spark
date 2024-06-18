@@ -1034,7 +1034,14 @@ object Hex {
 
   def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
-    val value = new Array[Byte](length * 2)
+    if (length == 0) {
+      return UTF8String.EMPTY_UTF8
+    }
+    val targetLength = length * 2L
+    if (targetLength > Int.MaxValue) {
+      throw QueryExecutionErrors.tooManyArrayElementsError(targetLength, Int.MaxValue)
+    }
+    val value = new Array[Byte](targetLength.toInt)
     var i = 0
     while (i < length) {
       value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
