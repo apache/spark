@@ -3330,7 +3330,7 @@
   },
   "NULL_DATA_SOURCE_OPTION" : {
     "message" : [
-      "JDBC Option value <option> cannot have null value."
+      "Data source read/write option <option> cannot have null value."
     ],
     "sqlState" : "22024"
   },
