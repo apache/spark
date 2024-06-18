@@ -496,6 +496,7 @@ class DataFrameWriter(OptionUtils):
         self._df: "LogicalPlan" = plan
         self._spark: "SparkSession" = session
         self._write: "WriteOperation" = WriteOperation(self._df)
+
         self._callback = callback if callback is not None else lambda _: None
 
     def mode(self, saveMode: Optional[str]) -> "DataFrameWriter":

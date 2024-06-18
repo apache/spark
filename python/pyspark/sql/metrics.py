@@ -106,6 +106,41 @@ class CollectedMetrics:
         metrics: List[MetricValue] = dataclasses.field(default_factory=list)
         children: List[int] = dataclasses.field(default_factory=list)
 
+    def text(self, current: "Node", graph: Dict[int, "Node"], prefix="") -> str:
+        """
+        Converts the current node and its children into a textual representation. This is used
+        to provide a usable output for the command line or other text-based interfaces. However,
+        it is recommended to use the Graphviz representation for a more visual representation.
+
+        Parameters
+        ----------
+        current: Node
+            Current node in the graph.
+        graph: Dict[int, Node]
+            The full graph of all nodes in the executed plan.
+        prefix: str
+            String prefix used for generating the output buffer.
+
+        Returns
+        -------
+        The full string representation of the current node as root.
+        """
+        base_metrics = set(["numPartitions", "peakMemory", "numOutputRows", "spillSize"])
+
+        # Format the metrics of this node:
+        metric_buffer = []
+        for m in current.metrics:
+            if m.name in base_metrics:
+                metric_buffer.append(f"{m.name}: {m.value} ({m.metric_type})")
+
+        buffer = f"{prefix}- {current.name}({','.join(metric_buffer)})\n"
+        for i, child in enumerate(current.children):
+            c = graph[child]
+            new_prefix = prefix + "  " if i == len(c.children) - 1 else prefix
+            if current.id != c.id:
+                buffer += self.text(c, graph, new_prefix)
+        return buffer
+
     def __init__(self, metrics: List[PlanMetrics]):
         # Sort the input list
         self._metrics = sorted(metrics, key=lambda x: x._parent_id, reverse=False)
@@ -137,7 +172,7 @@ class CollectedMetrics:
             all_nodes[m.parent_plan_id].children.append(m.plan_id)
 
         # Next step is to find all the root nodes. Root nodes are never used in children.
-        # So we start will all node ids as candidates.
+        # So we start with all node ids as candidates.
         candidates = set(all_nodes.keys())
         for k, v in all_nodes.items():
             for c in v.children:
@@ -146,6 +181,18 @@ class CollectedMetrics:
 
         assert len(candidates) == 1, f"Expected 1 root node, found {len(candidates)}"
         return candidates.pop(), all_nodes
+
+    def toText(self) -> str:
+        """
+        Converts the execution graph from a graph into a textual representation
+        that can be read at the command line for example.
+
+        Returns
+        -------
+        A string representation of the collected metrics.
+        """
+        root, graph = self.extract_graph()
+        return self.text(graph[root], graph)
 
     def toDot(self, filename: Optional[str] = None, out_format: str = "png") -> "graphviz.Digraph":
         """
