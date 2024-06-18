@@ -2012,7 +2012,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithChangelogCheckpointingEnabled("time travel 4 -" +
-    " validate successful RocksDB load") {
+    " validate successful RocksDB load when metadata file is overwritten") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
@@ -2027,8 +2027,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.load(1)
       db.put("3", "3")
 
-      // do maintenance - upload any latest snapshots so far
-      // would fail to acquire lock and no snapshots would be uploaded
+      // upload any latest snapshots so far
       db.doMaintenance()
       db.commit()
       // upload newly created snapshot 2.zip
@@ -2040,7 +2039,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("RocksDB: eliminate lastSnapshot race condition") {
+  testWithChangelogCheckpointingEnabled("time travel 5 -" +
+    "validate successful RocksDB load when metadata file is not overwritten") {
     // Ensure commit doesn't modify the latestSnapshot that doMaintenance will upload
     val fmClass = "org.apache.spark.sql.execution.streaming.state." +
       "NoOverwriteFileSystemBasedCheckpointFileManager"
@@ -2055,13 +2055,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("a", "1")
         db.commit()
 
-        // load previous version
+        // load previous version, and recreate the snapshot
         db.load(0)
         db.put("a", "1")
 
         // upload version 1 snapshot created above
-        // lastSnapshot is a newer snapshot when old version
-        // is loaded so it is not discarded
         db.doMaintenance()
         assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
