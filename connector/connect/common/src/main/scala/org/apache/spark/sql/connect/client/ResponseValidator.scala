@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import com.google.protobuf.GeneratedMessageV3
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
@@ -33,7 +35,8 @@ class ResponseValidator extends Logging {
 
   // Indicates whether the server side session ID has changed. This flag being true usually means
   // that the session is unusable and the user should establish a new connection to the server.
-  private var hasServerSideSessionIDChanged: Boolean = false
+  // Access to the value has to be synchronized since it can be shared among multiple threads.
+  private val hasServerSideSessionIDChanged: AtomicBoolean = new AtomicBoolean(false)
 
   // Returns the server side session ID, used to send it back to the server in the follow-up
   // requests so the server can validate it session id against the previous requests.
@@ -51,19 +54,20 @@ class ResponseValidator extends Logging {
    * Returns true if the server side session ID has changed.
    */
   private[sql] def hasSessionChanged: Boolean = {
-    hasServerSideSessionIDChanged
+    hasServerSideSessionIDChanged.getAcquire
   }
 
   def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
-    val response = try {
-      fn
-    } catch {
-      case e: StatusRuntimeException
-        if e.getStatus.getCode == Status.Code.INTERNAL &&
-          e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]") =>
-        hasServerSideSessionIDChanged = true
-        throw e
-    }
+    val response =
+      try {
+        fn
+      } catch {
+        case e: StatusRuntimeException
+            if e.getStatus.getCode == Status.Code.INTERNAL &&
+              e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]") =>
+          hasServerSideSessionIDChanged.setRelease(true)
+          throw e
+      }
     val field = response.getDescriptorForType.findFieldByName("server_side_session_id")
     // If the field does not exist, we ignore it. New / Old message might not contain it and this
     // behavior allows us to be compatible.
@@ -74,7 +78,7 @@ class ResponseValidator extends Logging {
         serverSideSessionId match {
           case Some(id) =>
             if (value != id) {
-              hasServerSideSessionIDChanged = true
+              hasServerSideSessionIDChanged.setRelease(true)
               throw new IllegalStateException(
                 s"Server side session ID changed from $id to $value")
             }
