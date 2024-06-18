@@ -236,6 +236,7 @@ public abstract class BlockStoreClient implements Closeable {
               if (!isSaslTimeout && saslRetryCount > 0) {
                 Preconditions.checkState(retryCount >= saslRetryCount,
                         "retryCount must be greater than or equal to saslRetryCount");
+                // Consistent with the retry logic of the RetryingBlockTransferor.shouldRetry method
                 retryCount -= saslRetryCount;
                 saslRetryCount = 0;
               }
