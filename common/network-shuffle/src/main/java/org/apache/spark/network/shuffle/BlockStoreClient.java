@@ -252,6 +252,7 @@ public abstract class BlockStoreClient implements Closeable {
                 final int finalRetryCount = retryCount;
                 final int finalSaslRetryCount = saslRetryCount;
                 logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
+                        e,
                         MDC.of(LogKeys.NUM_RETRY$.MODULE$, finalRetryCount),
                         MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
                         MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, delayMs));
