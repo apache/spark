@@ -85,8 +85,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
                 logError(
                   log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
                     log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-                    log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER,
-                      executeHolder.operationId)}] " +
+                    log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER, executeHolder.operationId)}] " +
                     log"Error sending listener added response.",
                   e)
                 listenerHolder.cleanUp()
@@ -103,8 +102,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
         listenerHolder.streamingQueryListenerLatch.await()
         logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}][UserId: " +
           log"${MDC(LogKeys.USER_ID, userId)}]" +
-          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER,
-            executeHolder.operationId)}] " +
+          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER, executeHolder.operationId)}] " +
           log"Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
