@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -31,8 +30,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   test("logical plan transformation for transpose") {
     val transposePlan = Transpose(
       firstColumnValues = Seq(Literal("dotNET"), Literal("Java")),
-      valueType = IntegerType,
-      child = courseSales.queryExecution.logical
+      child = courseSalesDedup.queryExecution.logical
     )
 
     println(s"Logical plan before analysis:\n$transposePlan")
@@ -45,8 +43,8 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   }
 
   test("transpose scala API") {
-    println(s"df: \n${courseSales.show()}")
-    val transposed = courseSales.transpose(Seq($"dotNET", $"Java"), IntegerType)
+    println(s"df: \n${courseSalesDedup.show()}")
+    val transposed = courseSalesDedup.transpose(Seq($"dotNET", $"Java"))
     println(s"transposed df: \n${transposed.show()}")
   }
 }
