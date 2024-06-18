@@ -2205,31 +2205,72 @@ class DataFrameAggregateSuite extends QueryTest
   test("Fix reference error when grouping by MapType") {
     val numRows = 50
 
-    val dfSingleColumn = (0 until numRows)
+    // Group by single `MapType` and select that column.
+    val dfSingleColumn1 = (0 until numRows)
       .map(_ => Tuple1(Map(1 -> 1)))
       .toDF("m")
-    val resultSingleColumn = dfSingleColumn.groupBy("m")
+    val resultSingleColumn1 = dfSingleColumn1.groupBy("m")
       .agg(count("*")).select("m", "count(1)")
     checkAnswer(
-      resultSingleColumn,
+      resultSingleColumn1,
       Seq[Row](
         Row(Map(1 -> 1), numRows)
       )
     )
 
-    val dfMultiColumn = (0 until numRows)
+    // Group by single `MapType` column and select one non-`MapType` column.
+    val dfSingleColumn2 = (0 until numRows)
+      .map(_ => Tuple2(Map(1 -> 1), 1))
+      .toDF("m", "i")
+    val resultSingleColumn2 = dfSingleColumn2.groupBy("m")
+      .agg(first("i")).select("first(i)")
+    checkAnswer(
+      resultSingleColumn2,
+      Seq[Row](
+        Row(1)
+      )
+    )
+
+    // Group by single `MapType` column and select one different `MapType` column.
+    val dfSingleColumn3 = (0 until numRows)
+      .map(_ => Tuple2(Map(1 -> 1), Map(2 -> 2)))
+      .toDF("m0", "m1")
+    val resultSingleColumn3 = dfSingleColumn3.groupBy("m0")
+      .agg(first("m1")).select("m0", "first(m1)")
+    checkAnswer(
+      resultSingleColumn3,
+      Seq[Row](
+        Row(Map(1 -> 1), Map(2 -> 2))
+      )
+    )
+
+    // Group by two `MapType` columns and select them both.
+    val dfMultiColumn1 = (0 until numRows)
       .map(_ => Tuple2(Map(1 -> 1), Map(2 -> 2)))
       .toDF("m0", "m1")
 
-    val resultMultiColumn = dfMultiColumn.groupBy("m0", "m1")
+    val resultMultiColumn1 = dfMultiColumn1.groupBy("m0", "m1")
       .agg(count("*")).select("m0", "m1", "count(1)")
     checkAnswer(
-      resultMultiColumn,
+      resultMultiColumn1,
       Seq[Row](
         Row(Map(1 -> 1), Map(2 -> 2), numRows)
       )
     )
 
+    // Group by one `MapType` and non-`MapType` column, select both.
+    val dfMultiColumn2 = (0 until numRows)
+      .map(_ => Tuple2(Map(1 -> 1), 1))
+      .toDF("m", "i")
+
+    val resultMultiColumn2 = dfMultiColumn2.groupBy("m", "i")
+      .agg(count("*")).select("m", "i", "count(1)")
+    checkAnswer(
+      resultMultiColumn2,
+      Seq[Row](
+        Row(Map(1 -> 1), 1, numRows)
+      )
+    )
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {

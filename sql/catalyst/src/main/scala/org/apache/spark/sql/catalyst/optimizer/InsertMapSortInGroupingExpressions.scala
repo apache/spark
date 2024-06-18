@@ -43,7 +43,7 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] with AliasHe
         !expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]
       )
       val newChild = Project(toSort.map( expr =>
-        Alias(MapSort(expr), "map_sorted")()
+        Alias(MapSort(expr), s"map_sorted_${expr.prettyName}")()
       ), child)
       val sortedAliasMap = getAliasMap(newChild)
       val newGroupingExpr = groupingExpr.map(expr => replaceAlias(expr, sortedAliasMap))
