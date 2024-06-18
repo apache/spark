@@ -1828,7 +1828,10 @@ class DataFrame(ParentDataFrame):
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
-        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        # not all datatypes are supported in arrow based collect
+        # here always verify the schema by from_arrow_schema
+        schema2 = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
 
