@@ -847,7 +847,7 @@ class SparkConnectClient(object):
         logger.info("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties) = self.execute_command(cmd)
+        (_, properties, _) = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
 
@@ -1815,6 +1815,6 @@ class SparkConnectClient(object):
         logger.info("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
-        (_, properties) = self.execute_command(cmd)
+        (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id

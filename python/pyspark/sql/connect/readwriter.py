@@ -491,7 +491,7 @@ class DataFrameWriter(OptionUtils):
         self,
         plan: "LogicalPlan",
         session: "SparkSession",
-        callback: Optional[Callable[['QueryExecution'], None]] = None,
+        callback: Optional[Callable[["QueryExecution"], None]] = None,
     ):
         self._df: "LogicalPlan" = plan
         self._spark: "SparkSession" = session
@@ -860,7 +860,7 @@ class DataFrameWriterV2(OptionUtils):
         plan: "LogicalPlan",
         session: "SparkSession",
         table: str,
-        callback: Optional[Callable[['QueryExecution'], None]] = None,
+        callback: Optional[Callable[["QueryExecution"], None]] = None,
     ):
         self._df: "LogicalPlan" = plan
         self._spark: "SparkSession" = session

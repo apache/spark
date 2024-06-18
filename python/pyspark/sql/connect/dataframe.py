@@ -1980,25 +1980,29 @@ class DataFrame(ParentDataFrame):
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, qe = self._session.client.execute_command(command, self._plan.observations)
+        self._query_execution = qe
 
     def createOrReplaceTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, qe = self._session.client.execute_command(command, self._plan.observations)
+        self._query_execution = qe
 
     def createGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, qe = self._session.client.execute_command(command, self._plan.observations)
+        self._query_execution = qe
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, qe = self._session.client.execute_command(command, self._plan.observations)
+        self._query_execution = qe
 
     def cache(self) -> ParentDataFrame:
         return self.persist()
@@ -2183,7 +2187,8 @@ class DataFrame(ParentDataFrame):
 
     def checkpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, qe = self._session.client.execute_command(cmd.command(self._session.client))
+        self._query_execution = qe
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
@@ -2191,7 +2196,8 @@ class DataFrame(ParentDataFrame):
 
     def localCheckpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, qe = self._session.client.execute_command(cmd.command(self._session.client))
+        self._query_execution = qe
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
