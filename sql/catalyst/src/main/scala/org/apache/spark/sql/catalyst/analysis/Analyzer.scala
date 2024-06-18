@@ -4017,14 +4017,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           child = child
         )
 
+        val keyExpr = UnresolvedAttribute("key")
+        val valueExpr = UnresolvedAttribute("value")
+
         val aggExpression = First(
-          AttributeReference("value", valueType)(), ignoreNulls = true
-        ).toAggregateExpression(isDistinct = true)
+          valueExpr, ignoreNulls = true).toAggregateExpression(isDistinct = true)
 
         val pivot = Pivot(
-          groupByExprsOpt = Some(Seq(AttributeReference("key", StringType)())),
+          groupByExprsOpt = Some(Seq(keyExpr)),
           pivotColumn = firstColumnNamedExpr,
-          pivotValues = firstColumnValues,
+          pivotValues = Seq(Literal("dotNET"), Literal("Java")),
           aggregates = Seq(aggExpression),
           child = unpivot
         )

@@ -25,10 +25,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
+  // scalastyle:off println
   test("logical plan transformation for transpose") {
-    // scalastyle:off println
-
     val transposePlan = Transpose(
       firstColumnValues = Seq(Literal("dotNET"), Literal("Java")),
       valueType = IntegerType,
@@ -42,5 +42,11 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     val analyzedPlan = testAnalyzer.execute(transposePlan)
 
     println(s"Logical plan after analysis:\n$analyzedPlan")
+  }
+
+  test("transpose scala API") {
+    println(s"df: \n${courseSales.show()}")
+    val transposed = courseSales.transpose(Seq($"dotNET", $"Java"), IntegerType)
+    println(s"transposed df: \n${transposed.show()}")
   }
 }
