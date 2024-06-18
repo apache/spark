@@ -34,7 +34,7 @@ import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.SparkLogger
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -112,6 +112,12 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
+
+  private val logInfo = (msg: String) => getAncestorField[SparkLogger](this, 3, "LOG").info(msg)
+
+  private val logError = (msg: String, e: Throwable) =>
+    getAncestorField[SparkLogger](this, 3, "LOG").error(msg, e)
+
   def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`
     val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
@@ -121,7 +127,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.NOTINITED)
     setAncestorField(this, 3, "hiveConf", hiveConf)
     invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.INITED)
-    logInfo(log"Service: ${MDC(LogKeys.SERVICE_NAME, getName)} is inited.")
+    logInfo(s"Service: $getName is inited.")
   }
 
   def startCompositeService(): Unit = {
@@ -138,10 +144,10 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
       setAncestorField(this, 3, "startTime", startTime)
       invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.INITED)
       invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.STARTED)
-      logInfo(log"Service: ${MDC(LogKeys.SERVICE_NAME, getName)} is started.")
+      logInfo(s"Service: $getName is started.")
     } catch {
       case NonFatal(e) =>
-      logError(log"Error starting services ${MDC(LogKeys.SERVICE_NAME, getName)}", e)
+      logError(s"Error starting services $getName", e)
       invoke(classOf[CompositeService], this, "stop",
         classOf[Int] -> Integer.valueOf(serviceStartCount))
       throw HiveThriftServerErrors.failedToStartServiceError(getName, e)
