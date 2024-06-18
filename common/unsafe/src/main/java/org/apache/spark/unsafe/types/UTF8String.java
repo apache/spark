@@ -363,10 +363,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(bytes);
   }
 
-  public static UTF8String makeValid(UTF8String input) {
-    return input.makeValid();
-  }
-
   /**
    * Checks if the current UTF8String is valid.
    *
@@ -404,10 +400,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byteIndex += codePointLen;
     }
     return true;
-  }
-
-  public static boolean isValid(UTF8String input) {
-    return input.isValid();
   }
 
   /**

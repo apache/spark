@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
@@ -711,12 +711,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[UTF8String],
-    BooleanType,
-    "isValid",
-    Seq(input),
-    inputTypes)
+  override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
@@ -763,12 +758,8 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
 case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[UTF8String],
-    SQLConf.get.defaultStringType,
-    "makeValid",
-    Seq(input),
-    inputTypes)
+  override lazy val replacement: Expression = Invoke(
+    input, "makeValid", SQLConf.get.defaultStringType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
