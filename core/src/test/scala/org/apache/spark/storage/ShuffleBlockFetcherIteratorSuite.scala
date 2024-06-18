@@ -375,7 +375,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Array("loc2.1", "loc2.2"))
 
     var sendRpcThrowIOExceptionIdx = 0
-    var sendRpcThrowIOExceptionMaxCnt = 2
+    var sendRpcThrowIOExceptionMaxCnt = 0
     when(mockClientFactory.createClient(any(), any())).thenAnswer(_ => {
       mockTransportClient
     })
@@ -402,13 +402,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     }
 
     val config = new java.util.HashMap[String, String]
-    config.put("spark.shuffle.io.maxRetries", "3")
+    val maxRetries = 3
+    config.put("spark.shuffle.io.maxRetries", maxRetries.toString)
     val clientConf: TransportConf = new TransportConf("shuffle", new MapConfigProvider(config))
     val testExternalBlockStoreClient = new TestExternalBlockStoreClient(
       clientConf, null, false, 5000)
     try {
       testExternalBlockStoreClient.init("APP_ID")
-      Seq((0, true), (2, true), (3, true), (4, false)).foreach { case (maxCnt, success) =>
+      ((0 to maxRetries).map((_, true)) ++ Seq((maxRetries + 1, false))).foreach {
+        case (maxCnt, success) =>
         sendRpcThrowIOExceptionIdx = 0
         sendRpcThrowIOExceptionMaxCnt = maxCnt
         val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
