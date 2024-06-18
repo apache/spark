@@ -832,17 +832,10 @@ object SparkSession extends Logging {
    * they are not set yet or the associated [[SparkConnectClient]] is unusable.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    var oldDefault = defaultSession.getAcquire
-    var swapped = false
-    while ((oldDefault == null || oldDefault.client.hasSessionChanged) && !swapped) {
-      val currentDefault = defaultSession.compareAndExchangeRelease(oldDefault, session)
-      if (currentDefault == oldDefault) {
-        swapped = true
-      } else {
-        oldDefault = currentDefault
-      }
+    val oldDefault = defaultSession.getAcquire
+    if (oldDefault == null || oldDefault.client.hasSessionChanged) {
+      defaultSession.setRelease(session)
     }
-
     if (getActiveSession.isEmpty || getActiveSession.get.client.hasSessionChanged) {
       setActiveSession(session)
     }
