@@ -55,6 +55,11 @@ class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
         df.collect()
         self.assertIn("HashAggregate", df.queryExecution.metrics.toText())
 
+        # Different execution mode.
+        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df.toPandas()
+        self.assertIn("HashAggregate", df.queryExecution.metrics.toText())
+
     @unittest.skipIf(not have_graphviz, graphviz_requirement_message)
     def test_df_query_execution_metrics_to_dot(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()

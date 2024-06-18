@@ -1854,7 +1854,9 @@ class DataFrame(ParentDataFrame):
 
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query, self._plan.observations)
+        pdf, qe = self._session.client.to_pandas(query, self._plan.observations)
+        self._query_execution = qe
+        return pdf
 
     @property
     def schema(self) -> StructType:

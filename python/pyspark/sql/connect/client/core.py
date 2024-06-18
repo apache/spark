@@ -888,7 +888,9 @@ class SparkConnectClient(object):
         assert table is not None
         return table, schema, qe
 
-    def to_pandas(self, plan: pb2.Plan, observations: Dict[str, Observation]) -> "pd.DataFrame":
+    def to_pandas(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Tuple["pd.DataFrame", "QueryExecution"]:
         """
         Return given plan as a pandas DataFrame.
         """
@@ -903,6 +905,7 @@ class SparkConnectClient(object):
             req, observations, self_destruct=self_destruct
         )
         assert table is not None
+        qe = QueryExecution(metrics, observed_metrics)
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
@@ -969,7 +972,7 @@ class SparkConnectClient(object):
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
             pdf.attrs["observed_metrics"] = observed_metrics
-        return pdf
+        return pdf, qe
 
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
