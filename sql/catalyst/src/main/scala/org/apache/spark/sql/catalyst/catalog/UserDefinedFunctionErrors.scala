@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -28,6 +29,6 @@ object UserDefinedFunctionErrors extends QueryErrorsBase {
   }
 
   def unsupportedUserDefinedFunction(language: String): Throwable = {
-    new IllegalArgumentException(s"Unsupported user defined function type: $language")
+    SparkException.internalError(s"Unsupported user defined function type: $language")
   }
 }
