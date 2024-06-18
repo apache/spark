@@ -32,16 +32,16 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
- * in more than one JSON files, the latter wins.
+ * in more than one JSON file, the latter wins.
  * Please read common/utils/src/main/resources/error/README.md for more details.
  */
 @DeveloperApi
-class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
+class ErrorConditionsJsonReader(jsonFileURLs: Seq[URL]) {
   assert(jsonFileURLs.nonEmpty)
 
   // Exposed for testing
   private[spark] val errorInfoMap =
-    jsonFileURLs.map(ErrorClassesJsonReader.readAsMap).reduce(_ ++ _)
+    jsonFileURLs.map(ErrorConditionsJsonReader.readAsMap).reduce(_ ++ _)
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, String]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
@@ -49,7 +49,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     sub.setEnableUndefinedVariableException(true)
     sub.setDisableSubstitutionInValues(true)
     try {
-      sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
+      sub.replace(ErrorConditionsJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))
     } catch {
       case i: IllegalArgumentException => throw SparkException.internalError(
@@ -61,7 +61,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)
-    val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
+    val matches = ErrorConditionsJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }
 
@@ -74,12 +74,12 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
-    assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
+    assert(errorInfo.subCondition.isDefined == subErrorClass.isDefined)
 
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
-      val errorSubInfo = errorInfo.subClass.get.getOrElse(
+      val errorSubInfo = errorInfo.subCondition.get.getOrElse(
         subErrorClass.get,
         throw SparkException.internalError(s"Cannot find sub error class '$errorClass'"))
       errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
@@ -98,15 +98,15 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorClasses = errorClass.split("\\.")
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)
-      case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
-        info.subClass.get.contains(subClass)
+      case Array(mainClass, subCondition) => errorInfoMap.get(mainClass).exists { info =>
+        info.subCondition.get.contains(subCondition)
       }
       case _ => false
     }
   }
 }
 
-private object ErrorClassesJsonReader {
+private object ErrorConditionsJsonReader {
   private val TEMPLATE_REGEX = "<([a-zA-Z0-9_-]+)>".r
 
   private val mapper: JsonMapper = JsonMapper.builder()
@@ -114,31 +114,31 @@ private object ErrorClassesJsonReader {
     .build()
   private def readAsMap(url: URL): Map[String, ErrorInfo] = {
     val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
-    val errorClassWithDots = map.collectFirst {
-      case (errorClass, _) if errorClass.contains('.') => errorClass
+    val errorConditionWithDots = map.collectFirst {
+      case (errorCondition, _) if errorCondition.contains('.') => errorCondition
       case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>
         map.keys.collectFirst { case s if s.contains('.') => s }.get
     }
-    if (errorClassWithDots.isEmpty) {
+    if (errorConditionWithDots.isEmpty) {
       map
     } else {
       throw SparkException.internalError(
-        s"Found the (sub-)error class with dots: ${errorClassWithDots.get}")
+        s"Found an error (sub-)condition with dots: ${errorConditionWithDots.get}")
     }
   }
 }
 
 /**
- * Information associated with an error class.
+ * Information associated with an error condition.
  *
- * @param sqlState SQLSTATE associated with this class.
- * @param subClass SubClass associated with this class.
+ * @param sqlState SQLSTATE associated with this condition.
+ * @param subCondition Sub-condition associated with this condition.
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
     message: Seq[String],
-    subClass: Option[Map[String, ErrorSubInfo]],
+    subCondition: Option[Map[String, ErrorSubInfo]],
     sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
@@ -146,7 +146,7 @@ private case class ErrorInfo(
 }
 
 /**
- * Information associated with an error subclass.
+ * Information associated with an error sub-condition.
  *
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.

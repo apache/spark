@@ -21,14 +21,11 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{ErrorClassesJsonReader, SparkException, SparkThrowable}
+import org.apache.spark.{ErrorConditionsJsonReader, SparkException, SparkThrowable}
 
 private object KafkaExceptionsHelper {
-  val errorClassesJsonReader: ErrorClassesJsonReader =
-    new ErrorClassesJsonReader(
-      // Note that though we call them "error classes" here, the proper name is "error conditions",
-      // hence why the name of the JSON file is different. We will address this inconsistency as
-      // part of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
+  val errorConditionsJsonReader: ErrorConditionsJsonReader =
+    new ErrorConditionsJsonReader(
       Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
 }
 
@@ -36,7 +33,7 @@ object KafkaExceptions {
   def mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
       tpsForPrefetched: Set[TopicPartition],
       tpsForEndOffset: Set[TopicPartition]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "MISMATCHED_TOPIC_PARTITIONS_BETWEEN_END_OFFSET_AND_PREFETCHED",
       Map(
         "tpsForPrefetched" -> tpsForPrefetched.toString(),
@@ -49,7 +46,7 @@ object KafkaExceptions {
   def endOffsetHasGreaterOffsetForTopicPartitionThanPrefetched(
       prefetchedOffset: Map[TopicPartition, Long],
       endOffset: Map[TopicPartition, Long]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "END_OFFSET_HAS_GREATER_OFFSET_FOR_TOPIC_PARTITION_THAN_PREFETCHED",
       Map(
         "prefetchedOffset" -> prefetchedOffset.toString(),
@@ -62,7 +59,7 @@ object KafkaExceptions {
   def lostTopicPartitionsInEndOffsetWithTriggerAvailableNow(
       tpsForLatestOffset: Set[TopicPartition],
       tpsForEndOffset: Set[TopicPartition]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "LOST_TOPIC_PARTITIONS_IN_END_OFFSET_WITH_TRIGGER_AVAILABLENOW",
       Map(
         "tpsForLatestOffset" -> tpsForLatestOffset.toString(),
@@ -75,7 +72,7 @@ object KafkaExceptions {
   def endOffsetHasGreaterOffsetForTopicPartitionThanLatestWithTriggerAvailableNow(
       latestOffset: Map[TopicPartition, Long],
       endOffset: Map[TopicPartition, Long]): SparkException = {
-    val errMsg = KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
+    val errMsg = KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
       "END_OFFSET_HAS_GREATER_OFFSET_FOR_TOPIC_PARTITION_THAN_LATEST_WITH_TRIGGER_AVAILABLENOW",
       Map(
         "latestOffset" -> latestOffset.toString(),
@@ -92,7 +89,7 @@ object KafkaExceptions {
       groupId: String,
       cause: Throwable): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
+      errorCondition = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
       messageParameters = Map(
         "startOffset" -> startOffset.toString,
         "endOffset" -> endOffset.toString,
@@ -106,7 +103,7 @@ object KafkaExceptions {
       offset: Long,
       fetchedOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
+      errorCondition = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
       messageParameters = Map(
         "topicPartition" -> topicPartition.toString,
         "offset" -> offset.toString,
@@ -116,7 +113,7 @@ object KafkaExceptions {
   def initialOffsetNotFoundForPartitions(
       partitions: Set[TopicPartition]): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
+      errorCondition = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
       messageParameters = Map("partitions" -> partitions.toString))
   }
 
@@ -124,7 +121,7 @@ object KafkaExceptions {
       topicPartition: TopicPartition,
       startOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
+      errorCondition = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
       messageParameters =
         Map("topicPartition" -> topicPartition.toString, "startOffset" -> startOffset.toString))
   }
@@ -135,11 +132,11 @@ object KafkaExceptions {
     groupIdConfigName match {
       case Some(config) =>
         new KafkaIllegalStateException(
-          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
+          errorCondition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
           messageParameters = Map("partitions" -> partitions.toString, "groupIdConfig" -> config))
       case None =>
         new KafkaIllegalStateException(
-          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+          errorCondition = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
           messageParameters = Map("partitions" -> partitions.toString))
     }
   }
@@ -149,7 +146,7 @@ object KafkaExceptions {
       prevOffset: Long,
       newOffset: Long): KafkaIllegalStateException = {
     new KafkaIllegalStateException(
-      errorClass = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
+      errorCondition = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
       messageParameters = Map(
         "topicPartition" -> topicPartition.toString,
         "prevOffset" -> prevOffset.toString,
@@ -171,18 +168,18 @@ object KafkaExceptions {
  * Illegal state exception thrown with an error class.
  */
 private[kafka010] class KafkaIllegalStateException(
-    errorClass: String,
+    errorCondition: String,
     messageParameters: Map[String, String],
     cause: Throwable = null)
   extends IllegalStateException(
-    KafkaExceptionsHelper.errorClassesJsonReader.getErrorMessage(
-      errorClass, messageParameters), cause)
+    KafkaExceptionsHelper.errorConditionsJsonReader.getErrorMessage(
+      errorCondition, messageParameters), cause)
   with SparkThrowable {
 
   override def getSqlState: String =
-    KafkaExceptionsHelper.errorClassesJsonReader.getSqlState(errorClass)
+    KafkaExceptionsHelper.errorConditionsJsonReader.getSqlState(errorCondition)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass
+  override def getErrorClass: String = errorCondition
 }

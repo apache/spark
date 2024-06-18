@@ -46,8 +46,6 @@ class SparkThrowableSuite extends SparkFunSuite {
         "core/testOnly *SparkThrowableSuite -- -t \"Error classes are correctly formatted\""
    }}}
    */
-  private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
-    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     // Note that though we call them "error classes" here, the proper name is "error conditions",
@@ -55,7 +53,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
-  private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
+  private val errorReader = new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -143,7 +141,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Message invariants") {
     val messageSeq = errorReader.errorInfoMap.values.toSeq.flatMap { i =>
-      Seq(i.message) ++ i.subClass.getOrElse(Map.empty).values.toSeq.map(_.message)
+      Seq(i.message) ++ i.subCondition.getOrElse(Map.empty).values.toSeq.map(_.message)
     }
     messageSeq.foreach { message =>
       message.foreach { msg =>
@@ -180,7 +178,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val allowedChars = "[A-Z0-9_]*"
     errorReader.errorInfoMap.foreach { e =>
       assert(e._1.matches(allowedChars), s"Error class: ${e._1} is invalid")
-      e._2.subClass.map { s =>
+      e._2.subCondition.map { s =>
         s.keys.foreach { k =>
           assert(k.matches(allowedChars), s"Error sub-class: $k is invalid")
         }
@@ -353,7 +351,7 @@ class SparkThrowableSuite extends SparkFunSuite {
         |  } ]
         |}""".stripMargin)
       // scalastyle:on line.size.limit
-    // STANDARD w/ errorSubClass but w/o queryContext
+    // STANDARD w/ errorSubCondition but w/o queryContext
     val e2 = new SparkIllegalArgumentException(
       errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
       messageParameters = Map("saveMode" -> "UNSUPPORTED_MODE"))
@@ -442,7 +440,8 @@ class SparkThrowableSuite extends SparkFunSuite {
           |  }
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
-      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      val reader = new ErrorConditionsJsonReader(
+        Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       assert(reader.getErrorMessage("DIVIDE_BY_ZERO", Map.empty) == "abc")
     }
   }
@@ -461,7 +460,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+        new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("DIVIDE.BY_ZERO"))
@@ -476,7 +475,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |    "message" : [
           |      "abc"
           |    ],
-          |    "subClass" : {
+          |    "subCondition" : {
           |      "BY.ZERO" : {
           |        "message" : [
           |          "def"
@@ -487,7 +486,7 @@ class SparkThrowableSuite extends SparkFunSuite {
           |}
           |""".stripMargin, StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
-        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+        new ErrorConditionsJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
       }
       assert(e.getErrorClass === "INTERNAL_ERROR")
       assert(e.getMessage.contains("BY.ZERO"))
