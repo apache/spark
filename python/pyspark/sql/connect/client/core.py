@@ -1013,7 +1013,7 @@ class SparkConnectClient(object):
 
     def execute_command(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
-    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], QueryExecution]:
         """
         Execute given command.
         """
@@ -1022,11 +1022,15 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, _, properties = self._execute_and_fetch(req, observations or {})
+        data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
+            req, observations or {}
+        )
+        # Create a query execution object.
+        qe = QueryExecution(metrics, observed_metrics)
         if data is not None:
-            return (data.to_pandas(), properties)
+            return (data.to_pandas(), properties, qe)
         else:
-            return (None, properties)
+            return (None, properties, qe)
 
     def execute_command_as_iterator(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None

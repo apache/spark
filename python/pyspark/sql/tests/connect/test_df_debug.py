@@ -42,6 +42,13 @@ class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
         qe = df.queryExecution
         self.assertIsNone(qe, "The query execution must be None before the action is executed")
 
+    def test_df_query_execution_with_writes(self):
+        df: DataFrame = self.connect.range(100).repation(10).groupBy("id").count()
+        df.write.save("/tmp/test_df_query_execution_with_writes", format="json")
+
+        qe = df.queryExecution
+        self.assertIsNone(qe, "The query execution must be None after the write action is executed")
+
     @unittest.skipIf(not have_graphviz, graphviz_requirement_message)
     def test_df_query_execution_metrics_to_dot(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()

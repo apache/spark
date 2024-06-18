@@ -208,7 +208,10 @@ class DataFrame(ParentDataFrame):
 
     @property
     def write(self) -> "DataFrameWriter":
-        return DataFrameWriter(self._plan, self._session)
+        def cb(qe: "QueryExecution") -> None:
+            self._query_execution = qe
+
+        return DataFrameWriter(self._plan, self._session, cb)
 
     @functools.cache
     def isEmpty(self) -> bool:
@@ -2170,7 +2173,10 @@ class DataFrame(ParentDataFrame):
         )
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        return DataFrameWriterV2(self._plan, self._session, table)
+        def cb(qe: "QueryExecution") -> None:
+            self._query_execution = qe
+
+        return DataFrameWriterV2(self._plan, self._session, table, cb)
 
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)

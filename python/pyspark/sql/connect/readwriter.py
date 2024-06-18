@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast
+from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.metrics import QueryExecution
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -486,10 +487,16 @@ DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
 
 
 class DataFrameWriter(OptionUtils):
-    def __init__(self, plan: "LogicalPlan", session: "SparkSession"):
+    def __init__(
+        self,
+        plan: "LogicalPlan",
+        session: "SparkSession",
+        callback: Optional[Callable[['QueryExecution'], None]] = None,
+    ):
         self._df: "LogicalPlan" = plan
         self._spark: "SparkSession" = session
         self._write: "WriteOperation" = WriteOperation(self._df)
+        self._callback = callback if callback is not None else lambda _: None
 
     def mode(self, saveMode: Optional[str]) -> "DataFrameWriter":
         # At the JVM side, the default value of mode is already set to "error".
@@ -649,9 +656,10 @@ class DataFrameWriter(OptionUtils):
         if format is not None:
             self.format(format)
         self._write.path = path
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     save.__doc__ = PySparkDataFrameWriter.save.__doc__
 
@@ -660,9 +668,10 @@ class DataFrameWriter(OptionUtils):
             self.mode("overwrite" if overwrite else "append")
         self._write.table_name = tableName
         self._write.table_save_method = "insert_into"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     insertInto.__doc__ = PySparkDataFrameWriter.insertInto.__doc__
 
@@ -681,9 +690,10 @@ class DataFrameWriter(OptionUtils):
             self.format(format)
         self._write.table_name = name
         self._write.table_save_method = "save_as_table"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     saveAsTable.__doc__ = PySparkDataFrameWriter.saveAsTable.__doc__
 
@@ -845,11 +855,18 @@ class DataFrameWriter(OptionUtils):
 
 
 class DataFrameWriterV2(OptionUtils):
-    def __init__(self, plan: "LogicalPlan", session: "SparkSession", table: str):
+    def __init__(
+        self,
+        plan: "LogicalPlan",
+        session: "SparkSession",
+        table: str,
+        callback: Optional[Callable[['QueryExecution'], None]] = None,
+    ):
         self._df: "LogicalPlan" = plan
         self._spark: "SparkSession" = session
         self._table_name: str = table
         self._write: "WriteOperationV2" = WriteOperationV2(self._df, self._table_name)
+        self._callback = callback if callback is not None else lambda _: None
 
     def using(self, provider: str) -> "DataFrameWriterV2":
         self._write.provider = provider
@@ -884,50 +901,56 @@ class DataFrameWriterV2(OptionUtils):
 
     def create(self) -> None:
         self._write.mode = "create"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     create.__doc__ = PySparkDataFrameWriterV2.create.__doc__
 
     def replace(self) -> None:
         self._write.mode = "replace"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     replace.__doc__ = PySparkDataFrameWriterV2.replace.__doc__
 
     def createOrReplace(self) -> None:
         self._write.mode = "create_or_replace"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     createOrReplace.__doc__ = PySparkDataFrameWriterV2.createOrReplace.__doc__
 
     def append(self) -> None:
         self._write.mode = "append"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     append.__doc__ = PySparkDataFrameWriterV2.append.__doc__
 
     def overwrite(self, condition: "ColumnOrName") -> None:
         self._write.mode = "overwrite"
         self._write.overwrite_condition = F._to_col(condition)
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     overwrite.__doc__ = PySparkDataFrameWriterV2.overwrite.__doc__
 
     def overwritePartitions(self) -> None:
         self._write.mode = "overwrite_partitions"
-        self._spark.client.execute_command(
+        _, _, qe = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
+        self._callback(qe)
 
     overwritePartitions.__doc__ = PySparkDataFrameWriterV2.overwritePartitions.__doc__
 
