@@ -21,7 +21,6 @@ import json
 from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.serializers import (
     read_int,
@@ -37,7 +36,7 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
