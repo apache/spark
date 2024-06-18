@@ -230,8 +230,8 @@ public abstract class BlockStoreClient implements Closeable {
             .exceptionally(e -> {
               int retryCount = retryCountValue;
               int saslRetryCount = saslRetryCountValue;
-              boolean isIOException = e instanceof IOException
-                      || (e.getCause() != null && e.getCause() instanceof IOException);
+              boolean isIOException = e instanceof IOException ||
+                      e.getCause() instanceof IOException;
               boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
               if (!isSaslTimeout && saslRetryCount > 0) {
                 Preconditions.checkState(retryCount >= saslRetryCount,
@@ -245,12 +245,12 @@ public abstract class BlockStoreClient implements Closeable {
               if (!shouldRetry) {
                 future.completeExceptionally(e);
               } else {
-                if (enableSaslRetries && e instanceof SaslTimeoutException) {
+                if (isSaslTimeout) {
                   saslRetryCount += 1;
                 }
                 retryCount += 1;
-                int finalRetryCount = retryCount;
-                int finalSaslRetryCount = saslRetryCount;
+                final int finalRetryCount = retryCount;
+                final int finalSaslRetryCount = saslRetryCount;
                 logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
                         MDC.of(LogKeys.NUM_RETRY$.MODULE$, finalRetryCount),
                         MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
