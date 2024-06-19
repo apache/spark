@@ -172,6 +172,9 @@ class MergeIntoWriter[T] private[sql] (
    */
   def withSchemaEvolution(): MergeIntoWriter[T] = {
     new MergeIntoWriter[T](this.table, this.ds, this.on, schemaEvolutionEnabled = true)
+      .withNewMatchedActions(matchedActions: _*)
+      .withNewNotMatchedActions(notMatchedActions: _*)
+      .withNewNotMatchedBySourceActions(notMatchedBySourceActions: _*)
   }
 
   /**
