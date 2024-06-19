@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -49,8 +50,8 @@ public class NettyUtils {
    */
   private static int MAX_DEFAULT_NETTY_THREADS = 8;
 
-  private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
-      new PooledByteBufAllocator[2];
+  private static final AtomicReferenceArray<PooledByteBufAllocator> _sharedPooledByteBufAllocator =
+      new AtomicReferenceArray<>(2);
 
   public static long freeDirectMemory() {
     return PlatformDependent.maxDirectMemory() - PlatformDependent.usedDirectMemory();
@@ -121,18 +122,24 @@ public class NettyUtils {
    * Returns the lazily created shared pooled ByteBuf allocator for the specified allowCache
    * parameter value.
    */
-  public static synchronized PooledByteBufAllocator getSharedPooledByteBufAllocator(
+  public static PooledByteBufAllocator getSharedPooledByteBufAllocator(
       boolean allowDirectBufs,
       boolean allowCache) {
     final int index = allowCache ? 0 : 1;
-    if (_sharedPooledByteBufAllocator[index] == null) {
-      _sharedPooledByteBufAllocator[index] =
-        createPooledByteBufAllocator(
-          allowDirectBufs,
-          allowCache,
-          defaultNumThreads(0));
+    PooledByteBufAllocator allocator = _sharedPooledByteBufAllocator.get(index);
+    if (allocator == null) {
+      synchronized (NettyUtils.class) {
+        allocator = _sharedPooledByteBufAllocator.get(index);
+        if (allocator == null) {
+          allocator = createPooledByteBufAllocator(
+            allowDirectBufs,
+            allowCache,
+            defaultNumThreads(0));
+          _sharedPooledByteBufAllocator.set(index, allocator);
+        }
+      }
     }
-    return _sharedPooledByteBufAllocator[index];
+    return allocator;
   }
 
   /**
