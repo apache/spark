@@ -32,6 +32,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
+    PySparkNotImplementedError,
 )
 from pyspark.sql.types import (
     DataType,
@@ -2241,37 +2242,19 @@ class TypesTestsMixin:
                 self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
             )
 
-    def test_disallowed_types_in_collect(self):
-        # YearMonthIntervalType
-        with self.assertRaises(Exception):
+    def test_ym_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
             self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
 
-        # CalendarIntervalType
-        with self.assertRaises(Exception):
-            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()
+        with self.temp_env({"PYSPARK_YM_INTERVAL_LEGACY": "1"}):
+            self.assertEqual(
+                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first(),
+                Row(interval=128),
+            )
 
-    def test_disallowed_types_list_config(self):
-        with self.sql_conf(
-            {"spark.sql.execution.pyspark.collect.disabledTypes": "YearMonthIntervalType"}
-        ):
-            # YearMonthIntervalType
-            with self.assertRaises(Exception):
-                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
-
-            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()
-
-        with self.sql_conf(
-            {"spark.sql.execution.pyspark.collect.disabledTypes": "CalendarIntervalType"}
-        ):
-            # CalendarIntervalType
-            with self.assertRaises(Exception):
-                self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()
-
-            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
-
-        with self.sql_conf({"spark.sql.execution.pyspark.collect.disabledTypes": ""}):
-            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
-            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()
+    def test_cal_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
 
 
 class DataTypeTests(unittest.TestCase):
