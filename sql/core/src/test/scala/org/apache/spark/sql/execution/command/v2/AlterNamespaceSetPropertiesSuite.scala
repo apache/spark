@@ -27,17 +27,4 @@ class AlterNamespaceSetPropertiesSuite extends command.AlterNamespaceSetProperti
     with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
   override def notFoundMsgPrefix: String = "Namespace"
-
-
-  test("UNSET") {
-    val ns = s"$catalog.$namespace"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $ns")
-      assert(getProperties(ns) === "")
-      sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('a'='a', 'b'='b', 'c'='c')")
-      assert(getProperties(ns) === "((a,a), (b,b), (c,c))")
-      sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES ('b')")
-      assert(getProperties(ns) === "((a,a), (c,c))")
-    }
-  }
 }
