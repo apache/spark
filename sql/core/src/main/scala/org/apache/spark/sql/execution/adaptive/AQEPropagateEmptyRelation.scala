@@ -35,8 +35,7 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
-    super.isEmpty(plan) || plan.isInstanceOf[EmptyRelation] ||
-      (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
+    super.isEmpty(plan) || (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
@@ -64,6 +63,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       } else {
         None
       }
+
+    case _: EmptyRelation => Some(0)
 
     case _ => None
   }
