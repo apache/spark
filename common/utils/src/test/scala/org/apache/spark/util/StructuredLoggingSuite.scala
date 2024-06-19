@@ -56,7 +56,7 @@ trait LoggingSuiteBase
   def basicMsgWithEscapeChar: String = "This is a log message\nThis is a new line \t other msg"
 
   def basicMsgWithEscapeCharMDC: LogEntry =
-    log"This is a log message\nThis is a new line \t other msg"
+    log"This is a log message" + LF + log"This is a new line " + TAB + log" other msg"
 
   def msgWithMDC: LogEntry = log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, "1")}."
 

@@ -19,7 +19,6 @@ package org.apache.spark.internal
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.text.StringEscapeUtils
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -100,7 +99,7 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = StringEscapeUtils.unescapeJava(messageWithContext.message)
+  def message: String = messageWithContext.message
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
@@ -161,7 +160,16 @@ trait Logging {
 
       MessageWithContext(sb.toString(), context)
     }
+
+    def log(c: Char): MessageWithContext = {
+      MessageWithContext(s"$c", new java.util.HashMap[String, String]())
+    }
   }
+
+  private final val LF_CHAR: Char = '\n'
+  private final val TAB_CHAR: Char = '\t'
+  final val LF = MessageWithContext(s"$LF_CHAR", new java.util.HashMap[String, String]())
+  final val TAB = MessageWithContext(s"$TAB_CHAR", new java.util.HashMap[String, String]())
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
     val threadContext = CloseableThreadContext.putAll(context)
