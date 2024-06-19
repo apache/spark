@@ -396,6 +396,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockManager = Some(blockManager)
     )
     intercept[FetchFailedException] { iterator.next() }
+    verify(mockExternalBlockStoreClient, times(1)).getHostLocalDirs(any(), any(), any(), any())
   }
 
   test("Hit maxBytesInFlight limitation before maxBlocksInFlightPerAddress") {
