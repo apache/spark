@@ -19,12 +19,9 @@ package org.apache.spark.errors
 
 import java.io.{File, IOException}
 import java.util.concurrent.TimeoutException
-
 import scala.jdk.CollectionConverters._
-
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, TaskNotSerializableException}
 import org.apache.spark.internal.config.IO_COMPRESSION_CODEC
 import org.apache.spark.io.CompressionCodec.FALLBACK_COMPRESSION_CODEC
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -499,6 +496,16 @@ private[spark] object SparkCoreErrors {
         "codecName" -> codecName,
         "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
         "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC)))
+  }
+
+  def cartesianPartitionNumOverflow(rdd1PartitionNum: Int, rdd1PartitionNum2: Int): Throwable = {
+    new SparkArithmeticException(
+      errorClass = "CARTESIAN_PARTITION_NUM_ARITHMETIC_OVERFLOW",
+      messageParameters = Map(
+        "value1" -> rdd1PartitionNum.toString,
+        "value2" -> rdd1PartitionNum2.toString),
+      context = Array.empty
+    )
   }
 
   private def quoteByDefault(elem: String): String = {

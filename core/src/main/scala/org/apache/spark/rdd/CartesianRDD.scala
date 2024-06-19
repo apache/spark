@@ -18,10 +18,9 @@
 package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
-
 import scala.reflect.ClassTag
-
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -53,11 +52,16 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
+  val numPartitionsInRdd1 = rdd1.partitions.length
   val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
+    val partitionNum: Long = numPartitionsInRdd1.toLong * numPartitionsInRdd2.toLong
+    if (partitionNum > Int.MaxValue) {
+      throw SparkCoreErrors.cartesianPartitionNumOverflow(numPartitionsInRdd1, numPartitionsInRdd2)
+    }
+    val array = new Array[Partition](partitionNum.toInt)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
