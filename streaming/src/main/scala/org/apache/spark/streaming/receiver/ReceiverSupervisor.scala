@@ -25,7 +25,7 @@ import scala.concurrent._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DELAY, ERROR, MESSAGE, STREAM_ID}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -145,10 +145,10 @@ private[streaming] abstract class ReceiverSupervisor(
   def startReceiver(): Unit = synchronized {
     try {
       if (onReceiverStart()) {
-        logInfo(s"Starting receiver $streamId")
+        logInfo(log"Starting receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
         receiverState = Started
         receiver.onStart()
-        logInfo(s"Called receiver $streamId onStart")
+        logInfo(log"Called receiver ${MDC(LogKeys.STREAM_ID, streamId)} onStart")
       } else {
         // The driver refused us
         stop("Registered unsuccessfully because Driver refused to start receiver " + streamId, None)
@@ -162,7 +162,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Stop receiver */
   def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
-      logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
+      logInfo(log"Stopping receiver with message: ${MDC(LogKeys.MESSAGE, message)}: " +
+        log"${MDC(LogKeys.ERROR, error.getOrElse(""))}")
       receiverState match {
         case Initialized =>
           logWarning("Skip stopping receiver because it has not yet stared")
