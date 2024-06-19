@@ -23,7 +23,6 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-import io.grpc.StatusRuntimeException
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
