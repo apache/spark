@@ -796,36 +796,26 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
-  with NullIntolerant {
+case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
 
-  override def child: Expression = srcExpr
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    input.dataType,
+    "validateUTF8String",
+    Seq(input),
+    inputTypes)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
-  override def dataType: DataType = child.dataType
+
+  override def nodeName: String = "validate_utf8"
+
   override def nullable: Boolean = true
 
-  override def nullSafeEval(srcEval: Any): Any = {
-    val utf8string = srcEval.asInstanceOf[UTF8String]
-    if (utf8string.isValid) utf8string
-    else throw QueryExecutionErrors.invalidUTF8StringError(utf8string)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""
-        if ($c.isValid()) {
-          ${ev.value} = $c;
-        } else {
-          throw QueryExecutionErrors.invalidUTF8StringError($c);
-        }
-      """
-    )
-  }
-
-  override def prettyName: String = "validate_utf8"
+  override def child: Expression = input
 
   override protected def withNewChildInternal(newChild: Expression): ValidateUTF8 = {
-    copy(srcExpr = newChild)
+    copy(input = newChild)
   }
 
 }
@@ -855,36 +845,26 @@ case class ValidateUTF8(srcExpr: Expression) extends UnaryExpression with Implic
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on
-case class TryValidateUTF8(srcExpr: Expression) extends UnaryExpression with ImplicitCastInputTypes
-  with NullIntolerant {
+case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
 
-  override def child: Expression = srcExpr
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    input.dataType,
+    "tryValidateUTF8String",
+    Seq(input),
+    inputTypes)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
-  override def dataType: DataType = child.dataType
+
+  override def nodeName: String = "try_validate_utf8"
+
   override def nullable: Boolean = true
 
-  override def nullSafeEval(srcEval: Any): Any = {
-    val utf8string = srcEval.asInstanceOf[UTF8String]
-    if (utf8string.isValid) utf8string
-    else null
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c =>
-      s"""
-        if ($c.isValid()) {
-          ${ev.value} = $c;
-        } else {
-          ${ev.isNull} = true;
-        }
-      """
-    )
-  }
-
-  override def prettyName: String = "try_validate_utf8"
+  override def child: Expression = input
 
   override protected def withNewChildInternal(newChild: Expression): TryValidateUTF8 = {
-    copy(srcExpr = newChild)
+    copy(input = newChild)
   }
 
 }
