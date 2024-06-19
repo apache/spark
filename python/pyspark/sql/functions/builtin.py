@@ -155,12 +155,15 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals or ndarray.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool, list or dict, NumPy literals or ndarray.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
 
         .. versionchanged:: 3.4.0
             Since 3.4.0, it supports the list type.
+
+        .. versionchanged:: 4.0.0
+            Since 4.0.0, it supports the dict type for the creation of a map.
 
     Returns
     -------
@@ -212,7 +215,19 @@ def lit(col: Any) -> Column:
     |      false|     Yes|
     |      false|      No|
     +-----------+--------+
+
+    Example 5: Creating a literal column from a dict.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.lit({"a": 1, "b": 2}).alias("map_col")).show()
+    +----------------+
+    |         map_col|
+    +----------------+
+    |{a -> 1, b -> 2}|
+    +----------------+
     """
+    from itertools import chain
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -221,6 +236,8 @@ def lit(col: Any) -> Column:
                 error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
+    elif isinstance(col, dict):
+        return create_map(*[lit(x) for x in chain(*col.items())])
     else:
         if _has_numpy and isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)

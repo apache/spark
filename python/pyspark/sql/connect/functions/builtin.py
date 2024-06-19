@@ -255,6 +255,7 @@ column = col
 
 
 def lit(col: Any) -> Column:
+    from itertools import chain
     from pyspark.sql.connect.column import Column as ConnectColumn
 
     if isinstance(col, Column):
@@ -265,6 +266,8 @@ def lit(col: Any) -> Column:
                 error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
             )
         return array(*[lit(c) for c in col])
+    elif isinstance(col, dict):
+        return create_map(*[lit(x) for x in chain(*col.items())])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
             raise PySparkTypeError(

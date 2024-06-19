@@ -1183,6 +1183,16 @@ class FunctionsTestsMixin:
             message_parameters={"func_name": "lit"},
         )
 
+    def test_lit_dict(self):
+        # SPARK-48665: added support for dict type
+        test_dict = {"a": 1, "b": 2}
+        actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+        self.assertEqual(actual, test_dict)
+
+        test_dict = {"a": {"1": 1}, "b": {"2": 2}}
+        actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+        self.assertEqual(actual, test_dict)
+
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(
