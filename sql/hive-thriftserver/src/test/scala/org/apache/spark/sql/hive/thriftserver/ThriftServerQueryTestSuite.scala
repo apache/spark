@@ -103,11 +103,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
-    "collations.sql",
-    "binary_hex.sql",
-    "binary_hex_discrete.sql",
-    "binary_basic.sql",
-    "binary_base64.sql"
+    "collations.sql"
   )
 
   override def runQueries(
@@ -119,6 +115,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
+        SQLConf.get.setConfString(k, v)
       }
 
       testCase match {
