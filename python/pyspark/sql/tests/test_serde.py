@@ -98,9 +98,9 @@ class SerdeTestsMixin:
     def test_ntz_from_internal(self):
         for ts in [1, 22, 333, 44444444, 5555555555]:
             t1 = datetime.datetime.utcfromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
-            t2 = datetime.datetime.fromtimestamp(
-                timestamp=ts // 1000000, tz=datetime.timezone.utc
-            ).replace(microsecond=ts % 1000000, tzinfo=None)
+            t2 = datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
             self.assertEqual(t1, t2)
 
     # regression test for SPARK-19561
