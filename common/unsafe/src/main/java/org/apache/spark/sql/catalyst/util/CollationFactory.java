@@ -318,9 +318,33 @@ public final class CollationFactory {
         }
       }
 
-      protected static SparkException collationInvalidNameException(String collationName) {
+      protected static SparkException collationInvalidNameException(
+          String collationName,
+          String[] ICULocaleNames,
+          List<String> validModifiers) {
+        String normalizedCollationName = collationName.toUpperCase();
+        Map<String, String> params = new HashMap<>();
+        params.put("collationName", collationName);
+
+        // remove modifiers from collation name.
+        String localeName = normalizedCollationName;
+        List<String> modifiers = new ArrayList<>();
+        while (validModifiers.stream().anyMatch(localeName::endsWith)) {
+          modifiers.add(localeName.substring(localeName.length() - 3));
+          localeName = localeName.substring(0, localeName.length() - 3);
+        }
+
+        Collections.reverse(modifiers);
+
+        String finalLocaleName = localeName;
+        String closestLocale = Collections.min(List.of(ICULocaleNames), Comparator.comparingInt(
+          c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
+            UTF8String.fromString(finalLocaleName))));
+        params.put("proposal", closestLocale+ String.join(
+                "", modifiers.stream().distinct().toList()));
+
         return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(Map.of("collationName", collationName)), null);
+          SparkException.constructMessageParams(params), null);
       }
 
       private static int collationNameToId(String collationName) throws SparkException {
@@ -380,7 +404,9 @@ public final class CollationFactory {
           return UTF8_LCASE_COLLATION_ID;
         } else {
           // Throw exception with original (before case conversion) collation name.
-          throw collationInvalidNameException(originalName);
+          throw collationInvalidNameException(originalName,
+            new String[]{UTF8_BINARY_COLLATION.collationName,
+              UTF8_LCASE_COLLATION.collationName}, List.of());
         }
       }
 
@@ -573,7 +599,8 @@ public final class CollationFactory {
           }
         }
         if (lastPos == -1) {
-          throw collationInvalidNameException(originalName);
+          throw collationInvalidNameException(
+            originalName, ICULocaleNames, List.of("_CI", "_AI", "_CS", "_AS"));
         } else {
           String locale = collationName.substring(0, lastPos);
           int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
@@ -604,7 +631,8 @@ public final class CollationFactory {
             caseSensitivity = CaseSensitivity.CI;
             accentSensitivity = AccentSensitivity.AI;
           } else {
-            throw collationInvalidNameException(originalName);
+            throw collationInvalidNameException(
+              originalName, ICULocaleNames, List.of("_CI", "_AI", "_CS", "_AS"));
           }
 
           // Build collation ID from computed specifiers.
