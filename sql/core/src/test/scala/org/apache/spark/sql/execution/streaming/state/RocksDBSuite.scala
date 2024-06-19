@@ -912,7 +912,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("RocksDBFileManager: eliminate lock contention") {
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: " +
+    "background snapshot upload doesn't acquire RocksDB instance lock") {
     // Create a custom ExecutionContext
     implicit val ec: ExecutionContext = ExecutionContext
       .fromExecutor(Executors.newSingleThreadExecutor())
@@ -939,6 +940,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
       // Ensure that maintenance task runs without being blocked by task thread
       ThreadUtils.awaitResult(maintenanceFuture, timeout)
+      assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
       // Release lock
       db.commit()
