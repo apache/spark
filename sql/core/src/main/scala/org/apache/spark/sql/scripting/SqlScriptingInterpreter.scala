@@ -63,6 +63,7 @@ case class SqlScriptingInterpreter() extends ProceduralLanguageInterpreter {
   private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
+        // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
         val variables = body.collection.flatMap {
           case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
           case _ => None

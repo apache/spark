@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
  */
 sealed trait CompoundStatementExec extends Logging {
   /**
-   * Whether the statement originates from the SQL script or it is created during the interpretation.
+   * Whether the statement originates from the SQL script or is created during the interpretation.
    * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
@@ -52,8 +52,9 @@ trait NonLeafStatementExec extends CompoundStatementExec with Iterator[CompoundS
  * Executable node for SingleStatement.
  * @param parsedPlan Logical plan of the parsed statement.
  * @param origin Origin descriptor for the statement.
- * @param isInternal Whether the statement originates from the script
- *                   or it is created during the interpretation.
+ * @param isInternal Whether the statement originates from the SQL script or it is created during
+ *                   the interpretation. Example: DropVariable statements are automatically created
+ *                   at the end of each compound.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
