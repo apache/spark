@@ -94,6 +94,10 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_schema_with_collations_json_ser_de(self):
         super().test_schema_with_collations_json_ser_de()
 
+    @unittest.skip("This configuration only takes effects in PySpark Classic.")
+    def test_disallowed_types_list_config(self):
+        super().test_disallowed_types_list_config()
+
 
 if __name__ == "__main__":
     import unittest

@@ -586,7 +586,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard
+
+    Notes
+    -----
+    This data type doesn't support collection: df.collect/take/head.
+    """
 
     YEAR = 0
     MONTH = 1
@@ -1788,6 +1793,24 @@ _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
+
+
+def _check_collection_support(d: DataType, disallowed: List[str]) -> None:
+    if len(disallowed) == 0:
+        return
+    if d.__class__.__name__ in disallowed:
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE",
+            message_parameters={"data_type": str(d)},
+        )
+    elif isinstance(d, StructType):
+        for f in d.fields:
+            _check_collection_support(f.dataType, disallowed)
+    elif isinstance(d, ArrayType):
+        _check_collection_support(d.elementType, disallowed)
+    elif isinstance(d, MapType):
+        _check_collection_support(d.keyType, disallowed)
+        _check_collection_support(d.valueType, disallowed)
 
 
 def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:

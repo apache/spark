@@ -3200,6 +3200,14 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
 
+  val PYSPARK_COLLECT_DISALLOW_LIST = buildConf("spark.sql.execution.pyspark.collect.disabledTypes")
+    .internal()
+    .doc("A comma-separated list of data types names for which the collection is disabled. " +
+      "This configuration only takes effects in PySpark Classic.")
+    .version("4.0.0")
+    .stringConf
+    .createWithDefault("YearMonthIntervalType,CalendarIntervalType")
+
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
@@ -5843,6 +5851,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNullInEmptyBehavior: Boolean = {
     getConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR).getOrElse(!ansiEnabled)
   }
+
+  def pyCollectDisallowList: String = getConf(SQLConf.PYSPARK_COLLECT_DISALLOW_LIST)
 
   def isReplEagerEvalEnabled: Boolean = getConf(SQLConf.REPL_EAGER_EVAL_ENABLED)
 

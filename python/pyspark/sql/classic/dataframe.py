@@ -62,6 +62,7 @@ from pyspark.sql.types import (
     StructType,
     Row,
     _parse_datatype_json_string,
+    _check_collection_support,
 )
 from pyspark.sql.dataframe import (
     DataFrame as ParentDataFrame,
@@ -441,6 +442,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return int(self._jdf.count())
 
     def collect(self) -> List[Row]:
+        _check_collection_support(
+            self.schema, self.sparkSession._jconf.pyCollectDisallowList().split(",")
+        )
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
         return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
