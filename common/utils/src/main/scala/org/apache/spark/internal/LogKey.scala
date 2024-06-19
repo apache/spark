@@ -103,9 +103,9 @@ private[spark] object LogKeys {
   case object BROADCAST_ID extends LogKey
   case object BROADCAST_OUTPUT_STATUS_SIZE extends LogKey
   case object BUCKET extends LogKey
+  case object BYTECODE_SIZE extends LogKey
   case object BYTE_BUFFER extends LogKey
   case object BYTE_SIZE extends LogKey
-  case object BYTECODE_SIZE extends LogKey
   case object CACHED_TABLE_PARTITION_METADATA_SIZE extends LogKey
   case object CACHE_AUTO_REMOVED_SIZE extends LogKey
   case object CACHE_UNTIL_HIGHEST_CONSUMED_SIZE extends LogKey
@@ -561,8 +561,8 @@ private[spark] object LogKeys {
   case object PARTITIONER extends LogKey
   case object PARTITION_ID extends LogKey
   case object PARTITION_IDS extends LogKey
-  case object PARTITION_SPECIFICATION extends LogKey
   case object PARTITION_SIZE extends LogKey
+  case object PARTITION_SPECIFICATION extends LogKey
   case object PARTITION_SPECS extends LogKey
   case object PATH extends LogKey
   case object PATHS extends LogKey
@@ -664,8 +664,8 @@ private[spark] object LogKeys {
   case object RULE_NAME extends LogKey
   case object RUN_ID extends LogKey
   case object SCALA_VERSION extends LogKey
-  case object SCALING_UP_RATIO extends LogKey
   case object SCALING_DOWN_RATIO extends LogKey
+  case object SCALING_UP_RATIO extends LogKey
   case object SCHEDULER_POOL_NAME extends LogKey
   case object SCHEDULING_MODE extends LogKey
   case object SCHEMA extends LogKey
