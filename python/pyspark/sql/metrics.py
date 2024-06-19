@@ -106,7 +106,7 @@ class CollectedMetrics:
         metrics: List[MetricValue] = dataclasses.field(default_factory=list)
         children: List[int] = dataclasses.field(default_factory=list)
 
-    def text(self, current: "Node", graph: Dict[int, "Node"], prefix: str="") -> str:
+    def text(self, current: "Node", graph: Dict[int, "Node"], prefix: str = "") -> str:
         """
         Converts the current node and its children into a textual representation. This is used
         to provide a usable output for the command line or other text-based interfaces. However,
