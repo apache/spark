@@ -108,7 +108,7 @@ message Unknown {}
 // Common metadata of all relations.
 message RelationCommon {
   // (Optional) Shared relation metadata.
-  string source_info = 1 [deprecated=true];
+  reserved 1;
 
   // (Optional) A per-client globally unique id for a given connect plan.
   optional int64 plan_id = 2;
