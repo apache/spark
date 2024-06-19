@@ -57,7 +57,16 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
+    val newNumPartitions = try {
+      Math.multiplyExact(rdd1.partitions.length, rdd2.partitions.length)
+    } catch {
+      case e: ArithmeticException =>
+        throw new ArithmeticException(s"Integer overflow when calculating the number of " +
+          s"partitions for CartesianRDD (rdd1 ID = ${rdd1.id} has ${rdd1.partitions.length} " +
+          s"partitions; rdd2 ID = ${rdd2.id} has ${rdd2.partitions.length} partitions). Please " +
+          s"reduce the number of partitions in the children RDDs.").initCause(e)
+    }
+    val array = new Array[Partition](newNumPartitions)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
