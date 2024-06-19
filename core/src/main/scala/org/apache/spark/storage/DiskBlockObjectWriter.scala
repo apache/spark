@@ -192,8 +192,7 @@ private[spark] class DiskBlockObjectWriter(
       }
     } catch {
       case e: IOException =>
-        logInfo(log"Exception occurred while closing the output stream" +
-          log"${MDC(ERROR, e.getMessage)}")
+        logInfo("Exception occurred while closing the output stream: " + e.getMessage)
     } finally {
       if (initialized) {
         Utils.tryWithSafeFinally {
