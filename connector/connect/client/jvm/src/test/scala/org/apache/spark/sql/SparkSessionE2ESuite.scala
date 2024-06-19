@@ -400,11 +400,11 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
     session1.client.hijackServerSideSessionIdForTesting("-testing")
 
-    val e = intercept[StatusRuntimeException] {
+    val e = intercept[SparkException] {
       session1.range(3).analyze
     }
 
-    assert(e.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
+    assert(e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]"))
     assert(!session1.client.isSessionValid)
     assert(SparkSession.getActiveSession.isEmpty)
     assert(SparkSession.getDefaultSession.isEmpty)
