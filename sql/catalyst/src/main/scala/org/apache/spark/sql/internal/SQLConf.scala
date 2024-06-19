@@ -1977,6 +1977,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
+    .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
+      "the option is enabled, table with two partition directories 'table/invalid' and " +
+      "'table/col=1' will only load the latter directory and ignore the invalid partition")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
@@ -5274,6 +5282,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
+  def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
