@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
  */
 sealed trait CompoundStatementExec extends Logging {
   /**
-   * Whether the statement originates from the script or it is created during the interpretation.
+   * Whether the statement originates from the SQL script or it is created during the interpretation.
    * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
