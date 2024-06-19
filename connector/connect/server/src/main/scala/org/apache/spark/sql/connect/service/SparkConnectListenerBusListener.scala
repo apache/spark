@@ -29,6 +29,7 @@ import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._
 
@@ -66,12 +67,13 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
    * @param responseObserver
    *   the responseObserver created from the first long running executeThread.
    */
-  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit = lock.synchronized {
-    val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
-    sessionHolder.session.streams.addListener(serverListener)
-    streamingQueryServerSideListener = Some(serverListener)
-    streamingQueryListenerLatch = new CountDownLatch(1)
-  }
+  def init(responseObserver: StreamObserver[ExecutePlanResponse]): Unit =
+    lock.synchronized {
+      val serverListener = new SparkConnectListenerBusListener(this, responseObserver)
+      sessionHolder.session.streams.addListener(serverListener)
+      streamingQueryServerSideListener = Some(serverListener)
+      streamingQueryListenerLatch = new CountDownLatch(1)
+    }
 
   /**
    * The cleanup of the server side listener and related resources. This method is called when the
@@ -83,10 +85,11 @@ private[sql] class ServerSideListenerHolder(val sessionHolder: SessionHolder) {
   def cleanUp(): Unit = lock.synchronized {
     streamingQueryServerSideListener.foreach { listener =>
       sessionHolder.session.streams.removeListener(listener)
+      listener.sendResultComplete()
     }
     streamingQueryStartedEventCache.clear()
     streamingQueryServerSideListener = None
-    streamingQueryListenerLatch.countDown()
+//    streamingQueryListenerLatch.countDown()
   }
 }
 
@@ -139,6 +142,13 @@ private[sql] class SparkConnectListenerBusListener(
         // remove this listener and cleanup resources.
         serverSideListenerHolder.cleanUp()
     }
+  }
+
+  def sendResultComplete(): Unit = {
+    responseObserver.asInstanceOf[ExecuteResponseObserver[ExecutePlanResponse]]
+      .onNextComplete(ExecutePlanResponse.newBuilder()
+        .setResultComplete(ExecutePlanResponse.ResultComplete.newBuilder().build())
+        .build())
   }
 
   // QueryStartedEvent is sent to client along with WriteStreamOperationStartResult

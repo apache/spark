@@ -236,14 +236,30 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         }
         completed = true // no longer interruptible
 
-        if (executeHolder.reattachable) {
-          // Reattachable execution sends a ResultComplete at the end of the stream
-          // to signal that there isn't more coming.
-          executeHolder.responseObserver.onNextComplete(createResultComplete())
-        } else {
-          executeHolder.responseObserver.onCompleted()
+        // If the request returns a long running iterator (e.g. StreamingQueryListener needs
+        // a long-running iterator to continuously stream back events),
+        // we delegate the sending of the final ResultComplete to the handler itself.
+        if (!isLongRunningIterator(executeHolder.request)) {
+          if (executeHolder.reattachable) {
+            // Reattachable execution sends a ResultComplete at the end of the stream
+            // to signal that there isn't more coming.
+            executeHolder.responseObserver.onNextComplete(createResultComplete())
+          } else {
+            executeHolder.responseObserver.onCompleted()
+          }
         }
       }
+    }
+  }
+
+  private def isLongRunningIterator(request: proto.ExecutePlanRequest): Boolean = {
+    request.getPlan.getOpTypeCase match {
+      case proto.Plan.OpTypeCase.COMMAND =>
+        request.getPlan.getCommand.getCommandTypeCase match {
+          case proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND => true
+          case _ => false
+        }
+      case _ => false
     }
   }
 

@@ -25,6 +25,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -94,7 +95,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
           s"${executeHolder.operationId}] Server side listener added. Now blocking until " +
           "all client side listeners are removed or there is error transmitting the event back.")
         // Block the handling thread, and have serverListener continuously send back new events
-        listenerHolder.streamingQueryListenerLatch.await()
+//        listenerHolder.streamingQueryListenerLatch.await()
         logInfo(s"[SessionId: $sessionId][UserId: $userId][operationId: " +
           s"${executeHolder.operationId}] Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
@@ -111,11 +112,6 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
       case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
     }
-    // If this thread is the handling thread of the original ADD_LISTENER_BUS_LISTENER command,
-    // this will be sent when the latch is counted down (either through
-    // a REMOVE_LISTENER_BUS_LISTENER command, or long-lived gRPC throws.
-    // If this thread is the handling thread of the REMOVE_LISTENER_BUS_LISTENER command,
-    // this is hit right away.
     executeHolder.eventsManager.postFinished()
   }
 }
