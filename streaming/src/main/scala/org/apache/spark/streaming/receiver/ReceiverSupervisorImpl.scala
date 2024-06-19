@@ -28,7 +28,7 @@ import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{ERROR, MESSAGE}
 import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
@@ -85,7 +85,7 @@ private[streaming] class ReceiverSupervisorImpl(
           logDebug("Received delete old batch signal")
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
-          logInfo(s"Received a new rate limit: $eps.")
+          logInfo(log"Received a new rate limit: ${MDC(LogKeys.RATE_LIMIT, eps)}.")
           registeredBlockGenerators.asScala.foreach { bg =>
             bg.updateRate(eps)
           }
@@ -195,10 +195,10 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onReceiverStop(message: String, error: Option[Throwable]): Unit = {
-    logInfo("Deregistering receiver " + streamId)
+    logInfo(log"Deregistering receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
     trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
-    logInfo("Stopped receiver " + streamId)
+    logInfo(log"Stopped receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
   }
 
   override def createBlockGenerator(
