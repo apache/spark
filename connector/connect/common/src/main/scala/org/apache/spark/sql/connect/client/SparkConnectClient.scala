@@ -71,6 +71,17 @@ private[sql] class SparkConnectClient(
     stubState.responseValidator.hijackServerSideSessionIdForTesting(suffix)
   }
 
+  /**
+   * Returns true if the session is valid on both the client and the server. A session becomes
+   * invalid if the server side information about the client, e.g., session ID, does not
+   * correspond to the actual client state.
+   */
+  private[sql] def isSessionValid: Boolean = {
+    // The last known state of the session is store in `responseValidator`, because it is where the
+    // client gets responses from the server.
+    stubState.responseValidator.isSessionValid
+  }
+
   private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
   }
