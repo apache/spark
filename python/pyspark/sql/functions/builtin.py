@@ -155,7 +155,8 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column`, str, int, float, bool, list or dict, NumPy literals or ndarray.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool, list or dict,
+        NumPy literals or ndarray.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
 
