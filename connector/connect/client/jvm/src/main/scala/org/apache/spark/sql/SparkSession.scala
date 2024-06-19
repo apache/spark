@@ -832,16 +832,12 @@ object SparkSession extends Logging {
    * they are not set yet or the associated [[SparkConnectClient]] is unusable.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    var currentDefault = defaultSession.getAcquire
-    var swapped = false
-    while ((currentDefault == null || !currentDefault.client.isSessionValid) && !swapped) {
-      // Update `defaultSession` if it is null or the contained session is not valid.
-      val result = defaultSession.compareAndExchangeRelease(currentDefault, session)
-      if (result == currentDefault) {
-        swapped = true
-      } else {
-        currentDefault = result
-      }
+    val currentDefault = defaultSession.getAcquire
+    if (currentDefault == null || !currentDefault.client.isSessionValid) {
+      // Update `defaultSession` if it is null or the contained session is not valid. There is a
+      // chance that the following `compareAndSet` fails if a new default session has just been set,
+      // but that does not matter since that event has happened after this method was invoked.
+      defaultSession.compareAndSet(currentDefault, session)
     }
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
@@ -1036,7 +1032,9 @@ object SparkSession extends Logging {
       val session = tryCreateSessionFromClient()
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)
-          while (!existingSession.client.isSessionValid) {
+          if (!existingSession.client.isSessionValid) {
+            // If the cached session has become invalid, e.g., due to a server restart, this creates
+            // a new one and returns it.
             sessions.refresh(builder.configuration)
             existingSession = sessions.get(builder.configuration)
           }
@@ -1049,7 +1047,8 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the default SparkSession.
+   * Returns the default SparkSession. If the previously set default SparkSession becomes
+   * unusable, returns None.
    *
    * @since 3.5.0
    */
@@ -1075,7 +1074,8 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the active SparkSession for the current thread.
+   * Returns the active SparkSession for the current thread. If the previously set active
+   * SparkSession becomes unusable, returns None.
    *
    * @since 3.5.0
    */

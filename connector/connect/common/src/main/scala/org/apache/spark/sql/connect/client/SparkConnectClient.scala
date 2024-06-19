@@ -72,7 +72,9 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Returns true if the session is valid on both the client and the server.
+   * Returns true if the session is valid on both the client and the server. A session becomes
+   * invalid if the server side information about the client, e.g., session ID, does not
+   * correspond to the actual client state.
    */
   private[sql] def isSessionValid: Boolean = {
     // The last known state of the session is store in `responseValidator`, because it is where the

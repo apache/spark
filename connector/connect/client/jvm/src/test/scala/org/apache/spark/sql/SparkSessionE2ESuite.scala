@@ -385,6 +385,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("SPARK-47986: get or create after session changed") {
     val remote = s"sc://localhost:$serverPort"
+
     SparkSession.clearDefaultSession()
     SparkSession.clearActiveSession()
 
