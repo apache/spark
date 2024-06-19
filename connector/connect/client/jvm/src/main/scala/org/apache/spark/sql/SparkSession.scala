@@ -1033,9 +1033,9 @@ object SparkSession extends Logging {
         .getOrElse({
           var existingSession = sessions.get(builder.configuration)
           if (!existingSession.client.isSessionValid) {
-            // If the cached session has become invalid, e.g., due to a server restart, this creates
-            // a new one and returns it.
-            sessions.refresh(builder.configuration)
+            // If the cached session has become invalid, e.g., due to a server restart, the cache
+            // entry is invalidated.
+            sessions.invalidate(builder.configuration)
             existingSession = sessions.get(builder.configuration)
           }
           existingSession
