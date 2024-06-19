@@ -131,7 +131,7 @@ select encode('渭城朝雨浥轻尘', 'US-ASCII');
 select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol);
 set spark.sql.legacy.codingErrorAction=false;
 select encode('客舍青青柳色新', 'US-ASCII');
-select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol);
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol);
 
 -- decode
 select decode();

@@ -732,7 +732,7 @@ Project [encode(客舍青青柳色新, US-ASCII, false, false) AS encode(客舍�
 
 
 -- !query
-select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
 Project [encode(scol#x, ecol#x, false, false) AS encode(scol, ecol)#x]
 +- SubqueryAlias t

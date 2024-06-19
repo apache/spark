@@ -884,7 +884,7 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
-select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
 -- !query schema
 struct<>
 -- !query output
