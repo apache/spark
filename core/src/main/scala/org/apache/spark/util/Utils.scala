@@ -575,6 +575,10 @@ private[spark] object Utils
     if (removeSourceFile) {
       Files.move(sourceFile.toPath, destFile.toPath)
     } else {
+      // scalastyle:off println
+      println(s"source path: ${sourceFile.getAbsolutePath}")
+      println(s"dest path: ${destFile.getAbsolutePath}")
+      // scalastyle:on println
       logInfo(log"Copying ${MDC(SOURCE_PATH, sourceFile.getAbsolutePath)}" +
         log" to ${MDC(DESTINATION_PATH, destFile.getAbsolutePath)}")
       copyRecursive(sourceFile, destFile)
