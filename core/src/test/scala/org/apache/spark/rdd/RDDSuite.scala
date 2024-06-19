@@ -925,8 +925,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       sqlState = "22003",
       parameters = Map(
         "value1" -> rdd1.partitions.length.toString,
-        "value2" -> rdd2.partitions.length.toString,
-      )
+        "value2" -> rdd2.partitions.length.toString)
     )
   }
 
