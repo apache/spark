@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector
 
 import java.util.Collections
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
