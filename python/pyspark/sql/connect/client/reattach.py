@@ -58,28 +58,41 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     # Lock to manage the pool
     _lock: ClassVar[RLock] = RLock()
-    _release_thread_pool: Optional[ThreadPool] = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+    _release_thread_pool_instance: Optional[ThreadPool] = None
+
+    @classmethod  # type: ignore[misc]
+    @property
+    def _release_thread_pool(cls) -> ThreadPool:
+        # Perform a first check outside the critical path.
+        if cls._release_thread_pool_instance is not None:
+            return cls._release_thread_pool_instance
+        with cls._lock:
+            if cls._release_thread_pool_instance is None:
+                cls._release_thread_pool_instance = ThreadPool(
+                    os.cpu_count() if os.cpu_count() else 8
+                )
+            return cls._release_thread_pool_instance
 
     @classmethod
-    def shutdown(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+    def shutdown_threadpool(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
         """
         When the channel is closed, this method will be called before, to make sure all
         outstanding calls are closed.
         """
         with cls._lock:
-            if cls._release_thread_pool is not None:
-                cls._release_thread_pool.close()
-                cls._release_thread_pool.join()
-                cls._release_thread_pool = None
+            if cls._release_thread_pool_instance is not None:
+                cls._release_thread_pool.close()  # type: ignore[attr-defined]
+                cls._release_thread_pool.join()  # type: ignore[attr-defined]
+                cls._release_thread_pool_instance = None
 
-    @classmethod
-    def _initialize_pool_if_necessary(cls: Type["ExecutePlanResponseReattachableIterator"]) -> None:
+    def shutdown(self: "ExecutePlanResponseReattachableIterator") -> None:
         """
-        If the processing pool for the release calls is None, initialize the pool exactly once.
+        When the channel is closed, this method will be called before, to make sure all
+        outstanding calls are closed, and mark this iterator is shutdown.
         """
-        with cls._lock:
-            if cls._release_thread_pool is None:
-                cls._release_thread_pool = ThreadPool(os.cpu_count() if os.cpu_count() else 8)
+        with self._lock:
+            self.shutdown_threadpool()
+            self._is_shutdown = True
 
     def __init__(
         self,
@@ -88,7 +101,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
     ):
-        ExecutePlanResponseReattachableIterator._initialize_pool_if_necessary()
+        self._is_shutdown = False
         self._request = request
         self._retrying = retrying
         if request.operation_id:
@@ -206,8 +219,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
-            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if not self._is_shutdown:
+            self._release_thread_pool.apply_async(target)
 
     def _release_all(self) -> None:
         """
@@ -230,8 +243,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             except Exception as e:
                 warnings.warn(f"ReleaseExecute failed with exception: {e}.")
 
-        if ExecutePlanResponseReattachableIterator._release_thread_pool is not None:
-            ExecutePlanResponseReattachableIterator._release_thread_pool.apply_async(target)
+        if not self._is_shutdown:
+            self._release_thread_pool.apply_async(target)
         self._result_complete = True
 
     def _call_iter(self, iter_fun: Callable) -> Any:

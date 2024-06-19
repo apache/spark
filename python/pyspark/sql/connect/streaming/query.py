@@ -33,7 +33,6 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryIdleEvent,
     QueryTerminatedEvent,
-    StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
@@ -111,21 +110,21 @@ class StreamingQuery:
     status.__doc__ = PySparkStreamingQuery.status.__doc__
 
     @property
-    def recentProgress(self) -> List[StreamingQueryProgress]:
+    def recentProgress(self) -> List[Dict[str, Any]]:
         cmd = pb2.StreamingQueryCommand()
         cmd.recent_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
-        return [StreamingQueryProgress.fromJson(json.loads(p)) for p in progress]
+        return [json.loads(p) for p in progress]
 
     recentProgress.__doc__ = PySparkStreamingQuery.recentProgress.__doc__
 
     @property
-    def lastProgress(self) -> Optional[StreamingQueryProgress]:
+    def lastProgress(self) -> Optional[Dict[str, Any]]:
         cmd = pb2.StreamingQueryCommand()
         cmd.last_progress = True
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
         if len(progress) > 0:
-            return StreamingQueryProgress.fromJson(json.loads(progress[-1]))
+            return json.loads(progress[-1])
         else:
             return None
 

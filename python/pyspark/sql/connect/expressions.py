@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -77,6 +76,8 @@ from pyspark.sql.connect.types import (
     proto_schema_to_pyspark_data_type,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import current_origin
+from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
@@ -89,7 +90,16 @@ class Expression:
     """
 
     def __init__(self) -> None:
-        pass
+        origin = current_origin()
+        fragment = origin.fragment
+        call_site = origin.call_site
+        self.origin = None
+        if fragment is not None and call_site is not None:
+            self.origin = proto.Origin(
+                python_origin=proto.PythonOrigin(
+                    fragment=origin.fragment, call_site=origin.call_site
+                )
+            )
 
     def to_plan(  # type: ignore[empty-body]
         self, session: "SparkConnectClient"
@@ -111,6 +121,12 @@ class Expression:
 
     def name(self) -> str:  # type: ignore[empty-body]
         ...
+
+    def _create_proto_expression(self) -> proto.Expression:
+        plan = proto.Expression()
+        if self.origin is not None:
+            plan.common.origin.CopyFrom(self.origin)
+        return plan
 
 
 class CaseWhen(Expression):
@@ -162,7 +178,7 @@ class ColumnAlias(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         if len(self._alias) == 1:
-            exp = proto.Expression()
+            exp = self._create_proto_expression()
             exp.alias.name.append(self._alias[0])
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
@@ -175,7 +191,7 @@ class ColumnAlias(Expression):
                     error_class="CANNOT_PROVIDE_METADATA",
                     message_parameters={},
                 )
-            exp = proto.Expression()
+            exp = self._create_proto_expression()
             exp.alias.name.extend(self._alias)
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
             return exp
@@ -407,7 +423,7 @@ class LiteralExpression(Expression):
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
 
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
 
         if self._value is None:
             expr.literal.null.CopyFrom(pyspark_types_to_proto_types(self._dataType))
@@ -483,7 +499,7 @@ class ColumnReference(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the expression."""
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         if self._plan_id is not None:
             expr.unresolved_attribute.plan_id = self._plan_id
@@ -512,7 +528,7 @@ class UnresolvedStar(Expression):
         self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_star.SetInParent()
         if self._unparsed_target is not None:
             expr.unresolved_star.unparsed_target = self._unparsed_target
@@ -546,7 +562,7 @@ class SQLExpression(Expression):
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         """Returns the Proto representation of the SQL expression."""
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.expression_string.expression = self._expr
         return expr
 
@@ -572,7 +588,7 @@ class SortOrder(Expression):
         )
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        sort = proto.Expression()
+        sort = self._create_proto_expression()
         sort.sort_order.child.CopyFrom(self._child.to_plan(session))
 
         if self._ascending:
@@ -611,7 +627,7 @@ class UnresolvedFunction(Expression):
         self._is_distinct = is_distinct
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
+        fun = self._create_proto_expression()
         fun.unresolved_function.function_name = self._name
         if len(self._args) > 0:
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
@@ -708,7 +724,7 @@ class CommonInlineUserDefinedFunction(Expression):
         self._function = function
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.common_inline_user_defined_function.function_name = self._function_name
         expr.common_inline_user_defined_function.deterministic = self._deterministic
         if len(self._arguments) > 0:
@@ -762,7 +778,7 @@ class WithField(Expression):
         self._valueExpr = valueExpr
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
         expr.update_fields.field_name = self._fieldName
         expr.update_fields.value_expression.CopyFrom(self._valueExpr.to_plan(session))
@@ -787,7 +803,7 @@ class DropField(Expression):
         self._fieldName = fieldName
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.update_fields.struct_expression.CopyFrom(self._structExpr.to_plan(session))
         expr.update_fields.field_name = self._fieldName
         return expr
@@ -811,7 +827,7 @@ class UnresolvedExtractValue(Expression):
         self._extraction = extraction
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_extract_value.child.CopyFrom(self._child.to_plan(session))
         expr.unresolved_extract_value.extraction.CopyFrom(self._extraction.to_plan(session))
         return expr
@@ -831,7 +847,7 @@ class UnresolvedRegex(Expression):
         self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_regex.col_name = self.col_name
         if self._plan_id is not None:
             expr.unresolved_regex.plan_id = self._plan_id
@@ -858,7 +874,7 @@ class CastExpression(Expression):
         self._eval_mode = eval_mode
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        fun = proto.Expression()
+        fun = self._create_proto_expression()
         fun.cast.expr.CopyFrom(self._expr.to_plan(session))
         if isinstance(self._data_type, str):
             fun.cast.type_str = self._data_type
@@ -909,7 +925,7 @@ class UnresolvedNamedLambdaVariable(Expression):
         self._name_parts = name_parts
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.unresolved_named_lambda_variable.name_parts.extend(self._name_parts)
         return expr
 
@@ -951,7 +967,7 @@ class LambdaFunction(Expression):
         self._arguments = arguments
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.lambda_function.function.CopyFrom(self._function.to_plan(session))
         expr.lambda_function.arguments.extend(
             [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
@@ -984,7 +1000,7 @@ class WindowExpression(Expression):
         self._windowSpec = windowSpec
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
 
         expr.window.window_function.CopyFrom(self._windowFunction.to_plan(session))
 
@@ -1091,7 +1107,7 @@ class CallFunction(Expression):
         self._args = args
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.call_function.function_name = self._name
         if len(self._args) > 0:
             expr.call_function.arguments.extend([arg.to_plan(session) for arg in self._args])
@@ -1115,7 +1131,7 @@ class NamedArgumentExpression(Expression):
         self._value = value
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
-        expr = proto.Expression()
+        expr = self._create_proto_expression()
         expr.named_argument_expression.key = self._key
         expr.named_argument_expression.value.CopyFrom(self._value.to_plan(session))
         return expr
