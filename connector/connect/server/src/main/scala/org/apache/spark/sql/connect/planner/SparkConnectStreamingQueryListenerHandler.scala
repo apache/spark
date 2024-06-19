@@ -24,7 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 
 /**
@@ -83,20 +83,30 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
             } catch {
               case NonFatal(e) =>
                 logError(
-                  s"[SessionId: $sessionId][UserId: $userId][operationId: " +
-                    s"${executeHolder.operationId}] Error sending listener added response.",
+                  log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+                    log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
+                    log"[operationId: " +
+                    log"${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER, executeHolder.operationId)}] " +
+                    log"Error sending listener added response.",
                   e)
                 listenerHolder.cleanUp()
                 return
             }
         }
-        logInfo(s"[SessionId: $sessionId][UserId: $userId][operationId: " +
-          s"${executeHolder.operationId}] Server side listener added. Now blocking until " +
-          "all client side listeners are removed or there is error transmitting the event back.")
+        logInfo(
+          log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}][UserId: " +
+            log"${MDC(LogKeys.USER_ID, userId)}][operationId: " +
+            log"${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER, executeHolder.operationId)}] " +
+            log"Server side listener added. Now blocking until all client side listeners are " +
+            log"removed or there is error transmitting the event back.")
         // Block the handling thread, and have serverListener continuously send back new events
         listenerHolder.streamingQueryListenerLatch.await()
-        logInfo(s"[SessionId: $sessionId][UserId: $userId][operationId: " +
-          s"${executeHolder.operationId}] Server side listener long-running handling thread ended.")
+        logInfo(
+          log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}][UserId: " +
+            log"${MDC(LogKeys.USER_ID, userId)}]" +
+            log"[operationId: " +
+            log"${MDC(LogKeys.OPERATION_HANDLE_IDENTIFIER, executeHolder.operationId)}] " +
+            log"Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
           case true =>

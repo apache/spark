@@ -64,16 +64,19 @@ class StreamingQueryListener(ABC):
     """
 
     def _set_spark_session(
-        self, spark: "SparkSession"  # type: ignore[name-defined] # noqa: F821
+        self, session: "SparkSession"  # type: ignore[name-defined] # noqa: F821
     ) -> None:
-        self._sparkSession = spark
+        if self.spark is None:
+            self.spark = session
 
     @property
     def spark(self) -> Optional["SparkSession"]:  # type: ignore[name-defined] # noqa: F821
-        if hasattr(self, "_sparkSession"):
-            return self._sparkSession
-        else:
-            return None
+        return getattr(self, "_sparkSession", None)
+
+    @spark.setter
+    def spark(self, session: "SparkSession") -> None:  # type: ignore[name-defined] # noqa: F821
+        # For backward compatibility
+        self._sparkSession = session
 
     def _init_listener_id(self) -> None:
         self._id = str(uuid.uuid4())

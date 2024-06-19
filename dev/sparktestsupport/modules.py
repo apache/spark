@@ -1048,6 +1048,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
         "pyspark.sql.tests.connect.test_parity_python_datasource",
+        "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_client",
@@ -1102,6 +1103,8 @@ pyspark_pandas_connect_part0 = Module(
         "python/pyspark/pandas",
     ],
     python_test_goals=[
+        # unittests dedicated for Spark Connect
+        "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",

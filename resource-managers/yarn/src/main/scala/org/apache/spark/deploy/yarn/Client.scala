@@ -1385,7 +1385,7 @@ private[spark] class Client(
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
+          logError(log"Application diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         throw new SparkException(s"Application $appId finished with failed status")
       }

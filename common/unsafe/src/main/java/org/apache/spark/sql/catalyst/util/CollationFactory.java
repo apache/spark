@@ -134,7 +134,7 @@ public final class CollationFactory {
     /**
      * Support for Lowercase Equality implies that it is possible to check equality on
      * byte by byte level, but only after calling "UTF8String.toLowerCase" on both arguments.
-     * This allows custom collation support for UTF8_BINARY_LCASE collation in various Spark
+     * This allows custom collation support for UTF8_LCASE collation in various Spark
      * expressions, as this particular collation is not supported by the external ICU library.
      */
     public final boolean supportsLowercaseEquality;
@@ -220,7 +220,7 @@ public final class CollationFactory {
      * ---
      * Some illustrative examples of collation name to ID mapping:
      * - UTF8_BINARY       -> 0
-     * - UTF8_BINARY_LCASE -> 1
+     * - UTF8_LCASE        -> 1
      * - UNICODE           -> 0x20000000
      * - UNICODE_AI        -> 0x20010000
      * - UNICODE_CI        -> 0x20020000
@@ -326,7 +326,7 @@ public final class CollationFactory {
       private static int collationNameToId(String collationName) throws SparkException {
         // Collation names provided by user are treated as case-insensitive.
         String collationNameUpper = collationName.toUpperCase();
-        if (collationNameUpper.startsWith("UTF8_BINARY")) {
+        if (collationNameUpper.startsWith("UTF8_")) {
           return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
@@ -339,7 +339,7 @@ public final class CollationFactory {
     private static class CollationSpecUTF8Binary extends CollationSpec {
 
       /**
-       * Bit 0 in collation ID having value 0 for plain UTF8_BINARY and 1 for UTF8_BINARY_LCASE
+       * Bit 0 in collation ID having value 0 for plain UTF8_BINARY and 1 for UTF8_LCASE
        * collation.
        */
       private enum CaseSensitivity {
@@ -358,11 +358,11 @@ public final class CollationFactory {
 
       private static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8Binary(CaseSensitivity.UNSPECIFIED).collationId;
-      private static final int UTF8_BINARY_LCASE_COLLATION_ID =
+      private static final int UTF8_LCASE_COLLATION_ID =
         new CollationSpecUTF8Binary(CaseSensitivity.LCASE).collationId;
       protected static Collation UTF8_BINARY_COLLATION =
         new CollationSpecUTF8Binary(CaseSensitivity.UNSPECIFIED).buildCollation();
-      protected static Collation UTF8_BINARY_LCASE_COLLATION =
+      protected static Collation UTF8_LCASE_COLLATION =
         new CollationSpecUTF8Binary(CaseSensitivity.LCASE).buildCollation();
 
       private final int collationId;
@@ -376,8 +376,8 @@ public final class CollationFactory {
           throws SparkException {
         if (UTF8_BINARY_COLLATION.collationName.equals(collationName)) {
           return UTF8_BINARY_COLLATION_ID;
-        } else if (UTF8_BINARY_LCASE_COLLATION.collationName.equals(collationName)) {
-          return UTF8_BINARY_LCASE_COLLATION_ID;
+        } else if (UTF8_LCASE_COLLATION.collationName.equals(collationName)) {
+          return UTF8_LCASE_COLLATION_ID;
         } else {
           // Throw exception with original (before case conversion) collation name.
           throw collationInvalidNameException(originalName);
@@ -409,12 +409,12 @@ public final class CollationFactory {
             /* supportsLowercaseEquality = */ false);
         } else {
           return new Collation(
-            "UTF8_BINARY_LCASE",
+            "UTF8_LCASE",
             PROVIDER_SPARK,
             null,
-            UTF8String::compareLowerCase,
+            CollationAwareUTF8String::compareLowerCase,
             "1.0",
-            s -> (long) s.toLowerCase().hashCode(),
+            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
             /* supportsLowercaseEquality = */ true);
@@ -633,7 +633,7 @@ public final class CollationFactory {
         // Locale ID remains after removing all other specifiers.
         int localeId = collationId;
         // Verify locale ID is valid against `ICULocaleNames` array.
-        assert (localeId < ICULocaleNames.length);
+        assert(localeId >= 0 && localeId < ICULocaleNames.length);
         CaseSensitivity caseSensitivity = CaseSensitivity.values()[caseSensitivityOrdinal];
         AccentSensitivity accentSensitivity = AccentSensitivity.values()[accentSensitivityOrdinal];
         String locale = ICULocaleNames[localeId];
@@ -671,7 +671,7 @@ public final class CollationFactory {
           (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
           ICU_COLLATOR_VERSION,
           s -> (long) collator.getCollationKey(s.toString()).hashCode(),
-          /* supportsBinaryEquality = */ collationId == UNICODE_COLLATION_ID,
+          /* supportsBinaryEquality = */ false,
           /* supportsBinaryOrdering = */ false,
           /* supportsLowercaseEquality = */ false);
       }
@@ -728,8 +728,8 @@ public final class CollationFactory {
 
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8Binary.UTF8_BINARY_COLLATION_ID;
-  public static final int UTF8_BINARY_LCASE_COLLATION_ID =
-    Collation.CollationSpecUTF8Binary.UTF8_BINARY_LCASE_COLLATION_ID;
+  public static final int UTF8_LCASE_COLLATION_ID =
+    Collation.CollationSpecUTF8Binary.UTF8_LCASE_COLLATION_ID;
   public static final int UNICODE_COLLATION_ID =
     Collation.CollationSpecICU.UNICODE_COLLATION_ID;
   public static final int UNICODE_CI_COLLATION_ID =
@@ -766,7 +766,7 @@ public final class CollationFactory {
   /**
    * Returns a collation-unaware StringSearch object for the given pattern and target strings.
    * While this object does not respect collation, it can be used to find occurrences of the pattern
-   * in the target string for UTF8_BINARY or UTF8_BINARY_LCASE (if arguments are lowercased).
+   * in the target string for UTF8_BINARY or UTF8_LCASE (if arguments are lowercased).
    */
   public static StringSearch getStringSearch(
           final UTF8String targetUTF8String,

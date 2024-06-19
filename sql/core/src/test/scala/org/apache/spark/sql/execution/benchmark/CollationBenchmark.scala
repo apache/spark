@@ -30,7 +30,7 @@ import org.apache.spark.util.collection.OpenHashMap
 
 abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchmark {
   protected val collationTypes: Seq[String] =
-    Seq("UTF8_BINARY_LCASE", "UNICODE", "UTF8_BINARY", "UNICODE_CI")
+    Seq("UTF8_LCASE", "UNICODE", "UTF8_BINARY", "UNICODE_CI")
 
   def generateSeqInput(n: Long): Seq[UTF8String]
 

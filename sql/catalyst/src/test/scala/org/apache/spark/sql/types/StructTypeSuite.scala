@@ -39,7 +39,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val s = StructType.fromDDL("a INT, b STRING")
 
   private val UNICODE_COLLATION = "UNICODE"
-  private val UTF8_BINARY_LCASE_COLLATION = "UTF8_BINARY_LCASE"
+  private val UTF8_LCASE_COLLATION = "UTF8_LCASE"
   private val mapper = new ObjectMapper()
 
   test("lookup a single missing field should output existing fields") {
@@ -642,7 +642,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("nested struct with collations to json") {
     val nestedStruct = StructType(
       StructField("nested", StructType(
-        StructField("c1", StringType(UTF8_BINARY_LCASE_COLLATION)) :: Nil)) :: Nil)
+        StructField("c1", StringType(UTF8_LCASE_COLLATION)) :: Nil)) :: Nil)
 
     val expectedJson =
       s"""
@@ -660,7 +660,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
          |            "nullable": true,
          |            "metadata": {
          |              "${DataType.COLLATIONS_METADATA_KEY}": {
-         |                "c1": "spark.$UTF8_BINARY_LCASE_COLLATION"
+         |                "c1": "spark.$UTF8_LCASE_COLLATION"
          |              }
          |            }
          |          }

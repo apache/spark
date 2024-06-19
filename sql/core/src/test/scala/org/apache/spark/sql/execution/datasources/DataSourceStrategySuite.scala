@@ -358,7 +358,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
   }
 
-  for (collation <- Seq("UTF8_BINARY_LCASE", "UNICODE")) {
+  for (collation <- Seq("UTF8_LCASE", "UNICODE")) {
     test(s"SPARK-48431: Filter pushdown on columns with $collation collation") {
       val colAttr = $"col".string(collation)
 
