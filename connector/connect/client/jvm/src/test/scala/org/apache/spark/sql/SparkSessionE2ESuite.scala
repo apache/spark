@@ -23,6 +23,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
+import io.grpc.StatusRuntimeException
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SparkException
@@ -383,7 +384,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     }
   }
 
-  test("get or create after session changed") {
+  test("SPARK-47986: get or create after session changed") {
     val remote = s"sc://localhost:$serverPort"
     SparkSession.clearDefaultSession()
     SparkSession.clearActiveSession()
@@ -399,13 +400,12 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
     session1.client.hijackServerSideSessionIdForTesting("-testing")
 
-    try {
+    val e = intercept[StatusRuntimeException] {
       session1.range(3).analyze
-      fail("unreachable")
-    } catch {
-      case t: Throwable => assert(t.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
     }
 
+    assert(e.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
+    assert(!session1.client.isSessionValid)
     assert(SparkSession.getActiveSession.isEmpty)
     assert(SparkSession.getDefaultSession.isEmpty)
 
@@ -415,7 +415,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       .getOrCreate()
 
     assert(session1 ne session2)
-    assert(!session2.client.hasSessionChanged)
+    assert(session2.client.isSessionValid)
     assert(session2 eq SparkSession.getActiveSession.get)
     assert(session2 eq SparkSession.getDefaultSession.get)
     assert(session2.range(3).collect().length == 3)

@@ -72,10 +72,12 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Checks if the session has received an `INVALID_HANDLE.SESSION_CHANGED` error.
+   * Returns true if the session is valid on both the client and the server.
    */
-  private[sql] def hasSessionChanged: Boolean = {
-    stubState.responseValidator.hasSessionChanged
+  private[sql] def isSessionValid: Boolean = {
+    // The last known state of the session is store in `responseValidator`, because it is where the
+    // client gets responses from the server.
+    stubState.responseValidator.isSessionValid
   }
 
   private[sql] val artifactManager: ArtifactManager = {
