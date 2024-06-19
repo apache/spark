@@ -982,7 +982,7 @@ object SparkSession extends Logging {
     def appName(name: String): Builder = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
-      if (client != null && !client.isSessionValid) {
+      if (client != null && client.isSessionValid) {
         Option(new SparkSession(client, planIdGenerator))
       } else {
         None
