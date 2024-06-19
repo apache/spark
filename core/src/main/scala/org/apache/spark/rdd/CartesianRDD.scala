@@ -54,11 +54,11 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
   extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
-  val numPartitionsInRdd1 = rdd1.partitions.length
   val numPartitionsInRdd2 = rdd2.partitions.length
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
+    val numPartitionsInRdd1 = rdd1.partitions.length
     val partitionNum: Long = numPartitionsInRdd1.toLong * numPartitionsInRdd2.toLong
     if (partitionNum > Int.MaxValue) {
       throw SparkCoreErrors.cartesianPartitionNumOverflow(numPartitionsInRdd1, numPartitionsInRdd2)
