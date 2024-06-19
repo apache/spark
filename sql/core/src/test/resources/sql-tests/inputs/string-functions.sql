@@ -154,11 +154,11 @@ set spark.sql.legacy.javaCharsets=false;
 select decode(X'68656c6c6f', 'WINDOWS-1252');
 select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol);
 set spark.sql.legacy.codingErrorAction=true;
-select decode('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII');
-select decode(scol, ecol) from values('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol);
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII');
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol);
 set spark.sql.legacy.codingErrorAction=false;
-select decode('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII');
-select decode(scol, ecol) from values('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol);
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII');
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol);
 
 -- contains
 SELECT CONTAINS(null, 'Spark');

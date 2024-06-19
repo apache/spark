@@ -1198,19 +1198,19 @@ spark.sql.legacy.codingErrorAction	true
 
 
 -- !query
-select decode('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
 -- !query schema
-struct<decode(E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII):string>
+struct<decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII):string>
 -- !query output
-E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592
+���������������������
 
 
 -- !query
-select decode(scol, ecol) from values('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
 -- !query schema
 struct<decode(scol, ecol):string>
 -- !query output
-E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592
+���������������������
 
 
 -- !query
@@ -1222,19 +1222,35 @@ spark.sql.legacy.codingErrorAction	false
 
 
 -- !query
-select decode('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
 -- !query schema
-struct<decode(E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII):string>
+struct<>
 -- !query output
-E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
+  }
+}
 
 
 -- !query
-select decode(scol, ecol) from values('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
 -- !query schema
-struct<decode(scol, ecol):string>
+struct<>
 -- !query output
-E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
+  }
+}
 
 
 -- !query

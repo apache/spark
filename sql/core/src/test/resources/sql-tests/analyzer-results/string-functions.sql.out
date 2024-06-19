@@ -912,14 +912,14 @@ SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
 
 
 -- !query
-select decode('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
 -- !query analysis
-Project [decode(E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII) AS decode(E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII)#x]
+Project [decode(0xE58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII) AS decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII)#x]
 +- OneRowRelation
 
 
 -- !query
-select decode(scol, ecol) from values('E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
 Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
 +- SubqueryAlias t
@@ -933,14 +933,14 @@ SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
 
 
 -- !query
-select decode('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
 -- !query analysis
-Project [decode(E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII) AS decode(E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII)#x]
+Project [decode(0xE8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII) AS decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', US-ASCII)#x]
 +- OneRowRelation
 
 
 -- !query
-select decode(scol, ecol) from values('E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
 Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
 +- SubqueryAlias t
