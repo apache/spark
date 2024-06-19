@@ -4026,7 +4026,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val pivot = Pivot(
           groupByExprsOpt = Some(Seq(keyExpr)),
           pivotColumn = firstColumnNamedExpr,
-          pivotValues = Seq(Literal("dotNET"), Literal("Java")),
+          pivotValues = firstColumnValues,
           aggregates = Seq(aggExpression),
           child = unpivot
         )

@@ -2176,9 +2176,9 @@ class Dataset[T] private[sql](
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
 
-  def transpose(firstColumnValues: Seq[Column]): DataFrame = withPlan {
+  def transpose(firstColumnValues: Seq[ColumnName]): DataFrame = withPlan {
     Transpose(
-      firstColumnValues.map(_.expr),
+      firstColumnValues.map(col => Literal(col.toString())),
       logicalPlan
     )
   }
