@@ -184,9 +184,6 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
             frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
         ]
 
-    depth = int(
-        spark_session.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
-    )
     selected_frames = stack[:depth]
 
     # Identifying the cell is useful when the error is generated from IPython Notebook
