@@ -95,6 +95,7 @@ def _bin_op(
 def _unary_op(name: str, self: ParentColumn) -> ParentColumn:
     return Column(UnresolvedFunction(name, [self._expr]))  # type: ignore[list-item]
 
+
 def _to_expr(v: Any) -> Expression:
     return v._expr if isinstance(v, Column) else LiteralExpression._from_value(v)
 
