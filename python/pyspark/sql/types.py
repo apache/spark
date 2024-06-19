@@ -1829,24 +1829,6 @@ _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
 
-def _check_collection_support(d: DataType, disallowed: List[str]) -> None:
-    if len(disallowed) == 0:
-        return
-    if d.__class__.__name__ in disallowed:
-        raise PySparkTypeError(
-            error_class="UNSUPPORTED_DATA_TYPE",
-            message_parameters={"data_type": str(d)},
-        )
-    elif isinstance(d, StructType):
-        for f in d.fields:
-            _check_collection_support(f.dataType, disallowed)
-    elif isinstance(d, ArrayType):
-        _check_collection_support(d.elementType, disallowed)
-    elif isinstance(d, MapType):
-        _check_collection_support(d.keyType, disallowed)
-        _check_collection_support(d.valueType, disallowed)
-
-
 def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
     assert isinstance(d, (DataType, StructField))
     if isinstance(d, StructField):
