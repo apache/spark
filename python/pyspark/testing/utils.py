@@ -287,7 +287,7 @@ class PySparkErrorTestUtils:
         error_class: str,
         message_parameters: Optional[Dict[str, str]] = None,
         query_context_type: Optional[QueryContextType] = None,
-        pyspark_fragment: Optional[str] = None,
+        fragment: Optional[str] = None,
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
@@ -326,10 +326,10 @@ class PySparkErrorTestUtils:
                 )
                 if actual == QueryContextType.DataFrame:
                     assert (
-                        pyspark_fragment is not None
-                    ), "`pyspark_fragment` is required when QueryContextType is DataFrame."
-                    expected = pyspark_fragment
-                    actual = actual_context.pysparkFragment()
+                        fragment is not None
+                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    expected = fragment
+                    actual = actual_context.fragment()
                     self.assertEqual(
                         expected,
                         actual,

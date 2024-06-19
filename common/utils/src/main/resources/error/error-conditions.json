@@ -3328,6 +3328,12 @@
     ],
     "sqlState" : "42000"
   },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "Data source read/write option <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
+  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."

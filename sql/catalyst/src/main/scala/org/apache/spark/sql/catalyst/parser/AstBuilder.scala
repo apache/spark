@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, Set}
+import scala.collection.immutable.Seq
+import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
@@ -114,6 +115,45 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       null
     }
   }
+
+  override def visitCompoundOrSingleStatement(
+      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+    Option(ctx.singleCompoundStatement()).map { s =>
+      visit(s).asInstanceOf[CompoundBody]
+    }.getOrElse {
+      val logicalPlan = visitSingleStatement(ctx.singleStatement())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
+    }
+  }
+
+  override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
+    visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
+  }
+
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
+    val buff = ListBuffer[CompoundPlanStatement]()
+    ctx.compoundStatements.forEach(compoundStatement => {
+      buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
+    })
+    CompoundBody(buff.toSeq)
+  }
+
+  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
+    visitCompoundBodyImpl(ctx.compoundBody())
+  }
+
+  override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
+    visitCompoundBodyImpl(ctx)
+  }
+
+  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
+    withOrigin(ctx) {
+      Option(ctx.statement()).map {s =>
+        SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
+      }.getOrElse {
+        visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+      }
+    }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     visit(ctx.statement).asInstanceOf[LogicalPlan]

@@ -19,6 +19,7 @@ syntax = 'proto3';
 
 import "google/protobuf/any.proto";
 import "spark/connect/types.proto";
+import "spark/connect/common.proto";
 
 package spark.connect;
 
@@ -30,6 +31,7 @@ option go_package = "internal/generated";
 // expressions in SQL appear.
 message Expression {
 
+  ExpressionCommon common = 18;
   oneof expr_type {
     Literal literal = 1;
     UnresolvedAttribute unresolved_attribute = 2;
@@ -340,6 +342,11 @@ message Expression {
     // (Required) a list of name parts for the variable. Must not be empty.
     repeated string name_parts = 1;
   }
+}
+
+message ExpressionCommon {
+  // (Required) Keep the information of the origin for this expression such as stacktrace.
+  Origin origin = 1;
 }
 
 message CommonInlineUserDefinedFunction {
