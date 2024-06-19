@@ -432,7 +432,7 @@ trait SQLQueryTestHelper extends Logging {
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
     settingLines.flatMap(_.split(",").map { kv =>
       val (conf, value) = kv.span(_ != '=')
-      conf.trim -> value.substring(1).trim.stripSuffix(";")
+      conf.trim -> value.substring(1).trim
     })
   }
 
@@ -447,7 +447,7 @@ trait SQLQueryTestHelper extends Logging {
     val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).view.mapValues { lines =>
       lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
         val (conf, value) = kv.span(_ != '=')
-        conf.trim -> value.substring(1).trim.stripSuffix(";")
+        conf.trim -> value.substring(1).trim
       }.toSeq).toSeq
     }
 
