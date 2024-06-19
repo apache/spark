@@ -434,8 +434,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
-                microsecond=ts % 1000000
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.UTC).replace(
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
