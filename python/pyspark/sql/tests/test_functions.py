@@ -1193,6 +1193,12 @@ class FunctionsTestsMixin:
         actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
         self.assertEqual(actual, test_dict)
 
+        with self.sql_conf({"spark.sql.ansi.enabled": False}):
+            test_dict = {"a": 1, "b": "2", "c": None}
+            expected_dict = {"a": "1", "b": "2", "c": None}
+            actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
+            self.assertEqual(actual, expected_dict)
+
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(
