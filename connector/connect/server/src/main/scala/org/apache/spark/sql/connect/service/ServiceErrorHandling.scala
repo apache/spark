@@ -35,7 +35,8 @@ import org.apache.spark.internal.Logging
 
 /**
  * These are common functions used for error handling
- * in SparkConnect service.
+ * in SparkConnect service and can be used by other custom
+ * services.
  *
  */
 trait ServiceErrorHandling extends Logging {
