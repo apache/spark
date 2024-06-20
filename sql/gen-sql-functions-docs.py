@@ -170,7 +170,7 @@ def _make_pretty_examples(jspark, infos):
             query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
             for query_example in query_examples:
                 query = query_example.lstrip("      > ")
-                print("    %s" % query)
+                print("    %s: %s" % (info.name, query))
                 query_output = jspark.sql(query).showString(20, 20, False)
                 output.append(query)
                 output.append(query_output)
