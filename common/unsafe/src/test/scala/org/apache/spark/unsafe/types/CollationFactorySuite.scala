@@ -40,15 +40,15 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.supportsBinaryEquality)
 
-    assert(UTF8_BINARY_LCASE_COLLATION_ID == 1)
-    val utf8BinaryLcase = fetchCollation(UTF8_BINARY_LCASE_COLLATION_ID)
-    assert(utf8BinaryLcase.collationName == "UTF8_BINARY_LCASE")
+    assert(UTF8_LCASE_COLLATION_ID == 1)
+    val utf8BinaryLcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
+    assert(utf8BinaryLcase.collationName == "UTF8_LCASE")
     assert(!utf8BinaryLcase.supportsBinaryEquality)
 
     assert(UNICODE_COLLATION_ID == (1 << 29))
     val unicode = fetchCollation(UNICODE_COLLATION_ID)
     assert(unicode.collationName == "UNICODE")
-    assert(unicode.supportsBinaryEquality)
+    assert(!unicode.supportsBinaryEquality)
 
     assert(UNICODE_CI_COLLATION_ID == ((1 << 29) | (1 << 17)))
     val unicodeCi = fetchCollation(UNICODE_CI_COLLATION_ID)
@@ -60,7 +60,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     // Collation name already normalized.
     Seq(
       "UTF8_BINARY",
-      "UTF8_BINARY_LCASE",
+      "UTF8_LCASE",
       "UNICODE",
       "UNICODE_CI",
       "UNICODE_AI",
@@ -79,7 +79,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_AI_CI", "UNICODE_CI_AI"),
       // Randomized case collation names.
       ("utf8_binary", "UTF8_BINARY"),
-      ("UtF8_binARy_LcasE", "UTF8_BINARY_LCASE"),
+      ("UtF8_LcasE", "UTF8_LCASE"),
       ("unicode", "UNICODE"),
       ("UnICoDe_cs_aI", "UNICODE_AI")
     ).foreach{
@@ -131,18 +131,24 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "aaa", true),
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", false),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aaa", true),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AAA", true),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", true),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", true),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aa", false),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "bbb", false),
+      CollationTestCase("UTF8_BINARY", "å", "a\u030A", false),
+      CollationTestCase("UTF8_LCASE", "aaa", "aaa", true),
+      CollationTestCase("UTF8_LCASE", "aaa", "AAA", true),
+      CollationTestCase("UTF8_LCASE", "aaa", "AaA", true),
+      CollationTestCase("UTF8_LCASE", "aaa", "AaA", true),
+      CollationTestCase("UTF8_LCASE", "aaa", "aa", false),
+      CollationTestCase("UTF8_LCASE", "aaa", "bbb", false),
+      CollationTestCase("UTF8_LCASE", "å", "a\u030A", false),
       CollationTestCase("UNICODE", "aaa", "aaa", true),
       CollationTestCase("UNICODE", "aaa", "AAA", false),
       CollationTestCase("UNICODE", "aaa", "bbb", false),
+      CollationTestCase("UNICODE", "å", "a\u030A", true),
       CollationTestCase("UNICODE_CI", "aaa", "aaa", true),
       CollationTestCase("UNICODE_CI", "aaa", "AAA", true),
-      CollationTestCase("UNICODE_CI", "aaa", "bbb", false))
+      CollationTestCase("UNICODE_CI", "aaa", "bbb", false),
+      CollationTestCase("UNICODE_CI", "å", "a\u030A", true),
+      CollationTestCase("UNICODE_CI", "Å", "a\u030A", true)
+    )
 
     checks.foreach(testCase => {
       val collation = fetchCollation(testCase.collationName)
@@ -161,12 +167,12 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", 1),
       CollationTestCase("UTF8_BINARY", "aaa", "bbb", -1),
       CollationTestCase("UTF8_BINARY", "aaa", "BBB", 1),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aaa", 0),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AAA", 0),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", 0),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "AaA", 0),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "aa", 1),
-      CollationTestCase("UTF8_BINARY_LCASE", "aaa", "bbb", -1),
+      CollationTestCase("UTF8_LCASE", "aaa", "aaa", 0),
+      CollationTestCase("UTF8_LCASE", "aaa", "AAA", 0),
+      CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
+      CollationTestCase("UTF8_LCASE", "aaa", "AaA", 0),
+      CollationTestCase("UTF8_LCASE", "aaa", "aa", 1),
+      CollationTestCase("UTF8_LCASE", "aaa", "bbb", -1),
       CollationTestCase("UNICODE", "aaa", "aaa", 0),
       CollationTestCase("UNICODE", "aaa", "AAA", -1),
       CollationTestCase("UNICODE", "aaa", "bbb", -1),
@@ -223,7 +229,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   test("test collation caching") {
     Seq(
       "UTF8_BINARY",
-      "UTF8_BINARY_LCASE",
+      "UTF8_LCASE",
       "UNICODE",
       "UNICODE_CI",
       "UNICODE_AI",
@@ -403,7 +409,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("repeated and/or incompatible specifiers in collation name") {
     Seq(
-      "UTF8_BINARY_LCASE_LCASE",
+      "UTF8_LCASE_LCASE",
       "UNICODE_CS_CS",
       "UNICODE_CI_CI",
       "UNICODE_CI_CS",

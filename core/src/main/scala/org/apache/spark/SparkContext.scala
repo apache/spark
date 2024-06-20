@@ -421,7 +421,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
     // We can remove this after Apache Hadoop 3.4.1 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -2321,6 +2321,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _dagScheduler = null
     }
+    // In case there are still events being posted during the shutdown of plugins,
+    // invoke the shutdown of each plugin before the listenerBus is stopped.
+    Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
+    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
@@ -2331,9 +2336,6 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         env.metricsSystem.report()
       }
-    }
-    Utils.tryLogNonFatalError {
-      _plugins.foreach(_.shutdown())
     }
     Utils.tryLogNonFatalError {
       FallbackStorage.cleanUp(_conf, _hadoopConfiguration)

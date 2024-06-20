@@ -608,7 +608,9 @@ class Unknown(google.protobuf.message.Message):
 global___Unknown = Unknown
 
 class RelationCommon(google.protobuf.message.Message):
-    """Common metadata of all relations."""
+    """Common metadata of all relations.
+    TODO(SPARK-48639): Add origin like Expression.ExpressionCommon
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

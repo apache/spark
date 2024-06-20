@@ -1977,6 +1977,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
+    .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
+      "the option is enabled, table with two partition directories 'table/invalid' and " +
+      "'table/col=1' will only load the latter directory and ignore the invalid partition")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val MAX_RECORDS_PER_FILE = buildConf("spark.sql.files.maxRecordsPerFile")
     .doc("Maximum number of records to write out to a single file. " +
       "If this value is zero or negative, there is no limit.")
@@ -4940,6 +4948,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT =
+    buildConf("spark.sql.analyzer.scalarSubqueryAllowGroupByColumnEqualToConstant")
+      .internal()
+      .doc("When set to true, allow scalar subqueries with group-by on a column that also " +
+        " has an equality filter with a constant (SPARK-48557).")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()
@@ -5265,6 +5282,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
+  def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
@@ -5948,6 +5967,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     ErrorMessageFormat.withName(getConf(SQLConf.ERROR_MESSAGE_FORMAT))
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
+
+  def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
 
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
