@@ -352,7 +352,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Column.create("price", FloatType),
     Column.create("time", TimestampType))
 
-  test("group by on partition keys should not introduce additional shuffle") {
+  test("SPARK-48655: group by on partition keys should not introduce additional shuffle") {
     val items_partitions = Array(identity("id"))
     createTable(items, itemsColumns, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
