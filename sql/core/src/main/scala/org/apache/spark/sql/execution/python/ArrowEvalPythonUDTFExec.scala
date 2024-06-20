@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -81,7 +82,8 @@ case class ArrowEvalPythonUDTFExec(
 
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
+      val arrowOutputTypes = outputTypes.map(ArrowUtils.toArrowOutputSchema)
+      assert(arrowOutputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
         s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
 
       flattenedBatch.setNumRows(batch.numRows())

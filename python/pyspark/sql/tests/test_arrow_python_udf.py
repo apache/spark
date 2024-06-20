@@ -21,16 +21,17 @@ from pyspark.errors import AnalysisException, PythonException, PySparkNotImpleme
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
-from pyspark.sql.types import VarcharType
+from pyspark.sql.types import VarcharType, StructType
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
     ReusedSQLTestCase,
+    ExamplePoint,
+    ExamplePointUDT
 )
 from pyspark.util import PythonEvalType
-
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
@@ -218,6 +219,17 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
 
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
+
+    def test_udt_as_return_type(self):
+        data = [
+            ExamplePoint(1.0, 2.0),
+        ]
+        schema = StructType().add("point", ExamplePointUDT())
+        df = self.spark.createDataFrame([data], schema=schema)
+        [row] = df.select(
+            udf(lambda x: x, returnType=ExamplePointUDT(), useArrow=True)("point"),
+        ).collect()
+        self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):

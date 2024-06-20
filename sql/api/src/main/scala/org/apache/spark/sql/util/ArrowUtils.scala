@@ -219,4 +219,18 @@ private[sql] object ArrowUtils {
         valueContainsNull)
     case _ => dt
   }
+
+  def toArrowOutputSchema(dt: DataType): DataType = {
+    dt match {
+      case udt: UserDefinedType[_] => toArrowOutputSchema(udt.sqlType)
+      case arr@ArrayType(elementType, _) =>
+        arr.copy(elementType = toArrowOutputSchema(elementType))
+      case struct@StructType(fields) =>
+        struct.copy(fields.map(field => field.copy(dataType = toArrowOutputSchema(field.dataType))))
+      case map@MapType(keyType, valueType, _) =>
+        map.copy(keyType = toArrowOutputSchema(keyType), valueType = toArrowOutputSchema(valueType))
+      case _ =>
+        dt
+    }
+  }
 }
