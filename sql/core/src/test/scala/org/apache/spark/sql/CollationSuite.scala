@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
@@ -1432,28 +1433,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("cache table with collated columns") {
-    val collations = Seq(
-      "UTF8_BINARY",
-      "UTF8_LCASE",
-      "UNICODE"
-    )
-    collations.foreach(collation =>
-      withTable("t1", "t2") {
-        sql(s"CACHE LAZY TABLE t1 AS SELECT col FROM VALUES ('a' COLLATE $collation) AS (col)")
+    val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+    val lazyOptions = Seq(false, true)
 
-//        checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row(collation))
-//        withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-//          sql(s"CACHE TABLE t2 AS SELECT col FROM VALUES ('a') AS (col)")
-//          checkAnswer(sql("SELECT COLLATION(col) FROM t2"), Row(collation))
-//        }
+    for (
+      collation <- collations;
+      lazyTable <- lazyOptions
+    ) {
+      val lazyStr = if (lazyTable) "LAZY" else ""
+
+      def checkCacheTable(values: String): Unit = {
+        sql(s"CACHE $lazyStr TABLE tbl AS SELECT col FROM VALUES ($values) AS (col)")
+        // Checks in-memory fetching code path.
+        val all = sql("SELECT col FROM tbl")
+        assert(all.queryExecution.executedPlan.collectFirst {
+          case _: InMemoryTableScanExec => true
+        }.nonEmpty)
+        checkAnswer(all, Row("a"))
+        // Checks column stats code path.
+        sql("SELECT col FROM tbl WHERE col = 'a'")
+        sql("SELECT col FROM tbl WHERE col = 'b'")
       }
-    )
-  }
 
-  test("cache table new test") {
-    withTable("t") {
-      sql(s"CACHE LAZY TABLE t AS SELECT col FROM VALUES ('a' COLLATE UTF8_LCASE) AS (col)")
-      checkAnswer(sql("SELECT * FROM t WHERE col = 'A'"), Row("a"))
+      withTable("tbl") {
+        checkCacheTable(s"'a' COLLATE $collation")
+      }
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+        withTable("tbl") {
+          checkCacheTable("'a'")
+        }
+      }
     }
   }
 }
