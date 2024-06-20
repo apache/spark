@@ -103,11 +103,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
-    "collations.sql",
-    "binary_hex.sql",
-    "binary_hex_discrete.sql",
-    "binary_basic.sql",
-    "binary_base64.sql"
+    "collations.sql"
   )
 
   override def runQueries(
@@ -135,13 +131,15 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       // Run the SQL queries preparing them for comparison.
-      val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-        val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
-        // We might need to do some query canonicalization in the future.
-        ExecutionOutput(
-          sql = sql,
-          schema = Some(""),
-          output = output.mkString("\n").replaceAll("\\s+$", ""))
+      val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
+        queries.map { sql =>
+          val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
+          // We might need to do some query canonicalization in the future.
+          ExecutionOutput(
+            sql = sql,
+            schema = Some(""),
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
+        }
       }
 
       // Read back the golden file.

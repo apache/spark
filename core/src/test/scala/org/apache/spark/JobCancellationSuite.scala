@@ -20,6 +20,7 @@ package org.apache.spark
 import java.util.concurrent.{Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,9 +30,10 @@ import scala.concurrent.duration._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -429,11 +431,19 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       .set(TASK_REAPER_KILL_TIMEOUT.key, "5s")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
-    // Add a listener to release the semaphore once any tasks are launched.
+    // Add a listener to release a semaphore once any tasks are launched, and another semaphore
+    // once an executor is removed.
     val sem = new Semaphore(0)
+    val semExec = new Semaphore(0)
+    val execLossReason = new ArrayBuffer[String]()
     sc.addSparkListener(new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         sem.release()
+      }
+
+      override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
+        execLossReason += executorRemoved.reason
+        semExec.release()
       }
     })
 
@@ -455,6 +465,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     sc.cancelJobGroup("jobA")
     val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, 15.seconds) }.getCause
     assert(e.getMessage contains "cancel")
+    semExec.acquire(2)
+    val expectedReason = s"Command exited with code ${ExecutorExitCode.KILLED_BY_TASK_REAPER}"
+    assert(execLossReason == Seq(expectedReason, expectedReason))
 
     // Once A is cancelled, job B should finish fairly quickly.
     assert(ThreadUtils.awaitResult(jobB, 1.minute) === 100)
