@@ -50,7 +50,7 @@ message Expression {
     CommonInlineUserDefinedFunction common_inline_user_defined_function = 15;
     CallFunction call_function = 16;
     NamedArgumentExpression named_argument_expression = 17;
-    MergeAction merge_action = 18;
+    MergeAction merge_action = 19;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
