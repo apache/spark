@@ -20,15 +20,11 @@ package org.apache.spark.sql.execution.python
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 import java.net.ServerSocket
 
-import scala.collection.mutable
-
 import com.google.protobuf.ByteString
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, StateRequest}
-import org.apache.spark.sql.streaming.ValueState
 
 class TransformWithStateInPandasStateServer(
     private val stateServerSocket: ServerSocket,
@@ -38,8 +34,6 @@ class TransformWithStateInPandasStateServer(
 
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = _
-
-  private val valueStates = mutable.HashMap[String, ValueState[String]]()
 
   def run(): Unit = {
     logWarning(s"Waiting for connection from Python worker")
@@ -83,103 +77,21 @@ class TransformWithStateInPandasStateServer(
   }
 
   private def handleRequest(message: StateRequest): Unit = {
-    if (message.getMethodCase == StateRequest.MethodCase.STATEFULPROCESSORHANDLECALL) {
-      val statefulProcessorHandleRequest = message.getStatefulProcessorHandleCall
+    if (message.getMethodCase == StateRequest.MethodCase.STATEFULPROCESSORCALL) {
+      val statefulProcessorHandleRequest = message.getStatefulProcessorCall
       val requestedState = statefulProcessorHandleRequest.getSetHandleState.getState
-
       requestedState match {
+        case HandleState.CREATED =>
+          logWarning(s"set handle state to Initialized")
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
         case HandleState.INITIALIZED =>
           logWarning(s"set handle state to Initialized")
           statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+        case HandleState.CLOSED =>
+          logWarning(s"set handle state to Initialized")
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
         case _ =>
       }
-    }
-  }
-
-  def setHandleState(handleState: String): Unit = {
-    logWarning(s"setting handle state to $handleState")
-    if (handleState == "CREATED") {
-      statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
-      outputStream.writeInt(0)
-    } else if (handleState == "INITIALIZED") {
-      statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-      outputStream.writeInt(0)
-    } else if (handleState == "CLOSED") {
-      statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
-      outputStream.writeInt(0)
-    } else {
-      // fail
-      outputStream.writeInt(1)
-    }
-  }
-
-  private def valueState(stateName: String, parts: Array[String]): Unit = {
-    val stateOption = valueStates.get(stateName)
-    val operation = parts(2)
-
-    if (stateOption.isEmpty) {
-      outputStream.writeInt(1)
-    } else if (operation == "get") {
-      val state = stateOption.get
-      val key = parts(3)
-
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      val result = state.getOption()
-      outputStream.writeInt(0)
-      if (result.isDefined) {
-        outputStream.writeInt(1)
-        logWarning(s"Writing ${result.get} to output")
-        outputStream.writeUTF(s"${result.get}\n")
-      } else {
-        outputStream.writeInt(0)
-      }
-    } else if (operation == "set") {
-      val state = stateOption.get
-      val key = parts(3)
-      val newState = parts(4)
-      logWarning(s"updating state for $key to $newState.")
-
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      state.update(newState)
-      logWarning(s"writing success to output")
-      outputStream.writeInt(0)
-    } else {
-      outputStream.writeInt(1)
-    }
-  }
-
-  private def performRequest(message: String): Unit = {
-    if (message.nonEmpty) {
-      val parts: Array[String] = message.split(':')
-      if (parts(0) == "setHandleState") {
-        assert(parts.length == 2)
-        setHandleState(parts(1))
-      } else if (parts(0) == "getState") {
-        val stateType = parts(1)
-        val stateName = parts(2)
-
-        initializeState(stateType, stateName)
-      } else {
-        val stateType = parts(0)
-        val stateName = parts(1)
-
-        stateType match {
-          case "ValueState" =>
-            valueState(stateName, parts)
-          case _ =>
-            outputStream.writeInt(1)
-        }
-      }
-    }
-  }
-
-  private def initializeState(stateType: String, stateName: String): Unit = {
-    if (stateType == "ValueState") {
-      val state = statefulProcessorHandle.getValueState[String](stateName, Encoders.STRING)
-      valueStates.put(stateName, state)
-      outputStream.writeInt(0)
-    } else {
-      outputStream.writeInt(1)
     }
   }
 }

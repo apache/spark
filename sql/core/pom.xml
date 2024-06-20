@@ -157,6 +157,7 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -245,6 +246,32 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+          <artifactSet>
+            <includes>
+              <include>com.google.protobuf:*</include>
+            </includes>
+          </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>com.google</pattern>
+              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
+              <excludes>
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
+                <exclude>com.google.common.**</exclude>
+              </excludes>
+            </relocation>
+          </relocations>
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
+        </configuration>
+      </plugin>
        <!--
             This plugin forces the generation of jar containing sql test classes,
             so that the tests classes of external modules can use them. The two execution profiles

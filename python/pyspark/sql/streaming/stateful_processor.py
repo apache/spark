@@ -20,7 +20,6 @@ from typing import Any, TYPE_CHECKING, Iterator, Union
 
 from pyspark.sql.streaming.state_api_client import StateApiClient
 from pyspark.sql.types import StructType
-import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
 
 if TYPE_CHECKING:
@@ -76,8 +75,7 @@ class StatefulProcessorHandle:
         pass
 
     def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:
-        self.state_api_client.getListState(state_name, schema)
-        return ListState(self.state_api_client, state_name)
+        pass
 
 
 class StatefulProcessor(ABC):

@@ -5,8 +5,8 @@ package pyspark.sql.streaming;
 message StateRequest {
   int32 version = 1;
   oneof method {
-    StatefulProcessorHandleCall statefulProcessorHandleCall = 2;
-    ListStateCall listStateCall = 3;
+    StatefulProcessorCall statefulProcessorCall = 2;
+    StateVariableRequest stateVariableRequest = 3;
   }
 }
 
@@ -15,31 +15,61 @@ message StateResponse {
   string errorMessage = 2;
 }
 
-message StatefulProcessorHandleCall {
+message StatefulProcessorCall {
   oneof method {
-    SetHandleState setHandleState = 2;
-    GetListState getListState = 3;
+    SetHandleState setHandleState = 1;
+    StateCallCommand getValueState = 2;
+    StateCallCommand getListState = 3;
+    StateCallCommand getMapState = 4;
   }
 }
 
-message GetListState {
+message StateVariableRequest {
+  oneof method {
+    ValueStateCall valueStateCall = 1;
+    ListStateCall listStateCall = 2;
+  }
+}
+
+message StateCallCommand {
   string stateName = 1;
   string schema = 2;
+}
+
+message ValueStateCall {
+  oneof method {
+    Exists exists = 1;
+    Get get = 2;
+    Update update = 3;
+    Clear clear = 4;
+  }
 }
 
 message ListStateCall {
   oneof method {
     Exists exists = 1;
     Get get = 2;
-    Update update = 3;
+    Clear clear = 3;
   }
 }
 
-message Exists {}
+message Exists {
+  string stateName = 1;
+}
 
-message Get {}
+message Get {
+  string stateName = 1;
+}
 
-message Update {}
+message Update {
+  string stateName = 1;
+  string schema = 2;
+  bytes value = 3;
+}
+
+message Clear {
+  string stateName = 1;
+}
 
 enum HandleState {
   CREATED = 0;

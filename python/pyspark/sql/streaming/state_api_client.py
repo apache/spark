@@ -39,13 +39,15 @@ class StateApiClient:
         self.sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
         print(f"client is ready - connection established")
         self.handle_state = StatefulProcessorHandleState.CREATED
+        # place holder, will remove when actual implementation is done
+        self.setHandleState(StatefulProcessorHandleState.CLOSED)
 
     
     def setHandleState(self, state: StatefulProcessorHandleState) -> None:
         proto_state = self._get_proto_state(state)
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
-        handle_call = stateMessage.StatefulProcessorHandleCall(setHandleState=set_handle_state)
-        message = stateMessage.StateRequest(statefulProcessorHandleCall=handle_call)
+        handle_call = stateMessage.StatefulProcessorCall(setHandleState=set_handle_state)
+        message = stateMessage.StateRequest(statefulProcessorCall=handle_call)
         
         self._send_proto_message(message)
         status = read_int(self.sockfile)
@@ -59,12 +61,12 @@ class StateApiClient:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
         
-        get_list_state = stateMessage.GetListState()
-        get_list_state.stateName = state_name
-        get_list_state.schema = schema.json()
-        call = stateMessage.StatefulProcessorHandleCall(getListState=get_list_state)
+        state_call_command = stateMessage.StateCallCommand()
+        state_call_command.stateName = state_name
+        state_call_command.schema = schema.json()
+        call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
 
-        message = stateMessage.StateRequest(statefulProcessorHandleCall=call)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
                 
         self._send_proto_message(message)
         status = read_int(self.sockfile)

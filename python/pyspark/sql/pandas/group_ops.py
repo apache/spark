@@ -366,7 +366,8 @@ class PandasGroupedOpsMixin:
     def transformWithStateInPandas(self, 
             stateful_processor: StatefulProcessor,
             outputStructType: Union[StructType, str],
-            outputMode: str) -> DataFrame:
+            outputMode: str,
+            timeMode: str) -> DataFrame:
         
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf
@@ -399,6 +400,7 @@ class PandasGroupedOpsMixin:
             udf_column._jc.expr(),
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
+            timeMode,
         )
         return DataFrame(jdf, self.session)
 
