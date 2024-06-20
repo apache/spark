@@ -225,6 +225,11 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
             message_parameters={"arg_name": "columns"},
         )
 
+    def test_ym_interval_in_collect(self):
+        # YearMonthIntervalType is not supported in python side arrow conversion
+        with self.assertRaises(PySparkTypeError):
+            self.connect.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_error import *  # noqa: F401

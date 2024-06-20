@@ -955,6 +955,10 @@ case class CollapseCodegenStages(
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
+      case plan: EmptyRelationExec =>
+        // Do not make EmptyRelationExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
       case plan: CommandResultExec =>
         // Do not make CommandResultExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.

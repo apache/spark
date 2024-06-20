@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -586,7 +587,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard
+
+    Notes
+    -----
+    This data type doesn't support collection: df.collect/take/head.
+    """
 
     YEAR = 0
     MONTH = 1
@@ -628,6 +634,24 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     jsonValue = _str_repr
 
+    def needConversion(self) -> bool:
+        # If PYSPARK_YM_INTERVAL_LEGACY is not set, needConversion is true,
+        # 'df.collect' fails with PySparkNotImplementedError;
+        # otherwise, no conversion is needed, and 'df.collect' returns the internal integers.
+        return not os.environ.get("PYSPARK_YM_INTERVAL_LEGACY") == "1"
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+        )
+
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
@@ -644,6 +668,21 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     @classmethod
     def typeName(cls) -> str:
         return "interval"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+        )
 
 
 class ArrayType(DataType):
