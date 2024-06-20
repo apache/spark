@@ -58,8 +58,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val numPartitionsInRdd1 = rdd1.partitions.length
-    val partitionNum: Long = numPartitionsInRdd1.toLong * numPartitionsInRdd2.toLong
+    val partitionNum: Long = numPartitionsInRdd2.toLong * rdd1.partitions.length
     if (partitionNum > Int.MaxValue) {
       throw SparkCoreErrors.tooManyArrayElementsError(partitionNum, Int.MaxValue)
     }
