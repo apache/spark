@@ -499,6 +499,15 @@ case class StateStoreSaveExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType,
+      stateManager.getStateValueSchema)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
     assert(outputMode.nonEmpty,
@@ -703,6 +712,15 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(stateManager.getStateKeySchema,
+      stateManager.getStateValueSchema)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -784,6 +802,15 @@ case class SessionWindowStateStoreSaveExec(
 
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(stateManager.getStateKeySchema,
+      stateManager.getStateValueSchema)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -1092,6 +1119,14 @@ case class StreamingDeduplicateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
+
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType, schemaForValueRow)
+  }
 }
 
 object StreamingDeduplicateExec {
@@ -1162,6 +1197,14 @@ case class StreamingDeduplicateWithinWatermarkExec(
   }
 
   override def shortName: String = "dedupeWithinWatermark"
+
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType, schemaForValueRow)
+  }
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
