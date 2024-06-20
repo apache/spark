@@ -131,16 +131,14 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       // Run the SQL queries preparing them for comparison.
-      val outputs: Seq[QueryTestOutput] = {
-        withSQLConf(configSet: _*) {
-          queries.map { sql =>
-            val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
-            // We might need to do some query canonicalization in the future.
-            ExecutionOutput(
-              sql = sql,
-              schema = Some(""),
-              output = output.mkString("\n").replaceAll("\\s+$", ""))
-          }
+      val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
+        queries.map { sql =>
+          val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
+          // We might need to do some query canonicalization in the future.
+          ExecutionOutput(
+            sql = sql,
+            schema = Some(""),
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
         }
       }
 
