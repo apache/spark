@@ -277,47 +277,46 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
 
   test("invalid names of collations with ICU non-root localization") {
-    case class TestCase(collationName: String, proposal: String)
     Seq(
-      TestCase("en_US", "en_USA"), // Must use 3-letter country code
-      TestCase("enn", "en"),
-      TestCase("en_AAA","en_USA"),
-      TestCase("en_Something", "UNICODE"),
-      TestCase("en_Something_USA", "en_USA"),
-      TestCase("en_LCASE", "en_USA"),
-      TestCase("en_UCASE", "en_USA"),
-      TestCase("en_CI_LCASE", "UNICODE"),
-      TestCase("en_CI_UCASE", "en_USA"),
-      TestCase("en_CI_UNSPECIFIED", "en_USA"),
-      TestCase("en_USA_UNSPECIFIED", "en_USA"),
-      TestCase("en_USA_UNSPECIFIED_CI", "en_USA_CI"),
-      TestCase("en_INDETERMINATE", "en_USA"),
-      TestCase("en_USA_INDETERMINATE", "en_USA"),
-      TestCase("en_Latn_USA", "en_USA"),
-      TestCase("en_Cyrl_USA", "en_USA"),
-      TestCase("en_USA_AAA", "en_USA"),
-      TestCase("sr_Cyrl_SRB_AAA", "sr_Cyrl_SRB"),
-      // // Invalid ordering of language, script and country code.
-      TestCase("USA_en", "en"),
-      TestCase("sr_SRB_Cyrl", "sr_Cyrl"),
-      TestCase("SRB_sr", "ar_SAU"),
-      TestCase("SRB_sr_Cyrl", "bs_Cyrl"),
-      TestCase("SRB_Cyrl_sr", "sr_Cyrl_SRB"),
-      TestCase("Cyrl_sr", "sr_Cyrl_SRB"),
-      TestCase("Cyrl_sr_SRB", "sr_Cyrl_SRB"),
-      TestCase("Cyrl_SRB_sr", "sr_Cyrl_SRB"),
-      // // Collation specifiers in the middle of locale.
-      TestCase("CI_en", "ceb"),
-      TestCase("USA_CI_en", "UNICODE"),
-      TestCase("en_CI_USA", "en_USA"),
-      TestCase("CI_sr_Cyrl_SRB", "sr_Cyrl_SRB"),
-      TestCase("sr_CI_Cyrl_SRB", "sr_Cyrl_SRB"),
-      TestCase("sr_Cyrl_CI_SRB", "sr_Cyrl_SRB"),
-      TestCase("CI_Cyrl_sr", "sr_Cyrl_SRB"),
-      TestCase("Cyrl_CI_sr", "he_ISR"),
-      TestCase("Cyrl_CI_sr_SRB", "sr_Cyrl_SRB"),
-      TestCase("Cyrl_sr_CI_SRB", "sr_Cyrl_SRB"),
-    ).foreach { case TestCase(collationName, proposal) => {
+      ("en_US", "en_USA"), // Must use 3-letter country code
+      ("enn", "en"),
+      ("en_AAA","en_USA"),
+      ("en_Something", "UNICODE"),
+      ("en_Something_USA", "en_USA"),
+      ("en_LCASE", "en_USA"),
+      ("en_UCASE", "en_USA"),
+      ("en_CI_LCASE", "UNICODE"),
+      ("en_CI_UCASE", "en_USA"),
+      ("en_CI_UNSPECIFIED", "en_USA"),
+      ("en_USA_UNSPECIFIED", "en_USA"),
+      ("en_USA_UNSPECIFIED_CI", "en_USA_CI"),
+      ("en_INDETERMINATE", "en_USA"),
+      ("en_USA_INDETERMINATE", "en_USA"),
+      ("en_Latn_USA", "en_USA"),
+      ("en_Cyrl_USA", "en_USA"),
+      ("en_USA_AAA", "en_USA"),
+      ("sr_Cyrl_SRB_AAA", "sr_Cyrl_SRB"),
+      // Invalid ordering of language, script and country code.
+      ("USA_en", "en"),
+      ("sr_SRB_Cyrl", "sr_Cyrl"),
+      ("SRB_sr", "ar_SAU"),
+      ("SRB_sr_Cyrl", "bs_Cyrl"),
+      ("SRB_Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_sr_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_SRB_sr", "sr_Cyrl_SRB"),
+      // Collation specifiers in the middle of locale.
+      ("CI_en", "ceb"),
+      ("USA_CI_en", "UNICODE"),
+      ("en_CI_USA", "en_USA"),
+      ("CI_sr_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("sr_CI_Cyrl_SRB", "sr_Cyrl_SRB"),
+      ("sr_Cyrl_CI_SRB", "sr_Cyrl_SRB"),
+      ("CI_Cyrl_sr", "sr_Cyrl_SRB"),
+      ("Cyrl_CI_sr", "he_ISR"),
+      ("Cyrl_CI_sr_SRB", "sr_Cyrl_SRB"),
+      ("Cyrl_sr_CI_SRB", "sr_Cyrl_SRB"),
+    ).foreach { case (collationName, proposal) => {
       val error = intercept[SparkException] {
         fetchCollation(collationName)
       }
