@@ -131,8 +131,8 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP()).u IS NULL FROM (SELECT FROM_AVRO(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}' ) AS s FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
-       [false]
+      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP()) IS NULL FROM (SELECT NULL AS s);
+       [true]
   """,
   group = "misc_funcs",
   since = "4.0.0"
