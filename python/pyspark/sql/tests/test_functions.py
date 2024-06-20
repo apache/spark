@@ -1199,6 +1199,22 @@ class FunctionsTestsMixin:
             actual = self.spark.range(1).select(F.lit(test_dict)).first()[0]
             self.assertEqual(actual, expected_dict)
 
+        df = self.spark.range(10)
+        dicts = [
+            {"a": df.id},
+            {"a": {"b": df.id}},
+        ]
+
+        for d in dicts:
+            with self.assertRaises(PySparkValueError) as pe:
+                F.lit(d)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="COLUMN_IN_DICT",
+                message_parameters={"func_name": "lit"},
+            )
+
     # Test added for SPARK-39832; change Python API to accept both col & str as input
     def test_regexp_replace(self):
         df = self.spark.createDataFrame(
