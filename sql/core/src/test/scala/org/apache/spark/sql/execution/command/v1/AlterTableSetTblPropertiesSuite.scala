@@ -46,7 +46,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblProper
   private def getTableProperties(tableIdent: TableIdentifier): Map[String, String] = {
     sessionCatalog.getTableMetadata(tableIdent).properties
   }
-  
+
   override def checkTblProps(tableIdent: TableIdentifier,
       expectedTblProps: Map[String, String]): Unit = {
     val actualTblProps = getTableProperties(tableIdent)
