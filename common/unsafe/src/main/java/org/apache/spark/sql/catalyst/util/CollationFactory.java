@@ -322,26 +322,39 @@ public final class CollationFactory {
           String collationName,
           String[] ICULocaleNames,
           List<String> validModifiers) {
-        String normalizedCollationName = collationName.toUpperCase();
         Map<String, String> params = new HashMap<>();
         params.put("collationName", collationName);
 
-        // remove modifiers from collation name.
-        String localeName = normalizedCollationName;
+        final int MODIFIER_LENGTH = 3;
+        assert(validModifiers.stream().allMatch(m -> m.length() == MODIFIER_LENGTH));
+
+        // Split modifiers and locale name.
+        String localeName = collationName.toUpperCase();
         List<String> modifiers = new ArrayList<>();
         while (validModifiers.stream().anyMatch(localeName::endsWith)) {
-          modifiers.add(localeName.substring(localeName.length() - 3));
-          localeName = localeName.substring(0, localeName.length() - 3);
+          modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
+          localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
         }
 
+        // Suggest version with unique modifiers.
         Collections.reverse(modifiers);
+        modifiers = modifiers.stream().distinct().toList();
 
-        String finalLocaleName = localeName;
+        // Remove conflicting settings.
+        if (modifiers.contains("_CI") && modifiers.contains(("_CS"))) {
+          modifiers = modifiers.stream().filter(m -> !m.equals("_CI")).toList();
+        }
+
+        if (modifiers.contains("_AI") && modifiers.contains(("_AS"))) {
+          modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
+        }
+
+        // Find the closest locale name.
+        final String finalLocaleName = localeName;
         String closestLocale = Collections.min(List.of(ICULocaleNames), Comparator.comparingInt(
           c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
             UTF8String.fromString(finalLocaleName))));
-        params.put("proposal", closestLocale+ String.join(
-                "", modifiers.stream().distinct().toList()));
+        params.put("proposal", closestLocale + String.join("", modifiers));
 
         return new SparkException("COLLATION_INVALID_NAME",
           SparkException.constructMessageParams(params), null);

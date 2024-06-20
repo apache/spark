@@ -417,15 +417,15 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UTF8_LCASE_LCASE", "UTF8_LCASE"),
       ("UNICODE_CS_CS", "UNICODE_CS"),
       ("UNICODE_CI_CI", "UNICODE_CI"),
-      // ("UNICODE_CI_CS", ""), // error message for invalid combination...
-      // ("UNICODE_CS_CI", ""),
+      ("UNICODE_CI_CS", "UNICODE_CS"),
+      ("UNICODE_CS_CI", "UNICODE_CS"),
       ("UNICODE_AS_AS", "UNICODE_AS"),
       ("UNICODE_AI_AI", "UNICODE_AI"),
-      // ("UNICODE_AS_AI", ""),
-      // ("UNICODE_AI_AS", ""),
-      // ("UNICODE_AS_CS_AI", ""),
-      // ("UNICODE_CS_AI_CI", ""),
-      // ("UNICODE_CS_AS_CI_AI", "")
+      ("UNICODE_AS_AI", "UNICODE_AS"),
+      ("UNICODE_AI_AS", "UNICODE_AS"),
+      ("UNICODE_AS_CS_AI", "UNICODE_AS_CS"),
+      ("UNICODE_CS_AI_CI", "UNICODE_CS_AI"),
+      ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS")
     ).foreach { case (collationName, proposal) =>
       val error = intercept[SparkException] {
         fetchCollation(collationName)
