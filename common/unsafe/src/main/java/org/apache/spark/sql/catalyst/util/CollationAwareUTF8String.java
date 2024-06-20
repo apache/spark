@@ -339,10 +339,11 @@ public class CollationAwareUTF8String {
    * @return the uppercase string
    */
   public static UTF8String toUpperCase(final UTF8String target) {
-    return UTF8String.fromString(toUpperCase(target.toString()));
+    if (target.isFullAscii()) return target.toUpperCaseAscii();
+    return UTF8String.fromString(toUpperCaseSlow(target.toString()));
   }
 
-  private static String toUpperCase(final String target) {
+  private static String toUpperCaseSlow(final String target) {
     return UCharacter.toUpperCase(target);
   }
 
@@ -353,10 +354,11 @@ public class CollationAwareUTF8String {
    * @return the uppercase string
    */
   public static UTF8String toUpperCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toUpperCase(target.toString(), collationId));
+    if (target.isFullAscii()) return target.toUpperCaseAscii();
+    return UTF8String.fromString(toUpperCaseSlow(target.toString(), collationId));
   }
 
-  private static String toUpperCase(final String target, final int collationId) {
+  private static String toUpperCaseSlow(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toUpperCase(locale, target);
@@ -369,9 +371,11 @@ public class CollationAwareUTF8String {
    * @return the lowercase string
    */
   public static UTF8String toLowerCase(final UTF8String target) {
-    return UTF8String.fromString(toLowerCase(target.toString()));
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
+    return UTF8String.fromString(toLowerCaseSlow(target.toString()));
   }
-  private static String toLowerCase(final String target) {
+
+  private static String toLowerCaseSlow(final String target) {
     return UCharacter.toLowerCase(target);
   }
 
@@ -382,9 +386,11 @@ public class CollationAwareUTF8String {
    * @return the lowercase string
    */
   public static UTF8String toLowerCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toLowerCase(target.toString(), collationId));
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
+    return UTF8String.fromString(toLowerCaseSlow(target.toString(), collationId));
   }
-  private static String toLowerCase(final String target, final int collationId) {
+
+  private static String toLowerCaseSlow(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toLowerCase(locale, target);
