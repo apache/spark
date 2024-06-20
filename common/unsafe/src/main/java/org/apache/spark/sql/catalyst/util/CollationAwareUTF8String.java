@@ -228,7 +228,7 @@ public class CollationAwareUTF8String {
    * @return An integer representing the comparison result.
    */
   private static int compareLowerCaseSlow(final UTF8String left, final UTF8String right) {
-    return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
+    return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
   public static UTF8String replace(final UTF8String src, final UTF8String search,
@@ -431,6 +431,7 @@ public class CollationAwareUTF8String {
    * @return The string converted to lowercase in a context-unaware manner.
    */
   public static UTF8String lowerCaseCodePoints(final UTF8String target) {
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
     return UTF8String.fromString(lowerCaseCodePoints(target.toString()));
   }
 
