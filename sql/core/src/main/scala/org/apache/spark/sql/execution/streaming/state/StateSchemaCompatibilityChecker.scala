@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -70,6 +70,9 @@ class StateSchemaCompatibilityChecker(
       ignoreValueSchema: Boolean) : Unit = {
     val (storedKeySchema, storedValueSchema) = oldSchema
     val (keySchema, valueSchema) = newSchema
+
+    logWarning(s"TEST: storedValueSchema=$storedValueSchema")
+
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
@@ -136,6 +139,7 @@ class StateSchemaCompatibilityChecker(
       newValueSchema: StructType): Unit = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
+      logWarning(s"TEST: writing new value schema=$newValueSchema")
       createSchemaFile(newKeySchema, newValueSchema)
     } else {
       check(existingSchema.get, (newKeySchema, newValueSchema), false)
@@ -148,4 +152,16 @@ class StateSchemaCompatibilityChecker(
 
 object StateSchemaCompatibilityChecker {
   val VERSION = 2
+
+  def validateAndMaybeEvolveSchema(
+      stateInfo: StatefulOperatorStateInfo,
+      hadoopConf: Configuration,
+      newKeySchema: StructType,
+      newValueSchema: StructType): Unit = {
+    val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
+      stateInfo.operatorId, 0), stateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(newKeySchema, newValueSchema)
+  }
+
 }

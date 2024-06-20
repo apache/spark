@@ -429,12 +429,8 @@ case class StateStoreRestoreExec(
     keyExpressions, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType,
-      stateManager.getStateValueSchema)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, stateManager.getStateValueSchema)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -500,12 +496,8 @@ case class StateStoreSaveExec(
     keyExpressions, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType,
-      stateManager.getStateValueSchema)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, stateManager.getStateValueSchema)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -713,12 +705,8 @@ case class SessionWindowStateStoreRestoreExec(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -804,12 +792,8 @@ case class SessionWindowStateStoreSaveExec(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1121,11 +1105,8 @@ case class StreamingDeduplicateExec(
     copy(child = newChild)
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType, schemaForValueRow)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, schemaForValueRow)
   }
 }
 
@@ -1199,11 +1180,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override def shortName: String = "dedupeWithinWatermark"
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType, schemaForValueRow)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, schemaForValueRow)
   }
 
   override protected def withNewChildInternal(

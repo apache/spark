@@ -190,12 +190,8 @@ trait FlatMapGroupsWithStateExecBase
   }
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val opStateInfo = getStateInfo
-    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
-      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType,
-      stateManager.stateSchema)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      groupingAttributes.toStructType, stateManager.stateSchema)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
