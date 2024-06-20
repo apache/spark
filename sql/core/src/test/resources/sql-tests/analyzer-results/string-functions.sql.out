@@ -384,21 +384,21 @@ Project [btrim(xyxtrimyyx, xy) AS btrim(xyxtrimyyx, xy)#x]
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query analysis
-Project [btrim(encode( xyz , utf-8, false, false)) AS btrim(encode( xyz , utf-8))#x]
+Project [btrim(encode( xyz , utf-8)) AS btrim(encode( xyz , utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(yxTomxx, utf-8, false, false), encode(xyz, utf-8, false, false)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
+Project [btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(xxxbarxxx, utf-8, false, false), encode(x, utf-8, false, false)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
+Project [btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
 +- OneRowRelation
 
 
@@ -649,14 +649,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(true))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, true, false) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, true, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -670,14 +670,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(false))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, false, false) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -685,14 +685,14 @@ Project [encode(scol#x, ecol#x, false, false) AS encode(scol, ecol)#x]
 -- !query
 select encode('hello', 'Windows-xxx')
 -- !query analysis
-Project [encode(hello, Windows-xxx, false, false) AS encode(hello, Windows-xxx)#x]
+Project [encode(hello, Windows-xxx) AS encode(hello, Windows-xxx)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -706,14 +706,14 @@ SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
 -- !query
 select encode('渭城朝雨浥轻尘', 'US-ASCII')
 -- !query analysis
-Project [encode(渭城朝雨浥轻尘, US-ASCII, false, true) AS encode(渭城朝雨浥轻尘, US-ASCII)#x]
+Project [encode(渭城朝雨浥轻尘, US-ASCII) AS encode(渭城朝雨浥轻尘, US-ASCII)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false, true) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -727,14 +727,14 @@ SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
 -- !query
 select encode('客舍青青柳色新', 'US-ASCII')
 -- !query analysis
-Project [encode(客舍青青柳色新, US-ASCII, false, false) AS encode(客舍青青柳色新, US-ASCII)#x]
+Project [encode(客舍青青柳色新, US-ASCII) AS encode(客舍青青柳色新, US-ASCII)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -788,14 +788,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
 -- !query analysis
-Project [decode(encode(abc, utf-8, false, false), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
+Project [decode(encode(abc, utf-8), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
 +- OneRowRelation
 
 
 -- !query
 select decode(encode('大千世界', 'utf-32'), 'utf-32')
 -- !query analysis
-Project [decode(encode(大千世界, utf-32, false, false), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
+Project [decode(encode(大千世界, utf-32), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
 +- OneRowRelation
 
 
