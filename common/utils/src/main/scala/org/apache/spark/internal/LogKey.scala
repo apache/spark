@@ -193,6 +193,7 @@ private[spark] object LogKeys {
   case object DELAY extends LogKey
   case object DELEGATE extends LogKey
   case object DELTA extends LogKey
+  case object DEPENDENCY extends LogKey
   case object DEPRECATED_KEY extends LogKey
   case object DERIVATIVE extends LogKey
   case object DESCRIPTION extends LogKey
@@ -279,6 +280,7 @@ private[spark] object LogKeys {
   case object FINAL_OUTPUT_PATH extends LogKey
   case object FINAL_PATH extends LogKey
   case object FINISH_TRIGGER_DURATION extends LogKey
+  case object FORMATTED_CODE extends LogKey
   case object FREE_MEMORY_SIZE extends LogKey
   case object FROM_OFFSET extends LogKey
   case object FROM_TIME extends LogKey
