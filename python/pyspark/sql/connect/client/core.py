@@ -1108,7 +1108,7 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        ExecutePlanResponseReattachableIterator.shutdown_threadpool()
+        ExecutePlanResponseReattachableIterator.shutdown()
         self._channel.close()
         self._closed = True
 
