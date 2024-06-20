@@ -778,7 +778,7 @@ class HiveDDLSuite
           errorClass = "UNSET_NONEXISTENT_PROPERTIES",
           parameters = Map(
             "properties" -> "`p`",
-            "table" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
+            "relationId" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`")
         )
       }
     }
@@ -1896,7 +1896,7 @@ class HiveDDLSuite
           parameters = Map(
             "properties" -> (s"${(forbiddenPrefix.split("\\.") :+ "foo").
               map(part => s"`$part`").mkString(".")}"),
-            "table" -> "`spark_catalog`.`default`.`tbl`")
+            "relationId" -> "`spark_catalog`.`default`.`tbl`")
         )
         checkError(
           exception = intercept[AnalysisException] {

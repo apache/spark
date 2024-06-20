@@ -347,7 +347,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         errorClass = "UNSET_NONEXISTENT_PROPERTIES",
         parameters = Map(
           "properties" -> "`test_prop1`, `test_prop2`",
-          "table" -> "`spark_catalog`.`default`.`test_table`")
+          "relationId" -> "`spark_catalog`.`default`.`test_table`")
       )
     }
   }
@@ -1190,7 +1190,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
       },
       errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      parameters = Map("properties" -> "`xyz`", "table" -> "`spark_catalog`.`dbx`.`tab1`")
+      parameters = Map("properties" -> "`xyz`", "relationId" -> "`spark_catalog`.`dbx`.`tab1`")
     )
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")

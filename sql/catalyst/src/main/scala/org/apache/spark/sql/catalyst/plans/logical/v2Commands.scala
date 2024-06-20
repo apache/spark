@@ -634,6 +634,23 @@ case class SetNamespaceProperties(
 }
 
 /**
+ * The logical plan of the ALTER NAMESPACE UNSET PROPERTIES command.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     ALTER (DATABASE|SCHEMA|NAMESPACE) ... UNSET (DBPROPERTIES|PROPERTIES) [IF EXISTS] ...;
+ * }}}
+ */
+case class UnsetNamespaceProperties(
+    namespace: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnsetNamespaceProperties =
+    copy(namespace = newChild)
+}
+
+/**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command.
  */
 case class SetNamespaceLocation(
