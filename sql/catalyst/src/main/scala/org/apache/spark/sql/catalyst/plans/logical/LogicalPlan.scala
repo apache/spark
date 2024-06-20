@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -30,7 +32,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
-
 
 abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
@@ -215,6 +216,10 @@ object LogicalPlan {
   //    to the old code path.
   private[spark] val PLAN_ID_TAG = TreeNodeTag[Long]("plan_id")
   private[spark] val IS_METADATA_COL = TreeNodeTag[Unit]("is_metadata_col")
+  private[spark] val DATASET_ID_TAG = TreeNodeTag[mutable.HashSet[Long]]("dataset_id")
+  private[spark] val UNRESOLVED_ATTRIBUTE_MD_TAG = TreeNodeTag[AttributeReference]("orig-attr")
+  private[spark] val DATASET_ID_KEY = "__dataset_id"
+  private[spark] val COL_POS_KEY = "__col_position"
 }
 
 /**
