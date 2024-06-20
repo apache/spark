@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
     """,
   examples = """
     Examples:
-      > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}')) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
+      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', map()) IS NULL AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
        [false]
   """,
   note = """
@@ -131,7 +131,7 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
   """,
   examples = """
     Examples:
-      > SELECT IS_NULL(_FUNC_(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP() ).u FROM (SELECT FROM_AVRO(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}' ) AS result FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1)));
+      > SELECT _FUNC_(s, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}', MAP()).u IS NULL FROM (SELECT FROM_AVRO(result, '{"type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }]}' ) AS s FROM (SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1));
        [false]
   """,
   group = "misc_funcs",
