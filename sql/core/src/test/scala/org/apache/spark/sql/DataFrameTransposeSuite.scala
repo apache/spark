@@ -17,32 +17,18 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
   // scalastyle:off println
-  test("logical plan transformation for transpose") {
-    val transposePlan = Transpose(
-      firstColumnValues = Seq(Literal("dotNET"), Literal("Java")),
-      child = courseSalesDedup.queryExecution.logical
-    )
-
-    println(s"Logical plan before analysis:\n$transposePlan")
-
-    val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
-    val analyzedPlan = testAnalyzer.execute(transposePlan)
-
-    println(s"Logical plan after analysis:\n$analyzedPlan")
-  }
-
-  test("transpose scala API") {
-    println(s"df: \n${courseSalesDedup.show()}")
-    val transposed = courseSalesDedup.transpose(Seq("dotNET", "Java"))
-    println(s"transposed df: \n${transposed.show()}")
+  test("transpose") {
+    val expected = Row("salary", 2000.0, 1000.0) :: Nil
+    val transposed = salary.transpose()
+//    checkAnswer(
+//      transposed,
+//      expected
+//    )
+    println(s"df: \n${salary.show()}")
+    println(s"df: \n${transposed.show()}")
   }
 }

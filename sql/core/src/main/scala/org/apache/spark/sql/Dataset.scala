@@ -2177,20 +2177,35 @@ class Dataset[T] private[sql](
 
   /**
    * Transpose a DataFrame, switching rows to columns.
-   * This function transforms the DataFrame such that the given values in the first column become
+   * This function transforms the DataFrame such that the distinct values in the first column become
    * the new columns of the DataFrame.
-   *
-   * @param firstColumnValues The distinct values of the first column which will become the new
-   *                          column headers in the transposed DataFrame.
    *
    * @group untypedrel
    * @since 4.0.0
    */
-  def transpose(firstColumnValues: Seq[String]): DataFrame = withPlan {
+  def transpose(): DataFrame = withPlan {
+    val firstColumnValues = collectFirstColumnValues()
     Transpose(
-      firstColumnValues.map(v => Literal(v)),
+      firstColumnValues.map(v => Literal(v.toString)),
       logicalPlan
     )
+  }
+
+  private[sql] def collectFirstColumnValues(): Seq[Any] = {
+
+    // This is to prevent unintended OOM errors when the number of distinct values is large
+    val maxValues = 5000
+    // Get the distinct values of the column and sort them so its consistent
+    val firstColumn = col(this.columns.head)
+    val values = this.select(firstColumn)
+      .distinct()
+      .limit(maxValues + 1)
+      .sort(firstColumn) // ensure that the output columns are in a consistent logical order
+      .collect()
+      .map(_.get(0))
+      .toImmutableArraySeq
+
+    values
   }
 
   /**
