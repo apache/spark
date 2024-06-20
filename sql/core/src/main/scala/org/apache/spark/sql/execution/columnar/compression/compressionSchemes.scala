@@ -25,6 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.{PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalShortType, PhysicalStringType}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -176,7 +177,8 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | SHORT | BYTE | STRING | BOOLEAN => true
+    case INT | LONG | SHORT | BYTE | BOOLEAN => true
+    case STRING(CollationFactory.UTF8_BINARY_COLLATION_ID) => true
     case _ => false
   }
 
@@ -373,7 +375,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | STRING => true
+    case INT | LONG | STRING(CollationFactory.UTF8_BINARY_COLLATION_ID) => true
     case _ => false
   }
 

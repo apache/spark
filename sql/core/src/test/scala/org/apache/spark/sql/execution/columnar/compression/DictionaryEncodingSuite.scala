@@ -25,12 +25,18 @@ import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.types.StringType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
   val nullValue = -1
   testDictionaryEncoding(new IntColumnStats, INT)
   testDictionaryEncoding(new LongColumnStats, LONG)
-  testDictionaryEncoding(new StringColumnStats, STRING, false)
+  Seq(
+    "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+  ).foreach(collation => {
+    val dt = StringType(collation)
+    testDictionaryEncoding(new StringColumnStats(dt), STRING(dt), false)
+  })
 
   def testDictionaryEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,

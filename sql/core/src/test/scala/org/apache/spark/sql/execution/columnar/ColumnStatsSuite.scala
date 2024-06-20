@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.types.StringType
 
 class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))
@@ -28,7 +29,7 @@ class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[LongColumnStats], LONG, Array(Long.MaxValue, Long.MinValue, 0))
   testColumnStats(classOf[FloatColumnStats], FLOAT, Array(Float.MaxValue, Float.MinValue, 0))
   testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
+  testColumnStats(classOf[StringColumnStats], STRING(StringType), Array(null, null, 0))
   testDecimalColumnStats(Array(null, null, 0))
   testIntervalColumnStats(Array(null, null, 0))
 

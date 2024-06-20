@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -255,14 +256,16 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class StringColumnStats extends ColumnStats {
+private[columnar] final class StringColumnStats(collationId: Int) extends ColumnStats {
+  def this(dt: StringType) = this(dt.collationId)
+
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getUTF8String(ordinal)
-      val size = STRING.actualSize(row, ordinal)
+      val size = STRING(collationId).actualSize(row, ordinal)
       gatherValueStats(value, size)
     } else {
       gatherNullStats()
@@ -270,8 +273,10 @@ private[columnar] final class StringColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    if (upper == null || value.binaryCompare(upper) > 0) upper = value.clone()
-    if (lower == null || value.binaryCompare(lower) < 0) lower = value.clone()
+    def collatedCompare(l: UTF8String, r: UTF8String): Int =
+      CollationFactory.fetchCollation(collationId).comparator.compare(l, r)
+    if (upper == null || collatedCompare(value, upper) > 0) upper = value.clone()
+    if (lower == null || collatedCompare(value, lower) < 0) lower = value.clone()
     sizeInBytes += size
     count += 1
   }

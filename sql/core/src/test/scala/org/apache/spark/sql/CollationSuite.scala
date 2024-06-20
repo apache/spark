@@ -1431,4 +1431,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("cache table with collated columns") {
+    val collations = Seq(
+      "UTF8_BINARY",
+      "UTF8_LCASE",
+      "UNICODE"
+    )
+    collations.foreach(collation =>
+      withTable("t1", "t2") {
+        sql(s"CACHE LAZY TABLE t1 AS SELECT col FROM VALUES ('a' COLLATE $collation) AS (col)")
+
+//        checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row(collation))
+//        withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+//          sql(s"CACHE TABLE t2 AS SELECT col FROM VALUES ('a') AS (col)")
+//          checkAnswer(sql("SELECT COLLATION(col) FROM t2"), Row(collation))
+//        }
+      }
+    )
+  }
+
+  test("cache table new test") {
+    withTable("t") {
+      sql(s"CACHE LAZY TABLE t AS SELECT col FROM VALUES ('a' COLLATE UTF8_LCASE) AS (col)")
+      checkAnswer(sql("SELECT * FROM t WHERE col = 'A'"), Row("a"))
+    }
+  }
 }

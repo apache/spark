@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.types.StringType
 
 class RunLengthEncodingSuite extends SparkFunSuite {
   val nullValue = -1
@@ -31,7 +32,12 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   testRunLengthEncoding(new ShortColumnStats, SHORT)
   testRunLengthEncoding(new IntColumnStats, INT)
   testRunLengthEncoding(new LongColumnStats, LONG)
-  testRunLengthEncoding(new StringColumnStats, STRING, false)
+  Seq(
+    "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
+  ).foreach(collation => {
+    val dt = StringType(collation)
+    testRunLengthEncoding(new StringColumnStats(dt), STRING(dt), false)
+  })
 
   def testRunLengthEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,
