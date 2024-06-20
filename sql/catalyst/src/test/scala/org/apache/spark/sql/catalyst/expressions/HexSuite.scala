@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.SparkFunSuite
 
 class HexSuite extends SparkFunSuite {
   test("SPARK-48596: hex long values") {
@@ -38,23 +38,9 @@ class HexSuite extends SparkFunSuite {
     assert(Hex.hex(Long.MaxValue).toString === "7FFFFFFFFFFFFFFF")
   }
 
-  test("SPARK-48644: hex bytes values") {
+  test("SPARK-48671: hex bytes values") {
     assert(Hex.hex(Array[Byte]()).toString === "")
     assert(Hex.hex(Array[Byte](0, 1, 15, 16, 17, Byte.MaxValue)).toString === "00010F10117F")
     assert(Hex.hex(Array[Byte](-1, -15, -16, -17, Byte.MinValue)).toString === "FFF1F0EF80")
-  }
-
-  test("SPARK-48644: bytes length check in hex") {
-    val bytes = new Array[Byte](1073741824)
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        Hex.hex(bytes)
-      },
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
-      sqlState = "54000",
-      parameters = Map(
-        "numberOfElements" -> (bytes.length.toLong * 2).toString,
-        "maxRoundedArrayLength" -> Int.MaxValue.toString)
-    )
   }
 }
