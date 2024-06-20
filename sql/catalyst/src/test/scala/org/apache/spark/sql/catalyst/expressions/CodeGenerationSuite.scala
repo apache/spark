@@ -107,7 +107,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       strExpr = StringDecode(Encode(strExpr, "utf-8"), "utf-8")
     }
 
-    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr)).map(replace)
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(null).toSeq(expressions.map(_.dataType))
     assert(actual.length == 1)
