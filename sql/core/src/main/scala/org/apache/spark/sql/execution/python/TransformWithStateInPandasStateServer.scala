@@ -23,6 +23,7 @@ import java.net.ServerSocket
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.streaming.ValueState
 
@@ -141,7 +142,7 @@ class TransformWithStateInPandasStateServer(
 
   private def initializeState(stateType: String, stateName: String): Unit = {
     if (stateType == "ValueState") {
-      val state = statefulProcessorHandle.getValueState[String](stateName)
+      val state = statefulProcessorHandle.getValueState[String](stateName, Encoders.STRING)
       valueStates.put(stateName, state)
       outputStream.writeInt(0)
     } else {

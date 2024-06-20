@@ -784,9 +784,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithStateInPandas(
-        func, groupingAttributes, outputAttrs, outputMode, child) =>
+        func, groupingAttributes, outputAttrs, outputMode, timeMode, child) =>
         val execPlan = TransformWithStateInPandasExec(
-          func, groupingAttributes, outputAttrs, outputMode,
+          func, groupingAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,

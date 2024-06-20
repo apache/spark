@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.python
 import scala.concurrent.duration.NANOSECONDS
 
 import org.apache.spark.JobArtifactSet
+
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,8 +29,8 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreOps}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreOps}
+import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.CompletionIterator
 
@@ -38,6 +39,7 @@ case class TransformWithStateInPandasExec(
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     outputMode: OutputMode,
+    timeMode: TimeMode,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
@@ -84,7 +86,7 @@ case class TransformWithStateInPandasExec(
       getStateInfo,
       schemaForKeyRow,
       schemaForValueRow,
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       session.sqlContext.sessionState,
       Some(session.sqlContext.streams.stateStoreCoordinator),
       useColumnFamilies = true,
@@ -99,7 +101,7 @@ case class TransformWithStateInPandasExec(
         val data = groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
 
         // TOOD (sahnib): fix this
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId, null)
+        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId, null, timeMode)
         val runner = new TransformWithStateInPandasPythonRunner(
           chainedFunc,
           PythonEvalType.SQL_TRANSFORM_WITH_STATE,

@@ -21,7 +21,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -166,6 +166,7 @@ case class TransformWithStateInPandas(
     groupingAttributes: Seq[Attribute],
     outputAttrs: Seq[Attribute],
     outputMode: OutputMode,
+    timeMode: TimeMode,
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = outputAttrs

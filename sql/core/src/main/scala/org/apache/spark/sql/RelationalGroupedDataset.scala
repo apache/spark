@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, InternalTimeModes}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -728,7 +728,8 @@ class RelationalGroupedDataset protected[sql](
   private[sql] def transformWithStateInPandas(
       func: PythonUDF,
       outputStructType: StructType,
-      outputModeStr: String): DataFrame = {
+      outputModeStr: String,
+      timeModeStr: String): DataFrame = {
     val groupingNamedExpressions = groupingExprs.map {
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
@@ -736,12 +737,14 @@ class RelationalGroupedDataset protected[sql](
     val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
     val outputAttrs = toAttributes(outputStructType)
     val outputMode = InternalOutputModes(outputModeStr)
+    val timeMode = InternalTimeModes(timeModeStr)
 
     val plan = TransformWithStateInPandas(
       func,
       groupingAttrs,
       outputAttrs,
       outputMode,
+      timeMode,
       child = df.logicalPlan
     )
     Dataset.ofRows(df.sparkSession, plan)
