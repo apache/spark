@@ -19,6 +19,9 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.internal.LogKeys.{STAGE_ATTEMPT, STAGE_ID}
+import org.apache.spark.internal.MessageWithContext
+
 /**
  * A set of tasks submitted together to the low-level TaskScheduler, usually representing
  * missing partitions of a particular stage.
@@ -34,4 +37,12 @@ private[spark] class TaskSet(
   val id: String = s"$stageId.$stageAttemptId"
 
   override def toString: String = "TaskSet " + id
+
+  // Identifier used in the structured logging framework.
+  lazy val logId: MessageWithContext = {
+    val hashMap = new java.util.HashMap[String, String]()
+    hashMap.put(STAGE_ID.name, stageId.toString)
+    hashMap.put(STAGE_ATTEMPT.name, stageAttemptId.toString)
+    MessageWithContext(id, hashMap)
+  }
 }

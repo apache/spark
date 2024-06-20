@@ -1024,6 +1024,28 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             expected.collect(),
         )
 
+    def test_lambda_str_representation(self):
+        from pyspark.sql.connect.expressions import UnresolvedNamedLambdaVariable
+
+        # forcely clear the internal increasing id,
+        # otherwise the string representation varies with this id
+        UnresolvedNamedLambdaVariable._nextVarNameId = 0
+
+        c = CF.array_sort(
+            "data",
+            lambda x, y: CF.when(x.isNull() | y.isNull(), CF.lit(0)).otherwise(
+                CF.length(y) - CF.length(x)
+            ),
+        )
+
+        self.assertEqual(
+            str(c),
+            (
+                """Column<'array_sort(data, LambdaFunction(CASE WHEN or(isNull(x_0), """
+                """isNull(y_1)) THEN 0 ELSE -(length(y_1), length(x_0)) END, x_0, y_1))'>"""
+            ),
+        )
+
 
 if __name__ == "__main__":
     import unittest

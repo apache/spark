@@ -26,6 +26,7 @@ import org.apache.hadoop.util.Shell
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.Hex.unhexDigits
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -97,31 +98,40 @@ object ExternalCatalogUtils {
   }
 
   def unescapePathName(path: String): String = {
-    val sb = new StringBuilder
-    var i = 0
-
-    while (i < path.length) {
-      val c = path.charAt(i)
-      if (c == '%' && i + 2 < path.length) {
-        val code: Int = try {
-          Integer.parseInt(path.substring(i + 1, i + 3), 16)
-        } catch {
-          case _: Exception => -1
-        }
-        if (code >= 0) {
-          sb.append(code.asInstanceOf[Char])
-          i += 3
-        } else {
-          sb.append(c)
-          i += 1
-        }
-      } else {
-        sb.append(c)
-        i += 1
-      }
+    if (path == null || path.isEmpty) {
+      return path
     }
-
-    sb.toString()
+    var plaintextEndIdx = path.indexOf('%')
+    val length = path.length
+    if (plaintextEndIdx == -1 || plaintextEndIdx + 2 >= length) {
+      // fast path, no %xx encoding found then return the string identity
+      path
+    } else {
+      val sb = new java.lang.StringBuilder(length)
+      var plaintextStartIdx = 0
+      while(plaintextEndIdx != -1 && plaintextEndIdx + 2 < length) {
+        if (plaintextEndIdx > plaintextStartIdx) sb.append(path, plaintextStartIdx, plaintextEndIdx)
+        val high = path.charAt(plaintextEndIdx + 1)
+        if ((high >>> 8) == 0 && unhexDigits(high) != -1) {
+          val low = path.charAt(plaintextEndIdx + 2)
+          if ((low >>> 8) == 0 && unhexDigits(low) != -1) {
+            sb.append((unhexDigits(high) << 4 | unhexDigits(low)).asInstanceOf[Char])
+            plaintextStartIdx = plaintextEndIdx + 3
+          } else {
+            sb.append('%')
+            plaintextStartIdx = plaintextEndIdx + 1
+          }
+        } else {
+          sb.append('%')
+          plaintextStartIdx = plaintextEndIdx + 1
+        }
+        plaintextEndIdx = path.indexOf('%', plaintextStartIdx)
+      }
+      if (plaintextStartIdx < length) {
+        sb.append(path, plaintextStartIdx, length)
+      }
+      sb.toString
+    }
   }
 
   def generatePartitionPath(
