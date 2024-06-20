@@ -89,14 +89,14 @@ private[spark] abstract class ConfigEntry[T] (
   def defaultValueString: String
 
   protected def readString(reader: ConfigReader): Option[String] = {
-    val values = Seq(
-      prependedKey.flatMap(reader.get(_)),
-      alternatives.foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))
-    ).flatten
-    if (values.nonEmpty) {
-      Some(values.mkString(prependSeparator))
-    } else {
-      None
+    val maybePrependedValue: Option[String] = prependedKey.flatMap(reader.get)
+    val value: Option[String] = alternatives
+      .foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))
+    (maybePrependedValue, value) match {
+      case (Some(prependedValue), Some(value)) => Some(s"$prependedValue$prependSeparator$value")
+      case (Some(prepend), None) => Some(prepend)
+      case (None, Some(value)) => Some(value)
+      case (None, None) => None
     }
   }
 
