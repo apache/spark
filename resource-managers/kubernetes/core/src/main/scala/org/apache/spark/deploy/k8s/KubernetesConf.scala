@@ -284,12 +284,20 @@ private[spark] object KubernetesConf {
   def getKubernetesAppId(): String =
     s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
-  def getResourceNamePrefix(appName: String): String = {
-    val id = KubernetesUtils.uniqueID()
-    s"$appName-$id"
-      .trim
-      .toLowerCase(Locale.ROOT)
-      .replaceAll("[^a-z0-9\\-]", "-")
+  def getResourceNamePrefix(appName: String, id: String = KubernetesUtils.uniqueID()): String = {
+    // The longest resource suffix Spark currently uses is "-driver-podspec-conf-map" of length 24
+    val truncateLength = KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - 24 - (id.length + 1)
+    val truncatedAppName = StringUtils.abbreviate(
+      appName
+        .trim
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9\\-]", "-")
+        .replaceAll("-+", "-"),
+      "",
+      truncateLength
+    )
+
+    s"$truncatedAppName-$id"
       .replaceAll("-+", "-")
       .replaceAll("^-", "")
       .replaceAll("^[0-9]", "x")
