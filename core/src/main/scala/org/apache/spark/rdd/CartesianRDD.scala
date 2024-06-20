@@ -61,7 +61,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     val numPartitionsInRdd1 = rdd1.partitions.length
     val partitionNum: Long = numPartitionsInRdd1.toLong * numPartitionsInRdd2.toLong
     if (partitionNum > Int.MaxValue) {
-      throw SparkCoreErrors.cartesianPartitionNumOverflow(numPartitionsInRdd1, numPartitionsInRdd2)
+      throw SparkCoreErrors.tooManyArrayElementsError(partitionNum, Int.MaxValue)
     }
     val array = new Array[Partition](partitionNum.toInt)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {

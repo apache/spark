@@ -405,12 +405,6 @@
     },
     "sqlState" : "58030"
   },
-  "CARTESIAN_PARTITION_NUM_ARITHMETIC_OVERFLOW" : {
-    "message" : [
-      "The number of partitions in rdd1 (<value1>) multiplied by the number of partitions in rdd2 (<value2>) exceeds `Int.MaxValue` when performing a Cartesian product."
-    ],
-    "sqlState" : "22003"
-  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."

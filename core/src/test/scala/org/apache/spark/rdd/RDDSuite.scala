@@ -914,18 +914,19 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(c.cartesian[Int](a).collect().toList.sorted === c_cartesian_a)
   }
 
-  test("number of cartesian partitions overflow") {
-    val rdd1 = sc.parallelize(Seq(1, 2, 3), numSlices = 65536)
-    val rdd2 = sc.parallelize(Seq(1, 2, 3), numSlices = 65536)
+  test("SPARK-48656: number of cartesian partitions overflow") {
+    val numSlices: Int = 65536
+    val rdd1 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)
+    val rdd2 = sc.parallelize(Seq(1, 2, 3), numSlices = numSlices)
     checkError(
-      exception = intercept[SparkArithmeticException] {
+      exception = intercept[SparkIllegalArgumentException] {
         rdd1.cartesian(rdd2).partitions
       },
-      errorClass = "CARTESIAN_PARTITION_NUM_ARITHMETIC_OVERFLOW",
-      sqlState = "22003",
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      sqlState = "54000",
       parameters = Map(
-        "value1" -> rdd1.partitions.length.toString,
-        "value2" -> rdd2.partitions.length.toString)
+        "numberOfElements" -> (numSlices.toLong * numSlices.toLong).toString,
+        "maxRoundedArrayLength" -> Int.MaxValue.toString)
     )
   }
 
