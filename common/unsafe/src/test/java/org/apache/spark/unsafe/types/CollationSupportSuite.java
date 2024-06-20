@@ -606,7 +606,8 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId));
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, true));
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, false));
   }
 
   @Test
@@ -660,7 +661,8 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId));
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, true));
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, false));
   }
 
   @Test
