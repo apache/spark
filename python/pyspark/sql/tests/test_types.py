@@ -32,6 +32,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
+    PySparkNotImplementedError,
 )
 from pyspark.sql.types import (
     DataType,
@@ -2240,6 +2241,20 @@ class TypesTestsMixin:
                 ArrayType(ArrayType(LongType())),
                 self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
             )
+
+    def test_ym_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
+        with self.temp_env({"PYSPARK_YM_INTERVAL_LEGACY": "1"}):
+            self.assertEqual(
+                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first(),
+                Row(interval=128),
+            )
+
+    def test_cal_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
 
 
 class DataTypeTests(unittest.TestCase):
