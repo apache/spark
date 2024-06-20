@@ -1451,8 +1451,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
         checkAnswer(all, Row("a"))
         // Checks column stats code path.
-        sql("SELECT col FROM tbl WHERE col = 'a'")
-        sql("SELECT col FROM tbl WHERE col = 'b'")
+        checkAnswer(sql("SELECT col FROM tbl WHERE col = 'a'"), Row("a"))
+        checkAnswer(sql("SELECT col FROM tbl WHERE col = 'b'"), Seq.empty)
       }
 
       withTable("tbl") {
