@@ -2175,10 +2175,20 @@ class Dataset[T] private[sql](
       valueColumnName: String): DataFrame =
     unpivot(ids.toArray, variableColumnName, valueColumnName)
 
-
-  def transpose(firstColumnValues: Seq[Column]): DataFrame = withPlan {
+  /**
+   * Transpose a DataFrame, switching rows to columns.
+   * This function transforms the DataFrame such that the given values in the first column become
+   * the new columns of the DataFrame.
+   *
+   * @param firstColumnValues The distinct values of the first column which will become the new
+   *                          column headers in the transposed DataFrame.
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def transpose(firstColumnValues: Seq[String]): DataFrame = withPlan {
     Transpose(
-      firstColumnValues.map(col => Literal(col.toString())),
+      firstColumnValues.map(v => Literal(v)),
       logicalPlan
     )
   }

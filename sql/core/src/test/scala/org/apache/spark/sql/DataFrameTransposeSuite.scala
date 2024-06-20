@@ -24,8 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
-  import testImplicits._
-
   // scalastyle:off println
   test("logical plan transformation for transpose") {
     val transposePlan = Transpose(
@@ -44,7 +42,7 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
 
   test("transpose scala API") {
     println(s"df: \n${courseSalesDedup.show()}")
-    val transposed = courseSalesDedup.transpose(Seq($"dotNET", $"Java"))
+    val transposed = courseSalesDedup.transpose(Seq("dotNET", "Java"))
     println(s"transposed df: \n${transposed.show()}")
   }
 }
