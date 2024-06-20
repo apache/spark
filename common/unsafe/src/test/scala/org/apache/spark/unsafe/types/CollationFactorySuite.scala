@@ -278,6 +278,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   test("invalid names of collations with ICU non-root localization") {
     Seq(
       ("en_US", "en_USA"), // Must use 3-letter country code
+      ("eN_US", "en_USA"), // verify that proper casing is captured in error.
       ("enn", "en"),
       ("en_AAA","en_USA"),
       ("en_Something", "UNICODE"),
@@ -315,6 +316,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("Cyrl_CI_sr", "he_ISR"),
       ("Cyrl_CI_sr_SRB", "sr_Cyrl_SRB"),
       ("Cyrl_sr_CI_SRB", "sr_Cyrl_SRB"),
+      // no locale specified
+      ("_CI_AI", "af_CI_AI")
     ).foreach { case (collationName, proposal) => {
       val error = intercept[SparkException] {
         fetchCollation(collationName)
@@ -409,7 +412,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
-  test("repeated and/or incompatible specifiers in collation name") {
+  test("repeated and/or incompatible and/or misplaced specifiers in collation name") {
     Seq(
       ("UTF8_LCASE_LCASE", "UTF8_LCASE"),
       ("UNICODE_CS_CS", "UNICODE_CS"),
@@ -422,7 +425,11 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_AI_AS", "UNICODE_AS"),
       ("UNICODE_AS_CS_AI", "UNICODE_AS_CS"),
       ("UNICODE_CS_AI_CI", "UNICODE_CS_AI"),
-      ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS")
+      ("UNICODE_CS_AS_CI_AI", "UNICODE_CS_AS"),
+      ("UNICODE__CS__AS", "UNICODE_AS"),
+      ("UNICODE-CS-AS", "UNICODE"),
+      ("UNICODECSAS", "UNICODE"),
+      ("_CS_AS_UNICODE", "UNICODE"),
     ).foreach { case (collationName, proposal) =>
       val error = intercept[SparkException] {
         fetchCollation(collationName)

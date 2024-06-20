@@ -318,9 +318,12 @@ public final class CollationFactory {
         }
       }
 
+      /**
+       * Method for constructing errors thrown on providing invalid collation name.
+       */
       protected static SparkException collationInvalidNameException(
           String collationName,
-          String[] ICULocaleNames,
+          String[] validRootNames,
           List<String> validModifiers) {
         Map<String, String> params = new HashMap<>();
         params.put("collationName", collationName);
@@ -351,10 +354,12 @@ public final class CollationFactory {
 
         // Find the closest locale name.
         final String finalLocaleName = localeName;
-        String closestLocale = Collections.min(List.of(ICULocaleNames), Comparator.comparingInt(
+        String closestLocale = Collections.min(List.of(validRootNames), Comparator.comparingInt(
           c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
             UTF8String.fromString(finalLocaleName))));
-        params.put("proposal", closestLocale + String.join("", modifiers));
+        final String proposal = closestLocale + String.join("", modifiers);
+        assert(isCollationNameValid(proposal));
+        params.put("proposal", proposal);
 
         return new SparkException("COLLATION_INVALID_NAME",
           SparkException.constructMessageParams(params), null);
@@ -367,6 +372,15 @@ public final class CollationFactory {
           return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
+        }
+      }
+
+      private static boolean isCollationNameValid(String collationName) {
+        try {
+          collationNameToId(collationName);
+          return true;
+        } catch (SparkException e) {
+          return false;
         }
       }
 
