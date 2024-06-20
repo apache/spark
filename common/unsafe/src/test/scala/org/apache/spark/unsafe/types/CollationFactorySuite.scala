@@ -275,7 +275,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     })
   }
 
-
   test("invalid names of collations with ICU non-root localization") {
     Seq(
       ("en_US", "en_USA"), // Must use 3-letter country code
@@ -406,8 +405,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     )
     badCollationIds.foreach(collationId => {
       // Assumptions about collation id will break and assert statement will fail.
-      // intercept[AssertionError](fetchCollation(collationId))
-      fetchCollation(collationId)
+      intercept[AssertionError](fetchCollation(collationId))
     })
   }
 
