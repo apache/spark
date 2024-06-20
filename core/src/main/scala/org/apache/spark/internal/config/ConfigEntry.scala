@@ -89,6 +89,8 @@ private[spark] abstract class ConfigEntry[T] (
   def defaultValueString: String
 
   protected def readString(reader: ConfigReader): Option[String] = {
+    // SPARK-48678: performance optimization: this code could be expressed more succinctly
+    // using flatten and mkString, but doings so adds lots of Scala collections perf. overhead.
     val maybePrependedValue: Option[String] = prependedKey.flatMap(reader.get)
     val value: Option[String] = alternatives
       .foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))

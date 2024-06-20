@@ -84,7 +84,7 @@ private[spark] class ConfigReader(conf: ConfigProvider) {
   def substitute(input: String): String = substitute(input, Set())
 
   private def substitute(input: String, usedRefs: Set[String]): String = {
-    // Performance optimization: skip the costly regex processing
+    // SPARK-48678: performance optimization: skip the costly regex processing
     // if the string cannot possibly contain a variable reference:
     if (input != null && input.contains("${")) {
       ConfigReader.REF_RE.replaceAllIn(input, { m =>
