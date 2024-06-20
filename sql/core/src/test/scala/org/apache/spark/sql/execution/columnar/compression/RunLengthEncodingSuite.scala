@@ -36,15 +36,17 @@ class RunLengthEncodingSuite extends SparkFunSuite {
     "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
   ).foreach(collation => {
     val dt = StringType(collation)
-    testRunLengthEncoding(new StringColumnStats(dt), STRING(dt), false)
+    val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
+    testRunLengthEncoding(new StringColumnStats(dt), STRING(dt), false, Some(typeName))
   })
 
   def testRunLengthEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
-      testDecompress: Boolean = true): Unit = {
+      testDecompress: Boolean = true,
+      testTypeName: Option[String] = None): Unit = {
 
-    val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val typeName = testTypeName.getOrElse(columnType.getClass.getSimpleName.stripSuffix("$"))
 
     def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]): Unit = {
       // -------------

@@ -35,15 +35,17 @@ class DictionaryEncodingSuite extends SparkFunSuite {
     "UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI"
   ).foreach(collation => {
     val dt = StringType(collation)
-    testDictionaryEncoding(new StringColumnStats(dt), STRING(dt), false)
+    val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
+    testDictionaryEncoding(new StringColumnStats(dt), STRING(dt), false, Some(typeName))
   })
 
   def testDictionaryEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
-      testDecompress: Boolean = true): Unit = {
+      testDecompress: Boolean = true,
+      testTypeName: Option[String] = None): Unit = {
 
-    val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val typeName = testTypeName.getOrElse(columnType.getClass.getSimpleName.stripSuffix("$"))
 
     def buildDictionary(buffer: ByteBuffer) = {
       (0 until buffer.getInt()).map(columnType.extract(buffer) -> _.toShort).toMap
