@@ -200,17 +200,17 @@ class MergeIntoWriter[T] private[sql] (
   }
 
   private[sql] def withNewMatchedActions(actions: MergeAction*): MergeIntoWriter[T] = {
-    this.matchedActions = this.matchedActions :++ actions
+    this.matchedActions ++= actions
     this
   }
 
   private[sql] def withNewNotMatchedActions(actions: MergeAction*): MergeIntoWriter[T] = {
-    this.notMatchedActions = this.notMatchedActions :++ actions
+    this.notMatchedActions ++= actions
     this
   }
 
   private[sql] def withNewNotMatchedBySourceActions(actions: MergeAction*): MergeIntoWriter[T] = {
-    this.notMatchedBySourceActions = this.notMatchedBySourceActions :++ actions
+    this.notMatchedBySourceActions ++= actions
     this
   }
 }
