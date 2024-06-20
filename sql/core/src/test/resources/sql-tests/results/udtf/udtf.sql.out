@@ -1070,6 +1070,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT * FROM UDTFPartitionByIndexingBug(
+    TABLE(
+        SELECT
+            5 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+
+        UNION ALL
+
+        SELECT
+            4 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+    )
+)
+-- !query schema
+struct<partition_col:string,double_col:double>
+-- !query output
+NULL	1.0
+NULL	1.0
+NULL	1.0
+NULL	1.0
+NULL	1.0
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.execution.streaming.AbstractFileContextBasedCheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 
@@ -36,7 +36,7 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
       s" an fs (path: $path) with abortable stream support")
   }
 
-  logInfo(s"Writing atomically to $path based on abortable stream")
+  logInfo(log"Writing atomically to ${MDC(LogKeys.PATH, path)} based on abortable stream")
 
   class AbortableStreamBasedFSDataOutputStream(
       fsDataOutputStream: FSDataOutputStream,

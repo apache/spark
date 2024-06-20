@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
@@ -53,6 +55,60 @@ class CollationSQLRegexpSuite
       }
       assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
     })
+  }
+
+  test("Like simplification should work with collated strings") {
+    case class SimplifyLikeTestCase[R](collation: String, str: String, cls: Class[_], result: R)
+    val testCases = Seq(
+      SimplifyLikeTestCase("UTF8_BINARY", "ab%", classOf[StartsWith], false),
+      SimplifyLikeTestCase("UTF8_BINARY", "%bc", classOf[EndsWith], false),
+      SimplifyLikeTestCase("UTF8_BINARY", "a%c", classOf[And], false),
+      SimplifyLikeTestCase("UTF8_BINARY", "%b%", classOf[Contains], false),
+      SimplifyLikeTestCase("UTF8_BINARY", "abc", classOf[EqualTo], false),
+      SimplifyLikeTestCase("UTF8_LCASE", "ab%", classOf[StartsWith], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%bc", classOf[EndsWith], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "a%c", classOf[And], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "%b%", classOf[Contains], true),
+      SimplifyLikeTestCase("UTF8_LCASE", "abc", classOf[EqualTo], true)
+    )
+    val tableName = "T"
+    withTable(tableName) {
+      sql(s"CREATE TABLE IF NOT EXISTS $tableName(c STRING) using PARQUET")
+      sql(s"INSERT INTO $tableName(c) VALUES('ABC')")
+      testCases.foreach { t =>
+        val query = sql(s"select c collate ${t.collation} like '${t.str}' FROM t")
+        checkAnswer(query, Row(t.result))
+        val optimizedPlan = query.queryExecution.optimizedPlan.asInstanceOf[Project]
+        assert(optimizedPlan.projectList.head.asInstanceOf[Alias].child.getClass == t.cls)
+      }
+    }
+  }
+
+  test("Like simplification should work with collated strings (for default collation)") {
+    val tableNameBinary = "T_BINARY"
+    withTable(tableNameBinary) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
+        sql(s"CREATE TABLE IF NOT EXISTS $tableNameBinary(c STRING) using PARQUET")
+        sql(s"INSERT INTO $tableNameBinary(c) VALUES('ABC')")
+        checkAnswer(sql(s"select c like 'ab%' FROM $tableNameBinary"), Row(false))
+        checkAnswer(sql(s"select c like '%bc' FROM $tableNameBinary"), Row(false))
+        checkAnswer(sql(s"select c like 'a%c' FROM $tableNameBinary"), Row(false))
+        checkAnswer(sql(s"select c like '%b%' FROM $tableNameBinary"), Row(false))
+        checkAnswer(sql(s"select c like 'abc' FROM $tableNameBinary"), Row(false))
+      }
+    }
+    val tableNameLcase = "T_LCASE"
+    withTable(tableNameLcase) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
+        sql(s"CREATE TABLE IF NOT EXISTS $tableNameLcase(c STRING) using PARQUET")
+        sql(s"INSERT INTO $tableNameLcase(c) VALUES('ABC')")
+        checkAnswer(sql(s"select c like 'ab%' FROM $tableNameLcase"), Row(true))
+        checkAnswer(sql(s"select c like '%bc' FROM $tableNameLcase"), Row(true))
+        checkAnswer(sql(s"select c like 'a%c' FROM $tableNameLcase"), Row(true))
+        checkAnswer(sql(s"select c like '%b%' FROM $tableNameLcase"), Row(true))
+        checkAnswer(sql(s"select c like 'abc' FROM $tableNameLcase"), Row(true))
+      }
+    }
   }
 
   test("Support ILike string expression with collation") {
