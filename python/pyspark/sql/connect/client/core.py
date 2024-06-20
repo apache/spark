@@ -659,12 +659,7 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-
-        class ClientThreadLocals(threading.local):
-            tags: set = set()
-            inside_error_handling: bool = False
-
-        self.thread_local = ClientThreadLocals()
+        self.thread_local = threading.local()
 
         # Parse the connection string.
         self._builder = (
@@ -1693,7 +1688,7 @@ class SparkConnectClient(object):
         Throws the appropriate internal Python exception.
         """
 
-        if self.thread_local.inside_error_handling:
+        if getattr(self.thread_local, "inside_error_handling", False):
             # We are already inside error handling routine,
             # avoid recursive error processing (with potentially infinite recursion)
             raise error

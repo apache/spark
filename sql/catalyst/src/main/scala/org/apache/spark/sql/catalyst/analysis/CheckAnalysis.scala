@@ -143,49 +143,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
-  private def checkUnreferencedCTERelations(
-      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
-      visited: mutable.Map[Long, Boolean],
-      danglingCTERelations: mutable.ArrayBuffer[CTERelationDef],
-      cteId: Long): Unit = {
-    if (visited(cteId)) {
-      return
-    }
-    val (cteDef, _, refMap) = cteMap(cteId)
-    refMap.foreach { case (id, _) =>
-      checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, id)
-    }
-    danglingCTERelations.append(cteDef)
-    visited(cteId) = true
-  }
-
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    val inlineCTE = InlineCTE(alwaysInline = true)
-    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
-    inlineCTE.buildCTEMap(plan, cteMap)
-    val danglingCTERelations = mutable.ArrayBuffer.empty[CTERelationDef]
-    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
-    // If a CTE relation is never used, it will disappear after inline. Here we explicitly collect
-    // these dangling CTE relations, and put them back in the main query, to make sure the entire
-    // query plan is valid.
-    cteMap.foreach { case (cteId, (_, refCount, _)) =>
-      // If a CTE relation ref count is 0, the other CTE relations that reference it should also be
-      // collected. This code will also guarantee the leaf relations that do not reference
-      // any others are collected first.
-      if (refCount == 0) {
-        checkUnreferencedCTERelations(cteMap, visited, danglingCTERelations, cteId)
-      }
-    }
-    // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    var inlinedPlan: LogicalPlan = plan
-    try {
-      inlinedPlan = inlineCTE(plan)
+    // We should inline all CTE relations to restore the original plan shape, as the analysis check
+    // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
+    // in the original `WithCTE` node, as we need to perform analysis check for them as well.
+    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true)
+    val inlinedPlan: LogicalPlan = try {
+      inlineCTE(plan)
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
-    }
-    if (danglingCTERelations.nonEmpty) {
-      inlinedPlan = WithCTE(inlinedPlan, danglingCTERelations.toSeq)
     }
     try {
       checkAnalysis0(inlinedPlan)
@@ -300,6 +267,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Early checks for column definitions, to produce better error messages
         ColumnDefinition.checkColumnDefinitions(operator)
 
+        var stagedError: Option[() => Unit] = None
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
@@ -338,12 +306,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // `Grouping` and `GroupingID` are considered as of having lower priority than the other
+          // nodes which cause errors.
           case g: Grouping =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
           case g: GroupingID =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
               !e.isInstanceOf[WindowExpression] && e.resolved =>
@@ -402,6 +372,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+        if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
@@ -1403,6 +1374,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             input,
             aggregated,
             canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
+
+        // We always inline CTE relations before analysis check, and only un-referenced CTE
+        // relations will be kept in the plan. Here we should simply skip them and check the
+        // children, as un-referenced CTE relations won't be executed anyway and doesn't need to
+        // be restricted by the current subquery correlation limitations.
+        case _: WithCTE | _: CTERelationDef =>
+          plan.children.foreach(p => checkPlan(p, aggregated, canContainOuter))
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only

@@ -397,12 +397,20 @@ def _check_arrow_array_timestamps_localize(
             return a
 
         mt: MapType = cast(MapType, dt)
-        # TODO(SPARK-48302): Do not replace nulls in MapArray with empty lists
-        return pa.MapArray.from_arrays(
-            a.offsets,
-            _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
-            _check_arrow_array_timestamps_localize(a.items, mt.valueType, truncate, timezone),
-        )
+
+        params = {
+            "offsets": a.offsets,
+            "keys": _check_arrow_array_timestamps_localize(a.keys, mt.keyType, truncate, timezone),
+            "items": _check_arrow_array_timestamps_localize(
+                a.items, mt.valueType, truncate, timezone
+            ),
+        }
+        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
+        # version 17.0.0
+        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+            params["mask"] = a.is_null()
+
+        return pa.MapArray.from_arrays(**params)
     if types.is_struct(a.type):
         # Return the StructArray as-is if it contains no nested fields or timestamps
         if all(

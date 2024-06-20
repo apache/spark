@@ -399,7 +399,7 @@
     <dependency>
       <groupId>net.razorvine</groupId>
       <artifactId>pickle</artifactId>
-      <version>1.3</version>
+      <version>1.5</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
@@ -547,6 +547,8 @@
               <include>org.eclipse.jetty:jetty-server</include>
               <include>com.google.guava:guava</include>
               <include>com.google.protobuf:*</include>
+              <!-- While shading new dependencies, please also update LICENSE/NOTICE files in the
+                core/src/main/resources/META-INF if necessary -->
             </includes>
           </artifactSet>
           <relocations>

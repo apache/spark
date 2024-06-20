@@ -82,7 +82,7 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
 
     val df = spark.range(1).selectExpr(
         "cast('a' as binary) a", "true b", "cast(1 as byte) c", "1.23 d", "'abc'",
-        "'abc' COLLATE UTF8_BINARY_LCASE")
+        "'abc' COLLATE UTF8_LCASE")
     dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
 
     // Variant and Interval types are disallowed by default.

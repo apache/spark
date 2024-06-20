@@ -23,6 +23,7 @@ from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F
+from pyspark.sql.utils import is_remote
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -571,10 +572,14 @@ class PandasOnSparkPlotAccessor(PandasObject):
         return module
 
     def __call__(self, kind="line", backend=None, **kwargs):
+        kind = {"density": "kde"}.get(kind, kind)
+
+        if is_remote() and kind in ["hist", "kde"]:
+            return unsupported_function(class_name="pd.DataFrame", method_name=kind)()
+
         plot_backend = PandasOnSparkPlotAccessor._get_plot_backend(backend)
         plot_data = self.data
 
-        kind = {"density": "kde"}.get(kind, kind)
         if hasattr(plot_backend, "plot_pandas_on_spark"):
             # use if there's pandas-on-Spark specific method.
             return plot_backend.plot_pandas_on_spark(plot_data, kind=kind, **kwargs)
@@ -948,6 +953,9 @@ class PandasOnSparkPlotAccessor(PandasObject):
             >>> df = ps.from_pandas(df)
             >>> df.plot.hist(bins=12, alpha=0.5)  # doctest: +SKIP
         """
+        if is_remote():
+            return unsupported_function(class_name="pd.DataFrame", method_name="hist")()
+
         return self(kind="hist", bins=bins, **kwds)
 
     def kde(self, bw_method=None, ind=None, **kwargs):
@@ -1023,6 +1031,9 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ... })
             >>> df.plot.kde(ind=[1, 2, 3, 4, 5, 6], bw_method=0.3)  # doctest: +SKIP
         """
+        if is_remote():
+            return unsupported_function(class_name="pd.DataFrame", method_name="kde")()
+
         return self(kind="kde", bw_method=bw_method, ind=ind, **kwargs)
 
     density = kde

@@ -284,6 +284,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
         statementType, colName, defaultSQL)
     }
+
     // Analyze the parse result.
     val plan = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
@@ -298,6 +299,21 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
     }.get
+
+    if (!analyzed.foldable) {
+      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName, defaultSQL)
+    }
+
+    // Another extra check, expressions should already be resolved if AnalysisException is not
+    // thrown in the code block above
+    if (!analyzed.resolved) {
+      throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
+        statementType,
+        colName,
+        defaultSQL,
+        cause = null)
+    }
+
     // Perform implicit coercion from the provided expression type to the required column type.
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
