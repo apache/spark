@@ -430,7 +430,7 @@ case class StateStoreRestoreExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      keyExpressions.toStructType, stateManager.getStateValueSchema)
+      keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -497,7 +497,7 @@ case class StateStoreSaveExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      keyExpressions.toStructType, stateManager.getStateValueSchema)
+      keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -706,7 +706,7 @@ case class SessionWindowStateStoreRestoreExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      stateManager.getStateKeySchema, stateManager.getStateValueSchema)
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -793,7 +793,7 @@ case class SessionWindowStateStoreSaveExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      stateManager.getStateKeySchema, stateManager.getStateValueSchema)
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1106,7 +1106,7 @@ case class StreamingDeduplicateExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      keyExpressions.toStructType, schemaForValueRow)
+      keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
   }
 }
 
@@ -1181,7 +1181,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
-      keyExpressions.toStructType, schemaForValueRow)
+      keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
   }
 
   override protected def withNewChildInternal(

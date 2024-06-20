@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
 class StateSchemaCompatibilityChecker(
@@ -136,13 +141,14 @@ class StateSchemaCompatibilityChecker(
 
   def validateAndMaybeEvolveSchema(
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean): Unit = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
       logWarning(s"TEST: writing new value schema=$newValueSchema")
       createSchemaFile(newKeySchema, newValueSchema)
     } else {
-      check(existingSchema.get, (newKeySchema, newValueSchema), false)
+      check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
     }
   }
 
@@ -153,15 +159,48 @@ class StateSchemaCompatibilityChecker(
 object StateSchemaCompatibilityChecker {
   val VERSION = 2
 
+  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
+    if (!UnsafeRowUtils.isBinaryStable(schema)) {
+      throw new SparkUnsupportedOperationException(
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+        messageParameters = Map("schema" -> schema.json)
+      )
+    }
+  }
+
   def validateAndMaybeEvolveSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,
       newKeySchema: StructType,
-      newValueSchema: StructType): Unit = {
+      newValueSchema: StructType,
+      sessionState: SessionState,
+      extraOptions: Map[String, String] = Map.empty): Unit = {
+    // SPARK-47776: collation introduces the concept of binary (in)equality, which means
+    // in some collation we no longer be able to just compare the binary format of two
+    // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
+    // same in case insensitive collation.
+    // State store is basically key-value storage, and the most provider implementations
+    // rely on the fact that all the columns in the key schema support binary equality.
+    // We need to disallow using binary inequality column in the key schema, before we
+    // could support this in majority of state store providers (or high-level of state
+    // store.)
+    disallowBinaryInequalityColumn(newKeySchema)
+
+    val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0), stateInfo.queryRunId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.validateAndMaybeEvolveSchema(newKeySchema, newValueSchema)
-  }
+    // regardless of configuration, we check compatibility to at least write schema file
+    // if necessary
+    // if the format validation for value schema is disabled, we also disable the schema
+    // compatibility checker for value schema as well.
+    val result = Try(
+      checker.validateAndMaybeEvolveSchema(newKeySchema, newValueSchema,
+        ignoreValueSchema = !storeConf.formatValidationCheckValue)
+    ).toEither.fold(Some(_), _ => None)
 
+    if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
+      throw result.get
+    }
+  }
 }
