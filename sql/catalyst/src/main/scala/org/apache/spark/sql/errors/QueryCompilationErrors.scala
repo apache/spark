@@ -175,6 +175,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(funcName)))
   }
 
+  def nullDataSourceOption(option: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      messageParameters = Map("option" -> option)
+    )
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",

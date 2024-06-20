@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+/**
+ * Supported routine languages for UDFs created via SQL.
+ */
+sealed trait RoutineLanguage {
+  def name: String
+}
 
-object FileIndexOptions extends DataSourceOptions {
-  val IGNORE_MISSING_FILES = newOption(FileSourceOptions.IGNORE_MISSING_FILES)
-  val IGNORE_INVALID_PARTITION_PATHS = newOption("ignoreInvalidPartitionPaths")
-  val TIME_ZONE = newOption(DateTimeUtils.TIMEZONE_OPTION)
-  val RECURSIVE_FILE_LOOKUP = newOption("recursiveFileLookup")
-  val BASE_PATH_PARAM = newOption("basePath")
-  val MODIFIED_BEFORE = newOption("modifiedbefore")
-  val MODIFIED_AFTER = newOption("modifiedafter")
-  val PATH_GLOB_FILTER = newOption("pathglobfilter")
+case object LanguageSQL extends RoutineLanguage {
+  override def name: String = "SQL"
 }

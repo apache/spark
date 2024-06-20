@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 
-object FileIndexOptions extends DataSourceOptions {
-  val IGNORE_MISSING_FILES = newOption(FileSourceOptions.IGNORE_MISSING_FILES)
-  val IGNORE_INVALID_PARTITION_PATHS = newOption("ignoreInvalidPartitionPaths")
-  val TIME_ZONE = newOption(DateTimeUtils.TIMEZONE_OPTION)
-  val RECURSIVE_FILE_LOOKUP = newOption("recursiveFileLookup")
-  val BASE_PATH_PARAM = newOption("basePath")
-  val MODIFIED_BEFORE = newOption("modifiedbefore")
-  val MODIFIED_AFTER = newOption("modifiedafter")
-  val PATH_GLOB_FILTER = newOption("pathglobfilter")
+case class EmptyRelation(logical: LogicalPlan) extends LeafNode {
+  override val isStreaming: Boolean = logical.isStreaming
+
+  override val outputOrdering: Seq[SortOrder] = logical.outputOrdering
+
+  override def output: Seq[Attribute] = logical.output
+
+  override def computeStats(): Statistics = Statistics(sizeInBytes = 0, rowCount = Some(0))
+
+  override def maxRows: Option[Long] = Some(0)
+
+  override def maxRowsPerPartition: Option[Long] = Some(0)
 }
