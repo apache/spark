@@ -64,6 +64,26 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  def check(
+      oldSchema: (StructType, StructType),
+      newSchema: (StructType, StructType),
+      ignoreValueSchema: Boolean) : Unit = {
+    val (storedKeySchema, storedValueSchema) = oldSchema
+    val (keySchema, valueSchema) = newSchema
+    if (storedKeySchema.equals(keySchema) &&
+      (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
+      // schema is exactly same
+    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
+      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+        keySchema.toString)
+    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+        valueSchema.toString)
+    } else {
+      logInfo("Detected schema change which is compatible. Allowing to put rows.")
+    }
+  }
+
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
     DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
@@ -79,6 +99,14 @@ class StateSchemaCompatibilityChecker(
         throw e
     } finally {
       inStream.close()
+    }
+  }
+
+  private def getExistingKeyAndValueSchema(): Option[(StructType, StructType)] = {
+    if (fm.exists(schemaFileLocation)) {
+      Some(readSchemaFile())
+    } else {
+      None
     }
   }
 
@@ -100,6 +128,17 @@ class StateSchemaCompatibilityChecker(
         logError(s"Fail to write schema file to $schemaFileLocation", e)
         outStream.cancel()
         throw e
+    }
+  }
+
+  def validateAndMaybeEvolveSchema(
+      newKeySchema: StructType,
+      newValueSchema: StructType): Unit = {
+    val existingSchema = getExistingKeyAndValueSchema()
+    if (existingSchema.isEmpty) {
+      createSchemaFile(newKeySchema, newValueSchema)
+    } else {
+      check(existingSchema.get, (newKeySchema, newValueSchema), false)
     }
   }
 

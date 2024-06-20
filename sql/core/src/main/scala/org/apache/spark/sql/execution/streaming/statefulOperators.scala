@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -70,6 +72,8 @@ trait StatefulOperator extends SparkPlan {
       throw new IllegalStateException("State location not present for execution")
     }
   }
+
+  def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {}
 }
 
 /**
@@ -423,6 +427,15 @@ case class StateStoreRestoreExec(
 
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val opStateInfo = getStateInfo
+    val providerId = StateStoreProviderId(StateStoreId(opStateInfo.checkpointLocation,
+      opStateInfo.operatorId, 0), opStateInfo.queryRunId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.validateAndMaybeEvolveSchema(keyExpressions.toStructType,
+      stateManager.getStateValueSchema)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

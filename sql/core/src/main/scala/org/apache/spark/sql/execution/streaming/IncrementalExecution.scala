@@ -198,6 +198,14 @@ class IncrementalExecution(
     }
   }
 
+  object StateSchemaValidationRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case statefulOp: StatefulOperator if isFirstBatch =>
+        statefulOp.validateAndMaybeEvolveSchema(hadoopConf)
+        statefulOp
+    }
+  }
+
   object StateOpIdRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
@@ -473,6 +481,7 @@ class IncrementalExecution(
       }
       // The rule doesn't change the plan but cause the side effect that metadata is written
       // in the checkpoint directory of stateful operator.
+      planWithStateOpId transform StateSchemaValidationRule.rule
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
