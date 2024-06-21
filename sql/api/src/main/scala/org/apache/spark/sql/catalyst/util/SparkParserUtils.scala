@@ -74,6 +74,10 @@ trait SparkParserUtils {
     if (isRawString) {
       // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
       b.substring(2, b.length - 1)
+    } else if (b.indexOf('\\') == -1) {
+      // Fast path for the common case where the string has no escaped characters,
+      // in which case we just skip the first and last quotations enclosing the string literal.
+      b.substring(1, b.length - 1)
     } else {
       val sb = new JStringBuilder(b.length())
       // Skip the first and last quotations enclosing the string literal.
