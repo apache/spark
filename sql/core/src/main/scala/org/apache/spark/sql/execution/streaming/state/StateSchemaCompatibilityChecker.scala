@@ -206,6 +206,7 @@ object StateSchemaCompatibilityChecker {
         ignoreValueSchema = !storeConf.formatValidationCheckValue)
     ).toEither.fold(Some(_), _ => None)
 
+    // if schema validation is enabled and an exception is thrown, we re-throw it and fail the query
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }

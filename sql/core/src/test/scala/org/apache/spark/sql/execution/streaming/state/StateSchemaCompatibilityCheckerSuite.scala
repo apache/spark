@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -254,9 +255,9 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
 
   test("SPARK-47776: checking for compatibility with collation change in key") {
     verifyException(keySchema, valueSchema, keySchemaWithCollation, valueSchema,
-      ignoreValueSchema = false)
+      ignoreValueSchema = false, keyCollationChecks = true)
     verifyException(keySchemaWithCollation, valueSchema, keySchema, valueSchema,
-      ignoreValueSchema = false)
+      ignoreValueSchema = false, keyCollationChecks = true)
   }
 
   test("SPARK-47776: checking for compatibility with collation change in value") {
@@ -303,12 +304,56 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       .check(newKeySchema, newValueSchema, ignoreValueSchema = ignoreValueSchema)
   }
 
-  private def verifyException(
+  private def verifyExceptionViaSchemaValidation(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
       newValueSchema: StructType,
-      ignoreValueSchema: Boolean = false): Unit = {
+      ignoreValueSchema: Boolean,
+      keyCollationChecks: Boolean): Unit = {
+    val dir = newDir()
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
+
+    val result = Try(
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(stateInfo, hadoopConf,
+        oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+    ).toEither.fold(Some(_), _ => None)
+
+    val ex = if (result.isDefined) {
+      result.get.asInstanceOf[SparkUnsupportedOperationException]
+    } else {
+      intercept[SparkUnsupportedOperationException] {
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(stateInfo, hadoopConf,
+          newKeySchema, newValueSchema, spark.sessionState, extraOptions)
+      }
+    }
+
+    // collation checks are also performed in this path. so we need to check for them explicitly.
+    if (keyCollationChecks) {
+      assert(ex.getMessage.contains("Binary inequality column is not supported"))
+      assert(ex.getErrorClass === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
+    } else {
+      if (ignoreValueSchema) {
+        // if value schema is ignored, the mismatch has to be on the key schema
+        assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
+      } else {
+        assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+          ex.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+      }
+      assert(ex.getMessage.contains("does not match existing"))
+    }
+  }
+
+  private def verifyExceptionViaSchemaChecker(
+      oldKeySchema: StructType,
+      oldValueSchema: StructType,
+      newKeySchema: StructType,
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean): Unit = {
     val dir = newDir()
     val queryId = UUID.randomUUID()
     runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
@@ -327,6 +372,22 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
         e.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
     }
     assert(e.getMessage.contains("does not match existing"))
+  }
+
+  private def verifyException(
+      oldKeySchema: StructType,
+      oldValueSchema: StructType,
+      newKeySchema: StructType,
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false,
+      keyCollationChecks: Boolean = false): Unit = {
+    // verify through the schema validation method
+    verifyExceptionViaSchemaValidation(oldKeySchema, oldValueSchema, newKeySchema, newValueSchema,
+      ignoreValueSchema, keyCollationChecks)
+
+    // verify through invoking the schema checker directly
+    verifyExceptionViaSchemaChecker(oldKeySchema, oldValueSchema, newKeySchema, newValueSchema,
+      ignoreValueSchema)
   }
 
   private def verifySuccess(

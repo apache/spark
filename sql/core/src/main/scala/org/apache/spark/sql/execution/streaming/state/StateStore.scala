@@ -529,9 +529,6 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
-  @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
-
   private val maintenanceThreadPoolLock = new Object
 
   // Shared exception between threads in thread pool that the scheduling thread
