@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
+import org.apache.spark.sql.connector.expressions.{NullOrdering, SortDirection, SortValue, Expression => V2Expression, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -53,8 +53,7 @@ import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap}
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils, PartitioningUtils => CatalystPartitioningUtils}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -647,7 +646,7 @@ object DataSourceStrategy
         // Is null filters on attribute references can always be pushed, also for collated columns.
         translateAndRecordLeafNodeFilter(isNull)
 
-      case p if DataSourceUtils.hasNonUTF8BinaryCollation(p) =>
+      case p if DataSourceUtils.referencesNonUTF8BinaryCollation(p) =>
         // The filter cannot be pushed and we widen it to be AlwaysTrue() and set it
         // as partially translated so it has to get evaluated by the engine as well.
         // This is only valid if the result of the filter is not negated by a

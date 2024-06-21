@@ -283,7 +283,7 @@ object DataSourceUtils extends PredicateHelper {
   /**
    * Determines whether a filter references any columns with non-UTF8 binary collation.
    */
-  def hasNonUTF8BinaryCollation(expression: Expression): Boolean = {
+  def referencesNonUTF8BinaryCollation(expression: Expression): Boolean = {
     expression.references.exists(ref => SchemaUtils.hasNonUTF8BinaryCollation(ref.dataType))
   }
 }
