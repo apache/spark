@@ -103,6 +103,7 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
+    <module>connector/connect/shaded-grpc-deps</module>
     <module>connector/connect/server</module>
     <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>

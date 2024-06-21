@@ -686,7 +686,8 @@ object SparkConnectCommon {
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
       case _ => MergeStrategy.first
-    }
+    },
+    (Compile / PB.includePaths) ++= Seq(file("sql/api/src/main/protobuf"))
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
@@ -1115,13 +1116,37 @@ object SqlApi {
   import com.simplytyped.Antlr4Plugin
   import com.simplytyped.Antlr4Plugin.autoImport._
 
+  import BuildCommons.protoVersion
+
   lazy val settings = Antlr4Plugin.projectSettings ++ Seq(
     (Antlr4 / antlr4Version) := SbtPomKeys.effectivePom.value.getProperties.get("antlr4.version").asInstanceOf[String],
     (Antlr4 / antlr4PackageName) := Some("org.apache.spark.sql.catalyst.parser"),
     (Antlr4 / antlr4GenListener) := true,
     (Antlr4 / antlr4GenVisitor) := true,
-    (Antlr4 / antlr4TreatWarningsAsErrors) := true
-  )
+    (Antlr4 / antlr4TreatWarningsAsErrors) := true,
+
+    // TODO (herman) unify with core settings.
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(PB.protocExecutable := file(sparkProtocExecPath.get))
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object SQL {
