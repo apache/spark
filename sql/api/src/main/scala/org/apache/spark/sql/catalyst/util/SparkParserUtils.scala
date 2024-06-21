@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import java.lang.{Long => JLong}
+import java.lang.{Long => JLong, StringBuilder => JStringBuilder}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -28,7 +28,7 @@ trait SparkParserUtils {
 
   /** Unescape backslash-escaped string enclosed by quotes. */
   def unescapeSQLString(b: String): String = {
-    def appendEscapedChar(n: Char, sb: StringBuilder): Unit = {
+    def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
       n match {
         case '0' => sb.append('\u0000')
         case 'b' => sb.append('\b')
@@ -75,7 +75,7 @@ trait SparkParserUtils {
       // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
       b.substring(2, b.length - 1)
     } else {
-      val sb = new StringBuilder(b.length())
+      val sb = new JStringBuilder(b.length())
       // Skip the first and last quotations enclosing the string literal.
       var i = 1
       val length = b.length - 1
@@ -116,7 +116,7 @@ trait SparkParserUtils {
           }
         }
       }
-      sb.toString()
+      sb.toString
     }
   }
 
