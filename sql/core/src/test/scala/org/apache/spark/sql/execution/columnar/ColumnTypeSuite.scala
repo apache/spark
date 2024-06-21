@@ -101,7 +101,7 @@ class ColumnTypeSuite extends SparkFunSuite {
   testNativeColumnType(FLOAT)
   testNativeColumnType(DOUBLE)
   testNativeColumnType(COMPACT_DECIMAL(15, 10))
-  testNativeColumnType(STRING(StringType))
+  testNativeColumnType(STRING(StringType)) // UTF8_BINARY
   testNativeColumnType(STRING(StringType("UTF8_LCASE")))
   testNativeColumnType(STRING(StringType("UNICODE")))
   testNativeColumnType(STRING(StringType("UNICODE_CI")))

@@ -43,7 +43,7 @@ class NullableColumnAccessorSuite extends SparkFunSuite {
   import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
   val stringTypes = Seq(
-    STRING(StringType),
+    STRING(StringType), // UTF8_BINARY
     STRING(StringType("UTF8_LCASE")),
     STRING(StringType("UNICODE")),
     STRING(StringType("UNICODE_CI")))
