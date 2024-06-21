@@ -49,19 +49,7 @@ class StateSchemaCompatibilityChecker(
   def check(keySchema: StructType, valueSchema: StructType, ignoreValueSchema: Boolean): Unit = {
     if (fm.exists(schemaFileLocation)) {
       logDebug(s"Schema file for provider $providerId exists. Comparing with provided schema.")
-      val (storedKeySchema, storedValueSchema) = readSchemaFile()
-      if (storedKeySchema.equals(keySchema) &&
-        (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
-        // schema is exactly same
-      } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
-          keySchema.toString)
-      } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-        throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
-          valueSchema.toString)
-      } else {
-        logInfo("Detected schema change which is compatible. Allowing to put rows.")
-      }
+      check(readSchemaFile(), (keySchema, valueSchema), ignoreValueSchema)
     } else {
       // schema doesn't exist, create one now
       logDebug(s"Schema file for provider $providerId doesn't exist. Creating one.")
