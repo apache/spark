@@ -80,6 +80,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiCombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.ApplyCharTypePadding" ::
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
+      "org.apache.spark.sql.catalyst.analysis.EliminateCollates" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
