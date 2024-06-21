@@ -20,15 +20,28 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
+
   // scalastyle:off println
   test("transpose") {
-    val expected = Row("salary", 2000.0, 1000.0) :: Nil
-    val transposed = salary.transpose()
-//    checkAnswer(
-//      transposed,
-//      expected
-//    )
-    println(s"df: \n${salary.show()}")
-    println(s"df: \n${transposed.show()}")
+    checkAnswer(
+      salary.transpose(),
+      Row("salary", 2000.0, 1000.0) :: Nil
+    )
+  }
+
+  test("transpose empty frame") {
+    checkAnswer(
+      emptyTestData.transpose(),
+      emptyTestData
+    )
+  }
+
+  test("transpose frame with repeated first column values") {
+    val repeatedDf = Seq(("test", 1), ("test", 2)).toDF("s", "id")
+    checkAnswer(
+      repeatedDf.transpose(),
+      Row("id", 1) :: Nil
+    )
   }
 }

@@ -280,14 +280,6 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
-  protected lazy val courseSalesDedup: DataFrame = {
-    val df = spark.sparkContext.parallelize(
-        CourseSales("dotNET", 2013, 48000) ::
-        CourseSales("Java", 2013, 30000) :: Nil).toDF()
-    df.createOrReplaceTempView("courseSalesDedup")
-    df
-  }
-
   protected lazy val trainingSales: DataFrame = {
     val df = spark.sparkContext.parallelize(
       TrainingSales("Experts", CourseSales("dotNET", 2012, 10000)) ::
