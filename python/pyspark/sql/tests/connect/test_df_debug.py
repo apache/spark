@@ -32,41 +32,41 @@ class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
     def test_df_debug_basics(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
         x = df.collect()  # noqa: F841
-        qe = df.queryExecution
+        ei = df.executionInfo
 
-        root, graph = qe.metrics.extract_graph()
+        root, graph = ei.metrics.extract_graph()
         self.assertIn(root, graph, "The root must be rooted in the graph")
 
     def test_df_quey_execution_empty_before_execution(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
-        qe = df.queryExecution
-        self.assertIsNone(qe, "The query execution must be None before the action is executed")
+        ei = df.executionInfo
+        self.assertIsNone(ei, "The query execution must be None before the action is executed")
 
     def test_df_query_execution_with_writes(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
         df.write.save("/tmp/test_df_query_execution_with_writes", format="json", mode="overwrite")
-        qe = df.queryExecution
+        ei = df.executionInfo
         self.assertIsNotNone(
-            qe, "The query execution must be None after the write action is executed"
+            ei, "The query execution must be None after the write action is executed"
         )
 
     def test_query_execution_text_format(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
         df.collect()
-        self.assertIn("HashAggregate", df.queryExecution.metrics.toText())
+        self.assertIn("HashAggregate", df.executionInfo.metrics.toText())
 
         # Different execution mode.
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
         df.toPandas()
-        self.assertIn("HashAggregate", df.queryExecution.metrics.toText())
+        self.assertIn("HashAggregate", df.executionInfo.metrics.toText())
 
     @unittest.skipIf(not have_graphviz, graphviz_requirement_message)
     def test_df_query_execution_metrics_to_dot(self):
         df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
         x = df.collect()  # noqa: F841
-        qe = df.queryExecution
+        ei = df.executionInfo
 
-        dot = qe.metrics.toDot()
+        dot = ei.metrics.toDot()
         source = dot.source
         self.assertIsNotNone(dot, "The dot representation must not be None")
         self.assertGreater(len(source), 0, "The dot representation must not be empty")

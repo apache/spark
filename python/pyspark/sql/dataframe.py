@@ -64,7 +64,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
-    from pyspark.sql.metrics import QueryExecution
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -6283,7 +6283,7 @@ class DataFrame:
         ...
 
     @property
-    def queryExecution(self) -> Optional["QueryExecution"]:
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
         """
         Returns a QueryExecution object after the query was executed.
 

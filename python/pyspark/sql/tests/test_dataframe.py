@@ -852,7 +852,7 @@ class DataFrameTestsMixin:
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
         with self.assertRaises(PySparkValueError) as pe:
-            self.spark.range(1).queryExecution
+            self.spark.range(1).executionInfo
 
         self.check_error(
             exception=pe.exception,

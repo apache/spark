@@ -267,7 +267,7 @@ class CollectedMetrics:
             )
 
 
-class QueryExecution:
+class ExecutionInfo:
     """The query execution class allows users to inspect the query execution of this particular
     data frame. This value is only set in the data frame if it was executed."""
 

@@ -720,11 +720,11 @@ class SparkSession:
                 _views.append(SubqueryAlias(df._plan, name))
 
         cmd = SQL(sqlQuery, _args, _named_args, _views)
-        data, properties, qe = self.client.execute_command(cmd.command(self._client))
+        data, properties, ei = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             df = DataFrame(CachedRelation(properties["sql_command_result"]), self)
             # A command result contains the execution.
-            df._query_execution = qe
+            df._execution_info = ei
             return df
         else:
             return DataFrame(cmd, self)

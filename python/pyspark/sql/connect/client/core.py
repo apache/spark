@@ -61,7 +61,7 @@ from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
-from pyspark.sql.metrics import MetricValue, PlanMetrics, QueryExecution, ObservedMetrics
+from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
@@ -874,7 +874,7 @@ class SparkConnectClient(object):
 
     def to_table(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
-    ) -> Tuple["pa.Table", Optional[StructType], QueryExecution]:
+    ) -> Tuple["pa.Table", Optional[StructType], ExecutionInfo]:
         """
         Return given plan as a PyArrow Table.
         """
@@ -884,13 +884,13 @@ class SparkConnectClient(object):
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req, observations)
 
         # Create a query execution object.
-        qe = QueryExecution(metrics, observed_metrics)
+        ei = ExecutionInfo(metrics, observed_metrics)
         assert table is not None
-        return table, schema, qe
+        return table, schema, ei
 
     def to_pandas(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
-    ) -> Tuple["pd.DataFrame", "QueryExecution"]:
+    ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
         """
@@ -905,7 +905,7 @@ class SparkConnectClient(object):
             req, observations, self_destruct=self_destruct
         )
         assert table is not None
-        qe = QueryExecution(metrics, observed_metrics)
+        ei = ExecutionInfo(metrics, observed_metrics)
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
@@ -972,7 +972,7 @@ class SparkConnectClient(object):
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
             pdf.attrs["observed_metrics"] = observed_metrics
-        return pdf, qe
+        return pdf, ei
 
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
@@ -1016,7 +1016,7 @@ class SparkConnectClient(object):
 
     def execute_command(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
-    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], QueryExecution]:
+    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], ExecutionInfo]:
         """
         Execute given command.
         """
@@ -1029,11 +1029,11 @@ class SparkConnectClient(object):
             req, observations or {}
         )
         # Create a query execution object.
-        qe = QueryExecution(metrics, observed_metrics)
+        ei = ExecutionInfo(metrics, observed_metrics)
         if data is not None:
-            return (data.to_pandas(), properties, qe)
+            return (data.to_pandas(), properties, ei)
         else:
-            return (None, properties, qe)
+            return (None, properties, ei)
 
     def execute_command_as_iterator(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
