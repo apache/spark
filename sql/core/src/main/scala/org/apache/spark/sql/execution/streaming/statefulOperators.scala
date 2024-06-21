@@ -73,7 +73,7 @@ trait StatefulOperator extends SparkPlan {
     }
   }
 
-  def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {}
+  def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit
 }
 
 /**

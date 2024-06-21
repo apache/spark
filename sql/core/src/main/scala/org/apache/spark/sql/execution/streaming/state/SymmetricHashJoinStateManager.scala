@@ -449,15 +449,6 @@ class SymmetricHashJoinStateManager(
   // Clean up any state store resources if necessary at the end of the task
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
 
-  def getSchema(): scala.collection.mutable.Map[String, (StructType, StructType)] = {
-    val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
-    val keyToNumValuesSchema = keyToNumValues.getSchema()
-    result += (keyToNumValuesSchema._1 -> keyToNumValuesSchema._2)
-    val keyWithIndexToValueSchema = keyWithIndexToValue.getSchema()
-    result += (keyWithIndexToValueSchema._1 -> keyWithIndexToValueSchema._2)
-    result
-  }
-
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
@@ -524,11 +515,6 @@ class SymmetricHashJoinStateManager(
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
     protected val stateStore: StateStore = getStateStore(keySchema, longValueSchema)
-
-
-    def getSchema(): (String, (StructType, StructType)) = {
-      (getStateStoreName(joinSide, KeyToNumValuesType), (keySchema, longValueSchema))
-    }
 
     /** Get the number of values the key has */
     def get(key: UnsafeRow): Long = {
@@ -689,11 +675,6 @@ class SymmetricHashJoinStateManager(
     protected val stateStore = getStateStore(keyWithIndexSchema,
       valueRowConverter.valueAttributes.toStructType)
 
-    def getSchema(): (String, (StructType, StructType)) = {
-      (getStateStoreName(joinSide, KeyWithIndexToValueType), (keySchema,
-        valueRowConverter.valueAttributes.toStructType))
-    }
-
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(stateStore.get(keyWithIndexRow(key, valueIndex)))
     }
@@ -784,6 +765,32 @@ object SymmetricHashJoinStateManager {
     for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
       getStateStoreName(joinSide, stateStoreType)
     }
+  }
+
+  def getSchemaForStateStores(
+      joinSide: JoinSide,
+      inputValueAttributes: Seq[Attribute],
+      joinKeys: Seq[Expression],
+      stateFormatVersion: Int): scala.collection.mutable.Map[String, (StructType, StructType)] = {
+    val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+    val keySchema = StructType(
+      joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
+    val longValueSchema = new StructType().add("value", "long")
+    result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
+
+    val keyWithIndexSchema = keySchema.add("index", LongType)
+    val valueSchema = if (stateFormatVersion == 1) {
+      inputValueAttributes
+    } else if (stateFormatVersion == 2) {
+      inputValueAttributes :+ AttributeReference("matched", BooleanType)()
+    } else {
+      throw new IllegalArgumentException("Incorrect state format version! " +
+        s"version=$stateFormatVersion")
+    }
+
+    result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
+      (keyWithIndexSchema, valueSchema.toStructType))
+    result
   }
 
   private sealed trait StateStoreType

@@ -246,22 +246,12 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val inputSchema = left.output ++ right.output
-    val postJoinFilter =
-      Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
-
     val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
-    val leftSideJoiner = new OneSideHashJoiner(
-      LeftSide, left.output, leftKeys, Iterator.empty,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, 0,
-      None)
-    result ++= leftSideJoiner.getSchema()
+    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
+      left.output, leftKeys, stateFormatVersion)
 
-    val rightSideJoiner = new OneSideHashJoiner(
-      RightSide, right.output, rightKeys, Iterator.empty,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, 0,
-      None)
-    result ++= rightSideJoiner.getSchema()
+    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
+      right.output, rightKeys, stateFormatVersion)
 
     result.foreach { case (stateStoreName, (keySchema, valueSchema)) =>
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
@@ -584,10 +574,6 @@ case class StreamingSymmetricHashJoinExec(
     private[this] var updatedStateRowsCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
-
-    def getSchema(): scala.collection.mutable.Map[String, (StructType, StructType)] = {
-      joinStateManager.getSchema()
-    }
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
