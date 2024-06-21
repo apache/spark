@@ -168,4 +168,24 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     assert(e.getErrorClass === "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
     assert{e.getMessage.contains("testVarName")}
   }
+
+  test("session vars - drop var statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |DECLARE var = 1;
+        |SET VAR var = var + 1;
+        |SELECT var;
+        |DROP TEMPORARY VARIABLE var;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq.empty[Row], // declare var
+      Seq.empty[Row], // set var
+      Seq(Row(2)), // select
+      Seq.empty[Row], // drop var - explicit
+      Seq.empty[Row] // drop var - implicit
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
 }

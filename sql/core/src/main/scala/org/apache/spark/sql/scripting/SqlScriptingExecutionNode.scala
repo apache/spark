@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
@@ -97,14 +98,16 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
       case Some(body: NonLeafStatementExec) => body.hasNext
       case Some(_: LeafStatementExec) => true
       case None => false
-      case _ => throw new IllegalStateException("Unknown statement type")
+      case _ => throw SparkException.internalError(
+        "Unknown statement type encountered during SQL script interpretation.")
     }
     localIterator.hasNext || childHasNext
   }
 
   override def next(): CompoundStatementExec = {
     curr match {
-      case None => throw new IllegalStateException("No more elements")
+      case None => throw SparkException.internalError(
+        "No more elements to iterate through in the current SQL compound statement.")
       case Some(statement: LeafStatementExec) =>
         if (localIterator.hasNext) curr = Some(localIterator.next())
         else curr = None
@@ -116,7 +119,8 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
           curr = if (localIterator.hasNext) Some(localIterator.next()) else None
           next()
         }
-      case _ => throw new IllegalStateException("Unknown statement type")
+      case _ => throw SparkException.internalError(
+        "Unknown statement type encountered during SQL script interpretation.")
     }
   }
 
