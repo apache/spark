@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
@@ -31,8 +33,8 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
-
 
 /**
  * Performs stream-stream join using symmetric hash join algorithm. It works as follows.
@@ -241,6 +243,30 @@ case class StreamingSymmetricHashJoinExec(
         newInputWatermark > eventTimeWatermarkForEviction.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
+  }
+
+  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+    val inputSchema = left.output ++ right.output
+    val postJoinFilter =
+      Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
+
+    val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+    val leftSideJoiner = new OneSideHashJoiner(
+      LeftSide, left.output, leftKeys, Iterator.empty,
+      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, 0,
+      None)
+    result ++= leftSideJoiner.getSchema()
+
+    val rightSideJoiner = new OneSideHashJoiner(
+      RightSide, right.output, rightKeys, Iterator.empty,
+      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, 0,
+      None)
+    result ++= rightSideJoiner.getSchema()
+
+    result.foreach { case (stateStoreName, (keySchema, valueSchema)) =>
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+        keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -558,6 +584,10 @@ case class StreamingSymmetricHashJoinExec(
     private[this] var updatedStateRowsCount = 0
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
+
+    def getSchema(): scala.collection.mutable.Map[String, (StructType, StructType)] = {
+      joinStateManager.getSchema()
+    }
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered

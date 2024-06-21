@@ -76,8 +76,6 @@ class StateSchemaCompatibilityChecker(
     val (storedKeySchema, storedValueSchema) = oldSchema
     val (keySchema, valueSchema) = newSchema
 
-    logWarning(s"TEST: storedValueSchema=$storedValueSchema")
-
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
@@ -145,7 +143,6 @@ class StateSchemaCompatibilityChecker(
       ignoreValueSchema: Boolean): Unit = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
-      logWarning(s"TEST: writing new value schema=$newValueSchema")
       createSchemaFile(newKeySchema, newValueSchema)
     } else {
       check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
@@ -174,7 +171,8 @@ object StateSchemaCompatibilityChecker {
       newKeySchema: StructType,
       newValueSchema: StructType,
       sessionState: SessionState,
-      extraOptions: Map[String, String] = Map.empty): Unit = {
+      extraOptions: Map[String, String] = Map.empty,
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): Unit = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -188,7 +186,7 @@ object StateSchemaCompatibilityChecker {
 
     val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
-      stateInfo.operatorId, 0), stateInfo.queryRunId)
+      stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
