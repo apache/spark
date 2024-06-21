@@ -321,46 +321,10 @@ public final class CollationFactory {
       /**
        * Method for constructing errors thrown on providing invalid collation name.
        */
-      protected static SparkException collationInvalidNameException(
-          String collationName,
-          String[] validRootNames,
-          List<String> validModifiers) {
+      protected static SparkException collationInvalidNameException(String collationName) {
         Map<String, String> params = new HashMap<>();
         params.put("collationName", collationName);
-
-        final int MODIFIER_LENGTH = 3;
-        assert(validModifiers.stream().allMatch(m -> m.length() == MODIFIER_LENGTH));
-
-        // Split modifiers and locale name.
-        String localeName = collationName.toUpperCase();
-        List<String> modifiers = new ArrayList<>();
-        while (validModifiers.stream().anyMatch(localeName::endsWith)) {
-          modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
-          localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
-        }
-
-        // Suggest version with unique modifiers.
-        Collections.reverse(modifiers);
-        modifiers = modifiers.stream().distinct().toList();
-
-        // Remove conflicting settings.
-        if (modifiers.contains("_CI") && modifiers.contains(("_CS"))) {
-          modifiers = modifiers.stream().filter(m -> !m.equals("_CI")).toList();
-        }
-
-        if (modifiers.contains("_AI") && modifiers.contains(("_AS"))) {
-          modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
-        }
-
-        // Find the closest locale name.
-        final String finalLocaleName = localeName;
-        String closestLocale = Collections.min(List.of(validRootNames), Comparator.comparingInt(
-          c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
-            UTF8String.fromString(finalLocaleName))));
-        final String proposal = closestLocale + String.join("", modifiers);
-        assert(isCollationNameValid(proposal));
-        params.put("proposal", proposal);
-
+        params.put("proposal", getClosestSuggestionOnInvalidName(collationName));
         return new SparkException("COLLATION_INVALID_NAME",
           SparkException.constructMessageParams(params), null);
       }
@@ -431,9 +395,7 @@ public final class CollationFactory {
           return UTF8_LCASE_COLLATION_ID;
         } else {
           // Throw exception with original (before case conversion) collation name.
-          throw collationInvalidNameException(originalName,
-            new String[]{UTF8_BINARY_COLLATION.collationName,
-              UTF8_LCASE_COLLATION.collationName}, List.of());
+          throw collationInvalidNameException(originalName);
         }
       }
 
@@ -626,8 +588,7 @@ public final class CollationFactory {
           }
         }
         if (lastPos == -1) {
-          throw collationInvalidNameException(
-            originalName, ICULocaleNames, List.of("_CI", "_AI", "_CS", "_AS"));
+          throw collationInvalidNameException(originalName);
         } else {
           String locale = collationName.substring(0, lastPos);
           int collationId = ICULocaleToId.get(ICULocaleMapUppercase.get(locale));
@@ -658,8 +619,7 @@ public final class CollationFactory {
             caseSensitivity = CaseSensitivity.CI;
             accentSensitivity = AccentSensitivity.AI;
           } else {
-            throw collationInvalidNameException(
-              originalName, ICULocaleNames, List.of("_CI", "_AI", "_CS", "_AS"));
+            throw collationInvalidNameException(originalName);
           }
 
           // Build collation ID from computed specifiers.
@@ -883,4 +843,52 @@ public final class CollationFactory {
     }
   }
 
+  /**
+   * Returns same string if collation name is valid or the closest suggestion if it is invalid.
+   */
+  public static String getClosestSuggestionOnInvalidName(String collationName) {
+    String[] validRootNames;
+    String[] validModifiers;
+    if (collationName.startsWith("UTF8_")) {
+      validRootNames = new String[]{
+        Collation.CollationSpecUTF8Binary.UTF8_BINARY_COLLATION.collationName,
+        Collation.CollationSpecUTF8Binary.UTF8_LCASE_COLLATION.collationName
+      };
+      validModifiers = new String[0];
+    } else {
+      validRootNames = getICULocaleNames();
+      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
+    }
+
+    // Split modifiers and locale name.
+    final int MODIFIER_LENGTH = 3;
+    String localeName = collationName.toUpperCase();
+    List<String> modifiers = new ArrayList<>();
+    while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
+      modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
+      localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
+    }
+
+    // Suggest version with unique modifiers.
+    Collections.reverse(modifiers);
+    modifiers = modifiers.stream().distinct().toList();
+
+    // Remove conflicting settings.
+    if (modifiers.contains("_CI") && modifiers.contains(("_CS"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_CI")).toList();
+    }
+
+    if (modifiers.contains("_AI") && modifiers.contains(("_AS"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
+    }
+
+    // Find the closest locale name.
+    final String finalLocaleName = localeName;
+    String closestLocale = Collections.min(List.of(validRootNames), Comparator.comparingInt(
+            c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
+                    UTF8String.fromString(finalLocaleName))));
+    final String proposal = closestLocale + String.join("", modifiers);
+    assert(Collation.CollationSpec.isCollationNameValid(proposal));
+    return proposal;
+  }
 }
