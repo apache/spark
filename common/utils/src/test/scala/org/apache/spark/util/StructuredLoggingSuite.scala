@@ -367,6 +367,7 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     assert(log"\b".message == "\b")
     assert(log"\r".message == "\r")
     assert((log"\r" + log"\n" + log"\t" + log"\b").message == "\r\n\t\b")
+    assert((log"\r${MDC(LogKeys.EXECUTOR_ID, 1)}\n".message == "\r1\n"))
   }
 }
 

@@ -154,7 +154,7 @@ trait Logging {
         }
 
         if (processedParts.hasNext) {
-          sb.append(processedParts.next())
+          sb.append(StringContext.processEscapes(processedParts.next()))
         }
       }
 
