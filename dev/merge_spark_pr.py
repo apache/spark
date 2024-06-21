@@ -257,16 +257,19 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 
 
 def print_jira_issue_summary(issue):
-    summary = issue.fields.summary
+    summary = "Summary\t\t%s\n" % issue.fields.summary
     assignee = issue.fields.assignee
     if assignee is not None:
         assignee = assignee.displayName
-    status = issue.fields.status.name
+    assignee = "Assignee\t%s\n" % assignee
+    status = "Status\t\t%s\n" % issue.fields.status.name
+    url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
+    target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
+    fix_versions = ""
+    if len(issue.fields.fixVersions) > 0:
+        fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
-    print(
-        "summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n"
-        % (summary, assignee, status, JIRA_BASE, issue.key)
-    )
+    print("%s%s%s%s%s%s" % (summary, assignee, status, url, target_versions, fix_versions))
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -684,6 +687,14 @@ def main():
             + "Continue? (experts only!)"
         )
         continue_maybe(msg)
+
+    if asf_jira is not None:
+        jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+        for jira_id in jira_ids:
+            try:
+                print_jira_issue_summary(asf_jira.issue(jira_id))
+            except Exception:
+                print_error("Unable to fetch summary of %s" % jira_id)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
