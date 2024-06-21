@@ -66,8 +66,13 @@ trait SparkParserUtils {
         (thirdChar >= '0' && thirdChar <= '7')
     }
 
-    if (b.startsWith("r") || b.startsWith("R")) {
-      // Raw string
+    val isRawString = {
+      val firstChar = b.charAt(0)
+      firstChar == 'r' || firstChar == 'R'
+    }
+
+    if (isRawString) {
+      // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
       b.substring(2, b.length - 1)
     } else {
       val sb = new StringBuilder(b.length())
