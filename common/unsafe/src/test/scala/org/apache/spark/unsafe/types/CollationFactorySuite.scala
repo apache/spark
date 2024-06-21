@@ -113,12 +113,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_CI_UNSPECIFIED", "UNICODE"),
       ("UNICODE_UNSPECIFIED_CI_UNSPECIFIED", "UNICODE"),
       ("UNICODE_INDETERMINATE", "UNICODE"),
-      ("UNICODE_CI_INDETERMINATE", "UNICODE"),
-    ).foreach {case (collationName, proposal) =>
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
+      ("UNICODE_CI_INDETERMINATE", "UNICODE")
+    ).foreach{case (collationName, proposal) =>
+      val error = intercept[SparkException] { fetchCollation(collationName) }
       assert(error.getErrorClass === "COLLATION_INVALID_NAME")
       assert(error.getMessageParameters.asScala === Map(
         "collationName" -> collationName, "proposal" -> proposal))
@@ -319,10 +316,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       // no locale specified
       ("_CI_AI", "af_CI_AI")
     ).foreach { case (collationName, proposal) => {
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
+      val error = intercept[SparkException] { fetchCollation(collationName) }
       assert(error.getErrorClass === "COLLATION_INVALID_NAME")
       assert(error.getMessageParameters.asScala === Map(
         "collationName" -> collationName, "proposal" -> proposal))
@@ -429,7 +423,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE__CS__AS", "UNICODE_AS"),
       ("UNICODE-CS-AS", "UNICODE"),
       ("UNICODECSAS", "UNICODE"),
-      ("_CS_AS_UNICODE", "UNICODE"),
+      ("_CS_AS_UNICODE", "UNICODE")
     ).foreach { case (collationName, proposal) =>
       val error = intercept[SparkException] {
         fetchCollation(collationName)
