@@ -2814,7 +2814,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
-    def test_udt_as_return_type(self):
+    def test_udtf_as_return_type(self):
         class TestUDTF:
             def eval(self):
                 yield ExamplePoint(0, 1),
@@ -2825,7 +2825,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
         schema = StructType().add("point", ExamplePointUDT())
         df = self.spark.createDataFrame([data], schema=schema)
         [row] = df.select(
-            udtf(TestUDTF, returnType=ExamplePointUDT(), useArrow=True)("point"),
+            udtf(TestUDTF, returnType=schema, useArrow=True)("point"),
         ).collect()
         self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
 
