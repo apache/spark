@@ -131,6 +131,10 @@ class ParserUtilsSuite extends SparkFunSuite {
         |cd\ef"""".stripMargin) ==
       """ab
         |cdef""".stripMargin)
+
+    // String with an invalid '\' as the last character.
+    assert(unescapeSQLString(""""abc\"""") == "abc\\")
+
     // scalastyle:on nonascii
   }
 
