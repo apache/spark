@@ -375,7 +375,7 @@ object JsonInferSchema {
         // This branch is only used by `SchemaOfVariant.mergeSchema` because `JsonInferSchema` never
         // produces `FloatType`.
         case (FloatType, _: DecimalType) | (_: DecimalType, FloatType) =>
-          FloatType
+          DoubleType
 
         case (t1: DecimalType, t2: DecimalType) =>
           val scale = math.max(t1.scale, t2.scale)

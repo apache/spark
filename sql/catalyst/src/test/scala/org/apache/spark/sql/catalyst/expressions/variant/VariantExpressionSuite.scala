@@ -895,7 +895,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     results.put((date, timestamp), "TIMESTAMP")
     results.put((date, timestampNtz), "TIMESTAMP_NTZ")
     results.put((timestamp, timestampNtz), "TIMESTAMP")
-    results.put((float, decimal), "FLOAT")
+    results.put((float, decimal), "DOUBLE")
     results.put((array1, array2), "ARRAY<DOUBLE>")
     results.put((struct1, struct2), "STRUCT<a: VARIANT, b: BIGINT>")
 
