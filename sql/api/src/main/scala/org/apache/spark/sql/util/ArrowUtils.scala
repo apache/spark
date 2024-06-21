@@ -220,14 +220,19 @@ private[sql] object ArrowUtils {
     case _ => dt
   }
 
+  /**
+   * Convert from spark sql types to arrow field can't support UserDefinedType yet.
+   * Arrow support UserDefinedType by read/write it's serialized/deserialized data.
+   * When compare output types should convert UserDefinedType to it's sqlType too.
+   */
   def toArrowOutputSchema(dt: DataType): DataType = {
     dt match {
       case udt: UserDefinedType[_] => toArrowOutputSchema(udt.sqlType)
-      case arr@ArrayType(elementType, _) =>
+      case arr @ ArrayType(elementType, _) =>
         arr.copy(elementType = toArrowOutputSchema(elementType))
-      case struct@StructType(fields) =>
+      case struct @ StructType(fields) =>
         struct.copy(fields.map(field => field.copy(dataType = toArrowOutputSchema(field.dataType))))
-      case map@MapType(keyType, valueType, _) =>
+      case map @ MapType(keyType, valueType, _) =>
         map.copy(keyType = toArrowOutputSchema(keyType), valueType = toArrowOutputSchema(valueType))
       case _ =>
         dt
