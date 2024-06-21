@@ -29,7 +29,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
     ExamplePoint,
-    ExamplePointUDT
+    ExamplePointUDT,
 )
 from pyspark.util import PythonEvalType
 
@@ -221,10 +221,8 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
-    def test_udt_as_return_type(self):
-        data = [
-            ExamplePoint(1.0, 2.0),
-        ]
+    def test_udt_as_udf_return_type(self):
+        data = [ExamplePoint(1.0, 2.0)]
         schema = StructType().add("point", ExamplePointUDT())
         df = self.spark.createDataFrame([data], schema=schema)
         [row] = df.select(
