@@ -63,6 +63,8 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
     ReusedSQLTestCase,
+    ExamplePoint,
+    ExamplePointUDT
 )
 
 
@@ -2811,6 +2813,21 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             with self.subTest(ret_type=ret_type):
                 with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
+
+    def test_udt_as_return_type(self):
+        class TestUDTF:
+            def eval(self):
+                yield ExamplePoint(0, 1),
+
+        data = [
+            ExamplePoint(1.0, 2.0),
+        ]
+        schema = StructType().add("point", ExamplePointUDT())
+        df = self.spark.createDataFrame([data], schema=schema)
+        [row] = df.select(
+            udtf(TestUDTF, returnType=ExamplePointUDT(), useArrow=True)("point"),
+        ).collect()
+        self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
