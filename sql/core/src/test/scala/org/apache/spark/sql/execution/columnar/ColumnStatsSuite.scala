@@ -186,7 +186,7 @@ class ColumnStatsSuite extends SparkFunSuite {
       import org.apache.spark.unsafe.types.UTF8String
 
       val columnStats = new StringColumnStats(StringType("UTF8_LCASE").collationId)
-      val rows = Seq("a", "A").map(str => {
+      val rows = Seq("b", "a", "C", "A").map(str => {
         val row = new GenericInternalRow(1)
         row(0) = UTF8String.fromString(str)
         row
@@ -195,7 +195,7 @@ class ColumnStatsSuite extends SparkFunSuite {
 
       val stats = columnStats.collectedStatistics
       assertResult(UTF8String.fromString("a"), "Wrong lower bound")(stats(0))
-      assertResult(UTF8String.fromString("a"), "Wrong upper bound")(stats(1))
+      assertResult(UTF8String.fromString("C"), "Wrong upper bound")(stats(1))
     }
   }
 }

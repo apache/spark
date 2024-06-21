@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -273,10 +272,8 @@ private[columnar] final class StringColumnStats(collationId: Int) extends Column
   }
 
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    def collatedCompare(l: UTF8String, r: UTF8String): Int =
-      CollationFactory.fetchCollation(collationId).comparator.compare(l, r)
-    if (upper == null || collatedCompare(value, upper) > 0) upper = value.clone()
-    if (lower == null || collatedCompare(value, lower) < 0) lower = value.clone()
+    if (upper == null || value.semanticCompare(upper, collationId) > 0) upper = value.clone()
+    if (lower == null || value.semanticCompare(lower, collationId) < 0) lower = value.clone()
     sizeInBytes += size
     count += 1
   }
