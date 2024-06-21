@@ -107,18 +107,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 98))
   }
 
-  test("alter table - property values must be set") {
-    val sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
-    checkError(
-      exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 78))
-  }
-
   test("alter table unset properties - property values must NOT be set") {
     val sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
