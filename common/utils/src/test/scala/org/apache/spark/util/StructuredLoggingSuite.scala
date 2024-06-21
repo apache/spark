@@ -360,6 +360,15 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
     assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
+
+  test("process escape sequences") {
+    assert(log"\n".message == "\n")
+    assert(log"\t".message == "\t")
+    assert(log"\b".message == "\b")
+    assert(log"\r".message == "\r")
+    assert((log"\r" + log"\n" + log"\t" + log"\b").message == "\r\n\t\b")
+    assert((log"\r${MDC(LogKeys.EXECUTOR_ID, 1)}\n".message == "\r1\n"))
+  }
 }
 
 object CustomLogKeys {
