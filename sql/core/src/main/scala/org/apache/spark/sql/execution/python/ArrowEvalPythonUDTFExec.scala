@@ -83,7 +83,8 @@ case class ArrowEvalPythonUDTFExec(
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
       val arrowOutputTypes = outputTypes.map(ArrowUtils.toArrowOutputSchema)
-      assert(arrowOutputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
+      assert(arrowOutputTypes == actualDataTypes,
+        "Invalid schema from arrow-enabled Python UDTF: " +
         s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
 
       flattenedBatch.setNumRows(batch.numRows())
