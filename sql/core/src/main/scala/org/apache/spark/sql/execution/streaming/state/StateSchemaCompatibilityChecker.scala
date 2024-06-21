@@ -108,6 +108,11 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  /**
+   * Function to read and return the existing key and value schema from the schema file, if it
+   * exists
+   * @return - Option of (keySchema, valueSchema) if the schema file exists, None otherwise
+   */
   private def getExistingKeyAndValueSchema(): Option[(StructType, StructType)] = {
     if (fm.exists(schemaFileLocation)) {
       Some(readSchemaFile())
@@ -143,8 +148,10 @@ class StateSchemaCompatibilityChecker(
       ignoreValueSchema: Boolean): Unit = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
+      // write the schema file if it doesn't exist
       createSchemaFile(newKeySchema, newValueSchema)
     } else {
+      // validate if the new schema is compatible with the existing schema
       check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
     }
   }
@@ -165,6 +172,20 @@ object StateSchemaCompatibilityChecker {
     }
   }
 
+  /**
+   * Function to validate the schema of the state store and maybe evolve it if needed.
+   * We also verify for binary inequality columns in the schema and disallow them. We then perform
+   * key and value schema validation. Depending on the passed configs, a warning might be logged
+   * or an exception might be thrown if the schema is not compatible.
+   *
+   * @param stateInfo - StatefulOperatorStateInfo containing the state store information
+   * @param hadoopConf - Hadoop configuration
+   * @param newKeySchema - New key schema
+   * @param newValueSchema - New value schema
+   * @param sessionState - session state used to retrieve session config
+   * @param extraOptions - any extra options to be passed for StateStoreConf creation
+   * @param storeName - optional state store name
+   */
   def validateAndMaybeEvolveSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,

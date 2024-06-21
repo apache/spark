@@ -481,10 +481,12 @@ class IncrementalExecution(
       if (isFirstBatch && currentBatchId != 0) {
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
-      // The rule doesn't change the plan but cause the side effect that metadata is written
-      // in the checkpoint directory of stateful operator.
+
+      // The two rules below don't change the plan but can cause the side effect that
+      // metadata/schema is written in the checkpoint directory of stateful operator.
       planWithStateOpId transform StateSchemaValidationRule.rule
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
     }
