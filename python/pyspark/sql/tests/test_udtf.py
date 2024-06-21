@@ -2819,12 +2819,8 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
             def eval(self):
                 yield ExamplePoint(0, 1),
 
-        data = [ExamplePoint(1.0, 2.0),]
         schema = StructType().add("point", ExamplePointUDT())
-        df = self.spark.createDataFrame([data], schema=schema)
-        [row] = df.select(
-            udtf(TestUDTF, returnType=schema, useArrow=True)("point"),
-        ).collect()
+        [row] =udtf(TestUDTF, returnType=schema, useArrow=True)(lit()).collect()
         self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
 
 
