@@ -92,13 +92,11 @@ private[spark] abstract class ConfigEntry[T] (
     // SPARK-48678: performance optimization: this code could be expressed more succinctly
     // using flatten and mkString, but doing so adds lots of Scala collections perf. overhead.
     val maybePrependedValue: Option[String] = prependedKey.flatMap(reader.get)
-    val value: Option[String] = alternatives
+    val maybeValue: Option[String] = alternatives
       .foldLeft(reader.get(key))((res, nextKey) => res.orElse(reader.get(nextKey)))
-    (maybePrependedValue, value) match {
+    (maybePrependedValue, maybeValue) match {
       case (Some(prependedValue), Some(value)) => Some(s"$prependedValue$prependSeparator$value")
-      case (Some(prepend), None) => Some(prepend)
-      case (None, Some(value)) => Some(value)
-      case (None, None) => None
+      case _ => maybeValue.orElse(maybePrependedValue)
     }
   }
 
