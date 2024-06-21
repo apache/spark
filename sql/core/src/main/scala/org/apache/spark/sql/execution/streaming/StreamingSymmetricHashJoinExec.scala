@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
+
 /**
  * Performs stream-stream join using symmetric hash join algorithm. It works as follows.
  *
@@ -247,12 +248,15 @@ case class StreamingSymmetricHashJoinExec(
 
   override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
     val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+    // get state schema for state stores on left side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
       left.output, leftKeys, stateFormatVersion)
 
+    // get state schema for state stores on right side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
       right.output, rightKeys, stateFormatVersion)
 
+    // validate and maybe evolve schema for all state stores across both sides of the join
     result.foreach { case (stateStoreName, (keySchema, valueSchema)) =>
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)

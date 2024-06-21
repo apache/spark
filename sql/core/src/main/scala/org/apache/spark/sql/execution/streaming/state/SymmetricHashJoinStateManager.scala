@@ -773,11 +773,14 @@ object SymmetricHashJoinStateManager {
       joinKeys: Seq[Expression],
       stateFormatVersion: Int): scala.collection.mutable.Map[String, (StructType, StructType)] = {
     val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+
+    // get the key and value schema for the KeyToNumValues state store
     val keySchema = StructType(
       joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
     val longValueSchema = new StructType().add("value", "long")
     result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
 
+    // get the key and value schema for the KeyWithIndexToValue state store
     val keyWithIndexSchema = keySchema.add("index", LongType)
     val valueSchema = if (stateFormatVersion == 1) {
       inputValueAttributes
@@ -787,9 +790,9 @@ object SymmetricHashJoinStateManager {
       throw new IllegalArgumentException("Incorrect state format version! " +
         s"version=$stateFormatVersion")
     }
-
     result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
       (keyWithIndexSchema, valueSchema.toStructType))
+
     result
   }
 

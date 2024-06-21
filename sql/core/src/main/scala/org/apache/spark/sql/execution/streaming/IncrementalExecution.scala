@@ -198,6 +198,8 @@ class IncrementalExecution(
     }
   }
 
+  // Planning rule used to record the state schema for the first run and validate state schema
+  // changes across query runs.
   object StateSchemaValidationRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case statefulOp: StatefulOperator if isFirstBatch =>
