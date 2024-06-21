@@ -160,11 +160,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      val filtersToPush = filters.filter(f =>
-          DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown))
-
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filtersToPush, l.output)
+        filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
         l.resolve(
@@ -206,6 +203,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+        .map(_.filter)
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.

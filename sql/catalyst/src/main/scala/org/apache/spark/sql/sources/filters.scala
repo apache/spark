@@ -353,6 +353,18 @@ case class StringContains(attribute: String, value: String) extends Filter {
 }
 
 /**
+ * A.
+ * @param filter a.
+ * @param fullyTranslated a.
+ */
+@Evolving
+case class TranslatedFilter(filter: Filter, fullyTranslated: Boolean) {
+  def withFilter(newFilter: Filter): TranslatedFilter = {
+    copy(filter = newFilter)
+  }
+}
+
+/**
  * A filter that always evaluates to `true`.
  *
  * @since 3.0.0

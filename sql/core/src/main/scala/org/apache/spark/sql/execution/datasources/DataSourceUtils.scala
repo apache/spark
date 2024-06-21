@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -281,22 +281,9 @@ object DataSourceUtils extends PredicateHelper {
   }
 
   /**
-   * Determines whether a filter should be pushed down to the data source or not.
-   *
-   * @param expression The filter expression to be evaluated.
-   * @param isCollationPushDownSupported Whether the data source supports collation push down.
-   * @return A boolean indicating whether the filter should be pushed down or not.
+   * Determines whether a filter references any columns with non-UTF8 binary collation.
    */
-  def shouldPushFilter(expression: Expression, isCollationPushDownSupported: Boolean): Boolean = {
-    if (!expression.deterministic) return false
-
-    isCollationPushDownSupported || !expression.exists {
-      case childExpression @ (_: Attribute | _: GetStructField) =>
-        // don't push down filters for types with non-binary sortable collation
-        // as it could lead to incorrect results
-        SchemaUtils.hasNonUTF8BinaryCollation(childExpression.dataType)
-
-      case _ => false
-    }
+  def hasNonUTF8BinaryCollation(expression: Expression): Boolean = {
+    expression.references.exists(ref => SchemaUtils.hasNonUTF8BinaryCollation(ref.dataType))
   }
 }

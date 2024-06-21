@@ -1265,7 +1265,7 @@ class FileBasedDataSourceSuite extends QueryTest
             df.write.format(format).save(path.getAbsolutePath)
 
             // filter and expected result
-            val filters = Seq(
+            val filterTypes = Seq(
               ("==", Seq(Row("aaa"), Row("AAA"))),
               ("!=", Seq(Row("bbb"))),
               ("<", Seq()),
@@ -1273,27 +1273,43 @@ class FileBasedDataSourceSuite extends QueryTest
               (">", Seq(Row("bbb"))),
               (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
 
-            filters.foreach { filter =>
-              val readback = spark.read
-                .format(format)
-                .load(path.getAbsolutePath)
-                .where(s"c1 ${filter._1} collate('aaa', $collation)")
-                .where(s"str ${filter._1} struct(collate('aaa', $collation))")
-                .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
-                .where(s"arr ${filter._1} array(collate('aaa', $collation))")
-                .where(s"map_keys(map1) ${filter._1} array(collate('aaa', $collation))")
-                .where(s"map_values(map2) ${filter._1} array(collate('aaa', $collation))")
-                .select("c1")
+            filterTypes.foreach { filterType =>
+              Seq(
+                s"c1 $filterType collate('aaa', $collation)",
+                s"str $filterType struct(collate('aaa', $collation))",
+                s"namedstr.f1.f2 $filterType collate('aaa', $collation)",
+                s"arr $filterType array(collate('aaa', $collation))",
+                s"map_keys(map1) $filterType array(collate('aaa', $collation))",
+                s"map_values(map2) $filterType array(collate('aaa', $collation))",
+              ).foreach { filterString =>
 
-              val explain = readback.queryExecution.explainString(
-                ExplainMode.fromString("extended"))
-              assert(explain.contains("PushedFilters: []"))
-              checkAnswer(readback, filter._2)
+                val readback = spark.read
+                  .format(format)
+                  .load(path.getAbsolutePath)
+                  .where(filterString)
+                  .select("c1")
+
+                val pus = getPushedFilters(readback)
+                getPushedFilters(readback).foreach { filter =>
+                  assert(filter === "AlwaysTrue()" || filter.startsWith("IsNotNull"))
+                }
+                checkAnswer(readback, filterType._2)
+              }
             }
           }
         }
       }
     }
+  }
+
+  def getPushedFilters(df: DataFrame): Set[String] = {
+    val explain = df.queryExecution.explainString(ExplainMode.fromString("extended"))
+    assert(explain.contains("PushedFilters:"))
+
+    // Regular expression to extract text inside the brackets
+    val pattern = "PushedFilters: \\[(.*?)]".r
+
+    pattern.findFirstMatchIn(explain).get.group(1).split(", ").toSet
   }
 }
 

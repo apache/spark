@@ -321,7 +321,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
    */
   def testTranslateFilter(catalystFilter: Expression, result: Option[sources.Filter]): Unit = {
     assertResult(result) {
-      DataSourceStrategy.translateFilter(catalystFilter, true)
+      DataSourceStrategy.translateFilter(catalystFilter, true).map(_.filter)
     }
   }
 
