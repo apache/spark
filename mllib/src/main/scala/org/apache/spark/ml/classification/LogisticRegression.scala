@@ -503,8 +503,8 @@ class LogisticRegression @Since("1.2.0") (
       tol, fitIntercept, maxBlockSizeInMB)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val instances = dataset.select(
@@ -569,8 +569,8 @@ class LogisticRegression @Since("1.2.0") (
 
     val isConstantLabel = histogram.count(_ != 0.0) == 1
     if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-      instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
-        s"coefficients will be zeros. Training is not needed.")
+      instr.logWarning("All labels are the same value and fitIntercept=true, so the " +
+        "coefficients will be zeros. Training is not needed.")
       val constantLabelIndex = Vectors.dense(histogram).argmax
       val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
         new Array[Int](numCoefficientSets + 1), Array.emptyIntArray, Array.emptyDoubleArray,
@@ -584,8 +584,8 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     if (!$(fitIntercept) && isConstantLabel) {
-      instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
-        s"dangerous ground, so the algorithm may not converge.")
+      instr.logWarning("All labels belong to a single class and fitIntercept=false. It's a " +
+        "dangerous ground, so the algorithm may not converge.")
     }
 
     val featuresMean = summarizer.mean.toArray
