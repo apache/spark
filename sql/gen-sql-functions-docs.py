@@ -164,13 +164,13 @@ def _make_pretty_examples(jspark, infos):
     pretty_output = ""
     for info in infos:
         if (info.examples.startswith("\n    Examples:")
-                and info.name.lower() not in ("from_json", "to_json")):
+                and info.name.lower() not in ("from_avro", "to_avro")):
             output = []
             output.append("-- %s" % info.name)
             query_examples = filter(lambda x: x.startswith("      > "), info.examples.split("\n"))
             for query_example in query_examples:
                 query = query_example.lstrip("      > ")
-                print("    %s: %s" % (info.name, query))
+                print("    %s" % query)
                 query_output = jspark.sql(query).showString(20, 20, False)
                 output.append(query)
                 output.append(query_output)
