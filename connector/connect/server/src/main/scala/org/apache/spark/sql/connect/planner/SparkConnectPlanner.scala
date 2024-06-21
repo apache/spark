@@ -44,7 +44,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{withOrigin, Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -57,6 +57,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
@@ -1473,7 +1474,6 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformExpression(exp: proto.Expression): Expression = transformExpression(exp, None)
-
   /**
    * Transforms an input protobuf expression into the Catalyst expression. This is usually not
    * called directly. Typically the planner will traverse the expressions automatically, only
@@ -1488,6 +1488,22 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformExpression(
+      exp: proto.Expression,
+      baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
+    try {
+      val origin = exp.getCommon.getOrigin
+      PySparkCurrentOrigin.set(
+        origin.getPythonOrigin.getFragment,
+        origin.getPythonOrigin.getCallSite)
+      withOrigin { doTransformExpression(exp, baseRelationOpt) }
+    } finally {
+      PySparkCurrentOrigin.clear()
+    }
+  } else {
+    doTransformExpression(exp, baseRelationOpt)
+  }
+
+  private def doTransformExpression(
       exp: proto.Expression,
       baseRelationOpt: Option[LogicalPlan]): Expression = {
     exp.getExprTypeCase match {
@@ -3210,7 +3226,11 @@ class SparkConnectPlanner(
       }
 
     // Register the new query so that its reference is cached and is stopped on session timeout.
-    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(sessionHolder, query)
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
+      sessionHolder,
+      query,
+      executeHolder.sparkSessionTags,
+      executeHolder.operationId)
     // Register the runner with the query if Python foreachBatch is enabled.
     foreachBatchRunnerCleaner.foreach { cleaner =>
       sessionHolder.streamingForeachBatchRunnerCleanerCache.registerCleanerForQuery(
@@ -3275,7 +3295,9 @@ class SparkConnectPlanner(
 
     // Find the query in connect service level cache, otherwise check session's active streams.
     val query = SparkConnectService.streamingSessionManager
-      .getCachedQuery(id, runId, session) // Common case: query is cached in the cache.
+      // Common case: query is cached in the cache.
+      .getCachedQuery(id, runId, executeHolder.sparkSessionTags, session)
+      .map(_.query)
       .orElse { // Else try to find it in active streams. Mostly will not be found here either.
         Option(session.streams.get(id))
       } match {

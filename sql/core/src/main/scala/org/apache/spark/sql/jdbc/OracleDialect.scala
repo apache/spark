@@ -30,7 +30,7 @@ import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
+private case class OracleDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 

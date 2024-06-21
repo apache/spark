@@ -29,7 +29,12 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql import Row
-from pyspark.sql.datasource import DataSource, WriterCommitMessage, CaseInsensitiveDict
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceWriter,
+    WriterCommitMessage,
+    CaseInsensitiveDict,
+)
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
@@ -162,6 +167,14 @@ def main(infile: IO, outfile: IO) -> None:
         else:
             # Instantiate the data source writer.
             writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
+            if not isinstance(writer, DataSourceWriter):
+                raise PySparkAssertionError(
+                    error_class="DATA_SOURCE_TYPE_MISMATCH",
+                    message_parameters={
+                        "expected": "an instance of DataSourceWriter",
+                        "actual": f"'{type(writer).__name__}'",
+                    },
+                )
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa

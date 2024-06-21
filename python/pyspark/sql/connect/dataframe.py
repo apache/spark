@@ -49,7 +49,7 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
-from functools import cached_property
+import functools
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -208,6 +208,7 @@ class DataFrame(ParentDataFrame):
     def write(self) -> "DataFrameWriter":
         return DataFrameWriter(self._plan, self._session)
 
+    @functools.cache
     def isEmpty(self) -> bool:
         return len(self.select().take(1)) == 0
 
@@ -222,6 +223,11 @@ class DataFrame(ParentDataFrame):
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
+        if any(not isinstance(c, (str, Column)) for c in cols):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                message_parameters={"arg_name": "columns"},
+            )
         return DataFrame(
             plan.Project(self._plan, [F._to_col(c) for c in cols]),
             session=self._session,
@@ -256,7 +262,9 @@ class DataFrame(ParentDataFrame):
             return self.groupBy().agg(*exprs)
 
     def alias(self, alias: str) -> ParentDataFrame:
-        return DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
+        res = DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -308,10 +316,12 @@ class DataFrame(ParentDataFrame):
                 error_class="VALUE_NOT_POSITIVE",
                 message_parameters={"arg_name": "numPartitions", "arg_value": str(numPartitions)},
             )
-        return DataFrame(
+        res = DataFrame(
             plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=False),
             self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
@@ -334,12 +344,12 @@ class DataFrame(ParentDataFrame):
                     },
                 )
             if len(cols) == 0:
-                return DataFrame(
+                res = DataFrame(
                     plan.Repartition(self._plan, numPartitions, shuffle=True),
                     self._session,
                 )
             else:
-                return DataFrame(
+                res = DataFrame(
                     plan.RepartitionByExpression(
                         self._plan, numPartitions, [F._to_col(c) for c in cols]
                     ),
@@ -347,7 +357,7 @@ class DataFrame(ParentDataFrame):
                 )
         elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
-            return DataFrame(
+            res = DataFrame(
                 plan.RepartitionByExpression(self._plan, None, [F._to_col(c) for c in cols]),
                 self.sparkSession,
             )
@@ -359,6 +369,9 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
@@ -386,14 +399,14 @@ class DataFrame(ParentDataFrame):
                     message_parameters={"item": "cols"},
                 )
             else:
-                return DataFrame(
+                res = DataFrame(
                     plan.RepartitionByExpression(
                         self._plan, numPartitions, [F._sort_col(c) for c in cols]
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
-            return DataFrame(
+            res = DataFrame(
                 plan.RepartitionByExpression(
                     self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
                 ),
@@ -408,46 +421,69 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
+        res._cached_schema = self._cached_schema
+        return res
 
-        if subset is None:
-            return DataFrame(
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
+
+        if not subset:
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
-        else:
-            return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset), session=self._session
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            res = DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=subset[0]),
+                session=self._session,
             )
+        else:
+            res = DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
+                session=self._session,
+            )
+
+        res._cached_schema = self._cached_schema
+        return res
 
     drop_duplicates = dropDuplicates
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and not isinstance(subset, (list, tuple)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
 
-        if subset is None:
+        if not subset:
             return DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
                 session=self._session,
             )
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            return DataFrame(
+                plan.Deduplicate(child=self._plan, column_names=subset[0], within_watermark=True),
+                session=self._session,
+            )
         else:
             return DataFrame(
-                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                plan.Deduplicate(
+                    child=self._plan,
+                    column_names=cast(List[str], subset),
+                    within_watermark=True,
+                ),
                 session=self._session,
             )
 
     def distinct(self) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
@@ -478,7 +514,9 @@ class DataFrame(ParentDataFrame):
             expr = F.expr(condition)
         else:
             expr = condition
-        return DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
+        res = DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def first(self) -> Optional[Row]:
         return self.head()
@@ -688,7 +726,9 @@ class DataFrame(ParentDataFrame):
         )
 
     def limit(self, n: int) -> ParentDataFrame:
-        return DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
+        res = DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def tail(self, num: int) -> List[Row]:
         return DataFrame(plan.Tail(child=self._plan, limit=num), session=self._session).collect()
@@ -745,7 +785,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -753,6 +793,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     orderBy = sort
 
@@ -761,7 +803,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -769,6 +811,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def sample(
         self,
@@ -816,7 +860,7 @@ class DataFrame(ParentDataFrame):
 
         seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
-        return DataFrame(
+        res = DataFrame(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
@@ -826,6 +870,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def withColumnRenamed(self, existing: str, new: str) -> ParentDataFrame:
         return self.withColumnsRenamed({existing: new})
@@ -1029,10 +1075,12 @@ class DataFrame(ParentDataFrame):
                         },
                     )
 
-        return DataFrame(
+        res = DataFrame(
             plan.Hint(self._plan, name, [F.lit(p) for p in list(parameters)]),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def randomSplit(
         self,
@@ -1073,6 +1121,7 @@ class DataFrame(ParentDataFrame):
                 ),
                 session=self._session,
             )
+            samplePlan._cached_schema = self._cached_schema
             splits.append(samplePlan)
             j += 1
 
@@ -1097,9 +1146,9 @@ class DataFrame(ParentDataFrame):
             )
 
         if isinstance(observation, Observation):
-            return observation._on(self, *exprs)
+            res = observation._on(self, *exprs)
         elif isinstance(observation, str):
-            return DataFrame(
+            res = DataFrame(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
                 self._session,
             )
@@ -1112,8 +1161,18 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
+        res._cached_schema = self._cached_schema
+        return res
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
+
+    def _merge_cached_schema(self, other: ParentDataFrame) -> Optional[StructType]:
+        # to avoid type coercion, only propagate the schema
+        # when the cached schemas are exactly the same
+        if self._cached_schema is not None and self._cached_schema == other._cached_schema:
+            return self.schema
+        return None
 
     def union(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
@@ -1121,18 +1180,20 @@ class DataFrame(ParentDataFrame):
 
     def unionAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "union", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def unionByName(
         self, other: ParentDataFrame, allowMissingColumns: bool = False
     ) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan,
                 other._plan,  # type: ignore[arg-type]
@@ -1142,42 +1203,52 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersectAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
@@ -1757,7 +1828,10 @@ class DataFrame(ParentDataFrame):
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
-        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        # not all datatypes are supported in arrow based collect
+        # here always verify the schema by from_arrow_schema
+        schema2 = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1790,24 +1864,17 @@ class DataFrame(ParentDataFrame):
             self._cached_schema = self._session.client.schema(query)
         return copy.deepcopy(self._cached_schema)
 
+    @functools.cache
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_local", plan=query).is_local
         assert result is not None
         return result
 
-    @cached_property
+    @functools.cached_property
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
-        assert result is not None
-        return result
-
-    def _tree_string(self, level: Optional[int] = None) -> str:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(
-            method="tree_string", plan=query, level=level
-        ).tree_string
         assert result is not None
         return result
 
@@ -1817,6 +1884,7 @@ class DataFrame(ParentDataFrame):
         else:
             print(self.schema.treeString())
 
+    @functools.cache
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files
@@ -1825,10 +1893,12 @@ class DataFrame(ParentDataFrame):
 
     def to(self, schema: StructType) -> ParentDataFrame:
         assert schema is not None
-        return DataFrame(
+        res = DataFrame(
             plan.ToSchema(child=self._plan, schema=schema),
             session=self._session,
         )
+        res._cached_schema = schema
+        return res
 
     def toDF(self, *cols: str) -> ParentDataFrame:
         for col_ in cols:
@@ -1896,6 +1966,7 @@ class DataFrame(ParentDataFrame):
         query = self._plan.to_proto(self._session.client)
         return self._session.client.explain_string(query, explain_mode)
 
+    @functools.cache
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
@@ -2009,7 +2080,7 @@ class DataFrame(ParentDataFrame):
             evalType=evalType,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.MapPartitions(
                 child=self._plan,
                 function=udf_obj,
@@ -2019,6 +2090,9 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     def mapInPandas(
         self,
@@ -2088,6 +2162,7 @@ class DataFrame(ParentDataFrame):
             other=other._plan.to_proto(other._session.client),
         )
 
+    @functools.cache
     def semanticHash(self) -> int:
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),

@@ -322,7 +322,13 @@ case object VariantGet {
       }
     }
 
-    if (dataType == VariantType) return new VariantVal(v.getValue, v.getMetadata)
+    if (dataType == VariantType) {
+      // Build a new variant, in order to strip off any unnecessary metadata.
+      val builder = new VariantBuilder
+      builder.appendVariant(v)
+      val result = builder.result()
+      return new VariantVal(result.getValue, result.getMetadata)
+    }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
     dataType match {

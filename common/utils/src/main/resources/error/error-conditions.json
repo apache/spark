@@ -90,6 +90,11 @@
         "message" : [
           "The input argument `tolerance` must be a constant."
         ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -118,6 +123,12 @@
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
     ],
     "sqlState" : "42KDE"
+  },
+  "CANNOT_ALTER_COLLATION_BUCKET_COLUMN" : {
+    "message" : [
+      "ALTER TABLE (ALTER|CHANGE) COLUMN cannot change collation of type/subtypes of bucket columns, but found the bucket column <columnName> in the table <tableName>."
+    ],
+    "sqlState" : "428FR"
   },
   "CANNOT_ALTER_PARTITION_COLUMN" : {
     "message" : [
@@ -1249,6 +1260,11 @@
           "List namespaces."
         ]
       },
+      "LOAD_TABLE" : {
+        "message" : [
+          "Load the table <tableName>."
+        ]
+      },
       "NAMESPACE_EXISTS" : {
         "message" : [
           "Check that the namespace <namespace> exists."
@@ -2347,6 +2363,12 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
@@ -3317,6 +3339,12 @@
     ],
     "sqlState" : "42000"
   },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "Data source read/write option <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
+  },
   "NULL_MAP_KEY" : {
     "message" : [
       "Cannot use null as map key."
@@ -3724,6 +3752,28 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
+    "message" : [
+      "The streaming query failed to validate written state for key row.",
+      "The following reasons may cause this:",
+      "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
+      "2. Corrupt checkpoint files",
+      "3. The query changed in an incompatible way between restarts",
+      "For the first case, use a new checkpoint directory or use the original Spark version",
+      "to process the streaming state. Retrieved error_message=<errorMsg>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided key schema does not match existing state key schema.",
+      "Please check number and type of fields.",
+      "Existing key_schema=<storedKeySchema> and new key_schema=<newKeySchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
@@ -3747,6 +3797,28 @@
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE" : {
+    "message" : [
+      "The streaming query failed to validate written state for value row.",
+      "The following reasons may cause this:",
+      "1. An old Spark version wrote the checkpoint that is incompatible with the current one",
+      "2. Corrupt checkpoint files",
+      "3. The query changed in an incompatible way between restarts",
+      "For the first case, use a new checkpoint directory or use the original Spark version",
+      "to process the streaming state. Retrieved error_message=<errorMsg>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE" : {
+    "message" : [
+      "Provided value schema does not match existing state value schema.",
+      "Please check number and type of fields.",
+      "Existing value_schema=<storedValueSchema> and new value_schema=<newValueSchema>.",
+      "If you want to force running the query without schema validation, please set spark.sql.streaming.stateStore.stateSchemaCheck to false.",
+      "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
@@ -4630,6 +4702,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
@@ -6105,11 +6183,6 @@
   "_LEGACY_ERROR_TEMP_1316" : {
     "message" : [
       "Invalid partition transformation: <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1319" : {
-    "message" : [
-      "Invalid join type in joinWith: <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1320" : {
@@ -8089,16 +8162,6 @@
   "_LEGACY_ERROR_TEMP_3215" : {
     "message" : [
       "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3216" : {
-    "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3217" : {
-    "message" : [
-      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3218" : {

@@ -568,7 +568,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_print_schema(self):
         # SPARK-41216: Test print schema
-        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y").schema.treeString()
         # root
         #  |-- X: integer (nullable = false)
         #  |-- Y: integer (nullable = false)
@@ -657,6 +657,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
+        self.assert_eq(
+            df.drop_duplicates(["name"]).toPandas(), df2.drop_duplicates(["name"]).toPandas()
+        )
+        self.assert_eq(
+            df.dropDuplicates(["name", "id"]).toPandas(),
+            df2.dropDuplicates(["name", "id"]).toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(["name", "id"]).toPandas(),
+            df2.drop_duplicates(["name", "id"]).toPandas(),
+        )
+        self.assert_eq(df.dropDuplicates("name").toPandas(), df2.dropDuplicates("name").toPandas())
 
     def test_drop(self):
         # SPARK-41169: test drop

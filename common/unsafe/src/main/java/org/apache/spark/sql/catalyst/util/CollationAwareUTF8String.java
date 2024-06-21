@@ -44,14 +44,14 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
-   * to the UTF8_BINARY_LCASE collation. The method assumes that the prefix is already lowercased
+   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased
    * prior to method call to avoid the overhead of calling .toLowerCase() multiple times on the
    * same prefix string.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
    * @param startPos the start position for searching (in the target string)
-   * @return whether the target string starts with the specified prefix in UTF8_BINARY_LCASE
+   * @return whether the target string starts with the specified prefix in UTF8_LCASE
    */
   public static boolean lowercaseMatchFrom(
       final UTF8String target,
@@ -63,7 +63,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the length of the substring of the target string that starts with the specified
    * prefix, starting from the specified position (0-based index referring to character position
-   * in UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * in UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * prefix is already lowercased. The method only considers the part of target string that
    * starts from the specified (inclusive) position (that is, the method does not look at UTF8
    * characters of the target string at or after position `endPos`). If the prefix is not found,
@@ -90,7 +90,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
@@ -115,7 +115,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string ends with the specified suffix, ending at the specified
    * position (0-based index referring to character position in UTF8String), with respect to the
-   * UTF8_BINARY_LCASE collation. The method assumes that the suffix is already lowercased prior
+   * UTF8_LCASE collation. The method assumes that the suffix is already lowercased prior
    * to method call to avoid the overhead of calling .toLowerCase() multiple times on the same
    * suffix string.
    *
@@ -134,7 +134,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the length of the substring of the target string that ends with the specified
    * suffix, ending at the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * suffix is already lowercased. The method only considers the part of target string that ends
    * at the specified (non-inclusive) position (that is, the method does not look at UTF8
    * characters of the target string at or after position `endPos`). If the suffix is not found,
@@ -161,7 +161,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the last occurrence of the pattern string in the target string,
    * ending at the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. The method assumes that the
+   * UTF8String), with respect to the UTF8_LCASE collation. The method assumes that the
    * pattern string is already lowercased prior to call. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
@@ -181,6 +181,54 @@ public class CollationAwareUTF8String {
       }
     }
     return MATCH_NOT_FOUND;
+  }
+
+  /**
+   * Lowercase UTF8String comparison used for UTF8_LCASE collation. While the default
+   * UTF8String comparison is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase()), this
+   * method uses code points to compare the strings in a case-insensitive manner using ICU rules,
+   * as well as handling special rules for one-to-many case mappings (see: lowerCaseCodePoints).
+   *
+   * @param left The first UTF8String to compare.
+   * @param right The second UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  public static int compareLowerCase(final UTF8String left, final UTF8String right) {
+    // Only if both strings are ASCII, we can use faster comparison (no string allocations).
+    if (left.isFullAscii() && right.isFullAscii()) {
+      return compareLowerCaseAscii(left, right);
+    }
+    return compareLowerCaseSlow(left, right);
+  }
+
+  /**
+   * Fast version of the `compareLowerCase` method, used when both arguments are ASCII strings.
+   *
+   * @param left The first ASCII UTF8String to compare.
+   * @param right The second ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseAscii(final UTF8String left, final UTF8String right) {
+    int leftBytes = left.numBytes(), rightBytes = right.numBytes();
+    for (int curr = 0; curr < leftBytes && curr < rightBytes; curr++) {
+      int lowerLeftByte = Character.toLowerCase(left.getByte(curr));
+      int lowerRightByte = Character.toLowerCase(right.getByte(curr));
+      if (lowerLeftByte != lowerRightByte) {
+        return lowerLeftByte - lowerRightByte;
+      }
+    }
+    return leftBytes - rightBytes;
+  }
+
+  /**
+   * Slow version of the `compareLowerCase` method, used when both arguments are non-ASCII strings.
+   *
+   * @param left The first non-ASCII UTF8String to compare.
+   * @param right The second non-ASCII UTF8String to compare.
+   * @return An integer representing the comparison result.
+   */
+  private static int compareLowerCaseSlow(final UTF8String left, final UTF8String right) {
+    return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
   }
 
   public static UTF8String replace(final UTF8String src, final UTF8String search,
@@ -284,16 +332,122 @@ public class CollationAwareUTF8String {
     return buf.build();
   }
 
+  /**
+   * Convert the input string to uppercase using the ICU root locale rules.
+   *
+   * @param target the input string
+   * @return the uppercase string
+   */
+  public static UTF8String toUpperCase(final UTF8String target) {
+    return UTF8String.fromString(toUpperCase(target.toString()));
+  }
+
+  public static String toUpperCase(final String target) {
+    return UCharacter.toUpperCase(target);
+  }
+
+  /**
+   * Convert the input string to uppercase using the specified ICU collation rules.
+   *
+   * @param target the input string
+   * @return the uppercase string
+   */
+  public static UTF8String toUpperCase(final UTF8String target, final int collationId) {
+    return UTF8String.fromString(toUpperCase(target.toString(), collationId));
+  }
+
   public static String toUpperCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toUpperCase(locale, target);
   }
 
+  /**
+   * Convert the input string to lowercase using the ICU root locale rules.
+   *
+   * @param target the input string
+   * @return the lowercase string
+   */
+  public static UTF8String toLowerCase(final UTF8String target) {
+    return UTF8String.fromString(toLowerCase(target.toString()));
+  }
+  public static String toLowerCase(final String target) {
+    return UCharacter.toLowerCase(target);
+  }
+
+  /**
+   * Convert the input string to lowercase using the specified ICU collation rules.
+   *
+   * @param target the input string
+   * @return the lowercase string
+   */
+  public static UTF8String toLowerCase(final UTF8String target, final int collationId) {
+    return UTF8String.fromString(toLowerCase(target.toString(), collationId));
+  }
   public static String toLowerCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
     return UCharacter.toLowerCase(locale, target);
+  }
+
+  /**
+   * Converts a single code point to lowercase using ICU rules, with special handling for
+   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase) and
+   * context-insensitive case mappings (i.e. characters that map to different characters based on
+   * string context - e.g. the position in the string relative to other characters).
+   *
+   * @param codePoint The code point to convert to lowercase.
+   * @param sb The StringBuilder to append the lowercase character to.
+   */
+  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    if (codePoint == 0x0130) {
+      // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+      sb.appendCodePoint(0x0069);
+      sb.appendCodePoint(0x0307);
+    }
+    else if (codePoint == 0x03C2) {
+      // Greek final and non-final capital letter sigma should be mapped the same.
+      sb.appendCodePoint(0x03C3);
+    }
+    else {
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+    }
+  }
+
+  /**
+   * Converts an entire string to lowercase using ICU rules, code point by code point, with
+   * special handling for one-to-many case mappings (i.e. characters that map to multiple
+   * characters in lowercase). Also, this method omits information about context-sensitive case
+   * mappings using special handling in the `lowercaseCodePoint` method.
+   *
+   * @param target The target string to convert to lowercase.
+   * @return The string converted to lowercase in a context-unaware manner.
+   */
+  public static String lowerCaseCodePoints(final String target) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < target.length(); ++i) {
+      lowercaseCodePoint(target.codePointAt(i), sb);
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Convert the input string to titlecase using the ICU root locale rules.
+   */
+  public static UTF8String toTitleCase(final UTF8String target) {
+    return UTF8String.fromString(toTitleCase(target.toString()));
+  }
+
+  public static String toTitleCase(final String target) {
+    return UCharacter.toTitleCase(target, BreakIterator.getWordInstance());
+  }
+
+  /**
+   * Convert the input string to titlecase using the specified ICU collation rules.
+   */
+  public static UTF8String toTitleCase(final UTF8String target, final int collationId) {
+    return UTF8String.fromString(toTitleCase(target.toString(), collationId));
   }
 
   public static String toTitleCase(final String target, final int collationId) {
@@ -335,7 +489,7 @@ public class CollationAwareUTF8String {
   /**
    * Returns the position of the first occurrence of the pattern string in the target string,
    * starting from the specified position (0-based index referring to character position in
-   * UTF8String), with respect to the UTF8_BINARY_LCASE collation. If the pattern is not found,
+   * UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not found,
    * MATCH_NOT_FOUND is returned.
    *
    * @param target the string to be searched in
@@ -351,9 +505,8 @@ public class CollationAwareUTF8String {
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
-    if (pattern.numBytes() == 0) {
-      return target.indexOfEmpty(start);
-    }
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
     stringSearch.setIndex(start);
