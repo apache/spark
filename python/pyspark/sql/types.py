@@ -675,13 +675,13 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     def toInternal(self, obj: Any) -> Any:
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+            message_parameters={"feature": "CalendarIntervalType.toInternal"},
         )
 
     def fromInternal(self, obj: Any) -> Any:
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+            message_parameters={"feature": "CalendarIntervalType.fromInternal"},
         )
 
 
