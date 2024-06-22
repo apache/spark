@@ -20,15 +20,13 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.{ArrayBuffer, Set}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
-import org.apache.commons.codec.DecoderException
-import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
@@ -116,6 +114,45 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       null
     }
   }
+
+  override def visitCompoundOrSingleStatement(
+      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+    Option(ctx.singleCompoundStatement()).map { s =>
+      visit(s).asInstanceOf[CompoundBody]
+    }.getOrElse {
+      val logicalPlan = visitSingleStatement(ctx.singleStatement())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
+    }
+  }
+
+  override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
+    visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
+  }
+
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
+    val buff = ListBuffer[CompoundPlanStatement]()
+    ctx.compoundStatements.forEach(compoundStatement => {
+      buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
+    })
+    CompoundBody(buff.toSeq)
+  }
+
+  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
+    visitCompoundBodyImpl(ctx.compoundBody())
+  }
+
+  override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
+    visitCompoundBodyImpl(ctx)
+  }
+
+  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
+    withOrigin(ctx) {
+      Option(ctx.statement()).map {s =>
+        SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
+      }.getOrElse {
+        visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+      }
+    }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     visit(ctx.statement).asInstanceOf[LogicalPlan]
@@ -2788,11 +2825,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
           Literal(interval, CalendarIntervalType)
         }
       case BINARY_HEX =>
-        val padding = if (value.length % 2 != 0) "0" else ""
         try {
-          Literal(Hex.decodeHex(padding + value), BinaryType)
+          Literal(Hex.unhex(value), BinaryType)
         } catch {
-          case e: DecoderException =>
+          case e: IllegalArgumentException =>
             val ex = QueryParsingErrors.cannotParseValueTypeError("X", value, ctx)
             ex.setStackTrace(e.getStackTrace)
             throw ex
@@ -3233,24 +3269,24 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   /**
    * Create top level table schema.
    */
-  protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    val columns = Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList)
+  protected def createSchema(ctx: ColDefinitionListContext): StructType = {
+    val columns = Option(ctx).toArray.flatMap(visitColDefinitionList)
     StructType(columns.map(_.toV1Column))
   }
 
   /**
    * Get CREATE TABLE column definitions.
    */
-  override def visitCreateOrReplaceTableColTypeList(
-      ctx: CreateOrReplaceTableColTypeListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
-    ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
+  override def visitColDefinitionList(
+      ctx: ColDefinitionListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
+    ctx.colDefinition().asScala.map(visitColDefinition).toSeq
   }
 
   /**
    * Get a CREATE TABLE column definition.
    */
-  override def visitCreateOrReplaceTableColType(
-      ctx: CreateOrReplaceTableColTypeContext): ColumnDefinition = withOrigin(ctx) {
+  override def visitColDefinition(
+      ctx: ColDefinitionContext): ColumnDefinition = withOrigin(ctx) {
     import ctx._
 
     val name: String = colName.getText
@@ -4077,8 +4113,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val (identifierContext, temp, ifNotExists, external) =
       visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.createOrReplaceTableColTypeList())
-      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location,
       comment, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
@@ -4159,8 +4194,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo,
       clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
-    val columns = Option(ctx.createOrReplaceTableColTypeList())
-      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
     if (provider.isDefined && serdeInfo.isDefined) {

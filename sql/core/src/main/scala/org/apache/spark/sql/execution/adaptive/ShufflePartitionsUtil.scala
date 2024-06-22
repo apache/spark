@@ -61,10 +61,10 @@ object ShufflePartitionsUtil extends Logging {
     val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
-    logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_ID, shuffleIds)}), " +
-      log"advisory target size: ${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, " +
-      log"actual target size ${MDC(LogKeys.ACTUAL_TARGET_SIZE, targetSize)}, " +
-      log"minimum partition size: ${MDC(LogKeys.MIN_PARTITION_SIZE, minPartitionSize)}")
+    logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_ID, shuffleIds)}, advisory target size: " +
+      log"${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, actual target size " +
+      log"${MDC(LogKeys.TARGET_SIZE, targetSize)}, minimum partition size: " +
+      log"${MDC(LogKeys.PARTITION_SIZE, minPartitionSize)}")
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {

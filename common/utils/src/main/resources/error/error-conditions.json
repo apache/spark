@@ -90,6 +90,11 @@
         "message" : [
           "The input argument `tolerance` must be a constant."
         ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -2358,6 +2363,12 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
@@ -3327,6 +3338,12 @@
       "Row ID attributes cannot be nullable: <nullableRowIdAttrs>."
     ],
     "sqlState" : "42000"
+  },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "Data source read/write option <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
   },
   "NULL_MAP_KEY" : {
     "message" : [
@@ -4685,6 +4702,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
@@ -6160,11 +6183,6 @@
   "_LEGACY_ERROR_TEMP_1316" : {
     "message" : [
       "Invalid partition transformation: <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1319" : {
-    "message" : [
-      "Invalid join type in joinWith: <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1320" : {
@@ -8144,16 +8162,6 @@
   "_LEGACY_ERROR_TEMP_3215" : {
     "message" : [
       "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3216" : {
-    "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3217" : {
-    "message" : [
-      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3218" : {

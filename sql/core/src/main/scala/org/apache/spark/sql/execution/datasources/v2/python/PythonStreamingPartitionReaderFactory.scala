@@ -52,8 +52,8 @@ class PythonStreamingPartitionReaderFactory(
       val block = SparkEnv.get.blockManager.get[InternalRow](part.blockId.get)
         .map(_.data.asInstanceOf[Iterator[InternalRow]])
       if (block.isEmpty) {
-        logWarning(log"Prefetched block ${MDC(LogKeys.BLOCK_ID, part.blockId)} for " +
-          log"Python data source not found.")
+        logWarning(log"Prefetched block ${MDC(LogKeys.BLOCK_ID, part.blockId)} " +
+          log"for Python data source not found.")
       }
       block
     } else None

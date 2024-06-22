@@ -27,7 +27,6 @@ from typing import (
     Any,
     Union,
     Optional,
-    cast,
 )
 
 from pyspark.sql.column import Column as ParentColumn
@@ -35,7 +34,6 @@ from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValue
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.connect.expressions import (
     Expression,
     UnresolvedFunction,
@@ -48,6 +46,7 @@ from pyspark.sql.connect.expressions import (
     WithField,
     DropField,
 )
+from pyspark.errors.utils import with_origin_to_class
 
 
 if TYPE_CHECKING:
@@ -97,6 +96,11 @@ def _unary_op(name: str, self: ParentColumn) -> ParentColumn:
     return Column(UnresolvedFunction(name, [self._expr]))  # type: ignore[list-item]
 
 
+def _to_expr(v: Any) -> Expression:
+    return v._expr if isinstance(v, Column) else LiteralExpression._from_value(v)
+
+
+@with_origin_to_class
 class Column(ParentColumn):
     def __new__(
         cls,
@@ -312,7 +316,7 @@ class Column(ParentColumn):
 
         return Column(
             CaseWhen(
-                branches=self._expr._branches + [(condition._expr, F.lit(value)._expr)],
+                branches=self._expr._branches + [(condition._expr, _to_expr(value))],
                 else_value=None,
             )
         )
@@ -331,7 +335,7 @@ class Column(ParentColumn):
         return Column(
             CaseWhen(
                 branches=self._expr._branches,
-                else_value=cast(Expression, F.lit(value)._expr),
+                else_value=_to_expr(value),
             )
         )
 
@@ -358,22 +362,15 @@ class Column(ParentColumn):
                 },
             )
 
-        if isinstance(length, Column):
-            length_expr = length._expr
-            start_expr = startPos._expr  # type: ignore[union-attr]
-        elif isinstance(length, int):
-            length_expr = LiteralExpression._from_value(length)
-            start_expr = LiteralExpression._from_value(startPos)
+        if isinstance(length, (Column, int)):
+            length_expr = _to_expr(length)
+            start_expr = _to_expr(startPos)
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT",
                 message_parameters={"arg_name": "startPos", "arg_type": type(length).__name__},
             )
-        return Column(
-            UnresolvedFunction(
-                "substr", [self._expr, start_expr, length_expr]  # type: ignore[list-item]
-            )
-        )
+        return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
     def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
         if other is None or isinstance(
@@ -457,11 +454,7 @@ class Column(ParentColumn):
         else:
             _cols = list(cols)
 
-        return Column(
-            UnresolvedFunction(
-                "in", [self._expr] + [cast(Expression, F.lit(c)._expr) for c in _cols]
-            )
-        )
+        return Column(UnresolvedFunction("in", [self._expr] + [_to_expr(c) for c in _cols]))
 
     def between(
         self,
@@ -552,7 +545,7 @@ class Column(ParentColumn):
                 )
             return self.substr(k.start, k.stop)
         else:
-            return Column(UnresolvedExtractValue(self._expr, cast(Expression, F.lit(k)._expr)))
+            return Column(UnresolvedExtractValue(self._expr, _to_expr(k)))
 
     def __iter__(self) -> None:
         raise PySparkTypeError(

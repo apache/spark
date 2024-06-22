@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.{lang => jl}
+import java.util.HexFormat.fromHexDigit
 import java.util.Locale
 
 import org.apache.spark.QueryContext
@@ -1033,7 +1034,14 @@ object Hex {
 
   def hex(bytes: Array[Byte]): UTF8String = {
     val length = bytes.length
-    val value = new Array[Byte](length * 2)
+    if (length == 0) {
+      return UTF8String.EMPTY_UTF8
+    }
+    val targetLength = length * 2L
+    if (targetLength > Int.MaxValue) {
+      throw QueryExecutionErrors.tooManyArrayElementsError(targetLength, Int.MaxValue)
+    }
+    val value = new Array[Byte](targetLength.toInt)
     var i = 0
     while (i < length) {
       value(i * 2) = hexDigits((bytes(i) & 0xF0) >> 4)
@@ -1059,37 +1067,33 @@ object Hex {
   }
 
   def unhex(bytes: Array[Byte]): Array[Byte] = {
-    val out = new Array[Byte]((bytes.length + 1) >> 1)
-    var i = 0
-    var oddShift = 0
-    if ((bytes.length & 0x01) != 0) {
-      // padding with '0'
-      if (bytes(0) < 0) {
-        return null
-      }
-      val v = Hex.unhexDigits(bytes(0))
-      if (v == -1) {
-        return null
-      }
-      out(0) = v
-      i += 1
-      oddShift = 1
+    val length = bytes.length
+    if (length == 0) {
+      return Array.emptyByteArray
     }
-    // two characters form the hex value.
-    while (i < bytes.length) {
-      if (bytes(i) < 0 || bytes(i + 1) < 0) {
-        return null
+    if ((length & 0x1) != 0) {
+      // while length of bytes is odd, loop from the end to beginning w/o the head
+      val result = new Array[Byte](length / 2  + 1)
+      var i = result.length - 1
+      while (i > 0) {
+        result(i) = ((fromHexDigit(bytes(i * 2 - 1)) << 4) | fromHexDigit(bytes(i * 2))).toByte
+        i -= 1
       }
-      val first = Hex.unhexDigits(bytes(i))
-      val second = Hex.unhexDigits(bytes(i + 1))
-      if (first == -1 || second == -1) {
-        return null
+      // add it 'tailing' head
+      result(0) = fromHexDigit(bytes(0)).toByte
+      result
+    } else {
+      val result = new Array[Byte](length / 2)
+      var i = 0
+      while (i < result.length) {
+        result(i) = ((fromHexDigit(bytes(2 * i)) << 4) | fromHexDigit(bytes(2 * i + 1))).toByte
+        i += 1
       }
-      out(i / 2 + oddShift) = (((first << 4) | second) & 0xFF).toByte
-      i += 2
+      result
     }
-    out
   }
+
+  def unhex(str: String): Array[Byte] = unhex(str.getBytes())
 }
 
 /**
@@ -1162,41 +1166,26 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
   override def dataType: DataType = BinaryType
 
   protected override def nullSafeEval(num: Any): Any = {
-    val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
-    if (failOnError && result == null) {
-      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
-      // parameter to `try_to_binary`.
-      throw QueryExecutionErrors.invalidInputInConversionError(
-        BinaryType,
-        num.asInstanceOf[UTF8String],
-        UTF8String.fromString("HEX"),
-        "try_to_binary")
+    try {
+      Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+    } catch {
+      case _: IllegalArgumentException if !failOnError => null
+      case _: IllegalArgumentException =>
+        throw QueryExecutionErrors.invalidInputInConversionError(
+          BinaryType,
+          num.asInstanceOf[UTF8String],
+          UTF8String.fromString("HEX"),
+          "try_to_binary")
     }
-    result
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val hex = Hex.getClass.getName.stripSuffix("$")
-      val maybeFailOnErrorCode = if (failOnError) {
-        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
-        s"""
-           |if (${ev.value} == null) {
-           |  throw QueryExecutionErrors.invalidInputInConversionError(
-           |    $binaryType,
-           |    $c,
-           |    UTF8String.fromString("HEX"),
-           |    "try_to_binary");
-           |}
-           |""".stripMargin
-      } else {
-        s"${ev.isNull} = ${ev.value} == null;"
-      }
-
+    val expr = ctx.addReferenceObj("this", this)
+    nullSafeCodeGen(ctx, ev, input => {
       s"""
-        ${ev.value} = $hex.unhex($c.getBytes());
-        $maybeFailOnErrorCode
-       """
+        ${ev.value} = (byte[]) $expr.nullSafeEval($input);
+        ${ev.isNull} = ${ev.value} == null;
+      """
     })
   }
 

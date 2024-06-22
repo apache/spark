@@ -528,8 +528,8 @@ private[spark] class ApplicationMaster(
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
         logError(log"SparkContext did not initialize after waiting for " +
-          log"${MDC(LogKeys.TOTAL_WAIT_TIME, totalWaitTime)} ms. " +
-          log"Please check earlier log output for errors. Failing the application.")
+            log"${MDC(LogKeys.TIMEOUT, totalWaitTime)} ms. " +
+            log"Please check earlier log output for errors. Failing the application.")
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
           "Timed out waiting for SparkContext.")
@@ -737,7 +737,7 @@ private[spark] class ApplicationMaster(
         try {
           if (!Modifier.isStatic(mainMethod.getModifiers)) {
             logError(log"Could not find static main method in object " +
-              log"${MDC(LogKeys.USER_CLASS, args.userClass)}")
+              log"${MDC(LogKeys.CLASS_NAME, args.userClass)}")
             finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
           } else {
             mainMethod.invoke(null, userArgs.toArray)

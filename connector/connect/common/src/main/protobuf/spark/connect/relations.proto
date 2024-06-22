@@ -106,6 +106,8 @@ message Unknown {}
 
 // Common metadata of all relations.
 message RelationCommon {
+  // TODO(SPARK-48639): Add origin like Expression.ExpressionCommon
+
   // (Required) Shared relation metadata.
   string source_info = 1;
 

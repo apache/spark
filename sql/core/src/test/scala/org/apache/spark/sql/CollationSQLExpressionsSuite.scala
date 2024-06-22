@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1271,6 +1272,16 @@ class CollationSQLExpressionsSuite
            |    <A>true</A>
            |    <B>2.0</B>
            |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_LCASE",
+        s"""<ROW>
+           |    <A>aa</A>
+           |    <B>bb</B>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_BINARY",
+        s"""<ROW>
+           |    <A>aa</A>
+           |    <B>bb</B>
+           |</ROW>""".stripMargin),
       StructsToXmlTestCase("named_struct()", "UNICODE",
         "<ROW/>"),
       StructsToXmlTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
@@ -1854,6 +1865,59 @@ class CollationSQLExpressionsSuite
     })
   }
 
+  test("ExtractValue expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val query =
+          s"""
+             |select col['Field1']
+             |from values (named_struct('Field1', 'Spark', 'Field2', 5)) as tab(col);
+             |""".stripMargin
+        // Result & data type check
+        val testQuery = sql(query)
+        val dataType = StringType(collationName)
+        val expectedResult = "Spark"
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, Row(expectedResult))
+      }
+    })
+  }
+
+  test("Lag expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query =
+        s"""
+           |SELECT lag(a, -1, 'default' collate $collationName) OVER (PARTITION BY b ORDER BY a)
+           |FROM VALUES ('A1', 2), ('A2', 1), ('A2', 3), ('A1', 1) tab(a, b);
+           |""".stripMargin
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = StringType(collationName)
+      val expectedResult = Seq("A2", "default", "default", "default")
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, expectedResult.map(Row(_)))
+    })
+  }
+
+  test("Lead expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query =
+        s"""
+           |SELECT lead(a, -1, 'default' collate $collationName) OVER (PARTITION BY b ORDER BY a)
+           |FROM VALUES ('A1', 2), ('A2', 1), ('A2', 3), ('A1', 1) tab(a, b);
+           |""".stripMargin
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = StringType(collationName)
+      val expectedResult = Seq("A1", "default", "default", "default")
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, expectedResult.map(Row(_)))
+    })
+  }
+
   test("DatePart expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
@@ -1868,6 +1932,84 @@ class CollationSQLExpressionsSuite
       val expectedResult = 33
       assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       checkAnswer(testQuery, Row(expectedResult))
+    })
+  }
+
+  test("DateAdd expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query = s"""select date_add(collate('2016-07-30', '${collationName}'), 1)"""
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = DateType
+      val expectedResult = "2016-07-31"
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Date.valueOf(expectedResult)))
+    })
+  }
+
+  test("DateSub expression with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      val query = s"""select date_sub(collate('2016-07-30', '${collationName}'), 1)"""
+      // Result & data type check
+      val testQuery = sql(query)
+      val dataType = DateType
+      val expectedResult = "2016-07-29"
+      assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+      checkAnswer(testQuery, Row(Date.valueOf(expectedResult)))
+    })
+  }
+
+  test("WindowTime and TimeWindow expressions with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val query =
+          s"""SELECT window_time(window)
+             | FROM (SELECT a, window, count(*) as cnt FROM VALUES
+             |('A1', '2021-01-01 00:00:00'),
+             |('A1', '2021-01-01 00:04:30'),
+             |('A1', '2021-01-01 00:06:00'),
+             |('A2', '2021-01-01 00:01:00') AS tab(a, b)
+             |GROUP by a, window(b, '5 minutes') ORDER BY a, window.start);
+             |""".stripMargin
+        // Result & data type check
+        val testQuery = sql(query)
+        val dataType = TimestampType
+        val expectedResults =
+          Seq("2021-01-01 00:04:59.999999",
+            "2021-01-01 00:09:59.999999",
+            "2021-01-01 00:04:59.999999")
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, expectedResults.map(ts => Row(Timestamp.valueOf(ts))))
+      }
+    })
+  }
+
+  test("SessionWindow expressions with collation") {
+    // Supported collations
+    testSuppCollations.foreach(collationName => {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+        val query =
+          s"""SELECT count(*) as cnt
+             | FROM VALUES
+             |('A1', '2021-01-01 00:00:00'),
+             |('A1', '2021-01-01 00:04:30'),
+             |('A1', '2021-01-01 00:10:00'),
+             |('A2', '2021-01-01 00:01:00'),
+             |('A2', '2021-01-01 00:04:30') AS tab(a, b)
+             |GROUP BY a,
+             |session_window(b, CASE WHEN a = 'A1' THEN '5 minutes'  ELSE '1 minutes' END)
+             |ORDER BY a, session_window.start;
+             |""".stripMargin
+        // Result & data type check
+        val testQuery = sql(query)
+        val dataType = LongType
+        val expectedResults = Seq(2, 1, 1, 1)
+        assert(testQuery.schema.fields.head.dataType.sameType(dataType))
+        checkAnswer(testQuery, expectedResults.map(Row(_)))
+      }
     })
   }
 
@@ -1887,6 +2029,56 @@ class CollationSQLExpressionsSuite
       assert(testQuery.schema.fields.head.dataType.sameType(dataType))
       checkAnswer(testQuery, Row(expectedResult))
     })
+  }
+
+  test("Reflect expressions with collated strings") {
+    // be aware that output of java.util.UUID.fromString is always lowercase
+
+    case class ReflectExpressions(
+      left: String,
+      leftCollation: String,
+      right: String,
+      rightCollation: String,
+      result: Boolean
+    )
+
+    val testCases = Seq(
+      ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", true),
+      ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
+        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", false),
+
+      ReflectExpressions("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true),
+      ReflectExpressions("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
+        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true)
+    )
+    testCases.foreach(testCase => {
+      val query =
+        s"""
+           |SELECT REFLECT('java.util.UUID', 'fromString',
+           |collate('${testCase.left}', '${testCase.leftCollation}'))=
+           |collate('${testCase.right}', '${testCase.rightCollation}');
+           |""".stripMargin
+      val testQuery = sql(query)
+      checkAnswer(testQuery, Row(testCase.result))
+    })
+
+    val queryPass =
+      s"""
+         |SELECT REFLECT('java.lang.Integer', 'toHexString',2);
+         |""".stripMargin
+    val testQueryPass = sql(queryPass)
+    checkAnswer(testQueryPass, Row("2"))
+
+    val queryFail =
+      s"""
+         |SELECT REFLECT('java.lang.Integer', 'toHexString',"2");
+         |""".stripMargin
+    val typeException = intercept[ExtendedAnalysisException] {
+      sql(queryFail).collect()
+    }
+    assert(typeException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD")
   }
 
   // TODO: Add more tests for other SQL expressions

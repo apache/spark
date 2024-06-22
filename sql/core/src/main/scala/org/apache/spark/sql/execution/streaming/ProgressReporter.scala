@@ -352,8 +352,8 @@ abstract class ProgressContext(
           metrics = sourceMetrics
         )
       }
-      logInfo(log"Extracting source progress metrics for " +
-        log"source=${MDC(LogKeys.SOURCE, source.toString)} " +
+      logInfo(log"Extracting source progress metrics for source=" +
+        log"${MDC(LogKeys.SOURCE, source.toString)} " +
         log"took duration_ms=${MDC(LogKeys.DURATION, duration)}")
       result
     }

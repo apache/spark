@@ -70,6 +70,13 @@ abstract class PartitioningAwareFileIndex(
     caseInsensitiveMap.getOrElse(FileIndexOptions.RECURSIVE_FILE_LOOKUP, "false").toBoolean
   }
 
+  protected lazy val ignoreInvalidPartitionPaths: Boolean = {
+    caseInsensitiveMap
+      .get(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS)
+      .map(_.toBoolean)
+      .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
+  }
+
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
@@ -162,7 +169,8 @@ abstract class PartitioningAwareFileIndex(
         userSpecifiedSchema = userSpecifiedSchema,
         caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis,
         validatePartitionColumns = sparkSession.sessionState.conf.validatePartitionColumns,
-        timeZoneId = timeZoneId)
+        timeZoneId = timeZoneId,
+        ignoreInvalidPartitionPaths = ignoreInvalidPartitionPaths)
     }
   }
 
