@@ -343,7 +343,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.createOrReplaceTableColTypeList()).map(createSchema)
+      val schema = Option(ctx.colDefinitionList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
@@ -651,6 +651,173 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null)
       }
     })
+  }
+
+  /**
+   * Create a [[CreateUserDefinedFunctionCommand]].
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   ([param_name param_type [COMMENT param_comment], ...])
+   *   RETURNS {ret_type | TABLE (ret_name ret_type [COMMENT ret_comment], ...])}
+   *   [routine_characteristic]
+   *   RETURN {expression | query };
+   *
+   *   routine_characteristic
+   *   { LANGUAGE {SQL | IDENTIFIER} |
+   *     [NOT] DETERMINISTIC |
+   *     COMMENT function_comment |
+   *     [CONTAINS SQL | READS SQL DATA] }
+   * }}}
+   */
+  override def visitCreateUserDefinedFunction(ctx: CreateUserDefinedFunctionContext): LogicalPlan =
+    withOrigin(ctx) {
+      assert(ctx.expression != null || ctx.query != null)
+
+      if (ctx.EXISTS != null && ctx.REPLACE != null) {
+        throw QueryParsingErrors.createFuncWithBothIfNotExistsAndReplaceError(ctx)
+      }
+
+      val inputParamText = Option(ctx.parameters).map(source)
+      val returnTypeText: String =
+        if (ctx.RETURNS != null &&
+          (Option(ctx.dataType).nonEmpty || Option(ctx.returnParams).nonEmpty)) {
+          source(Option(ctx.dataType).getOrElse(ctx.returnParams))
+        } else {
+          ""
+        }
+      val exprText = Option(ctx.expression()).map(source)
+      val queryText = Option(ctx.query()).map(source)
+
+      val (containsSQL, deterministic, comment, optionalLanguage) =
+        visitRoutineCharacteristics(ctx.routineCharacteristics())
+      val language: RoutineLanguage = optionalLanguage.getOrElse(LanguageSQL)
+      val isTableFunc = ctx.TABLE() != null || returnTypeText.equalsIgnoreCase("table")
+
+      withIdentClause(ctx.identifierReference(), functionIdentifier => {
+        if (ctx.TEMPORARY == null) {
+          // TODO: support creating persistent UDFs.
+          operationNotAllowed(s"creating persistent SQL functions is not supported", ctx)
+        } else {
+          // Disallow to define a temporary function with `IF NOT EXISTS`
+          if (ctx.EXISTS != null) {
+            throw QueryParsingErrors.defineTempFuncWithIfNotExistsError(ctx)
+          }
+
+          if (functionIdentifier.length > 2) {
+            throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+          } else if (functionIdentifier.length == 2) {
+            // Temporary function names should not contain database prefix like "database.function"
+            throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
+          }
+
+          CreateUserDefinedFunctionCommand(
+            functionIdentifier.asFunctionIdentifier,
+            inputParamText,
+            returnTypeText,
+            exprText,
+            queryText,
+            comment,
+            deterministic,
+            containsSQL,
+            language,
+            isTableFunc,
+            isTemp = true,
+            ctx.EXISTS != null,
+            ctx.REPLACE != null
+          )
+        }
+      })
+    }
+
+  /**
+   * SQL function routine characteristics.
+   * Currently only deterministic clause and comment clause are used.
+   *
+   * routine language: [LANGUAGE SQL | IDENTIFIER]
+   * specific name: [SPECIFIC specific_name]
+   * routine data access: [NO SQL | CONTAINS SQL | READS SQL DATA | MODIFIES SQL DATA]
+   * routine null call: [RETURNS NULL ON NULL INPUT | CALLED ON NULL INPUT]
+   * routine determinism: [DETERMINISTIC | NOT DETERMINISTIC]
+   * comment: [COMMENT function_comment]
+   * rights: [SQL SECURITY INVOKER | SQL SECURITY DEFINER]
+   */
+  override def visitRoutineCharacteristics(ctx: RoutineCharacteristicsContext)
+  : (Option[Boolean], Option[Boolean], Option[String], Option[RoutineLanguage]) =
+    withOrigin(ctx) {
+      checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
+      checkDuplicateClauses(ctx.specificName(), "SPECIFIC", ctx)
+      checkDuplicateClauses(ctx.sqlDataAccess(), "SQL DATA ACCESS", ctx)
+      checkDuplicateClauses(ctx.nullCall(), "NULL CALL", ctx)
+      checkDuplicateClauses(ctx.deterministic(), "DETERMINISTIC", ctx)
+      checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+      checkDuplicateClauses(ctx.rightsClause(), "SQL SECURITY RIGHTS", ctx)
+
+      val language: Option[RoutineLanguage] = ctx
+        .routineLanguage()
+        .asScala
+        .headOption
+        .map(x => {
+          if (x.SQL() != null) {
+            LanguageSQL
+          } else {
+            val name: String = x.IDENTIFIER().getText()
+            operationNotAllowed(s"Unsupported language for user defined functions: $name", x)
+          }
+        })
+
+      val deterministic = ctx.deterministic().asScala.headOption.map(visitDeterminism)
+      val comment = visitCommentSpecList(ctx.commentSpec())
+
+      ctx.specificName().asScala.headOption.foreach(checkSpecificName)
+      ctx.nullCall().asScala.headOption.foreach(checkNullCall)
+      ctx.rightsClause().asScala.headOption.foreach(checkRightsClause)
+      val containsSQL: Option[Boolean] =
+        ctx.sqlDataAccess().asScala.headOption.map(visitDataAccess)
+      (containsSQL, deterministic, comment, language)
+    }
+
+  /**
+   * Check if the function has a SPECIFIC name,
+   * which is a way to provide an alternative name for the function.
+   * This check applies for all user defined functions.
+   * Use functionName to specify the function that is currently checked.
+   */
+  private def checkSpecificName(ctx: SpecificNameContext): Unit =
+    withOrigin(ctx) {
+      operationNotAllowed(s"SQL function with SPECIFIC name is not supported", ctx)
+    }
+
+  private def checkNullCall(ctx: NullCallContext): Unit = withOrigin(ctx) {
+    if (ctx.RETURNS() != null) {
+      operationNotAllowed("SQL function with RETURNS NULL ON NULL INPUT is not supported", ctx)
+    }
+  }
+
+  /**
+   * Check SQL function data access clause. Currently only READS SQL DATA and CONTAINS SQL
+   * are supported. Return true if the data access routine is CONTAINS SQL.
+   */
+  private def visitDataAccess(ctx: SqlDataAccessContext): Boolean = withOrigin(ctx) {
+    if (ctx.NO() != null) {
+      operationNotAllowed("SQL function with NO SQL is not supported", ctx)
+    }
+    if (ctx.MODIFIES() != null) {
+      operationNotAllowed("SQL function with MODIFIES SQL DATA is not supported", ctx)
+    }
+    return ctx.READS() == null
+  }
+
+  private def checkRightsClause(ctx: RightsClauseContext): Unit = withOrigin(ctx) {
+    if (ctx.INVOKER() != null) {
+      operationNotAllowed("SQL function with SQL SECURITY INVOKER is not supported", ctx)
+    }
+  }
+
+  private def visitDeterminism(ctx: DeterministicContext): Boolean = withOrigin(ctx) {
+    blockBang(ctx.errorCapturingNot())
+    ctx.errorCapturingNot() == null
   }
 
   /**
