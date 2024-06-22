@@ -301,9 +301,8 @@ private[spark] object LogKeys {
   case object HIVE_OPERATION_STATE extends LogKey
   case object HIVE_OPERATION_TYPE extends LogKey
   case object HOST extends LogKey
+  case object HOSTS extends LogKey
   case object HOST_LOCAL_BLOCKS_SIZE extends LogKey
-  case object HOST_NAME extends LogKey
-  case object HOST_NAMES extends LogKey
   case object HOST_PORT extends LogKey
   case object HOST_PORT2 extends LogKey
   case object HUGE_METHOD_LIMIT extends LogKey
