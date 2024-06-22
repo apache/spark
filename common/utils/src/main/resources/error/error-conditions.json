@@ -229,7 +229,7 @@
           "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
         ]
       },
-      "CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS" : {
+      "CANNOT_READ_MISSING_SNAPSHOT_FILE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
         ]

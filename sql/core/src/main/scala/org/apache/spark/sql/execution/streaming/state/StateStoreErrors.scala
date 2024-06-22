@@ -151,13 +151,13 @@ object StateStoreErrors {
   }
 
   def stateStoreSnapshotFileNotFound(fileToRead: String, clazz: String):
-  StateStoreSnapshotFileNotFound = {
+    StateStoreSnapshotFileNotFound = {
     new StateStoreSnapshotFileNotFound(fileToRead, clazz)
   }
 
   def stateStoreSnapshotPartitionNotFound(
-    snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String):
-  StateStoreSnapshotPartitionNotFound = {
+      snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String):
+    StateStoreSnapshotPartitionNotFound = {
     new StateStoreSnapshotPartitionNotFound(snapshotPartitionId, operatorId, checkpointLocation)
   }
 }
@@ -268,7 +268,7 @@ class StateStoreValueSchemaNotCompatible(
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_SNAPSHOT_FILE_NOT_EXISTS",
+    errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
     messageParameters = Map(
       "fileToRead" -> fileToRead,
       "clazz" -> clazz))

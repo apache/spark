@@ -227,14 +227,14 @@ class RocksDB(
   }
 
   /**
-   * Load from the start checkpoint version and apply all the changelog records to reach the
-   * end version. Note that this will copy all the necessary file from DFS to local disk as needed,
+   * Load from the start snapshot version and apply all the changelog records to reach the
+   * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    *
-   * @param startVersion
-   * @param endVersion
-   * @param readOnly
-   * @return
+   * @param startVersion version of the snapshot to start with
+   * @param endVersion end version
+   * @param readOnly whether the RocksDB instance is read-only
+   * @return A RocksDB instance loaded with the state endVersion replayed from startVersion
    */
   def load(startVersion: Long, endVersion: Long, readOnly: Boolean): RocksDB = {
     assert(startVersion >= 0 && endVersion >= startVersion)

@@ -263,7 +263,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /**
    * Get the state store of endVersion for reading by applying delta files on the snapshot of
-   * startVersion. If startVersion does not exist, an error will be thrown.
+   * startVersion. If snapshot for startVersion does not exist, an error will be thrown.
    *
    * @param startVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
@@ -287,7 +287,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /**
    * Get the state store of endVersion for reading by applying delta files on the snapshot of
-   * startVersion. If startVersion does not exist, an error will be thrown.
+   * startVersion. If snapshot for startVersion does not exist, an error will be thrown.
    *
    * @param startVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
@@ -317,6 +317,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
+  /**
+   * Consturct the state at endVersion from snapshot from startVersion.
+   * Returns a new [[HDFSBackedStateStoreMap]]
+   * @param startVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
   private def getLoadedMapForStore(startVersion: Long, endVersion: Long):
     HDFSBackedStateStoreMap = synchronized {
     try {
@@ -598,9 +604,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   private def loadMap(startVersion: Long, endVersion: Long): HDFSBackedStateStoreMap = {
-
     val (result, elapsedMs) = Utils.timeTakenMs {
-      val startVersionMap = Option(loadedMaps.get(startVersion)) match {
+      val startVersionMap = synchronized { Option(loadedMaps.get(startVersion)) } match {
         case Some(value) =>
           loadedMapCacheHitCount.increment()
           Option(value)
@@ -773,8 +778,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /**
-   * try to read the snapshot file of the given version.
-   * If the snapshot file is not available, return [[None]].
+   * Try to read the snapshot file. If the snapshot file is not available, return [[None]].
    *
    * @param version the version of the snapshot file
   */
