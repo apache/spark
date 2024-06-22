@@ -224,14 +224,14 @@
           "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
         ]
       },
-      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
-        "message" : [
-          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
-        ]
-      },
       "CANNOT_READ_MISSING_SNAPSHOT_FILE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
+      "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
         ]
       },
       "CANNOT_READ_SNAPSHOT_FILE_VALUE_SIZE" : {
