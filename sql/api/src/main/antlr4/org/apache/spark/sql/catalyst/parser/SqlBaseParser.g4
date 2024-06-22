@@ -113,7 +113,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=stringLit)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
@@ -123,7 +123,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
@@ -1213,14 +1213,6 @@ colTypeList
 
 colType
     : colName=errorCapturingIdentifier dataType (errorCapturingNot NULL)? commentSpec?
-    ;
-
-createOrReplaceTableColTypeList
-    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
-    ;
-
-createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType colDefinitionOption*
     ;
 
 colDefinitionList

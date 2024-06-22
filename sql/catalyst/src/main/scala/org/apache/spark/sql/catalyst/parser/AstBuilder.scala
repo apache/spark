@@ -3269,24 +3269,24 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   /**
    * Create top level table schema.
    */
-  protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
-    val columns = Option(ctx).toArray.flatMap(visitCreateOrReplaceTableColTypeList)
+  protected def createSchema(ctx: ColDefinitionListContext): StructType = {
+    val columns = Option(ctx).toArray.flatMap(visitColDefinitionList)
     StructType(columns.map(_.toV1Column))
   }
 
   /**
    * Get CREATE TABLE column definitions.
    */
-  override def visitCreateOrReplaceTableColTypeList(
-      ctx: CreateOrReplaceTableColTypeListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
-    ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
+  override def visitColDefinitionList(
+      ctx: ColDefinitionListContext): Seq[ColumnDefinition] = withOrigin(ctx) {
+    ctx.colDefinition().asScala.map(visitColDefinition).toSeq
   }
 
   /**
    * Get a CREATE TABLE column definition.
    */
-  override def visitCreateOrReplaceTableColType(
-      ctx: CreateOrReplaceTableColTypeContext): ColumnDefinition = withOrigin(ctx) {
+  override def visitColDefinition(
+      ctx: ColDefinitionContext): ColumnDefinition = withOrigin(ctx) {
     import ctx._
 
     val name: String = colName.getText
@@ -4113,8 +4113,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val (identifierContext, temp, ifNotExists, external) =
       visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.createOrReplaceTableColTypeList())
-      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location,
       comment, serdeInfo, clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
@@ -4195,8 +4194,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo,
       clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
-    val columns = Option(ctx.createOrReplaceTableColTypeList())
-      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.colDefinitionList()).map(visitColDefinitionList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
     if (provider.isDefined && serdeInfo.isDefined) {

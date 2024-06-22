@@ -343,7 +343,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.createOrReplaceTableColTypeList()).map(createSchema)
+      val schema = Option(ctx.colDefinitionList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
@@ -661,8 +661,14 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
    *   ([param_name param_type [COMMENT param_comment], ...])
    *   RETURNS {ret_type | TABLE (ret_name ret_type [COMMENT ret_comment], ...])}
-   *   [routine_characteristics]
-   *   RETURN {expression | TABLE ( query )};
+   *   [routine_characteristic]
+   *   RETURN {expression | query };
+   *
+   *   routine_characteristic
+   *   { LANGUAGE {SQL | IDENTIFIER} |
+   *     [NOT] DETERMINISTIC |
+   *     COMMENT function_comment |
+   *     [CONTAINS SQL | READS SQL DATA] }
    * }}}
    */
   override def visitCreateUserDefinedFunction(ctx: CreateUserDefinedFunctionContext): LogicalPlan =
