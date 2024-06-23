@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterTha
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanLike, SimpleMode}
+import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
@@ -1241,75 +1241,6 @@ class FileBasedDataSourceSuite extends QueryTest
         }
       }
     }
-  }
-
-  test("disable filter pushdown for collated strings") {
-    Seq("parquet").foreach { format =>
-      Seq(format, "").foreach { conf =>
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> conf) {
-          withTempPath { path =>
-            val collation = "'UTF8_LCASE'"
-            val df = sql(
-              s"""SELECT
-                 |  COLLATE(c, $collation) as c1,
-                 |  struct(COLLATE(c, $collation)) as str,
-                 |  named_struct('f1', named_struct('f2',
-                 |    COLLATE(c, $collation), 'f3', 1)) as namedstr,
-                 |  array(COLLATE(c, $collation)) as arr,
-                 |  map(COLLATE(c, $collation), 1) as map1,
-                 |  map(1, COLLATE(c, $collation)) as map2
-                 |FROM VALUES ('aaa'), ('AAA'), ('bbb')
-                 |as data(c)
-                 |""".stripMargin)
-
-            df.write.format(format).save(path.getAbsolutePath)
-
-            // filter and expected result
-            val filterTypes = Seq(
-              ("==", Seq(Row("aaa"), Row("AAA"))),
-              ("!=", Seq(Row("bbb"))),
-              ("<", Seq()),
-              ("<=", Seq(Row("aaa"), Row("AAA"))),
-              (">", Seq(Row("bbb"))),
-              (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
-
-            filterTypes.foreach { filterType =>
-              Seq(
-                s"c1 $filterType collate('aaa', $collation)",
-                s"str $filterType struct(collate('aaa', $collation))",
-                s"namedstr.f1.f2 $filterType collate('aaa', $collation)",
-                s"arr $filterType array(collate('aaa', $collation))",
-                s"map_keys(map1) $filterType array(collate('aaa', $collation))",
-                s"map_values(map2) $filterType array(collate('aaa', $collation))",
-              ).foreach { filterString =>
-
-                val readback = spark.read
-                  .format(format)
-                  .load(path.getAbsolutePath)
-                  .where(filterString)
-                  .select("c1")
-
-                val pus = getPushedFilters(readback)
-                getPushedFilters(readback).foreach { filter =>
-                  assert(filter === "AlwaysTrue()" || filter.startsWith("IsNotNull"))
-                }
-                checkAnswer(readback, filterType._2)
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  def getPushedFilters(df: DataFrame): Set[String] = {
-    val explain = df.queryExecution.explainString(ExplainMode.fromString("extended"))
-    assert(explain.contains("PushedFilters:"))
-
-    // Regular expression to extract text inside the brackets
-    val pattern = "PushedFilters: \\[(.*?)]".r
-
-    pattern.findFirstMatchIn(explain).get.group(1).split(", ").toSet
   }
 }
 

@@ -64,7 +64,7 @@ class CollatedFilterPushDownToReadersSuite extends QueryTest
   def withTestTable(dataSource: String)(fn: => Unit): Unit = {
     withTable(tblName) {
       sql(s"""
-           |CREATE OR REPLACE TABLE $tblName USING $dataSource AS
+           |CREATE TABLE $tblName USING $dataSource AS
            |SELECT
            |  c as $nonCollatedCol,
            |  COLLATE(c, $lcaseCollation) as $collatedCol,
