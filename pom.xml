@@ -206,8 +206,8 @@
     <libthrift.version>0.16.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.17.0</selenium.version>
-    <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
+    <selenium.version>4.21.0</selenium.version>
+    <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.8.0</commons-cli.version>
@@ -425,7 +425,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1173,8 +1173,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
