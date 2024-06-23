@@ -1156,19 +1156,19 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.18</version>
+        <version>3.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
