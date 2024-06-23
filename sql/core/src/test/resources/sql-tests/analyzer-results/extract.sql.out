@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz, interval 10 year 20 month as i, interval 30 day 40 hour 50 minute 6.7890 second as j
 -- !query analysis
-CreateViewCommand `t`, select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz, interval 10 year 20 month as i, interval 30 day 40 hour 50 minute 6.7890 second as j, false, false, LocalTempView, true
+CreateViewCommand `t`, select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz, interval 10 year 20 month as i, interval 30 day 40 hour 50 minute 6.7890 second as j, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-05-06 07:08:09.1234567 AS c#x, to_timestamp_ntz(2011-05-06 07:08:09.1234567, None, TimestampNTZType, Some(America/Los_Angeles), false) AS ntz#x, INTERVAL '11-8' YEAR TO MONTH AS i#x, INTERVAL '31 16:50:06.789' DAY TO SECOND AS j#x]
       +- OneRowRelation
 

@@ -143,13 +143,24 @@ package object config {
 
   private[spark] val STRUCTURED_LOGGING_ENABLED =
     ConfigBuilder("spark.log.structuredLogging.enabled")
-      .doc("When true, the default log4j output format is structured JSON lines, and there will " +
-        "be Mapped Diagnostic Context (MDC) from Spark added to the logs. This is useful for log " +
-        "aggregation and analysis tools. When false, the default log4j output will be plain " +
-        "text and no MDC from Spark will be set.")
+      .doc("When true, Spark logs are output as structured JSON lines with added Spark " +
+        "Mapped Diagnostic Context (MDC), facilitating easier integration with log aggregation " +
+        "and analysis tools. When false, logs are plain text without MDC. This configuration " +
+        "does not apply to interactive environments such as spark-shell, spark-sql, and " +
+        "PySpark shell.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
+    ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
+      .doc("When true, the MDC (Mapped Diagnostic Context) key `mdc.taskName` will be set in the " +
+        "log output, which is the behavior of Spark version 3.1 through Spark 3.5 releases. " +
+        "When false, the logging framework will use `task_name` as the MDC key, " +
+        "aligning it with the naming convention of newer MDC keys introduced in Spark 4.0 release.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DRIVER_LOG_LOCAL_DIR =
     ConfigBuilder("spark.driver.log.localDir")
@@ -1306,6 +1317,15 @@ package object config {
           s" be less than or equal to ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(64 * 1024 * 1024)
 
+  private[spark] val CHECKPOINT_DIR =
+    ConfigBuilder("spark.checkpoint.dir")
+      .doc(
+          "Set the default directory for checkpointing. It can be overwritten by " +
+          "SparkContext.setCheckpointDir.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
   private[spark] val CHECKPOINT_COMPRESS =
     ConfigBuilder("spark.checkpoint.compress")
       .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
@@ -1443,14 +1463,20 @@ package object config {
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
-      .doc("The file system for this buffer size after each partition " +
-        "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
+      .doc("(Deprecated since Spark 4.0, please use 'spark.shuffle.localDisk.file.output.buffer'.)")
       .version("2.3.0")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_LOCAL_DISK_FILE_OUTPUT_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.localDisk.file.output.buffer")
+      .doc("The file system for this buffer size after each partition " +
+        "is written in all local disk shuffle writers. In KiB unless otherwise specified.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
@@ -2011,6 +2037,13 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val IO_COMPRESSION_LZF_PARALLEL =
+    ConfigBuilder("spark.io.compression.lzf.parallel.enabled")
+      .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")
       .internal()
@@ -2403,7 +2436,7 @@ package object config {
         s"count ${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
     ConfigBuilder("spark.scheduler.maxRetainedRemovedDecommissionExecutors")

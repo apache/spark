@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.common
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
@@ -80,7 +81,7 @@ object DataTypeProtoConverter {
   }
 
   private def toCatalystStringType(t: proto.DataType.String): StringType =
-    StringType(t.getCollationId)
+    StringType(if (t.getCollation.nonEmpty) t.getCollation else "UTF8_BINARY")
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -177,7 +178,11 @@ object DataTypeProtoConverter {
       case s: StringType =>
         proto.DataType
           .newBuilder()
-          .setString(proto.DataType.String.newBuilder().setCollationId(s.collationId).build())
+          .setString(
+            proto.DataType.String
+              .newBuilder()
+              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+              .build())
           .build()
 
       case CharType(length) =>

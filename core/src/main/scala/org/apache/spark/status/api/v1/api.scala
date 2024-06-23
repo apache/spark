@@ -510,7 +510,7 @@ case class StackTrace(elems: Seq[String]) {
   override def toString: String = elems.mkString
 
   def html: NodeSeq = {
-    val withNewLine = elems.foldLeft(NodeSeq.Empty) { (acc, elem) =>
+    val withNewLine = elems.map(_.stripLineEnd).foldLeft(NodeSeq.Empty) { (acc, elem) =>
       if (acc.isEmpty) {
         acc :+ Text(elem)
       } else {

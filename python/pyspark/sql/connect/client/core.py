@@ -66,7 +66,11 @@ from pyspark.sql.connect.client.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
 from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
-from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
+from pyspark.sql.connect.conversion import (
+    storage_level_to_proto,
+    proto_to_storage_level,
+    proto_to_remote_cached_dataframe,
+)
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -655,12 +659,7 @@ class SparkConnectClient(object):
         use_reattachable_execute: bool
             Enable reattachable execution.
         """
-
-        class ClientThreadLocals(threading.local):
-            tags: set = set()
-            inside_error_handling: bool = False
-
-        self.thread_local = ClientThreadLocals()
+        self.thread_local = threading.local()
 
         # Parse the connection string.
         self._builder = (
@@ -1400,6 +1399,12 @@ class SparkConnectClient(object):
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}
+            if b.HasField("checkpoint_command_result"):
+                yield {
+                    "checkpoint_command_result": proto_to_remote_cached_dataframe(
+                        b.checkpoint_command_result.relation
+                    )
+                }
 
         try:
             if self._use_reattachable_execute:
@@ -1683,7 +1688,7 @@ class SparkConnectClient(object):
         Throws the appropriate internal Python exception.
         """
 
-        if self.thread_local.inside_error_handling:
+        if getattr(self.thread_local, "inside_error_handling", False):
             # We are already inside error handling routine,
             # avoid recursive error processing (with potentially infinite recursion)
             raise error
@@ -1829,6 +1834,7 @@ class SparkConnectClient(object):
                 response.server_side_session_id
                 and response.server_side_session_id != self._server_session_id
             ):
+                self._closed = True
                 raise PySparkAssertionError(
                     "Received incorrect server side session identifier for request. "
                     "Please create a new Spark Session to reconnect. ("

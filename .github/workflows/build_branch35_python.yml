@@ -17,32 +17,29 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.9/Python 3.10/Python 3.11/Python 3.12)"
+name: "Build / Python-only (branch-3.5)"
 
 on:
   schedule:
-    - cron: '0 15 * * *'
+    - cron: '0 11 * * *'
 
 jobs:
   run-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        pyversion: ["pypy3", "python3.10", "python3.11", "python3.12"]
     permissions:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
-      branch: master
+      java: 8
+      branch: branch-3.5
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": "${{ matrix.pyversion }}"
+          "PYTHON_TO_TEST": ""
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }

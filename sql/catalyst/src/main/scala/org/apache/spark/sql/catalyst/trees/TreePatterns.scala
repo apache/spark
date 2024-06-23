@@ -133,6 +133,7 @@ object TreePattern extends Enumeration  {
   val UNION: Value = Value
   val UNRESOLVED_RELATION: Value = Value
   val UNRESOLVED_WITH: Value = Value
+  val UPDATE_EVENT_TIME_WATERMARK_COLUMN: Value = Value
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TYPED_FILTER: Value = Value
   val WINDOW: Value = Value

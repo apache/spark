@@ -44,6 +44,7 @@ from pyspark.sql.utils import dispatch_df_method
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark._typing import PrimitiveType
@@ -239,7 +240,6 @@ class DataFrame:
 
     if not is_remote_only():
 
-        @dispatch_df_method
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
@@ -976,14 +976,17 @@ class DataFrame:
         """
         ...
 
-    @dispatch_df_method
     def checkpoint(self, eager: bool = True) -> "DataFrame":
-        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-        iterative algorithms where the plan may grow exponentially. It will be saved to files
-        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially
+        useful in iterative algorithms where the plan may grow exponentially. It will be
+        saved to files inside the checkpoint directory set with
+        :meth:`SparkContext.setCheckpointDir`, or `spark.checkpoint.dir` configuration.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1001,24 +1004,24 @@ class DataFrame:
 
         Examples
         --------
-        >>> import tempfile
         >>> df = spark.createDataFrame([
         ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
-        ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
-        ...     df.checkpoint(False)
+        >>> df.checkpoint(False)  # doctest: +SKIP
         DataFrame[age: bigint, name: string]
         """
         ...
 
-    @dispatch_df_method
     def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
-        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
-        iterative algorithms where the plan may grow exponentially. Local checkpoints are
-        stored in the executors using the caching subsystem and therefore they are not reliable.
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
+        be used to truncate the logical plan of this :class:`DataFrame`, which is especially
+        useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
+        are stored in the executors using the caching subsystem and therefore they are not
+        reliable.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1197,6 +1200,7 @@ class DataFrame:
         DataFrame.take : Returns the first `n` rows.
         DataFrame.head : Returns the first `n` rows.
         DataFrame.toPandas : Returns the data as a pandas DataFrame.
+        DataFrame.toArrow : Returns the data as a PyArrow Table.
 
         Notes
         -----
@@ -2521,7 +2525,7 @@ class DataFrame:
 
         Outer join on multiple columns
 
-        >>> df.join(df3, ["name", "age"], "outer").show()
+        >>> df.join(df3, ["name", "age"], "outer").sort("name", "age").show()
         +-----+----+------+
         | name| age|height|
         +-----+----+------+
@@ -4564,7 +4568,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4580,6 +4584,9 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
         Parameters
         ----------
@@ -4612,7 +4619,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates(['name', 'height']).show()
+        >>> df.dropDuplicates('name', 'height').show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4622,7 +4629,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4638,6 +4645,9 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
+
+         .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
          Parameters
          ----------
@@ -4668,7 +4678,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
         """
         ...
 
@@ -5925,11 +5935,17 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
         """
         ...
 
@@ -6207,6 +6223,34 @@ class DataFrame:
         --------
         pyspark.sql.functions.pandas_udf
         pyspark.sql.DataFrame.mapInPandas
+        """
+        ...
+
+    @dispatch_df_method
+    def toArrow(self) -> "pa.Table":
+        """
+        Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
+
+        This is only available if PyArrow is installed and available.
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
+        expected to be small, as all the data is loaded into the driver's memory.
+
+        This API is a developer API.
+
+        Examples
+        --------
+        >>> df.toArrow()  # doctest: +SKIP
+        pyarrow.Table
+        age: int64
+        name: string
+        ----
+        age: [[2,5]]
+        name: [["Alice","Bob"]]
         """
         ...
 

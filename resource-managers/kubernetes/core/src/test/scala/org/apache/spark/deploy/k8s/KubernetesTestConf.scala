@@ -22,6 +22,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * Builder methods for KubernetesConf that allow easy control over what to return for a few
@@ -52,7 +53,8 @@ object KubernetesTestConf {
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
       volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
-      proxyUser: Option[String] = None): KubernetesDriverConf = {
+      proxyUser: Option[String] = None,
+      clock: Clock = new SystemClock()): KubernetesDriverConf = {
     val conf = sparkConf.clone()
 
     resourceNamePrefix.foreach { prefix =>
@@ -67,7 +69,7 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_DRIVER_VOLUMES_PREFIX, volumes)
 
-    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser)
+    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser, clock)
   }
   // scalastyle:on argcount
 

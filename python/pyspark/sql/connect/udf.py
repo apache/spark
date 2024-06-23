@@ -36,9 +36,11 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
 )
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.types import DataType, StringType
-from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
+from pyspark.sql.types import DataType, StringType, _parse_datatype_string
+from pyspark.sql.udf import (
+    UDFRegistration as PySparkUDFRegistration,
+    UserDefinedFunction as PySparkUserDefinedFunction,
+)
 from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -148,14 +150,27 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self.returnType: DataType = (
-            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
-        )
+        self._returnType = returnType
+        self._returnType_placeholder: Optional[DataType] = None
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
         self.evalType = evalType
         self.deterministic = deterministic
+
+    @property
+    def returnType(self) -> DataType:
+        # Make sure this is called after Connect Session is initialized.
+        # ``_parse_datatype_string`` accesses to Connect Server for parsing a DDL formatted string.
+        # TODO: PythonEvalType.SQL_BATCHED_UDF
+        if self._returnType_placeholder is None:
+            if isinstance(self._returnType, DataType):
+                self._returnType_placeholder = self._returnType
+            else:
+                self._returnType_placeholder = _parse_datatype_string(self._returnType)
+
+        PySparkUserDefinedFunction._check_return_type(self._returnType_placeholder, self.evalType)
+        return self._returnType_placeholder
 
     def _build_common_inline_user_defined_function(
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"

@@ -125,6 +125,30 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
     matchedMode
   }
 
+  /**
+   * maximum number of files to cache to be processed in subsequent batches
+   */
+  val maxCachedFiles: Int = parameters.get("maxCachedFiles").map { str =>
+    Try(str.toInt).filter(_ >= 0).getOrElse {
+      throw new IllegalArgumentException(
+        s"Invalid value '$str' for option 'maxCachedFiles', must be an integer greater than or " +
+          "equal to 0")
+    }
+  }.getOrElse(10000)
+
+  /**
+   * ratio of cached input to max files/bytes to allow for listing from input source when
+   * there are fewer cached files/bytes than could be available to be read
+   */
+  val discardCachedInputRatio: Float = parameters.get("discardCachedInputRatio").map { str =>
+    Try(str.toFloat).filter(x => 0 <= x && x <= 1).getOrElse {
+      throw new IllegalArgumentException(
+        s"Invalid value '$str' for option 'discardCachedInputRatio', must be a positive float " +
+          "between 0 and 1"
+      )
+    }
+  }.getOrElse(0.2f)
+
   private def withBooleanParameter(name: String, default: Boolean) = {
     parameters.get(name).map { str =>
       try {

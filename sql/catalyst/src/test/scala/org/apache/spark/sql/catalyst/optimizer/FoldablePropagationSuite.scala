@@ -214,4 +214,15 @@ class FoldablePropagationSuite extends PlanTest {
     val expected = testRelation.select(foldableAttr, $"a").rebalance(foldableAttr, $"a").analyze
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-48419: Foldable propagation replace foldable column should use origin column name") {
+    val query = testRelation
+      .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
+      .select($"x", $"y", $"z")
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
+      .select($"x", "str".as("y"), $"z").analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }

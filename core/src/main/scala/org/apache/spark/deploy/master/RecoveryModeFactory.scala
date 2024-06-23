@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.Deploy.{RECOVERY_COMPRESSION_CODEC, RECOVERY_DIRECTORY}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
@@ -57,7 +57,7 @@ private[master] class FileSystemRecoveryModeFactory(conf: SparkConf, serializer:
   val recoveryDir = conf.get(RECOVERY_DIRECTORY)
 
   def createPersistenceEngine(): PersistenceEngine = {
-    logInfo("Persisting recovery state to directory: " + recoveryDir)
+    logInfo(log"Persisting recovery state to directory: ${MDC(LogKeys.PATH, recoveryDir)}")
     val codec = conf.get(RECOVERY_COMPRESSION_CODEC).map(c => CompressionCodec.createCodec(conf, c))
     new FileSystemPersistenceEngine(recoveryDir, serializer, codec)
   }
@@ -76,7 +76,8 @@ private[master] class RocksDBRecoveryModeFactory(conf: SparkConf, serializer: Se
 
   def createPersistenceEngine(): PersistenceEngine = {
     val recoveryDir = conf.get(RECOVERY_DIRECTORY)
-    logInfo("Persisting recovery state to directory: " + recoveryDir)
+    logInfo(log"Persisting recovery state to directory: " +
+      log"${MDC(LogKeys.PATH, recoveryDir)}")
     new RocksDBPersistenceEngine(recoveryDir, serializer)
   }
 

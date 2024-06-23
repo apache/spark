@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -30,7 +33,7 @@ import org.apache.spark.sql.types.DataType
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
-    numBucketsOpt: Option[Int] = None) extends Expression with Unevaluable {
+    numBucketsOpt: Option[Int] = None) extends Expression {
 
   override def nullable: Boolean = true
 
@@ -113,4 +116,23 @@ case class TransformExpression(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
+
+  private lazy val resolvedFunction: Option[Expression] = this match {
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, Some(numBuckets)) =>
+      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc,
+        Seq(Literal(numBuckets)) ++ arguments))
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, None) =>
+      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments))
+    case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = {
+    resolvedFunction match {
+      case Some(fn) => fn.eval(input)
+      case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }

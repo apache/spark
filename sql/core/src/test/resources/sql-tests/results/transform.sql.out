@@ -837,3 +837,13 @@ struct<a:string,b:string>
 3	3
 3	3
 3	3
+
+
+-- !query
+SELECT TRANSFORM (a, b)
+  USING 'cat' AS (a CHAR(10), b VARCHAR(10))
+FROM VALUES('apache', 'spark') t(a, b)
+-- !query schema
+struct<a:string,b:string>
+-- !query output
+apache	spark

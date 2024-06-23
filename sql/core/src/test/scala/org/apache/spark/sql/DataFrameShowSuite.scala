@@ -190,7 +190,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                            ||[33 34]|[31 32 33 34 36]|
                            |+-------+----------------+
                            |""".stripMargin
-    assert(df.showString(10) === expectedAnswer)
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      assert(df.showString(10) === expectedAnswer)
+    }
   }
 
   test("showString: binary, vertical = true") {
@@ -204,7 +206,9 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
                          "-RECORD 1---------------\n" +
                          " _1  | [33 34]          \n" +
                          " _2  | [31 32 33 34 36] \n"
-    assert(df.showString(10, vertical = true) === expectedAnswer)
+    withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> "HEX_DISCRETE") {
+      assert(df.showString(10, vertical = true) === expectedAnswer)
+    }
   }
 
   test("showString: minimum column width") {

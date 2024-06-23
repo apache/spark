@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 1.0 as a, 0.0 as b
 -- !query analysis
-CreateViewCommand `t`, SELECT 1.0 as a, 0.0 as b, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 1.0 as a, 0.0 as b, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1.0 AS a#x, 0.0 AS b#x]
       +- OneRowRelation
 

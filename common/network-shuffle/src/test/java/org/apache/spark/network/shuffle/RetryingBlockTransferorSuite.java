@@ -288,7 +288,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == 0);
+    assertEquals(0, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -310,7 +310,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslTimeoutException);
     verify(listener, times(3)).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == MAX_RETRIES);
+    assertEquals(MAX_RETRIES, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -339,7 +339,7 @@ public class RetryingBlockTransferorSuite {
     // This should be equal to 1 because after the SASL exception is retried,
     // retryCount should be set back to 0. Then after that b1 encounters an
     // exception that is retried.
-    assert(_retryingBlockTransferor.getRetryCount() == 1);
+    assertEquals(1, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -368,7 +368,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslExceptionFinal);
     verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == MAX_RETRIES);
+    assertEquals(MAX_RETRIES, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test

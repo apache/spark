@@ -19,8 +19,9 @@ package org.apache.spark.scheduler
 
 import org.apache.hadoop.mapred.{FileOutputCommitter, TaskAttemptContext}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TaskContext}
 
 /**
  * Integration tests for the OutputCommitCoordinator.
@@ -44,15 +45,13 @@ class OutputCommitCoordinatorIntegrationSuite
     sc = new SparkContext("local[2, 4]", "test", conf)
   }
 
-  test("SPARK-39195: exception thrown in OutputCommitter.commitTask()") {
+  test("exception thrown in OutputCommitter.commitTask()") {
     // Regression test for SPARK-10381
-    val e = intercept[SparkException] {
+    failAfter(Span(60, Seconds)) {
       withTempDir { tempDir =>
         sc.parallelize(1 to 4, 2).map(_.toString).saveAsTextFile(tempDir.getAbsolutePath + "/out")
       }
-    }.getCause.getMessage
-    assert(e.contains("failed; but task commit success, data duplication may happen.") &&
-      e.contains("Intentional exception"))
+    }
   }
 }
 

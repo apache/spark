@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -203,8 +203,9 @@ object GradientDescent extends Logging {
     }
 
     if (numIterations * miniBatchFraction < 1.0) {
-      logWarning("Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
-        s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
+      logWarning(log"Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
+        log"numIterations=${MDC(LogKeys.NUM_ITERATIONS, numIterations)} and " +
+        log"miniBatchFraction=${MDC(LogKeys.MINI_BATCH_FRACTION, miniBatchFraction)}")
     }
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations + 1)
@@ -291,7 +292,9 @@ object GradientDescent extends Logging {
           }
         }
       } else {
-        logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
+        logWarning(log"Iteration " +
+          log"(${MDC(LogKeys.INDEX, i)}/${MDC(LogKeys.NUM_ITERATIONS, numIterations)}). " +
+          log"The size of sampled batch is zero")
       }
       i += 1
     }

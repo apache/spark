@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.annotation.nowarn
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -83,6 +85,26 @@ class LogicalPlanSuite extends SparkFunSuite {
   }
 
   test("transformExpressions works with a Stream") {
+    val id1 = NamedExpression.newExprId
+    val id2 = NamedExpression.newExprId
+    @nowarn("cat=deprecation")
+    val plan = Project(Stream(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(2), "b")(exprId = id2)),
+      OneRowRelation())
+    val result = plan.transformExpressions {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    @nowarn("cat=deprecation")
+    val expected = Project(Stream(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(3), "b")(exprId = id2)),
+      OneRowRelation())
+    assert(result.sameResult(expected))
+  }
+
+  test("SPARK-45685: transformExpressions works with a LazyList") {
     val id1 = NamedExpression.newExprId
     val id2 = NamedExpression.newExprId
     val plan = Project(LazyList(

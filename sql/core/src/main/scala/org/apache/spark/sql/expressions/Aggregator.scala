@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @tparam OUT The type of the final output result.
  * @since 1.6.0
  */
+@SerialVersionUID(2093413866369130093L)
 abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
@@ -89,8 +90,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
-   * operations.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset` operations.
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {

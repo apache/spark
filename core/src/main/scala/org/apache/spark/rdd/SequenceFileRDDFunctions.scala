@@ -23,7 +23,7 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
@@ -58,8 +58,9 @@ class SequenceFileRDDFunctions[K: IsWritable: ClassTag, V: IsWritable: ClassTag]
     val convertKey = self.keyClass != _keyWritableClass
     val convertValue = self.valueClass != _valueWritableClass
 
-    logInfo("Saving as sequence file of type " +
-      s"(${_keyWritableClass.getSimpleName},${_valueWritableClass.getSimpleName})" )
+    logInfo(log"Saving as sequence file of type " +
+      log"(${MDC(LogKeys.KEY, _keyWritableClass.getSimpleName)}," +
+      log"${MDC(LogKeys.VALUE, _valueWritableClass.getSimpleName)})")
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
     val jobConf = new JobConf(self.context.hadoopConfiguration)
     if (!convertKey && !convertValue) {

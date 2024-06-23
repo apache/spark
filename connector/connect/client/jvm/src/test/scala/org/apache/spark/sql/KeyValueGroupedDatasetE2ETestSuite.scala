@@ -22,7 +22,7 @@ import java.util.Arrays
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
-import org.apache.spark.sql.test.{QueryTest, SQLHelper}
+import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -33,7 +33,7 @@ case class ClickState(id: String, count: Int)
 /**
  * All tests in this class requires client UDF artifacts synced with the server.
  */
-class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
+class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSession {
 
   lazy val session: SparkSession = spark
   import session.implicits._

@@ -23,7 +23,8 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
@@ -140,7 +141,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     if (putNewProfile) {
       // force the computation of maxTasks and limitingResource now so we don't have cost later
       rp.limitingResource(sparkConf)
-      logInfo(s"Added ResourceProfile id: ${rp.id}")
+      logInfo(log"Added ResourceProfile id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rp.id)}")
       listenerBus.post(SparkListenerResourceProfileAdded(rp))
     }
   }

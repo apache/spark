@@ -18,7 +18,8 @@
 package org.apache.spark.memory
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.BlockId
 
@@ -166,8 +167,9 @@ private[spark] class UnifiedMemoryManager(
     }
     if (numBytes > maxMemory) {
       // Fail fast if the block simply won't fit
-      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
-        s"memory limit ($maxMemory bytes)")
+      logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
+        log" (${MDC(NUM_BYTES, numBytes)} bytes) exceeds our" +
+        log" memory limit (${MDC(NUM_BYTES_MAX, maxMemory)} bytes)")
       return false
     }
     if (numBytes > storagePool.memoryFree) {

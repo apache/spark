@@ -26,6 +26,7 @@ import ammonite.compiler.iface.CodeWrapper
 import ammonite.util.{Bind, Imports, Name, Util}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClientParser}
 
@@ -55,6 +56,10 @@ object ConnectRepl {
       inputStream: InputStream = System.in,
       outputStream: OutputStream = System.out,
       errorStream: OutputStream = System.err): Unit = {
+    // For interpreters, structured logging is disabled by default to avoid generating mixed
+    // plain text and structured logs on the same console.
+    Logging.disableStructuredLogging()
+
     // Build the client.
     val client =
       try {

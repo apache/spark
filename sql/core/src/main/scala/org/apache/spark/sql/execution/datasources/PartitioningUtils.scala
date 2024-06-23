@@ -106,9 +106,10 @@ object PartitioningUtils extends SQLConfHelper {
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
-      timeZoneId: String): PartitionSpec = {
+      timeZoneId: String,
+      ignoreInvalidPartitionPaths: Boolean): PartitionSpec = {
     parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema, caseSensitive,
-      validatePartitionColumns, DateTimeUtils.getZoneId(timeZoneId))
+      validatePartitionColumns, DateTimeUtils.getZoneId(timeZoneId), ignoreInvalidPartitionPaths)
   }
 
   private[datasources] def parsePartitions(
@@ -118,7 +119,8 @@ object PartitioningUtils extends SQLConfHelper {
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
-      zoneId: ZoneId): PartitionSpec = {
+      zoneId: ZoneId,
+      ignoreInvalidPartitionPaths: Boolean): PartitionSpec = {
     val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
       if (!caseSensitive) {
@@ -171,7 +173,7 @@ object PartitioningUtils extends SQLConfHelper {
       // TODO: Selective case sensitivity.
       val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase())
       assert(
-        discoveredBasePaths.distinct.size == 1,
+        ignoreInvalidPartitionPaths || discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
           discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
           "If provided paths are partition directories, please set " +

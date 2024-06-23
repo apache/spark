@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: Publish Snapshot
+name: Publish snapshot
 
 on:
   schedule:
-  - cron: '0 0,12 * * *'
+  - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       branch:

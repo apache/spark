@@ -6,7 +6,7 @@ as t1(int_col1)
 -- !query analysis
 CreateViewCommand `t1`, SELECT * FROM VALUES
 (1), (2), (3), (4)
-as t1(int_col1), false, true, LocalTempView, true
+as t1(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t1
          +- LocalRelation [int_col1#x]

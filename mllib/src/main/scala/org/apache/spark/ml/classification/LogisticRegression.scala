@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
@@ -503,8 +503,8 @@ class LogisticRegression @Since("1.2.0") (
       tol, fitIntercept, maxBlockSizeInMB)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val instances = dataset.select(
@@ -569,8 +569,8 @@ class LogisticRegression @Since("1.2.0") (
 
     val isConstantLabel = histogram.count(_ != 0.0) == 1
     if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-      instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
-        s"coefficients will be zeros. Training is not needed.")
+      instr.logWarning("All labels are the same value and fitIntercept=true, so the " +
+        "coefficients will be zeros. Training is not needed.")
       val constantLabelIndex = Vectors.dense(histogram).argmax
       val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
         new Array[Int](numCoefficientSets + 1), Array.emptyIntArray, Array.emptyDoubleArray,
@@ -584,8 +584,8 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     if (!$(fitIntercept) && isConstantLabel) {
-      instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
-        s"dangerous ground, so the algorithm may not converge.")
+      instr.logWarning("All labels belong to a single class and fitIntercept=false. It's a " +
+        "dangerous ground, so the algorithm may not converge.")
     }
 
     val featuresMean = summarizer.mean.toArray
@@ -847,9 +847,11 @@ class LogisticRegression @Since("1.2.0") (
           (_initialModel.interceptVector.size == numCoefficientSets) &&
           (_initialModel.getFitIntercept == $(fitIntercept))
         if (!modelIsValid) {
-          instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
-            s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
-            s"expected size ($numCoefficientSets, $numFeatures)")
+          instr.logWarning(log"Initial coefficients will be ignored! Its dimensions " +
+            log"(${MDC(LogKeys.NUM_ROWS, providedCoefs.numRows)}}, " +
+            log"${MDC(LogKeys.NUM_COLUMNS, providedCoefs.numCols)}) did not match the " +
+            log"expected size (${MDC(LogKeys.NUM_COEFFICIENTS, numCoefficientSets)}, " +
+            log"${MDC(LogKeys.NUM_FEATURES, numFeatures)})")
         }
         modelIsValid
       case None => false

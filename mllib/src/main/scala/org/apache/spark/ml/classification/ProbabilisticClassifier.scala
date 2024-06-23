@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -154,8 +155,8 @@ abstract class ProbabilisticClassificationModel[
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: ProbabilisticClassificationModel.transform()" +
+        log" does nothing because no output columns were set.")
     }
     outputData.toDF()
   }

@@ -21,11 +21,13 @@ import java.util.TimeZone
 
 import org.scalatest.Assertions
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.SparkStringUtils.sideBySide
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class QueryTest extends RemoteSparkSession {
+abstract class QueryTest extends ConnectFunSuite with SQLHelper {
+
+  def spark: SparkSession
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.

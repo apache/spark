@@ -6,7 +6,7 @@ AS testRegression(k, y, x)
 -- !query analysis
 CreateViewCommand `testRegression`, SELECT * FROM VALUES
 (1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
-AS testRegression(k, y, x), false, true, LocalTempView, true
+AS testRegression(k, y, x), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, y#x, x#x]
       +- SubqueryAlias testRegression
          +- LocalRelation [k#x, y#x, x#x]

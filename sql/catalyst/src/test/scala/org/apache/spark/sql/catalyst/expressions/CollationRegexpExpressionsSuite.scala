@@ -30,14 +30,14 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     val testCases = Seq(
       LikeTestCase("AbC", "%AbC%", ".b.", "UTF8_BINARY", true, true, true),
       LikeTestCase("AbC", "%ABC%", ".B.", "UTF8_BINARY", false, true, false),
-      LikeTestCase("AbC", "%abc%", ".b.", "UTF8_BINARY_LCASE", true, true, true),
-      LikeTestCase("", "", "", "UTF8_BINARY_LCASE", true, true, true),
-      LikeTestCase("Foo", "", "", "UTF8_BINARY_LCASE", false, false, true),
-      LikeTestCase("", "%foo%", ".o.", "UTF8_BINARY_LCASE", false, false, false),
-      LikeTestCase("AbC", "%ABC%", ".B.", "UNICODE", false, true, false),
-      LikeTestCase(null, "%foo%", ".o.", "UNICODE", null, null, null),
-      LikeTestCase("Foo", null, null, "UNICODE", null, null, null),
-      LikeTestCase(null, null, null, "UNICODE", null, null, null)
+      LikeTestCase("AbC", "%abc%", ".b.", "UTF8_LCASE", true, true, true),
+      LikeTestCase("", "", "", "UTF8_LCASE", true, true, true),
+      LikeTestCase("Foo", "", "", "UTF8_LCASE", false, false, true),
+      LikeTestCase("", "%foo%", ".o.", "UTF8_LCASE", false, false, false),
+      LikeTestCase("AbC", "%ABC%", ".B.", "UTF8_BINARY", false, true, false),
+      LikeTestCase(null, "%foo%", ".o.", "UTF8_BINARY", null, null, null),
+      LikeTestCase("Foo", null, null, "UTF8_BINARY", null, null, null),
+      LikeTestCase(null, null, null, "UTF8_BINARY", null, null, null)
     )
     testCases.foreach(t => {
       // Like
@@ -60,15 +60,15 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     val testCases = Seq(
       StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY", Seq("1", "2", "3", "")),
       StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY", Seq("1A2B3C")),
-      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY_LCASE", Seq("1", "2", "3", "")),
-      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY_LCASE", Seq("1", "2", "3", "")),
-      StringSplitTestCase("1A2B3C", "[1-9]+", "UNICODE", Seq("", "A", "B", "C")),
-      StringSplitTestCase("", "", "UNICODE", Seq("")),
-      StringSplitTestCase("1A2B3C", "", "UNICODE", Seq("1", "A", "2", "B", "3", "C")),
-      StringSplitTestCase("", "[1-9]+", "UNICODE", Seq("")),
-      StringSplitTestCase(null, "[1-9]+", "UNICODE", null),
-      StringSplitTestCase("1A2B3C", null, "UNICODE", null),
-      StringSplitTestCase(null, null, "UNICODE", null)
+      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_LCASE", Seq("1", "2", "3", "")),
+      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_LCASE", Seq("1", "2", "3", "")),
+      StringSplitTestCase("1A2B3C", "[1-9]+", "UTF8_BINARY", Seq("", "A", "B", "C")),
+      StringSplitTestCase("", "", "UTF8_BINARY", Seq("")),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C")),
+      StringSplitTestCase("", "[1-9]+", "UTF8_BINARY", Seq("")),
+      StringSplitTestCase(null, "[1-9]+", "UTF8_BINARY", null),
+      StringSplitTestCase("1A2B3C", null, "UTF8_BINARY", null),
+      StringSplitTestCase(null, null, "UTF8_BINARY", null)
     )
     testCases.foreach(t => {
       // StringSplit
@@ -84,15 +84,15 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     val testCases = Seq(
       RegexpTestCase("AbC-aBc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC"), 1),
       RegexpTestCase("AbC-abc", ".b.", "UTF8_BINARY", "AbC", Seq("AbC", "abc"), 2),
-      RegexpTestCase("AbC-aBc", ".b.", "UTF8_BINARY_LCASE", "AbC", Seq("AbC", "aBc"), 2),
-      RegexpTestCase("ABC-abc", ".b.", "UTF8_BINARY_LCASE", "ABC", Seq("ABC", "abc"), 2),
-      RegexpTestCase("", "", "UTF8_BINARY_LCASE", "", Seq(""), 1),
-      RegexpTestCase("Foo", "", "UTF8_BINARY_LCASE", "", Seq("", "", "", ""), 4),
-      RegexpTestCase("", ".o.", "UTF8_BINARY_LCASE", "", Seq(), 0),
-      RegexpTestCase("Foo", ".O.", "UNICODE", "", Seq(), 0),
-      RegexpTestCase(null, ".O.", "UNICODE", null, null, null),
-      RegexpTestCase("Foo", null, "UNICODE", null, null, null),
-      RegexpTestCase(null, null, "UNICODE", null, null, null)
+      RegexpTestCase("AbC-aBc", ".b.", "UTF8_LCASE", "AbC", Seq("AbC", "aBc"), 2),
+      RegexpTestCase("ABC-abc", ".b.", "UTF8_LCASE", "ABC", Seq("ABC", "abc"), 2),
+      RegexpTestCase("", "", "UTF8_LCASE", "", Seq(""), 1),
+      RegexpTestCase("Foo", "", "UTF8_LCASE", "", Seq("", "", "", ""), 4),
+      RegexpTestCase("", ".o.", "UTF8_LCASE", "", Seq(), 0),
+      RegexpTestCase("Foo", ".O.", "UTF8_BINARY", "", Seq(), 0),
+      RegexpTestCase(null, ".O.", "UTF8_BINARY", null, null, null),
+      RegexpTestCase("Foo", null, "UTF8_BINARY", null, null, null),
+      RegexpTestCase(null, null, "UTF8_BINARY", null, null, null)
     )
     testCases.foreach(t => {
       // RegExpExtract
@@ -123,48 +123,47 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     val nullStr = Literal.create(null, StringType)
     // Supported collations (StringTypeBinaryLcase)
     val binaryCollation = StringType(CollationFactory.collationNameToId("UTF8_BINARY"))
-    val lowercaseCollation = StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))
-    val unicodeCollation = StringType(CollationFactory.collationNameToId("UNICODE"))
+    val lowercaseCollation = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
     // LikeAll
     checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%oo"), true)
     checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%bar%"), false)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAll("%foo%", "%oo"), true)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAll("%foo%", "%bar%"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%foo%", "%oo"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%foo%", "%bar%"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%foo%", nullStr), null)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAll("%feo%", nullStr), false)
-    checkEvaluation(Literal.create(null, unicodeCollation).likeAll("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%foo%", nullStr), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAll("%feo%", nullStr), false)
+    checkEvaluation(Literal.create(null, binaryCollation).likeAll("%foo%", "%oo"), null)
     // NotLikeAll
     checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%foo%", "%oo"), false)
     checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%goo%", "%bar%"), true)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAll("%foo%", "%oo"), false)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAll("%goo%", "%bar%"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%foo%", "%oo"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%goo%", "%bar%"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%foo%", nullStr), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAll("%feo%", nullStr), null)
-    checkEvaluation(Literal.create(null, unicodeCollation).notLikeAll("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%goo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%foo%", nullStr), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAll("%feo%", nullStr), null)
+    checkEvaluation(Literal.create(null, binaryCollation).notLikeAll("%foo%", "%oo"), null)
     // LikeAny
     checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%goo%", "%hoo"), false)
     checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%foo%", "%bar%"), true)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAny("%goo%", "%hoo"), false)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).likeAny("%foo%", "%bar%"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%goo%", "%hoo"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%foo%", "%bar%"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%foo%", nullStr), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).likeAny("%feo%", nullStr), null)
-    checkEvaluation(Literal.create(null, unicodeCollation).likeAny("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%goo%", "%hoo"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%foo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%foo%", nullStr), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).likeAny("%feo%", nullStr), null)
+    checkEvaluation(Literal.create(null, binaryCollation).likeAny("%foo%", "%oo"), null)
     // NotLikeAny
     checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", "%hoo"), true)
     checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", "%oo%"), false)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAny("%Foo%", "%hoo"), true)
     checkEvaluation(Literal.create("Foo", lowercaseCollation).notLikeAny("%foo%", "%oo%"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%Foo%", "%hoo"), true)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%foo%", "%oo%"), false)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%foo%", nullStr), null)
-    checkEvaluation(Literal.create("foo", unicodeCollation).notLikeAny("%feo%", nullStr), true)
-    checkEvaluation(Literal.create(null, unicodeCollation).notLikeAny("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%Foo%", "%hoo"), true)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", "%oo%"), false)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%foo%", nullStr), null)
+    checkEvaluation(Literal.create("foo", binaryCollation).notLikeAny("%feo%", nullStr), true)
+    checkEvaluation(Literal.create(null, binaryCollation).notLikeAny("%foo%", "%oo"), null)
   }
 
 }

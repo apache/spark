@@ -19,15 +19,15 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.io.Closeable;
 import java.io.IOException;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 /**
  * RowBasedKeyValueBatch stores key value pairs in contiguous memory region.
@@ -48,7 +48,8 @@ import org.slf4j.LoggerFactory;
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
-  protected static final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+  protected static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
 
@@ -127,7 +128,8 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
     try {
       page = allocatePage(requiredSize);
     } catch (SparkOutOfMemoryError e) {
-      logger.warn("Failed to allocate page ({} bytes).", requiredSize);
+      logger.warn("Failed to allocate page ({} bytes).",
+        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, requiredSize));
       return false;
     }
     base = page.getBaseObject();

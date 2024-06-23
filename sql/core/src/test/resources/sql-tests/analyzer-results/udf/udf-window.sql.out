@@ -22,7 +22,7 @@ CreateViewCommand `testData`, SELECT * FROM VALUES
 (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
 (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
-AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, true
+AS testData(val, val_long, val_double, val_date, val_timestamp, cate), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
       +- SubqueryAlias testData
          +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]

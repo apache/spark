@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
@@ -149,8 +150,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     }
 
     if (numColsOutput == 0) {
-      logWarning(s"$uid: ClassificationModel.transform() does nothing" +
-        " because no output columns were set.")
+      logWarning(log"${MDC(LogKeys.UUID, uid)}: ClassificationModel.transform() does nothing " +
+        log"because no output columns were set.")
     }
     outputData.toDF()
   }

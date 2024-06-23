@@ -127,6 +127,13 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
   private def withParquetVersions(f: String => Unit): Unit = Seq("V1", "V2").foreach(f)
 
+  private def getExpr(dataType: DataType = IntegerType): String = dataType match {
+    case BooleanType => "CASE WHEN value % 2 = 0 THEN true ELSE false END"
+    case ByteType => "cast(value % 128 as byte)"
+    case ShortType => "cast(value % 32768 as short)"
+    case _ => s"cast(value % ${Int.MaxValue} as ${dataType.sql})"
+  }
+
   def numericScanBenchmark(values: Int, dataType: DataType): Unit = {
     // Benchmarks running through spark sql.
     val sqlBenchmark = new Benchmark(
@@ -143,12 +150,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong())
+          .selectExpr(getExpr(dataType) + " as id")
+          .createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
+        prepareTable(dir, spark.sql(s"SELECT id FROM t1"))
 
         val query = dataType match {
-          case BooleanType => "sum(cast(id as bigint))"
+          case BooleanType => "sum(if(cast(id as boolean), 1, 0))"
           case _ => "sum(id)"
         }
 
@@ -291,7 +300,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir,
-          spark.sql(s"SELECT named_struct('f', CAST(value as ${dataType.sql})) as col FROM t1"),
+          spark.sql(s"SELECT named_struct('f', ${getExpr(dataType)}) as col FROM t1"),
           onlyParquetOrc = true)
 
         sqlBenchmark.addCase(s"SQL ORC MR") { _ =>
@@ -416,7 +425,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
         prepareTable(
           dir,
-          spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
+          spark.sql(s"SELECT ${getExpr()} c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
           spark.sql("select sum(c1), sum(length(c2)) from csvTable").noop()
@@ -512,7 +521,8 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
+        prepareTable(dir,
+          spark.sql(s"SELECT value % 2 AS p, ${getExpr()} id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
           spark.sql("select sum(id) from csvTable").noop()
@@ -710,7 +720,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         val middle = width / 2
-        val selectExpr = (1 to width).map(i => s"value as c$i")
+        val selectExpr = (1 to width).map(i => s"${getExpr()} as c$i")
         spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 

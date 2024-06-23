@@ -826,7 +826,9 @@ class SparkConnectServiceSuite
             when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
             SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
               SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None),
-              restartedQuery)
+              restartedQuery,
+              Set.empty[String],
+              "")
             f(verifyEvents)
           }
         }

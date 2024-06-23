@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
+import org.apache.spark.sql.execution.streaming.state.StateStoreValueRowFormatValidationFailure
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -385,6 +386,44 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       put(store, "a", 0, 1)
       store.commit()
       assert(getSizeOfStateForCurrentVersion(store.metrics) > noDataMemoryUsed)
+    }
+  }
+
+  test("SPARK-48105: state store unload/close happens during the maintenance") {
+    tryWithProviderResource(
+      newStoreProvider(opId = Random.nextInt(), partition = 0, minDeltasForSnapshot = 1)) {
+      provider =>
+        val store = provider.getStore(0).asInstanceOf[provider.HDFSBackedStateStore]
+        val values = (1 to 20)
+        val keys = values.map(i => ("a" + i))
+        keys.zip(values).map{case (k, v) => put(store, k, 0, v)}
+        // commit state store with 20 keys.
+        store.commit()
+        // get the state store iterator: mimic the case which the iterator is hold in the
+        // maintenance thread.
+        val storeIterator = store.iterator()
+
+        // the store iterator should still be valid as the maintenance thread may have already
+        // hold it and is doing snapshotting even though the state store is unloaded.
+        val outputKeys = new mutable.ArrayBuffer[String]
+        val outputValues = new mutable.ArrayBuffer[Int]
+        var cnt = 0
+        while (storeIterator.hasNext) {
+          if (cnt == 10) {
+            // Mimic the case where the provider is loaded in another executor in the middle of
+            // iteration. When this happens, the provider will be unloaded and closed in
+            // current executor.
+            provider.close()
+          }
+          val unsafeRowPair = storeIterator.next()
+          val (key, _) = keyRowToData(unsafeRowPair.key)
+          outputKeys.append(key)
+          outputValues.append(valueRowToData(unsafeRowPair.value))
+
+          cnt = cnt + 1
+        }
+        assert(keys.sorted === outputKeys.sorted)
+        assert(values.sorted === outputValues.sorted)
     }
   }
 
@@ -1568,12 +1607,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
     val valueRow = dataToValueRow(2)
-    val e = intercept[InvalidUnsafeRowException] {
+    val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
         keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
     }
-    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+    assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
     // When sqlConf.stateStoreFormatValidationEnabled is set to false and
     // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,

@@ -1,2 +1,2 @@
-SubqueryAlias primary.tempdb.myStreamingTable
-+- StreamingRelationV2 primary.tempdb.myStreamingTable, org.apache.spark.sql.connector.catalog.InMemoryTable, [p1=v1, p2=v2], [id#0L], org.apache.spark.sql.connector.catalog.InMemoryCatalog, tempdb.myStreamingTable
+~SubqueryAlias primary.tempdb.myStreamingTable
++- ~StreamingRelationV2 primary.tempdb.myStreamingTable, org.apache.spark.sql.connector.catalog.InMemoryTable, [p1=v1, p2=v2], [id#0L], org.apache.spark.sql.connector.catalog.InMemoryCatalog, tempdb.myStreamingTable

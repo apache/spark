@@ -22,8 +22,6 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.{Properties, TimeZone}
 
-import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -56,19 +54,17 @@ import org.apache.spark.tags.DockerTest
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 23.2.0 -f
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
+ *  $ ./buildContainerImage.sh -v 23.4.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
- * This procedure has been validated with Oracle Database Free version 23.2.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * This procedure has been validated with Oracle Database Free version 23.4.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
-
-  override val connectionTimeout = timeout(7.minutes)
 
   private val rsOfTsWithTimezone = Seq(
     Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),

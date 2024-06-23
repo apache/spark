@@ -22,7 +22,8 @@ import java.nio.file.{FileAlreadyExistsException, Files, Paths}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,7 +57,7 @@ private[master] class FileSystemPersistenceEngine(
   override def unpersist(name: String): Unit = {
     val f = new File(dir + File.separator + name)
     if (!f.delete()) {
-      logWarning(s"Error deleting ${f.getPath()}")
+      logWarning(log"Error deleting ${MDC(PATH, f.getPath())}")
     }
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.LiteralValue
@@ -575,9 +575,12 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "s": { "n_i": 3, "n_l": 33 }, "dep": "hr" }
         |""".stripMargin)
 
-    val e = intercept[SparkException] {
-      sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
-    }
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
+      },
+      errorClass = "NOT_NULL_ASSERT_VIOLATION",
+      sqlState = "42000",
+      parameters = Map("walkedTypePath" -> "\ns\nn_i\n"))
   }
 }

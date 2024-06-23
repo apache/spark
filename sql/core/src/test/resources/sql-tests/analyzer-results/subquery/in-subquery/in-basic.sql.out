@@ -2,7 +2,7 @@
 -- !query
 create temporary view tab_a as select * from values (1, 1) as tab_a(a1, b1)
 -- !query analysis
-CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, false, LocalTempView, true
+CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a1#x, b1#x]
       +- SubqueryAlias tab_a
          +- LocalRelation [a1#x, b1#x]
@@ -11,7 +11,7 @@ CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, 
 -- !query
 create temporary view tab_b as select * from values (1, 1) as tab_b(a2, b2)
 -- !query analysis
-CreateViewCommand `tab_b`, select * from values (1, 1) as tab_b(a2, b2), false, false, LocalTempView, true
+CreateViewCommand `tab_b`, select * from values (1, 1) as tab_b(a2, b2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a2#x, b2#x]
       +- SubqueryAlias tab_b
          +- LocalRelation [a2#x, b2#x]
@@ -22,7 +22,7 @@ create temporary view struct_tab as select struct(col1 as a, col2 as b) as recor
  values (1, 1), (1, 2), (2, 1), (2, 2)
 -- !query analysis
 CreateViewCommand `struct_tab`, select struct(col1 as a, col2 as b) as record from
- values (1, 1), (1, 2), (2, 1), (2, 2), false, false, LocalTempView, true
+ values (1, 1), (1, 2), (2, 1), (2, 2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [struct(a, col1#x, b, col2#x) AS record#x]
       +- LocalRelation [col1#x, col2#x]
 

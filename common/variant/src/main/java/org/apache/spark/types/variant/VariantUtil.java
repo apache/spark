@@ -392,6 +392,13 @@ public class VariantUtil {
     return Double.longBitsToDouble(readLong(value, pos + 1, 8));
   }
 
+  // Check whether the precision and scale of the decimal are within the limit.
+  private static void checkDecimal(BigDecimal d, int maxPrecision) {
+    if (d.precision() > maxPrecision || d.scale() > maxPrecision) {
+      throw malformedVariant();
+    }
+  }
+
   // Get a decimal value from variant value `value[pos...]`.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static BigDecimal getDecimal(byte[] value, int pos) {
@@ -399,14 +406,18 @@ public class VariantUtil {
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
     if (basicType != PRIMITIVE) throw unexpectedType(Type.DECIMAL);
-    int scale = value[pos + 1];
+    // Interpret the scale byte as unsigned. If it is a negative byte, the unsigned value must be
+    // greater than `MAX_DECIMAL16_PRECISION` and will trigger an error in `checkDecimal`.
+    int scale = value[pos + 1] & 0xFF;
     BigDecimal result;
     switch (typeInfo) {
       case DECIMAL4:
         result = BigDecimal.valueOf(readLong(value, pos + 2, 4), scale);
+        checkDecimal(result, MAX_DECIMAL4_PRECISION);
         break;
       case DECIMAL8:
         result = BigDecimal.valueOf(readLong(value, pos + 2, 8), scale);
+        checkDecimal(result, MAX_DECIMAL8_PRECISION);
         break;
       case DECIMAL16:
         checkIndex(pos + 17, value.length);
@@ -417,6 +428,7 @@ public class VariantUtil {
           bytes[i] = value[pos + 17 - i];
         }
         result = new BigDecimal(new BigInteger(bytes), scale);
+        checkDecimal(result, MAX_DECIMAL16_PRECISION);
         break;
       default:
         throw unexpectedType(Type.DECIMAL);

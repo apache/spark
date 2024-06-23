@@ -575,8 +575,6 @@ case class Cast(
   // notation if an exponent is needed.
   override protected def useDecimalPlainString: Boolean = ansiEnabled
 
-  override protected def useHexFormatForBinary: Boolean = false
-
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
 

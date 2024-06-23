@@ -222,7 +222,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
         checkCachedRelation("v1", Seq(Row(0, 2), Row(1, 3)))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)

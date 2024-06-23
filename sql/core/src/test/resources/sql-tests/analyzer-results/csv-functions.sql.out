@@ -173,7 +173,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a')
 -- !query analysis
-CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, true
+CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 

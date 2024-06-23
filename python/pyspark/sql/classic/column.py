@@ -588,7 +588,7 @@ class Column(ParentColumn):
         return Column(jc)
 
     def over(self, window: "WindowSpec") -> ParentColumn:
-        from pyspark.sql.window import WindowSpec
+        from pyspark.sql.classic.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(

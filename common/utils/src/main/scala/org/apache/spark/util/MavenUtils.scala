@@ -462,14 +462,13 @@ private[spark] object MavenUtils extends Logging {
       val sysOut = System.out
       // Default configuration name for ivy
       val ivyConfName = "default"
-
-      // A Module descriptor must be specified. Entries are dummy strings
-      val md = getModuleDescriptor
-
-      md.setDefaultConf(ivyConfName)
+      var md: DefaultModuleDescriptor = null
       try {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
+        // A Module descriptor must be specified. Entries are dummy strings
+        md = getModuleDescriptor
+        md.setDefaultConf(ivyConfName)
         val artifacts = extractMavenCoordinates(coordinates)
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
@@ -548,7 +547,9 @@ private[spark] object MavenUtils extends Logging {
         }
       } finally {
         System.setOut(sysOut)
-        clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
+        if (md != null) {
+          clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings.getDefaultCache, ivyConfName)
+        }
       }
     }
   }

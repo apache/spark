@@ -23,10 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-
-case class StateSchemaNotCompatible(message: String) extends Exception(message)
 
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
@@ -51,30 +48,12 @@ class StateSchemaCompatibilityChecker(
       if (storedKeySchema.equals(keySchema) &&
         (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
         // schema is exactly same
-      } else if (!schemasCompatible(storedKeySchema, keySchema) ||
-        (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema))) {
-        val errorMsgForKeySchema = s"- Provided key schema: $keySchema\n" +
-          s"- Existing key schema: $storedKeySchema\n"
-
-        // If it is requested to skip checking the value schema, we also don't expose the value
-        // schema information to the error message.
-        val errorMsgForValueSchema = if (!ignoreValueSchema) {
-          s"- Provided value schema: $valueSchema\n" +
-            s"- Existing value schema: $storedValueSchema\n"
-        } else {
-          ""
-        }
-        val errorMsg = "Provided schema doesn't match to the schema for existing state! " +
-          "Please note that Spark allow difference of field name: check count of fields " +
-          "and data type of each field.\n" +
-          errorMsgForKeySchema +
-          errorMsgForValueSchema +
-          s"If you want to force running query without schema validation, please set " +
-          s"${SQLConf.STATE_SCHEMA_CHECK_ENABLED.key} to false.\n" +
-          "Please note running query with incompatible schema could cause indeterministic" +
-          " behavior."
-        logError(errorMsg)
-        throw StateSchemaNotCompatible(errorMsg)
+      } else if (!schemasCompatible(storedKeySchema, keySchema)) {
+        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+          keySchema.toString)
+      } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+        throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+          valueSchema.toString)
       } else {
         logInfo("Detected schema change which is compatible. Allowing to put rows.")
       }

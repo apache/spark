@@ -42,6 +42,28 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean double_quoted_identifiers = false;
 }
 
+compoundOrSingleStatement
+    : singleStatement
+    | singleCompoundStatement
+    ;
+
+singleCompoundStatement
+    : beginEndCompoundBlock SEMICOLON? EOF
+    ;
+
+beginEndCompoundBlock
+    : BEGIN compoundBody END
+    ;
+
+compoundBody
+    : (compoundStatements+=compoundStatement SEMICOLON)*
+    ;
+
+compoundStatement
+    : statement
+    | beginEndCompoundBlock
+    ;
+
 singleStatement
     : statement SEMICOLON* EOF
     ;
@@ -89,7 +111,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=stringLit)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF errorCapturingNot EXISTS)? target=tableIdentifier
@@ -99,7 +121,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN colDefinitionList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
@@ -156,6 +178,7 @@ statement
         VIEW (IF errorCapturingNot EXISTS)? identifierReference
         identifierCommentList?
         (commentSpec |
+         schemaBinding |
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
@@ -163,9 +186,15 @@ statement
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW identifierReference AS? query                         #alterViewQuery
+    | ALTER VIEW identifierReference schemaBinding                     #alterViewSchemaBinding
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF errorCapturingNot EXISTS)?
         identifierReference AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
+    | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF errorCapturingNot EXISTS)?
+        identifierReference LEFT_PAREN parameters=colDefinitionList? RIGHT_PAREN
+        (RETURNS (dataType | TABLE LEFT_PAREN returnParams=colTypeList RIGHT_PAREN))?
+        routineCharacteristics
+        RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
     | DECLARE (OR REPLACE)? VARIABLE?
         identifierReference dataType? variableDefaultExpression?       #createVariable
@@ -342,6 +371,10 @@ locationSpec
     : LOCATION stringLit
     ;
 
+schemaBinding
+    : WITH SCHEMA (BINDING | COMPENSATION | EVOLUTION | TYPE EVOLUTION)
+    ;
+
 commentSpec
     : COMMENT stringLit
     ;
@@ -389,6 +422,7 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | shiftOperator
     | BANG
     ;
 
@@ -838,9 +872,11 @@ tableArgumentPartitioning
     : ((WITH SINGLE PARTITION)
         | ((PARTITION | DISTRIBUTE) BY
             (((LEFT_PAREN partition+=expression (COMMA partition+=expression)* RIGHT_PAREN))
+            | (expression (COMMA invalidMultiPartitionExpression=expression)+)
             | partition+=expression)))
       ((ORDER | SORT) BY
         (((LEFT_PAREN sortItem (COMMA sortItem)* RIGHT_PAREN)
+        | (sortItem (COMMA invalidMultiSortItem=sortItem)+)
         | sortItem)))?
     ;
 
@@ -977,10 +1013,17 @@ valueExpression
     | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
     | left=valueExpression operator=(PLUS | MINUS | CONCAT_PIPE) right=valueExpression       #arithmeticBinary
+    | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
     | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
+    ;
+
+shiftOperator
+    : SHIFT_LEFT
+    | SHIFT_RIGHT
+    | SHIFT_RIGHT_UNSIGNED
     ;
 
 datetimeUnit
@@ -1170,11 +1213,11 @@ colType
     : colName=errorCapturingIdentifier dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
-createOrReplaceTableColTypeList
-    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
+colDefinitionList
+    : colDefinition (COMMA colDefinition)*
     ;
 
-createOrReplaceTableColType
+colDefinition
     : colName=errorCapturingIdentifier dataType colDefinitionOption*
     ;
 
@@ -1196,6 +1239,46 @@ complexColTypeList
 complexColType
     : errorCapturingIdentifier COLON? dataType (errorCapturingNot NULL)? commentSpec?
     ;
+
+routineCharacteristics
+    : (routineLanguage
+    | specificName
+    | deterministic
+    | sqlDataAccess
+    | nullCall
+    | commentSpec
+    | rightsClause)*
+    ;
+
+routineLanguage
+    : LANGUAGE (SQL | IDENTIFIER)
+    ;
+
+specificName
+    : SPECIFIC specific=errorCapturingIdentifier
+    ;
+
+deterministic
+    : DETERMINISTIC
+    | errorCapturingNot DETERMINISTIC
+    ;
+
+sqlDataAccess
+    : access=NO SQL
+    | access=CONTAINS SQL
+    | access=READS SQL DATA
+    | access=MODIFIES SQL DATA
+    ;
+
+nullCall
+    : RETURNS NULL ON NULL INPUT
+    | CALLED ON NULL INPUT
+    ;
+
+rightsClause
+    : SQL SECURITY INVOKER
+    | SQL SECURITY DEFINER
+   ;
 
 whenClause
     : WHEN condition=expression THEN result=expression
@@ -1344,16 +1427,19 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY
     | BINARY_HEX
+    | BINDING
     | BOOLEAN
     | BUCKET
     | BUCKETS
     | BY
     | BYTE
     | CACHE
+    | CALLED
     | CASCADE
     | CATALOG
     | CATALOGS
@@ -1370,8 +1456,10 @@ ansiNonReserved
     | COMMIT
     | COMPACT
     | COMPACTIONS
+    | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONTAINS
     | COST
     | CUBE
     | CURRENT
@@ -1392,10 +1480,12 @@ ansiNonReserved
     | DECLARE
     | DEFAULT
     | DEFINED
+    | DEFINER
     | DELETE
     | DELIMITED
     | DESC
     | DESCRIBE
+    | DETERMINISTIC
     | DFS
     | DIRECTORIES
     | DIRECTORY
@@ -1436,13 +1526,16 @@ ansiNonReserved
     | INDEX
     | INDEXES
     | INPATH
+    | INPUT
     | INPUTFORMAT
     | INSERT
     | INT
     | INTEGER
     | INTERVAL
+    | INVOKER
     | ITEMS
     | KEYS
+    | LANGUAGE
     | LAST
     | LAZY
     | LIKE
@@ -1467,6 +1560,7 @@ ansiNonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODIFIES
     | MONTH
     | MONTHS
     | MSCK
@@ -1500,6 +1594,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READS
     | REAL
     | RECORDREADER
     | RECORDWRITER
@@ -1513,6 +1608,8 @@ ansiNonReserved
     | RESET
     | RESPECT
     | RESTRICT
+    | RETURN
+    | RETURNS
     | REVOKE
     | RLIKE
     | ROLE
@@ -1525,6 +1622,7 @@ ansiNonReserved
     | SCHEMAS
     | SECOND
     | SECONDS
+    | SECURITY
     | SEMI
     | SEPARATED
     | SERDE
@@ -1540,6 +1638,7 @@ ansiNonReserved
     | SORT
     | SORTED
     | SOURCE
+    | SPECIFIC
     | START
     | STATISTICS
     | STORED
@@ -1644,10 +1743,12 @@ nonReserved
     | ASC
     | AT
     | AUTHORIZATION
+    | BEGIN
     | BETWEEN
     | BIGINT
     | BINARY
     | BINARY_HEX
+    | BINDING
     | BOOLEAN
     | BOTH
     | BUCKET
@@ -1655,6 +1756,7 @@ nonReserved
     | BY
     | BYTE
     | CACHE
+    | CALLED
     | CASCADE
     | CASE
     | CAST
@@ -1677,9 +1779,11 @@ nonReserved
     | COMMIT
     | COMPACT
     | COMPACTIONS
+    | COMPENSATION
     | COMPUTE
     | CONCATENATE
     | CONSTRAINT
+    | CONTAINS
     | COST
     | CREATE
     | CUBE
@@ -1705,10 +1809,12 @@ nonReserved
     | DECLARE
     | DEFAULT
     | DEFINED
+    | DEFINER
     | DELETE
     | DELIMITED
     | DESC
     | DESCRIBE
+    | DETERMINISTIC
     | DFS
     | DIRECTORIES
     | DIRECTORY
@@ -1764,15 +1870,18 @@ nonReserved
     | INDEX
     | INDEXES
     | INPATH
+    | INPUT
     | INPUTFORMAT
     | INSERT
     | INT
     | INTEGER
     | INTERVAL
     | INTO
+    | INVOKER
     | IS
     | ITEMS
     | KEYS
+    | LANGUAGE
     | LAST
     | LAZY
     | LEADING
@@ -1799,6 +1908,7 @@ nonReserved
     | MILLISECONDS
     | MINUTE
     | MINUTES
+    | MODIFIES
     | MONTH
     | MONTHS
     | MSCK
@@ -1829,8 +1939,6 @@ nonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
-    | PERCENTILE_CONT
-    | PERCENTILE_DISC
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -1843,6 +1951,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READS
     | REAL
     | RECORDREADER
     | RECORDWRITER
@@ -1857,6 +1966,8 @@ nonReserved
     | RESET
     | RESPECT
     | RESTRICT
+    | RETURN
+    | RETURNS
     | REVOKE
     | RLIKE
     | ROLE
@@ -1869,6 +1980,7 @@ nonReserved
     | SCHEMAS
     | SECOND
     | SECONDS
+    | SECURITY
     | SELECT
     | SEPARATED
     | SERDE
@@ -1885,6 +1997,8 @@ nonReserved
     | SORT
     | SORTED
     | SOURCE
+    | SPECIFIC
+    | SQL
     | START
     | STATISTICS
     | STORED

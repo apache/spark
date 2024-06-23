@@ -217,7 +217,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tbl`, false
 CREATE VIEW view_SPARK_30302 (aaa, bbb)
 AS SELECT a, b FROM tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,None), (bbb,None)], SELECT a, b FROM tbl, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,None), (bbb,None)], SELECT a, b FROM tbl, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- SubqueryAlias spark_catalog.default.tbl
          +- Relation spark_catalog.default.tbl[a#x,b#x,c#x] parquet
@@ -246,7 +246,7 @@ CREATE VIEW view_SPARK_30302 (aaa COMMENT 'comment with \'quoted text\' for aaa'
 COMMENT 'This is a comment with \'quoted text\' for view'
 AS SELECT a, b FROM tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,Some(comment with 'quoted text' for aaa)), (bbb,None)], This is a comment with 'quoted text' for view, SELECT a, b FROM tbl, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,Some(comment with 'quoted text' for aaa)), (bbb,None)], This is a comment with 'quoted text' for view, SELECT a, b FROM tbl, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- SubqueryAlias spark_catalog.default.tbl
          +- Relation spark_catalog.default.tbl[a#x,b#x,c#x] parquet
@@ -275,7 +275,7 @@ CREATE VIEW view_SPARK_30302 (aaa, bbb)
 TBLPROPERTIES ('a' = '1', 'b' = '2')
 AS SELECT a, b FROM tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,None), (bbb,None)], [a=1, b=2], SELECT a, b FROM tbl, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,None), (bbb,None)], [a=1, b=2], SELECT a, b FROM tbl, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- SubqueryAlias spark_catalog.default.tbl
          +- Relation spark_catalog.default.tbl[a#x,b#x,c#x] parquet

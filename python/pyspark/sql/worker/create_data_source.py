@@ -75,7 +75,7 @@ def main(infile: IO, outfile: IO) -> None:
         data_source_cls = read_command(pickleSer, infile)
         if not (isinstance(data_source_cls, type) and issubclass(data_source_cls, DataSource)):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "a subclass of DataSource",
                     "actual": f"'{type(data_source_cls).__name__}'",
@@ -85,7 +85,7 @@ def main(infile: IO, outfile: IO) -> None:
         # Check the name method is a class method.
         if not inspect.ismethod(data_source_cls.name):
             raise PySparkTypeError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "'name()' method to be a classmethod",
                     "actual": f"'{type(data_source_cls.name).__name__}'",
@@ -98,7 +98,7 @@ def main(infile: IO, outfile: IO) -> None:
         # Check if the provider name matches the data source's name.
         if provider.lower() != data_source_cls.name().lower():
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": f"provider with name {data_source_cls.name()}",
                     "actual": f"'{provider}'",
@@ -111,7 +111,7 @@ def main(infile: IO, outfile: IO) -> None:
             user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
             if not isinstance(user_specified_schema, StructType):
                 raise PySparkAssertionError(
-                    error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                    error_class="DATA_SOURCE_TYPE_MISMATCH",
                     message_parameters={
                         "expected": "the user-defined schema to be a 'StructType'",
                         "actual": f"'{type(data_source_cls).__name__}'",

@@ -27,8 +27,8 @@ private object KafkaExceptionsHelper {
   val errorClassesJsonReader: ErrorClassesJsonReader =
     new ErrorClassesJsonReader(
       // Note that though we call them "error classes" here, the proper name is "error conditions",
-      // hence why the name of the JSON file different. We will address this inconsistency as part
-      // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
+      // hence why the name of the JSON file is different. We will address this inconsistency as
+      // part of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
       Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
 }
 
@@ -154,6 +154,16 @@ object KafkaExceptions {
         "topicPartition" -> topicPartition.toString,
         "prevOffset" -> prevOffset.toString,
         "newOffset" -> newOffset.toString))
+  }
+
+  def startOffsetDoesNotMatchAssigned(
+      specifiedPartitions: Set[TopicPartition],
+      assignedPartitions: Set[TopicPartition]): KafkaIllegalStateException = {
+    new KafkaIllegalStateException(
+      errorClass = "KAFKA_START_OFFSET_DOES_NOT_MATCH_ASSIGNED",
+      messageParameters = Map(
+        "specifiedPartitions" -> specifiedPartitions.toString,
+        "assignedPartitions" -> assignedPartitions.toString))
   }
 }
 

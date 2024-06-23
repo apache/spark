@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ForeachBatchUserFuncException, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -1185,6 +1185,17 @@ class StreamSuite extends StreamTest {
     checkAnswer(spark.sql("select * from output"), Row("true"))
   }
 
+  private val py4JInterruptedExceptions = Seq(
+    classOf[InterruptedException].getName,
+    classOf[InterruptedIOException].getName,
+    classOf[ClosedByInterruptException].getName).map { s =>
+    new py4j.Py4JException(
+      s"""
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
+        |: $s
+        |""".stripMargin)
+  }
+
   for (e <- Seq(
     new InterruptedException,
     new InterruptedIOException,
@@ -1192,16 +1203,8 @@ class StreamSuite extends StreamTest {
     new UncheckedIOException("test", new ClosedByInterruptException),
     new ExecutionException("test", new InterruptedException),
     new UncheckedExecutionException("test", new InterruptedException)) ++
-    Seq(
-      classOf[InterruptedException].getName,
-      classOf[InterruptedIOException].getName,
-      classOf[ClosedByInterruptException].getName).map { s =>
-    new py4j.Py4JException(
-      s"""
-        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
-        |: $s
-        |""".stripMargin)
-    }) {
+    py4JInterruptedExceptions ++
+    py4JInterruptedExceptions.map { e => ForeachBatchUserFuncException(e) }) {
     test(s"view ${e.getClass.getSimpleName} [${e.getMessage}] as a normal query stop") {
       ThrowingExceptionInCreateSource.createSourceLatch = new CountDownLatch(1)
       ThrowingExceptionInCreateSource.exception = e

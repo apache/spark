@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
@@ -28,7 +29,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
@@ -36,12 +37,11 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionCleaner, SqlApiConf}
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
@@ -73,6 +73,7 @@ class SparkSession private[sql] (
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+  private[sql] lazy val cleaner = new SessionCleaner(this)
 
   // a unique session ID for this session from client.
   private[sql] def sessionId: String = client.sessionId
@@ -80,6 +81,8 @@ class SparkSession private[sql] (
   lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
+
+  private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
   /**
    * Runtime configuration interface for Spark.
@@ -483,41 +486,21 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
-  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
+  @Since("4.0.0")
+  @DeveloperApi
+  def newDataset[T](encoder: AgnosticEncoder[T])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     new Dataset[T](this, plan, encoder)
-  }
-
-  @DeveloperApi
-  @deprecated("Use newDataFrame(Array[Byte]) instead", "4.0.0")
-  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
-    newDataFrame(_.setExtension(extension))
-  }
-
-  @DeveloperApi
-  @deprecated("Use newDataFrame(Array[Byte], AgnosticEncoder[T]) instead", "4.0.0")
-  def newDataset[T](
-      extension: com.google.protobuf.Any,
-      encoder: AgnosticEncoder[T]): Dataset[T] = {
-    newDataset(encoder)(_.setExtension(extension))
-  }
-
-  @DeveloperApi
-  def newDataFrame(extension: Array[Byte]): DataFrame = {
-    newDataFrame(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
-  }
-
-  @DeveloperApi
-  def newDataset[T](extension: Array[Byte], encoder: AgnosticEncoder[T]): Dataset[T] = {
-    newDataset(encoder)(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
@@ -553,8 +536,12 @@ class SparkSession private[sql] (
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder, timeZoneId)
-    result
+    new SparkResult(
+      value,
+      allocator,
+      encoder,
+      timeZoneId,
+      Some(setMetricsAndUnregisterObservation))
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
@@ -566,35 +553,20 @@ class SparkSession private[sql] (
     client.execute(plan).foreach(_ => ())
   }
 
-  private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
+  @Since("4.0.0")
+  @DeveloperApi
+  def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
     client.execute(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
+  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
+    client.execute(plan)
+
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  @deprecated("Use execute(Array[Byte]) instead", "4.0.0")
-  def execute(extension: com.google.protobuf.Any): Unit = {
-    val command = proto.Command.newBuilder().setExtension(extension).build()
-    execute(command)
-  }
-
-  @DeveloperApi
-  def execute(extension: Array[Byte]): Unit = {
-    val any = ProtoUtils.parseWithRecursionLimit(
-      extension,
-      com.google.protobuf.Any.parser(),
-      recursionLimit = client.configuration.grpcMaxRecursionLimit)
-    val command = proto.Command
-      .newBuilder()
-      .setExtension(any)
-      .build()
     execute(command)
   }
 
@@ -818,6 +790,21 @@ class SparkSession private[sql] (
    * Set to false to prevent client.releaseSession on close() (testing only)
    */
   private[sql] var releaseSessionOnClose = true
+
+  private[sql] def registerObservation(planId: Long, observation: Observation): Unit = {
+    if (observationRegistry.putIfAbsent(planId, observation) != null) {
+      throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
+    }
+  }
+
+  private[sql] def setMetricsAndUnregisterObservation(
+      planId: Long,
+      metrics: Map[String, Any]): Unit = {
+    val observationOrNull = observationRegistry.remove(planId)
+    if (observationOrNull != null) {
+      observationOrNull.setMetricsAndNotify(Some(metrics))
+    }
+  }
 }
 
 // The minimal builder needed to create a spark session.
@@ -842,10 +829,16 @@ object SparkSession extends Logging {
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet.
+   * they are not set yet or the associated [[SparkConnectClient]] is unusable.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    defaultSession.compareAndSet(null, session)
+    val currentDefault = defaultSession.getAcquire
+    if (currentDefault == null || !currentDefault.client.isSessionValid) {
+      // Update `defaultSession` if it is null or the contained session is not valid. There is a
+      // chance that the following `compareAndSet` fails if a new default session has just been set,
+      // but that does not matter since that event has happened after this method was invoked.
+      defaultSession.compareAndSet(currentDefault, session)
+    }
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
     }
@@ -985,7 +978,7 @@ object SparkSession extends Logging {
     def appName(name: String): Builder = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
-      if (client != null) {
+      if (client != null && client.isSessionValid) {
         Option(new SparkSession(client, planIdGenerator))
       } else {
         None
@@ -1037,7 +1030,16 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(sessions.get(builder.configuration))
+        .getOrElse({
+          var existingSession = sessions.get(builder.configuration)
+          if (!existingSession.client.isSessionValid) {
+            // If the cached session has become invalid, e.g., due to a server restart, the cache
+            // entry is invalidated.
+            sessions.invalidate(builder.configuration)
+            existingSession = sessions.get(builder.configuration)
+          }
+          existingSession
+        })
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
@@ -1045,11 +1047,13 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the default SparkSession.
+   * Returns the default SparkSession. If the previously set default SparkSession becomes
+   * unusable, returns None.
    *
    * @since 3.5.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get())
+  def getDefaultSession: Option[SparkSession] =
+    Option(defaultSession.get()).filter(_.client.isSessionValid)
 
   /**
    * Sets the default SparkSession.
@@ -1070,11 +1074,13 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the active SparkSession for the current thread.
+   * Returns the active SparkSession for the current thread. If the previously set active
+   * SparkSession becomes unusable, returns None.
    *
    * @since 3.5.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get())
+  def getActiveSession: Option[SparkSession] =
+    Option(activeThreadSession.get()).filter(_.client.isSessionValid)
 
   /**
    * Changes the SparkSession that will be returned in this thread and its children when

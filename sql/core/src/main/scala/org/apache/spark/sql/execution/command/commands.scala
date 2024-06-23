@@ -25,7 +25,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
@@ -157,7 +157,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     mode: ExplainMode)
-  extends LeafRunnableCommand {
+  extends RunnableCommand with SupervisingCommand {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
@@ -171,6 +171,9 @@ case class ExplainCommand(
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n")
       .map(Row(_)).toImmutableArraySeq
   }
+
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan =
+    copy(logicalPlan = transformer(logicalPlan))
 }
 
 /** An explain command for users to see how a streaming batch is executed. */

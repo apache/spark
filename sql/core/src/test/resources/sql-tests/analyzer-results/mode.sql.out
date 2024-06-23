@@ -38,7 +38,7 @@ CreateViewCommand `basic_pays`, SELECT * FROM VALUES
 ('Pamela Castillo','SCM',11303),
 ('Larry Bott','SCM',11798),
 ('Barry Jones','SCM',10586)
-AS basic_pays(employee_name, department, salary), false, true, LocalTempView, true
+AS basic_pays(employee_name, department, salary), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [employee_name#x, department#x, salary#x]
       +- SubqueryAlias basic_pays
          +- LocalRelation [employee_name#x, department#x, salary#x]
@@ -471,7 +471,7 @@ CreateViewCommand `intervals`, SELECT * FROM VALUES
 (2, INTERVAL '30' MONTH, INTERVAL '30' SECOND, INTERVAL '30' MINUTE),
 (3, INTERVAL '60' MONTH, INTERVAL '60' SECOND, INTERVAL '60' MINUTE),
 (4, null, null, null)
-AS intervals(k, dt, ym, dt2), false, true, LocalTempView, true
+AS intervals(k, dt, ym, dt2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, dt#x, ym#x, dt2#x]
       +- SubqueryAlias intervals
          +- LocalRelation [k#x, dt#x, ym#x, dt2#x]

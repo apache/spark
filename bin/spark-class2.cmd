@@ -61,14 +61,24 @@ if not "x%JAVA_HOME%"=="x" (
   )
 )
 
+rem SPARK-23015: We create a temporary text file when launching Spark. 
+rem This file must be given a unique name or else we risk a race condition when launching multiple instances close together.
+rem The best way to create a unique file name is to add a GUID to the file name. Use Powershell to generate the GUID.
+where powershell.exe >nul 2>&1
+if %errorlevel%==0 (
+  FOR /F %%a IN ('POWERSHELL -COMMAND "$([guid]::NewGuid().ToString())"') DO (set RANDOM_SUFFIX=%%a)
+) else (
+  rem If Powershell is not installed, try to create a random file name suffix using the Windows %RANDOM%.
+  rem %RANDOM% is seeded with 1-second granularity so it is highly likely that two Spark instances
+  rem launched within the same second will fail to start.
+  rem Note that Powershell is automatically installed on all Windows OS from Windows 7/Windows Server 2008 R2 and onward.
+  set RANDOM_SUFFIX=%RANDOM%
+)
+
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
-:gen
-set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
-rem SPARK-28302: %RANDOM% would return the same number if we call it instantly after last call,
-rem so we should make it sure to generate unique file to avoid process collision of writing into
-rem the same file concurrently.
-if exist %LAUNCHER_OUTPUT% goto :gen
+set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM_SUFFIX%.txt
+
 rem unset SHELL to indicate non-bash environment to launcher/Main
 set SHELL=
 "%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%

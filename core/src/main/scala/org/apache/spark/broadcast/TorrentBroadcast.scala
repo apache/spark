@@ -28,7 +28,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKeys.BROADCAST_ID
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -278,11 +278,12 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
             }
           case None =>
             val estimatedTotalSize = Utils.bytesToString(numBlocks.toLong * blockSize)
-            logInfo(s"Started reading broadcast variable $id with $numBlocks pieces " +
-              s"(estimated total size $estimatedTotalSize)")
+            logInfo(log"Started reading broadcast variable ${MDC(BROADCAST_ID, id)} with ${MDC(NUM_BROADCAST_BLOCK, numBlocks)} pieces " +
+              log"(estimated total size ${MDC(NUM_BYTES, estimatedTotalSize)})")
             val startTimeNs = System.nanoTime()
             val blocks = readBlocks()
-            logInfo(s"Reading broadcast variable $id took ${Utils.getUsedTimeNs(startTimeNs)}")
+            logInfo(log"Reading broadcast variable ${MDC(BROADCAST_ID, id)}" +
+              log" took ${MDC(TOTAL_TIME, Utils.getUsedTimeNs(startTimeNs))}")
 
             try {
               val obj = TorrentBroadcast.unBlockifyObject[T](

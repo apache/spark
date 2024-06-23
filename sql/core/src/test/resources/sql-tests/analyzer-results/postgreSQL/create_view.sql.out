@@ -16,7 +16,7 @@ CREATE VIEW toyemp AS
    FROM emp
 -- !query analysis
 CreateViewCommand `spark_catalog`.`default`.`toyemp`, SELECT name, age, /* location ,*/ 12*salary AS annualsal
-   FROM emp, false, false, PersistedView, true
+   FROM emp, false, false, PersistedView, COMPENSATION, true
    +- Project [name#x, age#x, (12 * salary#x) AS annualsal#x]
       +- SubqueryAlias spark_catalog.default.emp
          +- Relation spark_catalog.default.emp[name#x,age#x,salary#x,manager#x] parquet
@@ -102,7 +102,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT * FROM viewtest_tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT * FROM viewtest_tbl, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT * FROM viewtest_tbl, false, true, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- SubqueryAlias spark_catalog.default.viewtest_tbl
          +- Relation spark_catalog.default.viewtest_tbl[a#x,b#x] parquet
@@ -112,7 +112,7 @@ CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT * FROM viewtest_t
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT * FROM viewtest_tbl WHERE a > 10
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT * FROM viewtest_tbl WHERE a > 10, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT * FROM viewtest_tbl WHERE a > 10, false, true, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- Filter (a#x > 10)
          +- SubqueryAlias spark_catalog.default.viewtest_tbl
@@ -136,7 +136,7 @@ Project [a#x, b#x]
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, b FROM viewtest_tbl WHERE a > 5 ORDER BY b DESC
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, b FROM viewtest_tbl WHERE a > 5 ORDER BY b DESC, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, b FROM viewtest_tbl WHERE a > 5 ORDER BY b DESC, false, true, PersistedView, COMPENSATION, true
    +- Sort [b#x DESC NULLS LAST], true
       +- Project [a#x, b#x]
          +- Filter (a#x > 5)
@@ -162,7 +162,7 @@ Project [a#x, b#x]
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a FROM viewtest_tbl WHERE a <> 20
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a FROM viewtest_tbl WHERE a <> 20, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a FROM viewtest_tbl WHERE a <> 20, false, true, PersistedView, COMPENSATION, true
    +- Project [a#x]
       +- Filter NOT (a#x = 20)
          +- SubqueryAlias spark_catalog.default.viewtest_tbl
@@ -173,7 +173,7 @@ CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a FROM viewtest_t
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT 1, * FROM viewtest_tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT 1, * FROM viewtest_tbl, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT 1, * FROM viewtest_tbl, false, true, PersistedView, COMPENSATION, true
    +- Project [1 AS 1#x, a#x, b#x]
       +- SubqueryAlias spark_catalog.default.viewtest_tbl
          +- Relation spark_catalog.default.viewtest_tbl[a#x,b#x] parquet
@@ -183,7 +183,7 @@ CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT 1, * FROM viewtes
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, decimal(b) FROM viewtest_tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, decimal(b) FROM viewtest_tbl, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, decimal(b) FROM viewtest_tbl, false, true, PersistedView, COMPENSATION, true
    +- Project [a#x, cast(b#x as decimal(10,0)) AS b#x]
       +- SubqueryAlias spark_catalog.default.viewtest_tbl
          +- Relation spark_catalog.default.viewtest_tbl[a#x,b#x] parquet
@@ -193,7 +193,7 @@ CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, decimal(b) FRO
 CREATE OR REPLACE VIEW viewtest AS
 	SELECT a, b, 0 AS c FROM viewtest_tbl
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, b, 0 AS c FROM viewtest_tbl, false, true, PersistedView, true
+CreateViewCommand `spark_catalog`.`default`.`viewtest`, SELECT a, b, 0 AS c FROM viewtest_tbl, false, true, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, 0 AS c#x]
       +- SubqueryAlias spark_catalog.default.viewtest_tbl
          +- Relation spark_catalog.default.viewtest_tbl[a#x,b#x] parquet
@@ -243,7 +243,7 @@ CREATE TEMPORARY VIEW temp_table AS SELECT * FROM VALUES
   (1, 1) as temp_table(a, id)
 -- !query analysis
 CreateViewCommand `temp_table`, SELECT * FROM VALUES
-  (1, 1) as temp_table(a, id), false, false, LocalTempView, true
+  (1, 1) as temp_table(a, id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, id#x]
       +- SubqueryAlias temp_table
          +- LocalRelation [a#x, id#x]
@@ -252,7 +252,7 @@ CreateViewCommand `temp_table`, SELECT * FROM VALUES
 -- !query
 CREATE VIEW v1 AS SELECT * FROM base_table
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v1`, SELECT * FROM base_table, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v1`, SELECT * FROM base_table, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- SubqueryAlias spark_catalog.temp_view_test.base_table
          +- Relation spark_catalog.temp_view_test.base_table[a#x,id#x] parquet
@@ -283,7 +283,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE TEMP VIEW v2_temp AS SELECT * FROM base_table
 -- !query analysis
-CreateViewCommand `v2_temp`, SELECT * FROM base_table, false, false, LocalTempView, true
+CreateViewCommand `v2_temp`, SELECT * FROM base_table, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, id#x]
       +- SubqueryAlias spark_catalog.temp_view_test.base_table
          +- Relation spark_catalog.temp_view_test.base_table[a#x,id#x] parquet
@@ -298,7 +298,7 @@ DescribeTableCommand `v2_temp`, true, [col_name#x, data_type#x, comment#x]
 -- !query
 CREATE VIEW temp_view_test.v2 AS SELECT * FROM base_table
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v2`, SELECT * FROM base_table, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v2`, SELECT * FROM base_table, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- SubqueryAlias spark_catalog.temp_view_test.base_table
          +- Relation spark_catalog.temp_view_test.base_table[a#x,id#x] parquet
@@ -334,7 +334,7 @@ CREATE VIEW v3 AS
 -- !query analysis
 CreateViewCommand `spark_catalog`.`temp_view_test`.`v3`, SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, base_table2 t2
-    WHERE t1.id = t2.id, false, false, PersistedView, true
+    WHERE t1.id = t2.id, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x AS t1_a#x, a#x AS t2_a#x]
       +- Filter (id#x = id#x)
          +- Join Inner
@@ -393,7 +393,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW v4 AS SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v4`, SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v4`, SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- Filter id#x IN (list#x [])
          :  +- Project [id#x]
@@ -412,7 +412,7 @@ DescribeTableCommand `spark_catalog`.`temp_view_test`.`v4`, true, [col_name#x, d
 -- !query
 CREATE VIEW v5 AS SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v5`, SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v5`, SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2, false, false, PersistedView, COMPENSATION, true
    +- Project [id#x, a#x]
       +- Join Inner
          :- SubqueryAlias t1
@@ -433,7 +433,7 @@ DescribeTableCommand `spark_catalog`.`temp_view_test`.`v5`, true, [col_name#x, d
 -- !query
 CREATE VIEW v6 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v6`, SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v6`, SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- Filter exists#x []
          :  +- Project [1 AS 1#x]
@@ -452,7 +452,7 @@ DescribeTableCommand `spark_catalog`.`temp_view_test`.`v6`, true, [col_name#x, d
 -- !query
 CREATE VIEW v7 AS SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v7`, SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v7`, SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- Filter NOT exists#x []
          :  +- Project [1 AS 1#x]
@@ -471,7 +471,7 @@ DescribeTableCommand `spark_catalog`.`temp_view_test`.`v7`, true, [col_name#x, d
 -- !query
 CREATE VIEW v8 AS SELECT * FROM base_table WHERE EXISTS (SELECT 1)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`temp_view_test`.`v8`, SELECT * FROM base_table WHERE EXISTS (SELECT 1), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`temp_view_test`.`v8`, SELECT * FROM base_table WHERE EXISTS (SELECT 1), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, id#x]
       +- Filter exists#x []
          :  +- Project [1 AS 1#x]
@@ -641,7 +641,7 @@ CREATE TEMP VIEW tt AS SELECT * FROM VALUES
   (1, 'a') AS tt(num2, value)
 -- !query analysis
 CreateViewCommand `tt`, SELECT * FROM VALUES
-  (1, 'a') AS tt(num2, value), false, false, LocalTempView, true
+  (1, 'a') AS tt(num2, value), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [num2#x, value#x]
       +- SubqueryAlias tt
          +- LocalRelation [num2#x, value#x]
@@ -650,7 +650,7 @@ CreateViewCommand `tt`, SELECT * FROM VALUES
 -- !query
 CREATE VIEW nontemp1 AS SELECT * FROM t1 CROSS JOIN t2
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp1`, SELECT * FROM t1 CROSS JOIN t2, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp1`, SELECT * FROM t1 CROSS JOIN t2, false, false, PersistedView, COMPENSATION, true
    +- Project [num#x, name#x, num2#x, value#x]
       +- Join Cross
          :- SubqueryAlias spark_catalog.testviewschm2.t1
@@ -684,7 +684,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW nontemp2 AS SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp2`, SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp2`, SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2, false, false, PersistedView, COMPENSATION, true
    +- Project [num#x, name#x, num2#x, value#x]
       +- Join Inner, (num#x = num2#x)
          :- SubqueryAlias spark_catalog.testviewschm2.t1
@@ -718,7 +718,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW nontemp3 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp3`, SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp3`, SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2, false, false, PersistedView, COMPENSATION, true
    +- Project [num#x, name#x, num2#x, value#x]
       +- Join LeftOuter, (num#x = num2#x)
          :- SubqueryAlias spark_catalog.testviewschm2.t1
@@ -752,7 +752,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE VIEW nontemp4 AS SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp4`, SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx', false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`nontemp4`, SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx', false, false, PersistedView, COMPENSATION, true
    +- Project [num#x, name#x, num2#x, value#x]
       +- Join LeftOuter, ((num#x = num2#x) AND (value#x = xxx))
          :- SubqueryAlias spark_catalog.testviewschm2.t1
@@ -844,7 +844,7 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`pubview`, SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
-AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f), false, false, PersistedView, true
+AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- Filter (between(a#x, scalar-subquery#x [], scalar-subquery#x []) AND exists#x [])
          :  :- Project [d#x]
@@ -880,7 +880,7 @@ AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)
 CreateViewCommand `spark_catalog`.`testviewschm2`.`mytempview`, SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
-AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j), false, false, PersistedView, true
+AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x]
       +- Filter ((between(a#x, scalar-subquery#x [], scalar-subquery#x []) AND exists#x []) AND NOT exists#x [])
          :  :- Project [d#x]
@@ -925,7 +925,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`tt1`, SELECT * FROM (
     VALUES
        ('abc', '0123456789', 42, 'abcd'),
        ('0123456789', 'abc', 42.12, 'abc')
-  ) vv(a,b,c,d), false, false, PersistedView, true
+  ) vv(a,b,c,d), false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, c#x, d#x]
       +- SubqueryAlias vv
          +- Project [col1#x AS a#x, col2#x AS b#x, col3#x AS c#x, col4#x AS d#x]
@@ -988,7 +988,7 @@ CREATE VIEW aliased_view_1 AS
     where exists (select 1 from tx1 where tt1.f1 = tx1.x1)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`aliased_view_1`, select * from tt1
-    where exists (select 1 from tx1 where tt1.f1 = tx1.x1), false, false, PersistedView, true
+    where exists (select 1 from tx1 where tt1.f1 = tx1.x1), false, false, PersistedView, COMPENSATION, true
    +- Project [f1#x, f2#x, f3#x]
       +- Filter exists#x [f1#x]
          :  +- Project [1 AS 1#x]
@@ -1005,7 +1005,7 @@ CREATE VIEW aliased_view_2 AS
     where exists (select 1 from tx1 where a1.f1 = tx1.x1)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`aliased_view_2`, select * from tt1 a1
-    where exists (select 1 from tx1 where a1.f1 = tx1.x1), false, false, PersistedView, true
+    where exists (select 1 from tx1 where a1.f1 = tx1.x1), false, false, PersistedView, COMPENSATION, true
    +- Project [f1#x, f2#x, f3#x]
       +- Filter exists#x [f1#x]
          :  +- Project [1 AS 1#x]
@@ -1023,7 +1023,7 @@ CREATE VIEW aliased_view_3 AS
     where exists (select 1 from tx1 a2 where tt1.f1 = a2.x1)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`aliased_view_3`, select * from tt1
-    where exists (select 1 from tx1 a2 where tt1.f1 = a2.x1), false, false, PersistedView, true
+    where exists (select 1 from tx1 a2 where tt1.f1 = a2.x1), false, false, PersistedView, COMPENSATION, true
    +- Project [f1#x, f2#x, f3#x]
       +- Filter exists#x [f1#x]
          :  +- Project [1 AS 1#x]
@@ -1041,7 +1041,7 @@ CREATE VIEW aliased_view_4 AS
     where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`aliased_view_4`, select * from temp_view_test.tt1
-    where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1), false, false, PersistedView, true
+    where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1), false, false, PersistedView, COMPENSATION, true
    +- Project [y1#x, f2#x, f3#x]
       +- Filter exists#x [y1#x]
          :  +- Project [1 AS 1#x]
@@ -1180,7 +1180,7 @@ select * from
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`view_of_joins`, select * from
   (select * from (tbl1 cross join tbl2) same) ss,
-  (tbl3 cross join tbl4) same, false, false, PersistedView, true
+  (tbl3 cross join tbl4) same, false, false, PersistedView, COMPENSATION, true
    +- Project [a#x, b#x, c#x, d#x, e#x, f#x, g#x, h#x]
       +- Join Inner
          :- SubqueryAlias ss
@@ -1220,7 +1220,7 @@ CreateDataSourceTableCommand `spark_catalog`.`testviewschm2`.`tt4`, false
 -- !query
 create view v1 as select * from tt2 natural join tt3
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`v1`, select * from tt2 natural join tt3, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`v1`, select * from tt2 natural join tt3, false, false, PersistedView, COMPENSATION, true
    +- Project [b#x, c#x, a#x, ax#xL]
       +- Project [b#x, c#x, a#x, ax#xL]
          +- Join Inner, ((b#x = cast(b#x as int)) AND (cast(c#x as decimal(10,0)) = c#x))
@@ -1233,7 +1233,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`v1`, select * from tt2 natura
 -- !query
 create view v1a as select * from (tt2 natural join tt3) j
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`v1a`, select * from (tt2 natural join tt3) j, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`v1a`, select * from (tt2 natural join tt3) j, false, false, PersistedView, COMPENSATION, true
    +- Project [b#x, c#x, a#x, ax#xL]
       +- SubqueryAlias j
          +- Project [b#x, c#x, a#x, ax#xL]
@@ -1247,7 +1247,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`v1a`, select * from (tt2 natu
 -- !query
 create view v2 as select * from tt2 join tt3 using (b,c) join tt4 using (b)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`v2`, select * from tt2 join tt3 using (b,c) join tt4 using (b), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`v2`, select * from tt2 join tt3 using (b,c) join tt4 using (b), false, false, PersistedView, COMPENSATION, true
    +- Project [b#x, c#x, a#x, ax#xL, ay#x, q#x]
       +- Project [b#x, c#x, a#x, ax#xL, ay#x, q#x]
          +- Join Inner, (b#x = b#x)
@@ -1264,7 +1264,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`v2`, select * from tt2 join t
 -- !query
 create view v2a as select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`v2a`, select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`v2a`, select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j, false, false, PersistedView, COMPENSATION, true
    +- Project [b#x, c#x, a#x, ax#xL, ay#x, q#x]
       +- SubqueryAlias j
          +- Project [b#x, c#x, a#x, ax#xL, ay#x, q#x]
@@ -1282,7 +1282,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`v2a`, select * from (tt2 join
 -- !query
 create view v3 as select * from tt2 join tt3 using (b,c) full join tt4 using (b)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`v3`, select * from tt2 join tt3 using (b,c) full join tt4 using (b), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`v3`, select * from tt2 join tt3 using (b,c) full join tt4 using (b), false, false, PersistedView, COMPENSATION, true
    +- Project [b#x, c#x, a#x, ax#xL, ay#x, q#x]
       +- Project [coalesce(b#x, b#x) AS b#x, c#x, a#x, ax#xL, ay#x, q#x]
          +- Join FullOuter, (b#x = b#x)
@@ -1438,7 +1438,7 @@ CreateDataSourceTableCommand `spark_catalog`.`testviewschm2`.`tt6`, false
 -- !query
 create view vv1 as select * from (tt5 cross join tt6) j(aa,bb,cc,dd)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`vv1`, select * from (tt5 cross join tt6) j(aa,bb,cc,dd), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`vv1`, select * from (tt5 cross join tt6) j(aa,bb,cc,dd), false, false, PersistedView, COMPENSATION, true
    +- Project [aa#x, bb#x, cc#x, dd#x]
       +- SubqueryAlias j
          +- Project [a#x AS aa#x, b#x AS bb#x, c#x AS cc#x, d#x AS dd#x]
@@ -1499,7 +1499,7 @@ select * from tt7 full join tt8 using (x), tt8 tt8x
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`vv2`, select * from (values(1,2,3,4,5)) v(a,b,c,d,e)
 union all
-select * from tt7 full join tt8 using (x), tt8 tt8x, false, false, PersistedView, true
+select * from tt7 full join tt8 using (x), tt8 tt8x, false, false, PersistedView, COMPENSATION, true
    +- Union false, false
       :- Project [a#x, b#x, c#x, d#x, e#x]
       :  +- SubqueryAlias v
@@ -1536,7 +1536,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`vv3`, select * from (values(1
 union all
 select * from
   tt7 full join tt8 using (x),
-  tt7 tt7x full join tt8 tt8x using (x), false, false, PersistedView, true
+  tt7 tt7x full join tt8 tt8x using (x), false, false, PersistedView, COMPENSATION, true
    +- Union false, false
       :- Project [a#x, b#x, c#x, x#x, e#x, f#x]
       :  +- SubqueryAlias v
@@ -1578,7 +1578,7 @@ CreateViewCommand `spark_catalog`.`testviewschm2`.`vv4`, select * from (values(1
 union all
 select * from
   tt7 full join tt8 using (x),
-  tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x), false, false, PersistedView, true
+  tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x), false, false, PersistedView, COMPENSATION, true
    +- Union false, false
       :- Project [a#x, b#x, c#x, x#x, e#x, f#x, g#x]
       :  +- SubqueryAlias v
@@ -1669,7 +1669,7 @@ select * from tt7a left join tt8a using (x), tt8a tt8ax
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`vv2a`, select * from (values(now(),2,3,now(),5)) v(a,b,c,d,e)
 union all
-select * from tt7a left join tt8a using (x), tt8a tt8ax, false, false, PersistedView, true
+select * from tt7a left join tt8a using (x), tt8a tt8ax, false, false, PersistedView, COMPENSATION, true
    +- Union false, false
       :- Project [a#x, b#x, c#x, d#x, e#x]
       :  +- SubqueryAlias v
@@ -1716,7 +1716,7 @@ CreateDataSourceTableCommand `spark_catalog`.`testviewschm2`.`tt10`, false
 -- !query
 create view vv5 as select x,y,z from tt9 join tt10 using(x)
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`vv5`, select x,y,z from tt9 join tt10 using(x), false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`vv5`, select x,y,z from tt9 join tt10 using(x), false, false, PersistedView, COMPENSATION, true
    +- Project [x#x, y#x, z#x]
       +- Project [x#x, xx#x, y#x, z#x]
          +- Join Inner, (x#x = x#x)
@@ -1761,7 +1761,7 @@ create view vv6 as select x,y,z,q from
   (tt11 join tt12 using(x)) join tt13 using(z)
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`vv6`, select x,y,z,q from
-  (tt11 join tt12 using(x)) join tt13 using(z), false, false, PersistedView, true
+  (tt11 join tt12 using(x)) join tt13 using(z), false, false, PersistedView, COMPENSATION, true
    +- Project [x#x, y#x, z#x, q#x]
       +- Project [z#x, x#x, y#x, q#x]
          +- Join Inner, (z#x = z#x)
@@ -1807,7 +1807,7 @@ create view tt18v as
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`tt18v`, select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy
   union all
-  select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz, false, false, PersistedView, true
+  select * from int8_tbl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz, false, false, PersistedView, COMPENSATION, true
    +- Union false, false
       :- Project [q1#x, q2#x]
       :  +- SubqueryAlias xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy
@@ -1829,7 +1829,7 @@ DescribeTableCommand `spark_catalog`.`testviewschm2`.`tt18v`, false, [col_name#x
 create view tt21v as
 select * from tt5 natural inner join tt6
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`tt21v`, select * from tt5 natural inner join tt6, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`tt21v`, select * from tt5 natural inner join tt6, false, false, PersistedView, COMPENSATION, true
    +- Project [c#x, a#x, b#x, cc#x, d#x]
       +- Project [c#x, a#x, b#x, cc#x, d#x]
          +- Join Inner, (c#x = c#x)
@@ -1849,7 +1849,7 @@ DescribeTableCommand `spark_catalog`.`testviewschm2`.`tt21v`, false, [col_name#x
 create view tt22v as
 select * from tt5 natural left join tt6
 -- !query analysis
-CreateViewCommand `spark_catalog`.`testviewschm2`.`tt22v`, select * from tt5 natural left join tt6, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`testviewschm2`.`tt22v`, select * from tt5 natural left join tt6, false, false, PersistedView, COMPENSATION, true
    +- Project [c#x, a#x, b#x, cc#x, d#x]
       +- Project [c#x, a#x, b#x, cc#x, d#x]
          +- Join LeftOuter, (c#x = c#x)
@@ -1873,7 +1873,7 @@ select 42, 43
 -- !query analysis
 CreateViewCommand `spark_catalog`.`testviewschm2`.`tt23v`, [(col_a,None), (col_b,None)], select q1 as other_name1, q2 as other_name2 from int8_tbl
 union
-select 42, 43, false, false, PersistedView, true
+select 42, 43, false, false, PersistedView, COMPENSATION, true
    +- Distinct
       +- Union false, false
          :- Project [q1#x AS other_name1#x, q2#x AS other_name2#x]

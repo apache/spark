@@ -28,7 +28,8 @@ import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, Servl
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
@@ -170,19 +171,19 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    lazy val application = s"$appId/${attemptId.mkString}"
-    logDebug(s"Loading application Entry $application")
+    lazy val application = log"${MDC(APP_ID, appId)}/${MDC(APP_ATTEMPT_ID, attemptId.mkString)}"
+    logDebug(log"Loading application Entry " + application)
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
       operations.getAppUI(appId, attemptId) match {
         case Some(loadedUI) =>
-          logDebug(s"Loaded application $application")
+          logDebug(log"Loaded application " + application)
           loadedUI
         case None =>
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
-          logInfo(s"Failed to load application attempt $application")
+          logInfo(log"Failed to load application attempt " + application)
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -197,7 +198,7 @@ private[history] class ApplicationCache(
       new CacheEntry(loadedUI, completed)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to initialize application UI for $application", e)
+        logWarning(log"Failed to initialize application UI for ${MDC(APP_ID, application)}", e)
         operations.detachSparkUI(appId, attemptId, loadedUI.ui)
         throw e
     }

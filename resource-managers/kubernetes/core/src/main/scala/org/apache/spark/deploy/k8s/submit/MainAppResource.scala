@@ -16,15 +16,38 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-private[spark] sealed trait MainAppResource
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 
-private[spark] sealed trait NonJVMResource
+/**
+ * :: DeveloperApi ::
+ *
+ * All traits and classes in this file are used by K8s module and Spark K8s operator.
+ */
 
-private[spark] case class JavaMainAppResource(primaryResource: Option[String])
+@Stable
+@DeveloperApi
+@Since("2.3.0")
+sealed trait MainAppResource
+
+@Stable
+@DeveloperApi
+@Since("2.4.0")
+sealed trait NonJVMResource
+
+@Stable
+@DeveloperApi
+@Since("3.0.0")
+case class JavaMainAppResource(primaryResource: Option[String])
   extends MainAppResource
 
-private[spark] case class PythonMainAppResource(primaryResource: String)
+@Stable
+@DeveloperApi
+@Since("2.4.0")
+case class PythonMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource
 
-private[spark] case class RMainAppResource(primaryResource: String)
+@Stable
+@DeveloperApi
+@Since("2.4.0")
+case class RMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource

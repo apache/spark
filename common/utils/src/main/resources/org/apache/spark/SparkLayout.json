@@ -1,6 +1,11 @@
 {
   "ts": {
-    "$resolver": "timestamp"
+    "$resolver": "timestamp",
+    "pattern": {
+      "format": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+      "timeZone": "UTC",
+      "locale": "en_US"
+    }
   },
   "level": {
     "$resolver": "level",
@@ -27,12 +32,30 @@
       "$resolver": "exception",
       "field": "stackTrace",
       "stackTrace": {
-        "stringified": true
+        "elementTemplate": {
+          "class": {
+            "$resolver": "stackTraceElement",
+            "field": "className"
+          },
+          "method": {
+            "$resolver": "stackTraceElement",
+            "field": "methodName"
+          },
+          "file": {
+            "$resolver": "stackTraceElement",
+            "field": "fileName"
+          },
+          "line": {
+            "$resolver": "stackTraceElement",
+            "field": "lineNumber"
+          }
+        }
       }
     }
   },
   "logger": {
-    "$resolver": "logger",
-    "field": "name"
+    "$resolver": "pattern",
+    "pattern": "%c{1}",
+    "stackTraceEnabled": false
   }
 }

@@ -163,6 +163,9 @@ class Iso8601TimestampFormatter(
     getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
+  private lazy val zonedFormatter: DateTimeFormatter = formatter.withZone(zoneId)
+
+  @transient
   protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
     pattern, zoneId, locale, legacyFormat)
 
@@ -231,7 +234,7 @@ class Iso8601TimestampFormatter(
 
   override def format(instant: Instant): String = {
     try {
-      formatter.withZone(zoneId).format(instant)
+      zonedFormatter.format(instant)
     } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
       (t: Timestamp) => format(t))
   }

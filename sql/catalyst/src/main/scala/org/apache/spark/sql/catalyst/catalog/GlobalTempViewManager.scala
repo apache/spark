@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * @param database The system preserved virtual database that keeps all the global temporary views.
  */
-class GlobalTempViewManager(val database: String) {
+class GlobalTempViewManager(database: String) {
 
   /** List of view definitions, mapping from view name to logical plan. */
   @GuardedBy("this")

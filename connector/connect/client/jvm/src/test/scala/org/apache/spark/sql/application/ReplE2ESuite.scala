@@ -25,13 +25,13 @@ import scala.util.Properties
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.test.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.tags.AmmoniteTest
 import org.apache.spark.util.IvyTestUtils
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 @AmmoniteTest
-class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
+class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAndAfterEach {
 
   private val executorService = Executors.newSingleThreadExecutor()
   private val TIMEOUT_SECONDS = 30

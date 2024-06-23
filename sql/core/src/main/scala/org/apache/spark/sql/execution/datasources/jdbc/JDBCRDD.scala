@@ -23,7 +23,8 @@ import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -266,7 +267,7 @@ class JDBCRDD(
     options.sessionInitStatement match {
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
-        logInfo(s"Executing sessionInitStatement: $sql")
+        logInfo(log"Executing sessionInitStatement: ${MDC(SQL_TEXT, sql)}")
         try {
           statement.setQueryTimeout(options.queryTimeout)
           statement.execute()

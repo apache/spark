@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalMapType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 
 class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
@@ -39,21 +40,33 @@ object TestNullableColumnBuilder {
 class NullableColumnBuilderSuite extends SparkFunSuite {
   import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
-  Seq(
+  val stringTypes = Seq(
+    STRING(StringType), // UTF8_BINARY
+    STRING(StringType("UTF8_LCASE")),
+    STRING(StringType("UNICODE")),
+    STRING(StringType("UNICODE_CI")))
+  val otherTypes = Seq(
     BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
-    STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
+    BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
     STRUCT(PhysicalStructType(Array(StructField("a", StringType)))),
     ARRAY(PhysicalArrayType(IntegerType, true)),
     MAP(PhysicalMapType(IntegerType, StringType, true)),
     CALENDAR_INTERVAL)
-    .foreach {
+
+  stringTypes.foreach(s => {
+    val collation = CollationFactory.fetchCollation(s.collationId).collationName
+    val typeName = if (collation == "UTF8_BINARY") "STRING" else s"STRING($collation)"
+    testNullableColumnBuilder(s, Some(typeName))
+  })
+  otherTypes.foreach {
     testNullableColumnBuilder(_)
   }
 
   def testNullableColumnBuilder[JvmType](
-      columnType: ColumnType[JvmType]): Unit = {
+      columnType: ColumnType[JvmType],
+      testTypeName: Option[String] = None): Unit = {
 
-    val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+    val typeName = testTypeName.getOrElse(columnType.getClass.getSimpleName.stripSuffix("$"))
     val dataType = columnType.dataType
     val proj = UnsafeProjection.create(Array[DataType](
       ColumnarDataTypeUtils.toLogicalDataType(dataType)))

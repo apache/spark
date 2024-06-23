@@ -36,7 +36,7 @@ You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the 
 [python]: https://www.python.org/downloads/
 
 ```sh
-$ gem install bundler
+$ gem install bundler -v 2.4.22
 ```
 
 After this all the required Ruby dependencies can be installed from the `docs/` directory via Bundler:

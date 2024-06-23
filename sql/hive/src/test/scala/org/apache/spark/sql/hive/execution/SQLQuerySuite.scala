@@ -178,24 +178,24 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             |PARTITIONED BY (state STRING, month INT)
             |STORED AS PARQUET
           """.stripMargin)
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+          sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
 
-        sql("set hive.exec.dynamic.partition.mode=nonstrict")
-        sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
-        sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
-
-        checkAnswer(
-          sql(
-            """
-              |select orders.state, orders.month
-              |from orders
-              |join (
-              |  select distinct orders.state,orders.month
-              |  from orders
-              |  join orderupdates
-              |    on orderupdates.id = orders.id) ao
-              |  on ao.state = orders.state and ao.month = orders.month
+          checkAnswer(
+            sql(
+              """
+                |select orders.state, orders.month
+                |from orders
+                |join (
+                |  select distinct orders.state,orders.month
+                |  from orders
+                |  join orderupdates
+                |    on orderupdates.id = orders.id) ao
+                |  on ao.state = orders.state and ao.month = orders.month
             """.stripMargin),
-          (1 to 6).map(_ => Row("CA", 20151)))
+            (1 to 6).map(_ => Row("CA", 20151)))
+        }
       }
     }
   }
@@ -715,21 +715,23 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("command substitution") {
-    sql("set tbl=src")
-    checkAnswer(
-      sql("SELECT key FROM ${hiveconf:tbl} ORDER BY key, value limit 1"),
-      sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
-
-    sql("set spark.sql.variable.substitute=false") // disable the substitution
-    sql("set tbl2=src")
-    intercept[Exception] {
-      sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1").collect()
+    withSQLConf("tbl" -> "src") {
+      checkAnswer(
+        sql("SELECT key FROM ${hiveconf:tbl} ORDER BY key, value limit 1"),
+        sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
     }
 
-    sql("set spark.sql.variable.substitute=true") // enable the substitution
-    checkAnswer(
-      sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1"),
-      sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
+    withSQLConf("tbl2" -> "src", "spark.sql.variable.substitute" -> "false") {
+      intercept[Exception] {
+        sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1").collect()
+      }
+    }
+
+    withSQLConf("tbl2" -> "src", "spark.sql.variable.substitute" -> "true") {
+      checkAnswer(
+        sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1"),
+        sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
+    }
   }
 
   test("ordering not in select") {
@@ -1108,35 +1110,30 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("dynamic partition value test") {
-    try {
-      sql("set hive.exec.dynamic.partition.mode=nonstrict")
-      // date
-      sql("drop table if exists dynparttest1")
-      sql("create table dynparttest1 (value int) partitioned by (pdate date)")
-      sql(
-        """
-          |insert into table dynparttest1 partition(pdate)
-          | select count(*), cast('2015-05-21' as date) as pdate from src
-        """.stripMargin)
-      checkAnswer(
-        sql("select * from dynparttest1"),
-        Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
+    withTable("dynparttest1", "dynparttest2") {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // date
+        sql("create table dynparttest1 (value int) partitioned by (pdate date)")
+        sql(
+          """
+             |insert into table dynparttest1 partition(pdate)
+             | select count(*), cast('2015-05-21' as date) as pdate from src
+          """.stripMargin)
+        checkAnswer(
+          sql("select * from dynparttest1"),
+          Seq(Row(500, java.sql.Date.valueOf("2015-05-21"))))
 
-      // decimal
-      sql("drop table if exists dynparttest2")
-      sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
-      sql(
-        """
-          |insert into table dynparttest2 partition(pdec)
-          | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
-        """.stripMargin)
-      checkAnswer(
-        sql("select * from dynparttest2"),
-        Seq(Row(500, new java.math.BigDecimal("100.1"))))
-    } finally {
-      sql("drop table if exists dynparttest1")
-      sql("drop table if exists dynparttest2")
-      sql("set hive.exec.dynamic.partition.mode=strict")
+        // decimal
+        sql("create table dynparttest2 (value int) partitioned by (pdec decimal(5, 1))")
+        sql(
+          """
+             |insert into table dynparttest2 partition(pdec)
+             | select count(*), cast('100.12' as decimal(5, 1)) as pdec from src
+          """.stripMargin)
+        checkAnswer(
+            sql("select * from dynparttest2"),
+            Seq(Row(500, new java.math.BigDecimal("100.1"))))
+      }
     }
   }
 
@@ -1911,14 +1908,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-17354: Partitioning by dates/timestamps works with Parquet vectorized reader") {
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
       sql(
         """CREATE TABLE order(id INT)
           |PARTITIONED BY (pd DATE, pt TIMESTAMP)
           |STORED AS PARQUET
         """.stripMargin)
 
-      sql("set hive.exec.dynamic.partition.mode=nonstrict")
       sql(
         """INSERT INTO TABLE order PARTITION(pd, pt)
           |SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt

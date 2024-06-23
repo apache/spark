@@ -31,6 +31,9 @@
   </properties>
   <packaging>jar</packaging>
   <name>Spark Profiler</name>
+  <description>
+    Enables code profiling of executors based on the the async profiler.
+  </description>
   <url>https://spark.apache.org/</url>
 
   <dependencies>
@@ -44,7 +47,8 @@
     <dependency>
       <groupId>me.bechberger</groupId>
       <artifactId>ap-loader-all</artifactId>
-      <version>3.0-8</version>
+      <version>${ap-loader.version}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>

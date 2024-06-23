@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAMETER}
+import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -136,7 +136,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case _: NoSuchFunctionException =>
         val parameterString = args.map(_.dataType.typeName).mkString("(", ", ", ")")
         logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} " +
-          log"with parameter types ${MDC(FUNCTION_PARAMETER, parameterString)} is used in " +
+          log"with parameter types ${MDC(FUNCTION_PARAM, parameterString)} is used in " +
           log"partition transforms, but its definition couldn't be found in the function catalog " +
           log"provided")
         None

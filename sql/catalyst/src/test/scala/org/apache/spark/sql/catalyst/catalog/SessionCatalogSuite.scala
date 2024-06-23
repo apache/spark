@@ -933,17 +933,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view1", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view2", tempTable, overrideIfExists = false)
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+      assert(catalog.listTables(catalog.globalTempDatabase, "*").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "*temp_view1").toSet ==
         Set(TableIdentifier("temp_view1"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
-        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "global*").toSet ==
+        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
     }
   }
 
@@ -1906,9 +1906,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
       createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
-      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      val qualifiedName2 = QualifiedTableName(catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
-      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempDatabase)))
       assert(catalog.getCachedTable(qualifiedName2) != null)
     }
   }

@@ -332,6 +332,21 @@ package object dsl {
       def sql(sqlText: String): Relation = {
         Relation.newBuilder().setSql(SQL.newBuilder().setQuery(sqlText)).build()
       }
+
+      def table(name: String): Relation = {
+        proto.Relation
+          .newBuilder()
+          .setRead(
+            proto.Read
+              .newBuilder()
+              .setNamedTable(
+                proto.Read.NamedTable
+                  .newBuilder()
+                  .setUnparsedIdentifier(name)
+                  .build())
+              .build())
+          .build()
+      }
     }
 
     implicit class DslNAFunctions(val logicalPlan: Relation) {
@@ -513,6 +528,25 @@ package object dsl {
         freqItems(cols.toArray, support)
 
       def freqItems(cols: Seq[String]): Relation = freqItems(cols, 0.01)
+
+      def sampleBy(col: String, fractions: Map[Any, Double], seed: Long): Relation = {
+        Relation
+          .newBuilder()
+          .setSampleBy(
+            StatSampleBy
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllFractions(fractions.toSeq.map { case (k, v) =>
+                StatSampleBy.Fraction
+                  .newBuilder()
+                  .setStratum(toLiteralProto(k))
+                  .setFraction(v)
+                  .build()
+              }.asJava)
+              .setSeed(seed)
+              .build())
+          .build()
+      }
     }
 
     def select(exprs: Expression*): Relation = {
@@ -587,6 +621,10 @@ package object dsl {
           .build()
       }
 
+      def filter(condition: Expression): Relation = {
+        where(condition)
+      }
+
       def deduplicate(colNames: Seq[String]): Relation =
         Relation
           .newBuilder()
@@ -641,6 +679,10 @@ package object dsl {
         join(otherPlan, joinType, usingColumns, None)
       }
 
+      def crossJoin(otherPlan: Relation): Relation = {
+        join(otherPlan, JoinType.JOIN_TYPE_CROSS, Seq(), None)
+      }
+
       private def join(
           otherPlan: Relation,
           joinType: JoinType = JoinType.JOIN_TYPE_INNER,
@@ -663,7 +705,7 @@ package object dsl {
 
       def as(alias: String): Relation = {
         Relation
-          .newBuilder(logicalPlan)
+          .newBuilder()
           .setSubqueryAlias(SubqueryAlias.newBuilder().setAlias(alias).setInput(logicalPlan))
           .build()
       }
@@ -693,9 +735,10 @@ package object dsl {
           .setNullOrdering(Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)
           .setDirection(Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
           .setChild(
-            Expression.newBuilder
+            Expression
+              .newBuilder()
               .setUnresolvedAttribute(
-                Expression.UnresolvedAttribute.newBuilder.setUnparsedIdentifier(col).build())
+                Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(col).build())
               .build())
           .build()
       }
@@ -992,7 +1035,13 @@ package object dsl {
             WithColumnsRenamed
               .newBuilder()
               .setInput(logicalPlan)
-              .putAllRenameColumnsMap(renameColumnsMap.asJava))
+              .addAllRenames(renameColumnsMap.toSeq.map { case (k, v) =>
+                WithColumnsRenamed.Rename
+                  .newBuilder()
+                  .setColName(k)
+                  .setNewColName(v)
+                  .build()
+              }.asJava))
           .build()
       }
 

@@ -73,17 +73,34 @@ final class StaxXmlParserUtilsSuite extends SparkFunSuite with BeforeAndAfterAll
     val input = <ROW><info>
       <name>Sam Mad Dog Smith</name><amount><small>1</small>
         <large>9</large></amount></info><abc>2</abc><test>2</test></ROW>
-    val parser = factory.createXMLEventReader(new StringReader(input.toString))
-    // We assume here it's reading the value within `id` field.
-    StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.CHARACTERS)
-    StaxXmlParserUtils.skipChildren(parser)
-    assert(parser.nextEvent().asEndElement().getName.getLocalPart === "info")
-    parser.next()
-    StaxXmlParserUtils.skipChildren(parser)
-    assert(parser.nextEvent().asEndElement().getName.getLocalPart === "abc")
-    parser.next()
-    StaxXmlParserUtils.skipChildren(parser)
-    assert(parser.nextEvent().asEndElement().getName.getLocalPart === "test")
+    val xmlOptions = new XmlOptions()
+    // skip the entire row
+    val parser1 = factory.createXMLEventReader(new StringReader(input.toString))
+    StaxXmlParserUtils.skipUntil(parser1, XMLStreamConstants.START_ELEMENT)
+    StaxXmlParserUtils.skipChildren(parser1, "ROW", xmlOptions)
+    assert(parser1.peek().getEventType === XMLStreamConstants.END_DOCUMENT)
+
+    // skip <name> and <amount> respectively
+    val parser2 = factory.createXMLEventReader(new StringReader(input.toString))
+    StaxXmlParserUtils.skipUntil(parser2, XMLStreamConstants.CHARACTERS)
+    // skip <name>
+    val elementName1 =
+      StaxXmlParserUtils.getName(parser2.nextEvent().asStartElement().getName, xmlOptions)
+    StaxXmlParserUtils.skipChildren(parser2, elementName1, xmlOptions)
+    assert(parser2.peek().getEventType === XMLStreamConstants.START_ELEMENT)
+    val elementName2 =
+      StaxXmlParserUtils.getName(parser2.peek().asStartElement().getName, xmlOptions)
+    assert(
+      StaxXmlParserUtils
+        .getName(parser2.peek().asStartElement().getName, xmlOptions) == elementName2
+    )
+    // skip <amount>
+    parser2.nextEvent()
+    StaxXmlParserUtils.skipChildren(parser2, elementName2, xmlOptions)
+    assert(parser2.peek().getEventType === XMLStreamConstants.END_ELEMENT)
+    assert(
+      StaxXmlParserUtils.getName(parser2.peek().asEndElement().getName, xmlOptions) == "info"
+    )
   }
 
   test("XML Input Factory disables DTD parsing") {

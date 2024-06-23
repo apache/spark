@@ -49,7 +49,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def useDecimalPlainString: Boolean = true
 
-  override protected def useHexFormatForBinary: Boolean = true
+  override protected val binaryFormatter: BinaryFormatter = ToStringBase.getBinaryFormatter
 
   private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType)
 

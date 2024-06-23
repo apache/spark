@@ -98,7 +98,7 @@ case class ExpressionWithUnresolvedIdentifier(
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  *
- * @param multipartIdentifier table name
+ * @param multipartIdentifier table name, the location of files or Kafka topic name, etc.
  * @param options options to scan this relation.
  */
 case class UnresolvedRelation(

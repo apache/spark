@@ -21,6 +21,7 @@ from pyspark.errors import PySparkAttributeError
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.types import Row
 from pyspark.testing.connectutils import should_test_connect
+from pyspark.errors import PySparkTypeError
 from pyspark.errors.exceptions.connect import AnalysisException
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
@@ -158,12 +159,10 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
-        for f in (
-            "checkpoint",
-            "localCheckpoint",
-        ):
-            with self.assertRaises(NotImplementedError):
-                getattr(df, f)()
+        with self.assertRaises(NotImplementedError):
+            df.toJSON()
+        with self.assertRaises(NotImplementedError):
+            df.rdd
 
     def test_unsupported_jvm_attribute(self):
         # Unsupported jvm attributes for Spark session.
@@ -215,6 +214,21 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
     def test_column_cannot_be_constructed_from_string(self):
         with self.assertRaises(TypeError):
             Column("col")
+
+    def test_select_none(self):
+        with self.assertRaises(PySparkTypeError) as e1:
+            self.connect.range(1).select(None)
+
+        self.check_error(
+            exception=e1.exception,
+            error_class="NOT_LIST_OF_COLUMN_OR_STR",
+            message_parameters={"arg_name": "columns"},
+        )
+
+    def test_ym_interval_in_collect(self):
+        # YearMonthIntervalType is not supported in python side arrow conversion
+        with self.assertRaises(PySparkTypeError):
+            self.connect.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
 
 
 if __name__ == "__main__":

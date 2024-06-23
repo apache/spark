@@ -18,7 +18,7 @@ CreateViewCommand `tbl_view`, SELECT * FROM VALUES
   (50, 'name5', named_struct('f1', 5, 's2', named_struct('f2', 505, 'f3', 'e'))),
   (60, 'name6', named_struct('f1', 6, 's2', named_struct('f2', 606, 'f3', 'f'))),
   (70, 'name7', named_struct('f1', 7, 's2', named_struct('f2', 707, 'f3', 'g')))
-AS tbl_view(id, name, data), false, false, LocalTempView, true
+AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x, data#x]
       +- SubqueryAlias tbl_view
          +- LocalRelation [id#x, name#x, data#x]
@@ -54,7 +54,7 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 -- !query
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query analysis
-CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, true
+CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x]
       +- SubqueryAlias tbl_view
          +- View (`tbl_view`, [id#x, name#x, data#x])

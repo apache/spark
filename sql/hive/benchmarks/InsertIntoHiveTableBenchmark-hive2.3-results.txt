@@ -1,11 +1,11 @@
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 insert hive table benchmark:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-INSERT INTO DYNAMIC                                3629           3775         207          0.0      354389.9       1.0X
-INSERT INTO HYBRID                                  500            542          30          0.0       48850.2       7.3X
-INSERT INTO STATIC                                  150            163          10          0.1       14611.0      24.3X
-INSERT OVERWRITE DYNAMIC                           3071           3249         252          0.0      299902.1       1.2X
-INSERT OVERWRITE HYBRID                             447            454           9          0.0       43634.8       8.1X
-INSERT OVERWRITE STATIC                             169            177           5          0.1       16521.3      21.5X
+INSERT INTO DYNAMIC                                3930           4221         411          0.0      383795.5       1.0X
+INSERT INTO HYBRID                                  588            621          32          0.0       57447.2       6.7X
+INSERT INTO STATIC                                  188            214          13          0.1       18338.3      20.9X
+INSERT OVERWRITE DYNAMIC                           3723           3853         183          0.0      363603.4       1.1X
+INSERT OVERWRITE HYBRID                             513            527          17          0.0       50096.3       7.7X
+INSERT OVERWRITE STATIC                             191            221          14          0.1       18612.1      20.6X
 

@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg._
@@ -139,8 +140,9 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           }.apply(col(colName))
 
         case _: VectorUDT if td < 0 =>
-          this.logWarning(s"Binarization operations on sparse dataset with negative threshold " +
-            s"$td will build a dense output, so take care when applying to sparse input.")
+          logWarning(log"Binarization operations on sparse dataset with negative threshold " +
+            log"${MDC(LogKeys.THRESHOLD, td)} will build a dense output, so take care when " +
+            log"applying to sparse input.")
           udf { vector: Vector =>
             val values = Array.fill(vector.size)(1.0)
             var nnz = vector.size

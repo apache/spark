@@ -8,7 +8,7 @@
         "planId": "0"
       },
       "localRelation": {
-        "schema": "struct\u003cs:string collate UTF8_BINARY_LCASE\u003e"
+        "schema": "struct\u003cs:string collate UTF8_LCASE\u003e"
       }
     },
     "expressions": [{

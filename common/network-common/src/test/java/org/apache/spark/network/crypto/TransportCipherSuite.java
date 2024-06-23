@@ -41,10 +41,10 @@ import static org.mockito.Mockito.when;
 public class TransportCipherSuite {
 
   @Test
-  public void testBufferNotLeaksOnInternalError() throws IOException {
+  public void testCtrBufferNotLeaksOnInternalError() throws IOException {
     String algorithm = "TestAlgorithm";
     TransportConf conf = new TransportConf("Test", MapConfigProvider.EMPTY);
-    TransportCipher cipher = new TransportCipher(conf.cryptoConf(), conf.cipherTransformation(),
+    CtrTransportCipher cipher = new CtrTransportCipher(conf.cryptoConf(),
       new SecretKeySpec(new byte[256], algorithm), new byte[0], new byte[0]) {
 
       @Override

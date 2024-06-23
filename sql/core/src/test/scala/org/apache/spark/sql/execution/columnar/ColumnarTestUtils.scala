@@ -50,7 +50,7 @@ object ColumnarTestUtils {
       case LONG => Random.nextLong()
       case FLOAT => Random.nextFloat()
       case DOUBLE => Random.nextDouble()
-      case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
+      case _: STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
       case CALENDAR_INTERVAL =>
         new CalendarInterval(Random.nextInt(), Random.nextInt(), Random.nextLong())

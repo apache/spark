@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
+import org.apache.spark.sql.streaming.StreamingQueryListener.QueryStartedEvent
 import org.apache.spark.sql.types.NullType
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -297,6 +298,11 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
       .build()
 
     val resp = ds.sparkSession.execute(startCmd).head
+    if (resp.getWriteStreamOperationStartResult.hasQueryStartedEventJson) {
+      val event = QueryStartedEvent.fromJson(
+        resp.getWriteStreamOperationStartResult.getQueryStartedEventJson)
+      ds.sparkSession.streams.streamingQueryListenerBus.postToAll(event)
+    }
     RemoteStreamingQuery.fromStartCommandResponse(ds.sparkSession, resp)
   }
 

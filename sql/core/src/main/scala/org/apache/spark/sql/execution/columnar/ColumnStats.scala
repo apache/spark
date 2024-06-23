@@ -255,14 +255,16 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class StringColumnStats extends ColumnStats {
+private[columnar] final class StringColumnStats(collationId: Int) extends ColumnStats {
+  def this(dt: StringType) = this(dt.collationId)
+
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val value = row.getUTF8String(ordinal)
-      val size = STRING.actualSize(row, ordinal)
+      val size = STRING(collationId).actualSize(row, ordinal)
       gatherValueStats(value, size)
     } else {
       gatherNullStats()
@@ -270,8 +272,8 @@ private[columnar] final class StringColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: UTF8String, size: Int): Unit = {
-    if (upper == null || value.binaryCompare(upper) > 0) upper = value.clone()
-    if (lower == null || value.binaryCompare(lower) < 0) lower = value.clone()
+    if (upper == null || value.semanticCompare(upper, collationId) > 0) upper = value.clone()
+    if (lower == null || value.semanticCompare(lower, collationId) < 0) lower = value.clone()
     sizeInBytes += size
     count += 1
   }

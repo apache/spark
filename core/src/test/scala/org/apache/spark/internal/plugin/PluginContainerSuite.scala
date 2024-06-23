@@ -20,6 +20,7 @@ package org.apache.spark.internal.plugin
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{Map => JMap}
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
@@ -40,6 +41,7 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
@@ -256,6 +258,40 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       }
     }
   }
+
+  test("The plugin should be shutdown before the listener bus is stopped") {
+
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
+
+    val sc = new SparkContext(conf)
+
+    val countDownLatch = new CountDownLatch(1)
+    sc.addSparkListener(new SparkListener {
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case _: TestSparkPluginEvent =>
+            // Count down upon receiving the event sent from the plugin during shutdown.
+            countDownLatch.countDown()
+        }
+      }
+    })
+
+    TestSparkPlugin.driverPluginShutdownHook = () => {
+      // The listener bus should still be active when the plugin is shutdown
+      sc.listenerBus.post(TestSparkPluginEvent())
+    }
+
+    // Stop the context
+    sc.stop()
+    countDownLatch.await()
+    // The listener should receive the event posted by the plugin on shutdown.
+    // If the listener bus is stopped before the plugin is shutdown,
+    // then the event will be dropped and won't be delivered to the listener.
+  }
 }
 
 class MemoryOverridePlugin extends SparkPlugin {
@@ -392,6 +428,12 @@ private class TestDriverPlugin extends DriverPlugin {
     case other => throw new IllegalArgumentException(s"unknown: $other")
   }
 
+  override def shutdown(): Unit = {
+    if (TestSparkPlugin.driverPluginShutdownHook != null) {
+      TestSparkPlugin.driverPluginShutdownHook()
+    }
+  }
+
 }
 
 private class TestExecutorPlugin extends ExecutorPlugin {
@@ -420,9 +462,12 @@ private class TestExecutorPlugin extends ExecutorPlugin {
   }
 }
 
+case class TestSparkPluginEvent() extends SparkListenerEvent
+
 private object TestSparkPlugin {
   var driverPlugin: TestDriverPlugin = _
   var driverContext: PluginContext = _
+  var driverPluginShutdownHook: () => Unit = _
 
   var executorPlugin: TestExecutorPlugin = _
   var executorContext: PluginContext = _
@@ -432,6 +477,7 @@ private object TestSparkPlugin {
   def reset(): Unit = {
     driverPlugin = null
     driverContext = null
+    driverPluginShutdownHook = null
     executorPlugin = null
     executorContext = null
     extraConf = null

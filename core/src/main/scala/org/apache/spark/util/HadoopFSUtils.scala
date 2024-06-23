@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.util.ArrayImplicits._
 
@@ -86,7 +87,7 @@ private[spark] object HadoopFSUtils extends Logging {
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
-    logInfo(s"Listing $path with listFiles API")
+    logInfo(log"Listing ${MDC(PATH, path)} with listFiles API")
     try {
       val prefixLength = path.toString.length
       val remoteIter = path.getFileSystem(hadoopConf).listFiles(path, true)
@@ -99,7 +100,8 @@ private[spark] object HadoopFSUtils extends Logging {
       Seq((path, statues.toImmutableArraySeq))
     } catch {
       case _: FileNotFoundException =>
-        logWarning(s"The root directory $path was not found. Was it deleted very recently?")
+        logWarning(log"The root directory ${MDC(PATH, path)} " +
+          log"was not found. Was it deleted very recently?")
         Seq((path, Seq.empty[FileStatus]))
     }
   }
@@ -132,8 +134,9 @@ private[spark] object HadoopFSUtils extends Logging {
       }
     }
 
-    logInfo(s"Listing leaf files and directories in parallel under ${paths.length} paths." +
-      s" The first several paths are: ${paths.take(10).mkString(", ")}.")
+    logInfo(log"Listing leaf files and directories in parallel under" +
+      log"${MDC(NUM_PATHS, paths.length)} paths." +
+      log" The first several paths are: ${MDC(PATHS, paths.take(10).mkString(", "))}.")
     HiveCatalogMetrics.incrementParallelListingJobCount(1)
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -235,7 +238,8 @@ private[spark] object HadoopFSUtils extends Logging {
       // InMemoryFileIndex construction. However, it's still a net improvement to detect and
       // fail-fast on the non-root cases. For more info see the SPARK-27676 review discussion.
       case _: FileNotFoundException if isRootPath || ignoreMissingFiles =>
-        logWarning(s"The directory $path was not found. Was it deleted very recently?")
+        logWarning(log"The directory ${MDC(PATH, path)} " +
+          log"was not found. Was it deleted very recently?")
         Array.empty[FileStatus]
     }
 
@@ -323,8 +327,8 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     if (missingFiles.nonEmpty) {
-      logWarning(
-        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
+      logWarning(log"the following files were missing during file scan:\n  " +
+        log"${MDC(PATHS, missingFiles.mkString("\n  "))}")
     }
 
     resolvedLeafStatuses.toImmutableArraySeq

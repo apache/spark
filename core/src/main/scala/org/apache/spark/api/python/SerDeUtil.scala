@@ -28,7 +28,8 @@ import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ArrayImplicits._
 
@@ -143,22 +144,26 @@ private[spark] object SerDeUtil extends Logging {
     }
     (kt, vt) match {
       case (Failure(kf), Failure(vf)) =>
-        logWarning(s"""
-               |Failed to pickle Java object as key: ${t._1.getClass.getSimpleName}, falling back
-               |to 'toString'. Error: ${kf.getMessage}""".stripMargin)
-        logWarning(s"""
-               |Failed to pickle Java object as value: ${t._2.getClass.getSimpleName}, falling back
-               |to 'toString'. Error: ${vf.getMessage}""".stripMargin)
+        logWarning(log"""
+               |Failed to pickle Java object as key:
+               |${MDC(CLASS_NAME, t._1.getClass.getSimpleName)}, falling back
+               |to 'toString'. Error: ${MDC(ERROR, kf.getMessage)}""".stripMargin)
+        logWarning(log"""
+               |Failed to pickle Java object as value:
+               |${MDC(CLASS_NAME, t._2.getClass.getSimpleName)}, falling back
+               |to 'toString'. Error: ${MDC(ERROR, vf.getMessage)}""".stripMargin)
         (true, true)
       case (Failure(kf), _) =>
-        logWarning(s"""
-               |Failed to pickle Java object as key: ${t._1.getClass.getSimpleName}, falling back
-               |to 'toString'. Error: ${kf.getMessage}""".stripMargin)
+        logWarning(log"""
+               |Failed to pickle Java object as key:
+               |${MDC(CLASS_NAME, t._1.getClass.getSimpleName)}, falling back
+               |to 'toString'. Error: ${MDC(ERROR, kf.getMessage)}""".stripMargin)
         (true, false)
       case (_, Failure(vf)) =>
-        logWarning(s"""
-               |Failed to pickle Java object as value: ${t._2.getClass.getSimpleName}, falling back
-               |to 'toString'. Error: ${vf.getMessage}""".stripMargin)
+        logWarning(log"""
+               |Failed to pickle Java object as value:
+               |${MDC(CLASS_NAME, t._2.getClass.getSimpleName)}, falling back
+               |to 'toString'. Error: ${MDC(ERROR, vf.getMessage)}""".stripMargin)
         (false, true)
       case _ =>
         (false, false)

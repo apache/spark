@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.END_POINT
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
 
@@ -194,7 +194,8 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
    * Exposed for testing.
    */
   protected def onDrop(message: InboxMessage): Unit = {
-    logWarning(s"Drop $message because endpoint $endpointName is stopped")
+    logWarning(log"Drop ${MDC(MESSAGE, message)} " +
+      log"because endpoint ${MDC(END_POINT, endpointName)} is stopped")
   }
 
   /**

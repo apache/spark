@@ -93,7 +93,7 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
   }
 
   test("isBinaryStable on complex types containing collated strings") {
-    val nonBinaryStringType = StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))
+    val nonBinaryStringType = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
 
     // simple checks
     assert(UnsafeRowUtils.isBinaryStable(IntegerType))

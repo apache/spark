@@ -151,11 +151,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   }
 
   test("explain table valued functions") {
-    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1, splits=None)")
+    checkKeywordsExistsInExplain(sql("select * from RaNgE(2)"), "Range (0, 2, step=1)")
     checkKeywordsExistsInExplain(sql("SELECT * FROM range(3) CROSS JOIN range(3)"),
       "Join Cross",
-      ":- Range (0, 3, step=1, splits=None)",
-      "+- Range (0, 3, step=1, splits=None)")
+      ":- Range (0, 3, step=1)",
+      "+- Range (0, 3, step=1)")
   }
 
   test("explain lateral joins") {

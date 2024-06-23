@@ -34,6 +34,28 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT (
+  WITH unreferenced AS (SELECT id)
+  SELECT 1
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery(id):int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  WITH unreferenced AS (SELECT 1)
+  SELECT id
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery(id):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))

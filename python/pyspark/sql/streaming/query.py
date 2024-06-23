@@ -114,7 +114,7 @@ class StreamingQuery:
     @property
     def name(self) -> str:
         """
-        Returns the user-specified name of the query, or null if not specified.
+        Returns the user-specified name of the query, or None if not specified.
         This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
         as `dataframe.writeStream.queryName("query").start()`.
         This name, if set, must be unique across all active queries.
@@ -127,14 +127,14 @@ class StreamingQuery:
         Returns
         -------
         str
-            The user-specified name of the query, or null if not specified.
+            The user-specified name of the query, or None if not specified.
 
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
-        Get the user-specified name of the query, or null if not specified.
+        Get the user-specified name of the query, or None if not specified.
 
         >>> sq.name
         'this_query'

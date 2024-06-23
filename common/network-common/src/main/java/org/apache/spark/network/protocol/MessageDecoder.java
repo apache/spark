@@ -23,8 +23,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * Decoder used by the client side to encode server-to-client responses.
@@ -33,7 +34,7 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
-  private static final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(MessageDecoder.class);
 
   public static final MessageDecoder INSTANCE = new MessageDecoder();
 

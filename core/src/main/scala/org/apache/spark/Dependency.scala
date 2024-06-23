@@ -24,7 +24,8 @@ import scala.reflect.ClassTag
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
@@ -211,10 +212,13 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   // This may crash the driver with an OOM error.
   if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
     logWarning(
-      s"The number of shuffle blocks (${numPartitions.toLong * partitioner.numPartitions.toLong})" +
-        s" for shuffleId ${shuffleId} for ${_rdd} with ${numPartitions} partitions" +
-        " is possibly too large, which could cause the driver to crash with an out-of-memory" +
-        " error. Consider decreasing the number of partitions in this shuffle stage."
+      log"The number of shuffle blocks " +
+        log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
+        log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
+        log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
+        log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
+        log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        log" error. Consider decreasing the number of partitions in this shuffle stage."
     )
   }
 

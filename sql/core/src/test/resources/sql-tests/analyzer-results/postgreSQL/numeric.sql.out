@@ -4775,21 +4775,21 @@ Project [EXP(cast(1234.5678 as double)) AS EXP(1234.5678)#x]
 select * from range(cast(0.0 as decimal(38, 18)), cast(4.0 as decimal(38, 18)))
 -- !query analysis
 Project [id#xL]
-+- Range (0, 4, step=1, splits=None)
++- Range (0, 4, step=1)
 
 
 -- !query
 select * from range(cast(0.1 as decimal(38, 18)), cast(4.0 as decimal(38, 18)), cast(1.3 as decimal(38, 18)))
 -- !query analysis
 Project [id#xL]
-+- Range (0, 4, step=1, splits=None)
++- Range (0, 4, step=1)
 
 
 -- !query
 select * from range(cast(4.0 as decimal(38, 18)), cast(-1.5 as decimal(38, 18)), cast(-2.2 as decimal(38, 18)))
 -- !query analysis
 Project [id#xL]
-+- Range (4, -1, step=-2, splits=None)
++- Range (4, -1, step=-2)
 
 
 -- !query
@@ -4894,14 +4894,14 @@ Project [LOG(cast(1.000016 as double), 8.45201E18) AS LOG(1.000016, 8.45201E18)#
 SELECT SUM(decimal(9999)) FROM range(1, 100001)
 -- !query analysis
 Aggregate [sum(cast(9999 as decimal(10,0))) AS sum(9999)#x]
-+- Range (1, 100001, step=1, splits=None)
++- Range (1, 100001, step=1)
 
 
 -- !query
 SELECT SUM(decimal(-9999)) FROM range(1, 100001)
 -- !query analysis
 Aggregate [sum(cast(-9999 as decimal(10,0))) AS sum(-9999)#x]
-+- Range (1, 100001, step=1, splits=None)
++- Range (1, 100001, step=1)
 
 
 -- !query

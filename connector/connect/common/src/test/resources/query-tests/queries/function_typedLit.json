@@ -200,7 +200,7 @@
         "map": {
           "keyType": {
             "string": {
-              "collationId": 0
+              "collation": "UTF8_BINARY"
             }
           },
           "valueType": {
@@ -228,7 +228,7 @@
                 "name": "_1",
                 "dataType": {
                   "string": {
-                    "collationId": 0
+                    "collation": "UTF8_BINARY"
                   }
                 },
                 "nullable": true
@@ -404,7 +404,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -417,7 +417,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -439,7 +439,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -461,7 +461,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -493,7 +493,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -511,7 +511,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -533,7 +533,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -576,7 +576,7 @@
                   "map": {
                     "keyType": {
                       "string": {
-                        "collationId": 0
+                        "collation": "UTF8_BINARY"
                       }
                     },
                     "valueType": {
@@ -594,7 +594,7 @@
                       "name": "_1",
                       "dataType": {
                         "string": {
-                          "collationId": 0
+                          "collation": "UTF8_BINARY"
                         }
                       },
                       "nullable": true
@@ -608,7 +608,7 @@
                           },
                           "valueType": {
                             "string": {
-                              "collationId": 0
+                              "collation": "UTF8_BINARY"
                             }
                           },
                           "valueContainsNull": true
@@ -640,7 +640,7 @@
             "map": {
               "keyType": {
                 "string": {
-                  "collationId": 0
+                  "collation": "UTF8_BINARY"
                 }
               },
               "valueType": {
@@ -666,7 +666,7 @@
                     "name": "_1",
                     "dataType": {
                       "string": {
-                        "collationId": 0
+                        "collation": "UTF8_BINARY"
                       }
                     },
                     "nullable": true
@@ -680,7 +680,7 @@
                         },
                         "valueType": {
                           "string": {
-                            "collationId": 0
+                            "collation": "UTF8_BINARY"
                           }
                         },
                         "valueContainsNull": true
@@ -700,7 +700,7 @@
                   },
                   "valueType": {
                     "string": {
-                      "collationId": 0
+                      "collation": "UTF8_BINARY"
                     }
                   },
                   "keys": [{

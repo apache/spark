@@ -28,8 +28,10 @@ import com.google.common.io.Closeables;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
 import org.junit.jupiter.api.Assertions;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
 /**
  * Manages some sort-shuffle data, including the creation

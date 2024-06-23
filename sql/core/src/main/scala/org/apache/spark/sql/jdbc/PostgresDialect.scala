@@ -37,7 +37,8 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect()
+  extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -61,8 +62,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         // money type seems to be broken but one workaround is to handle it as string.
         // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
         Some(StringType)
-      case Types.TIMESTAMP
-        if "timestamptz".equalsIgnoreCase(typeName) =>
+      case Types.TIMESTAMP if "timestamptz".equalsIgnoreCase(typeName) &&
+          !conf.legacyPostgresDatetimeMappingEnabled =>
         // timestamptz represents timestamp with time zone, currently it maps to Types.TIMESTAMP.
         // We need to change to Types.TIMESTAMP_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
@@ -149,6 +150,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case TimestampType if !conf.legacyPostgresDatetimeMappingEnabled =>
+      Some(JdbcType("TIMESTAMP WITH TIME ZONE", Types.TIMESTAMP))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>

@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**
@@ -82,7 +82,8 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
   /** Cleanup the tracked input information older than threshold batch time */
   def cleanup(batchThreshTime: Time): Unit = synchronized {
     val timesToCleanup = batchTimeToInputInfos.keys.filter(_ < batchThreshTime)
-    logInfo(s"remove old batch metadata: ${timesToCleanup.mkString(" ")}")
+    logInfo(log"remove old batch metadata: " +
+      log"${MDC(LogKeys.DURATION, timesToCleanup.mkString(" "))}")
     batchTimeToInputInfos --= timesToCleanup
   }
 }

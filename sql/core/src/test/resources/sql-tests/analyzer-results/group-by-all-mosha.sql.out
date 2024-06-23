@@ -10,7 +10,7 @@ CreateViewCommand `stuff`, select * from values
   (42, 9.75, 'hello world', '1970-08-07', '13.37', array(1,20,300)),
   (1337, 1.2345, 'oh no', '2000-01-01', '42.0', array(4000,50000,600000)),
   (42, 13.37, 'test', '1970-08-07', '1234567890', array(7000000,80000000,900000000))
-  as stuff(i, f, s, t, d, a), false, false, LocalTempView, true
+  as stuff(i, f, s, t, d, a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [i#x, f#x, s#x, t#x, d#x, a#x]
       +- SubqueryAlias stuff
          +- LocalRelation [i#x, f#x, s#x, t#x, d#x, a#x]

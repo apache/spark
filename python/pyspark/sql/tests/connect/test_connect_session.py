@@ -242,13 +242,27 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
 
-    def test_reset_when_server_session_changes(self):
+    def test_reset_when_server_and_client_sessionids_mismatch(self):
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
         # run a simple query so the session id is synchronized.
         session.range(3).collect()
 
         # trigger a mismatch between client session id and server session id.
         session._client._session_id = str(uuid.uuid4())
+        with self.assertRaises(SparkConnectException):
+            session.range(3).collect()
+
+        # assert that getOrCreate() generates a new session
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.range(3).collect()
+
+    def test_reset_when_server_session_id_mismatch(self):
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        # run a simple query so the session id is synchronized.
+        session.range(3).collect()
+
+        # trigger a mismatch
+        session._client._server_session_id = str(uuid.uuid4())
         with self.assertRaises(SparkConnectException):
             session.range(3).collect()
 

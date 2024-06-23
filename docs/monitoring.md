@@ -1435,12 +1435,14 @@ Note: applies to the shuffle service
 - blockTransferMessageRate (meter) - rate of block transfer messages,
   i.e. if batch fetches are enabled, this represents number of batches rather than number of blocks
 - blockTransferRateBytes (meter)
-- blockTransferAvgTime_1min (gauge - 1-minute moving average)
+- blockTransferAvgSize_1min (gauge - 1-minute moving average)
 - numActiveConnections.count
 - numRegisteredConnections.count
 - numCaughtExceptions.count
-- openBlockRequestLatencyMillis (histogram)
-- registerExecutorRequestLatencyMillis (histogram)
+- openBlockRequestLatencyMillis (timer)
+- registerExecutorRequestLatencyMillis (timer)
+- fetchMergedBlocksMetaLatencyMillis (timer)
+- finalizeShuffleMergeLatencyMillis (timer)
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory

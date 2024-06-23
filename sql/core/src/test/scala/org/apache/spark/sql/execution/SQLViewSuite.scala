@@ -91,7 +91,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
               "tempObj" -> "VIEW",
               "tempObjName" -> "`temp_jtv1`"))
-          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          val globalTempDB = spark.sharedState.globalTempDB
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           checkError(
             exception = intercept[AnalysisException] {
@@ -899,46 +899,48 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("resolve a view when the dataTypes of referenced table columns changed") {
     withTable("tab1") {
-      spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("tab1")
-      withView("testView") {
-        sql("CREATE VIEW testView AS SELECT * FROM tab1")
+      withSQLConf("spark.sql.legacy.viewSchemaCompensation" -> "false") {
+        spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("tab1")
+        withView("testView") {
+          sql("CREATE VIEW testView AS SELECT * FROM tab1")
 
-        // Allow casting from IntegerType to LongType
-        val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
-        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
+          // Allow casting from IntegerType to LongType
+          val df = (1 until 10).map(i => (i, i + 1)).toDF("id", "id1")
+          df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
+          checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i + 1)))
 
-        // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
-        val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
-        df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-        checkError(
-          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
-          errorClass = "CANNOT_UP_CAST_DATATYPE",
-          parameters = Map(
-            "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id",
-            "sourceType" -> "\"DOUBLE\"",
-            "targetType" -> "\"BIGINT\"",
-            "details" -> ("The type path of the target object is:\n\n" +
-              "You can either add an explicit cast to the input data or " +
-              "choose a higher precision type of the field in the target object")
+          // Casting from DoubleType to LongType might truncate, throw an AnalysisException.
+          val df2 = (1 until 10).map(i => (i.toDouble, i.toDouble)).toDF("id", "id1")
+          df2.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
+          checkError(
+            exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+            errorClass = "CANNOT_UP_CAST_DATATYPE",
+            parameters = Map(
+              "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id",
+              "sourceType" -> "\"DOUBLE\"",
+              "targetType" -> "\"BIGINT\"",
+              "details" -> ("The type path of the target object is:\n\n" +
+                "You can either add an explicit cast to the input data or " +
+                "choose a higher precision type of the field in the target object")
+            )
           )
-        )
 
-        // Can't cast from ArrayType to LongType, throw an AnalysisException.
-        val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
-        df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
-        checkError(
-          exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
-          errorClass = "CANNOT_UP_CAST_DATATYPE",
-          parameters = Map(
-            "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id1",
-            "sourceType" -> "\"ARRAY<INT>\"",
-            "targetType" -> "\"BIGINT\"",
-            "details" -> ("The type path of the target object is:\n\n" +
-              "You can either add an explicit cast to the input data or " +
-              "choose a higher precision type of the field in the target object")
+          // Can't cast from ArrayType to LongType, throw an AnalysisException.
+          val df3 = (1 until 10).map(i => (i, Seq(i))).toDF("id", "id1")
+          df3.write.format("json").mode(SaveMode.Overwrite).saveAsTable("tab1")
+          checkError(
+            exception = intercept[AnalysisException](sql("SELECT * FROM testView")),
+            errorClass = "CANNOT_UP_CAST_DATATYPE",
+            parameters = Map(
+              "expression" -> s"$SESSION_CATALOG_NAME.default.tab1.id1",
+              "sourceType" -> "\"ARRAY<INT>\"",
+              "targetType" -> "\"BIGINT\"",
+              "details" -> ("The type path of the target object is:\n\n" +
+                "You can either add an explicit cast to the input data or " +
+                "choose a higher precision type of the field in the target object")
+            )
           )
-        )
+        }
       }
     }
   }
@@ -1100,7 +1102,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("local temp view refers global temp view") {
     withGlobalTempView("v1") {
       withTempView("v2") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE GLOBAL TEMPORARY VIEW v1 AS SELECT 1")
         sql(s"CREATE TEMPORARY VIEW v2 AS SELECT * FROM ${globalTempDB}.v1")
         checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1)))
@@ -1111,7 +1113,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("global temp view refers local temp view") {
     withTempView("v1") {
       withGlobalTempView("v2") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
         sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
         checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))

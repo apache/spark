@@ -109,7 +109,7 @@
       <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>

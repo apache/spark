@@ -103,7 +103,7 @@ private[hive] class SparkGetTablesOperation(
 
       // Temporary views and global temporary views
       if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
-        val globalTempViewDb = catalog.globalTempViewManager.database
+        val globalTempViewDb = catalog.globalTempDatabase
         val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
         val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
           catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)

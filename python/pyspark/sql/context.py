@@ -46,6 +46,7 @@ from pyspark.sql.streaming import StreamingQueryManager
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.rdd import RDD
     from pyspark.core.context import SparkContext
     from pyspark.sql._typing import (
@@ -343,14 +344,14 @@ class SQLContext:
 
     @overload
     def createDataFrame(
-        self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
+        self, data: Union["PandasDataFrameLike", "pa.Table"], samplingRatio: Optional[float] = ...
     ) -> DataFrame:
         ...
 
     @overload
     def createDataFrame(
         self,
-        data: "PandasDataFrameLike",
+        data: Union["PandasDataFrameLike", "pa.Table"],
         schema: Union[StructType, str],
         verifySchema: bool = ...,
     ) -> DataFrame:
@@ -358,13 +359,14 @@ class SQLContext:
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike"],
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "pa.Table"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
     ) -> DataFrame:
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`, or
+        a :class:`pyarrow.Table`.
 
         When ``schema`` is a list of column names, the type of each column
         will be inferred from ``data``.
@@ -393,12 +395,15 @@ class SQLContext:
         .. versionchanged:: 2.1.0
            Added verifySchema.
 
+        .. versionchanged:: 4.0.0
+           Added support for :class:`pyarrow.Table`.
+
         Parameters
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
-            :class:`pandas.DataFrame`.
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`pandas.DataFrame`, or :class:`pyarrow.Table`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
@@ -450,6 +455,12 @@ class SQLContext:
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name='Alice', age=1)]
         >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
+        [Row(0=1, 1=2)]
+
+        >>> sqlContext.createDataFrame(df.toArrow()).collect()  # doctest: +SKIP
+        [Row(name='Alice', age=1)]
+        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(table).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
 
         >>> sqlContext.createDataFrame(rdd, "a: string, b: int").collect()

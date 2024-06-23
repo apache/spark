@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, TreePattern, WITH_EXPRESSION}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -27,9 +28,11 @@ import org.apache.spark.sql.types.DataType
  */
 case class With(child: Expression, defs: Seq[CommonExpressionDef])
   extends Expression with Unevaluable {
-  // We do not allow With to be created with an AggregateExpression in the child, as this would
-  // create a dangling CommonExpressionRef after rewriting it in RewriteWithExpression.
-  assert(!child.containsPattern(AGGREGATE_EXPRESSION))
+  // We do not allow creating a With expression with an AggregateExpression that contains a
+  // reference to a common expression defined in that scope (note that it can contain another With
+  // expression with a common expression ref of the inner With). This is to prevent the creation of
+  // a dangling CommonExpressionRef after rewriting it in RewriteWithExpression.
+  assert(!With.childContainsUnsupportedAggExpr(this))
 
   override val nodePatterns: Seq[TreePattern] = Seq(WITH_EXPRESSION)
   override def dataType: DataType = child.dataType
@@ -37,7 +40,23 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
   override def children: Seq[Expression] = child +: defs
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(child = newChildren.head, defs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef]))
+    val newDefs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef])
+    // If any `CommonExpressionDef` has been updated (data type or nullability), also update its
+    // `CommonExpressionRef` in the `child`.
+    val newChild = newDefs.filter(_.resolved).foldLeft(newChildren.head) { (result, newDef) =>
+      defs.find(_.id == newDef.id).map { oldDef =>
+        if (newDef.dataType != oldDef.dataType || newDef.nullable != oldDef.nullable) {
+          val newRef = new CommonExpressionRef(newDef)
+          result.transform {
+            case oldRef: CommonExpressionRef if oldRef.id == newRef.id =>
+              newRef
+          }
+        } else {
+          result
+        }
+      }.getOrElse(result)
+    }
+    copy(child = newChild, defs = newDefs)
   }
 
   /**
@@ -91,6 +110,21 @@ object With {
     val commonExprDefs = commonExprs.map(CommonExpressionDef(_))
     val commonExprRefs = commonExprDefs.map(new CommonExpressionRef(_))
     With(replaced(commonExprRefs), commonExprDefs)
+  }
+
+  private[sql] def childContainsUnsupportedAggExpr(withExpr: With): Boolean = {
+    lazy val commonExprIds = withExpr.defs.map(_.id).toSet
+    withExpr.child.exists {
+      case agg: AggregateExpression =>
+        // Check that the aggregate expression does not contain a reference to a common expression
+        // in the outer With expression (it is ok if it contains a reference to a common expression
+        // for a nested With expression).
+        agg.exists {
+          case r: CommonExpressionRef => commonExprIds.contains(r.id)
+          case _ => false
+        }
+      case _ => false
+    }
   }
 }
 

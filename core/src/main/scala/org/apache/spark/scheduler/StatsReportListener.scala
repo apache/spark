@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.util.{Distribution, Utils}
 
 
@@ -46,7 +46,8 @@ class StatsReportListener extends SparkListener with Logging {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
     implicit val sc = stageCompleted
-    this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
+    this.logInfo(
+      log"Finished stage: ${MDC(LogKeys.STAGE, getStatusDetail(stageCompleted.stageInfo))}")
     showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics.toSeq)
 
     // Shuffle write
@@ -111,9 +112,9 @@ private[spark] object StatsReportListener extends Logging {
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String): Unit = {
     val stats = d.statCounter
     val quantiles = d.getQuantiles(probabilities).map(formatNumber)
-    logInfo(heading + stats)
+    logInfo(log"${MDC(LogKeys.DESCRIPTION, heading)}${MDC(LogKeys.STATS, stats)}")
     logInfo(percentilesHeader)
-    logInfo("\t" + quantiles.mkString("\t"))
+    logInfo(log"\t" + log"${MDC(LogKeys.QUANTILES, quantiles.mkString("\t"))}")
   }
 
   def showDistribution(

@@ -22,9 +22,9 @@ import java.util.Random
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class ClientDataFrameStatSuite extends RemoteSparkSession {
+class ClientDataFrameStatSuite extends ConnectFunSuite with RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("approxQuantile") {

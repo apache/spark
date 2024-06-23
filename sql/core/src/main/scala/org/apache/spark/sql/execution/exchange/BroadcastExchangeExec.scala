@@ -67,10 +67,21 @@ trait BroadcastExchangeLike extends Exchange {
    * It also does the preparations work, such as waiting for the subqueries.
    */
   final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
+    materializationStarted.set(true)
     completionFuture
   }
 
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+
+  /**
+   * Cancels broadcast job.
+   */
+  final def cancelBroadcastJob(): Unit = {
+    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+      sparkContext.cancelJobsWithTag(this.jobTag)
+      this.relationFuture.cancel(true)
+    }
+  }
 
   /**
    * Returns the runtime statistics after broadcast materialization.

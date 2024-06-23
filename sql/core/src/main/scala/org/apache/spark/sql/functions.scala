@@ -1938,6 +1938,15 @@ object functions {
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
 
   /**
+   * Returns the remainder of `dividend``/``divisor`. Its result is
+   * always null if `divisor` is 0.
+   *
+   * @group math_funcs
+   * @since 4.0.0
+   */
+  def try_remainder(left: Column, right: Column): Column = Column.fn("try_remainder", left, right)
+
+  /**
    * Returns `left``*``right` and the result is null on overflow. The acceptable input types are
    * the same with the `*` operator.
    *
@@ -4226,6 +4235,19 @@ object functions {
     Column.fn("substring", str, lit(pos), lit(len))
 
   /**
+   * Substring starts at `pos` and is of length `len` when str is String type or
+   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
+   * when str is Binary type
+   *
+   * @note The position is not zero based, but 1 based index.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def substring(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substring", str, pos, len)
+
+  /**
    * Returns the substring from string str before count occurrences of the delimiter delim.
    * If count is positive, everything the left of the final delimiter (counting from left) is
    * returned. If count is negative, every to the right of the final delimiter (counting from the
@@ -5733,6 +5755,27 @@ object functions {
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
+   * Gets the difference between the timestamps in the specified units by truncating
+   * the fraction part.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
+    TimestampDiff(unit, start.expr, end.expr)
+  }
+
+  /**
+   * Adds the specified number of units to the given timestamp.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_add(unit: String, quantity: Column, ts: Column): Column = withExpr {
+    TimestampAdd(unit, quantity.expr, ts.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
@@ -6931,9 +6974,9 @@ object functions {
   /**
    * Returns length of array or map.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
+   * With the default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -6943,9 +6986,9 @@ object functions {
   /**
    * Returns length of array or map. This is an alias of `size` function.
    *
-   * The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-   * spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-   * With the default settings, the function returns -1 for null input.
+   * This function returns -1 for null input only if spark.sql.ansi.enabled is false and
+   * spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
+   * With the default settings, the function returns null for null input.
    *
    * @group collection_funcs
    * @since 3.5.0

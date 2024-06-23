@@ -165,7 +165,7 @@ class CogroupedApplyInPandasTestsMixin:
             fn=lambda lft, rgt: lft.size + rgt.size,
             error_class=PythonException,
             error_message_regex="Return type of the user-defined function "
-            "should be pandas.DataFrame, but is int.",
+            "should be pandas.DataFrame, but is int",
         )
 
     def test_apply_in_pandas_returning_column_names(self):

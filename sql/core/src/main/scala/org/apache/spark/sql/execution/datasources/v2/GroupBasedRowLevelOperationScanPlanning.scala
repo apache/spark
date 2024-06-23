@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.{GroupBasedRowLevelOperation, PhysicalOperation}
@@ -62,14 +63,16 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
 
       val (scan, output) = PushDownUtils.pruneColumns(scanBuilder, relation, relation.output, Nil)
 
+      // scalastyle:off line.size.limit
       logInfo(
-        s"""
-           |Pushing operators to ${relation.name}
-           |Pushed filters: $pushedFiltersStr
-           |Filters evaluated on data source side: ${evaluatedFilters.mkString(", ")}
-           |Filters evaluated on Spark side: ${postScanFilters.mkString(", ")}
-           |Output: ${output.mkString(", ")}
-         """.stripMargin)
+        log"""
+            |Pushing operators to ${MDC(LogKeys.RELATION_NAME, relation.name)}
+            |Pushed filters: ${MDC(LogKeys.PUSHED_FILTERS, pushedFiltersStr)}
+            |Filters evaluated on data source side: ${MDC(LogKeys.EVALUATED_FILTERS, evaluatedFilters.mkString(", "))}
+            |Filters evaluated on Spark side: ${MDC(LogKeys.POST_SCAN_FILTERS, postScanFilters.mkString(", "))}}
+            |Output: ${MDC(LogKeys.RELATION_OUTPUT, output.mkString(", "))}
+           """.stripMargin)
+      // scalastyle:on line.size.limit
 
       rd transformDown {
         // simplify the join condition in MERGE operations by discarding already evaluated filters

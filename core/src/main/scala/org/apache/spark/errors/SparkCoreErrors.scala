@@ -501,6 +501,15 @@ private[spark] object SparkCoreErrors {
         "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC)))
   }
 
+  def tooManyArrayElementsError(numElements: Long, maxRoundedArrayLength: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      messageParameters = Map(
+        "numberOfElements" -> numElements.toString,
+        "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
+    )
+  }
+
   private def quoteByDefault(elem: String): String = {
     "\"" + elem + "\""
   }

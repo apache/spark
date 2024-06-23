@@ -100,8 +100,8 @@ private[columnar] class FloatColumnAccessor(buffer: ByteBuffer)
 private[columnar] class DoubleColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, DOUBLE)
 
-private[columnar] class StringColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, STRING)
+private[columnar] class StringColumnAccessor(buffer: ByteBuffer, dataType: StringType)
+  extends NativeColumnAccessor(buffer, STRING(dataType))
 
 private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
@@ -147,7 +147,7 @@ private[sql] object ColumnAccessor {
         new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
-      case StringType => new StringColumnAccessor(buf)
+      case s: StringType => new StringColumnAccessor(buf, s)
       case BinaryType => new BinaryColumnAccessor(buf)
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnAccessor(buf, dt)

@@ -40,7 +40,9 @@ import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
@@ -84,7 +86,8 @@ private[spark] object JettyUtils extends Logging {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
           case e: Exception =>
-            logWarning(s"GET ${request.getRequestURI} failed: $e", e)
+            logWarning(log"GET ${MDC(LogKeys.URI, request.getRequestURI)} failed: " +
+              log"${MDC(ERROR, e)}", e)
             throw e
         }
       }
@@ -247,7 +250,8 @@ private[spark] object JettyUtils extends Logging {
       poolSize: Int = 200): ServerInfo = {
 
     val stopTimeout = conf.get(UI_JETTY_STOP_TIMEOUT)
-    logInfo(s"Start Jetty $hostName:$port for $serverName")
+    logInfo(log"Start Jetty ${MDC(HOST, hostName)}:${MDC(PORT, port)}" +
+      log" for ${MDC(SERVER_NAME, serverName)}")
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
@@ -555,7 +559,9 @@ private[spark] case class ServerInfo(
    */
   private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
     conf.get(UI_FILTERS).foreach { filter =>
-      logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
+      logInfo(log"Adding filter to" +
+        log" ${MDC(SERVLET_CONTEXT_HANDLER_PATH, handler.getContextPath())}:" +
+        log" ${MDC(UI_FILTER, filter)}")
       val oldParams = conf.getOption(s"spark.$filter.params").toSeq
         .flatMap(Utils.stringToSeq)
         .flatMap { param =>

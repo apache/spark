@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
@@ -86,11 +88,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       logInfo(
-        s"""
-           |Pushing operators to ${sHolder.relation.name}
-           |Pushed Filters: $pushedFiltersStr
-           |Post-Scan Filters: ${postScanFilters.mkString(",")}
-         """.stripMargin)
+        log"""
+            |Pushing operators to ${MDC(RELATION_NAME, sHolder.relation.name)}
+            |Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFiltersStr)}
+            |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
+           """.stripMargin)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
@@ -214,13 +216,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       holder.pushedAggOutputMap = AttributeMap(groupOutputMap ++ aggOutputMap)
       holder.output = newOutput
       logInfo(
-        s"""
-           |Pushing operators to ${holder.relation.name}
-           |Pushed Aggregate Functions:
-           | ${translatedAgg.aggregateExpressions().mkString(", ")}
-           |Pushed Group by:
-           | ${translatedAgg.groupByExpressions.mkString(", ")}
-         """.stripMargin)
+        log"""
+            |Pushing operators to ${MDC(RELATION_NAME, holder.relation.name)}
+            |Pushed Aggregate Functions:
+            | ${MDC(AGGREGATE_FUNCTIONS, translatedAgg.aggregateExpressions().mkString(", "))}
+            |Pushed Group by:
+            | ${MDC(GROUP_BY_EXPRS, translatedAgg.groupByExpressions.mkString(", "))}
+           """.stripMargin)
 
       if (canCompletePushDown) {
         val projectExpressions = finalResultExprs.map { expr =>
@@ -361,9 +363,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
 
       logInfo(
-        s"""
-           |Output: ${output.mkString(", ")}
-         """.stripMargin)
+        log"""
+            |Output: ${MDC(RELATION_OUTPUT, output.mkString(", "))}
+           """.stripMargin)
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 

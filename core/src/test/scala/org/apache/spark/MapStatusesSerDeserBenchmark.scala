@@ -123,7 +123,6 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
   }
 
   override def afterAll(): Unit = {
-    tracker.stop()
     if (sc != null) {
       sc.stop()
     }

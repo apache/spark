@@ -1364,10 +1364,39 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
+  test("Collation aware streaming") {
+    withTable("parquet_streaming_tbl") {
+      spark.sql(
+        """
+          |CREATE TABLE parquet_streaming_tbl
+          |(
+          |  key STRING COLLATE UTF8_LCASE,
+          |  value_stream INTEGER
+          |) USING parquet""".stripMargin)
+
+      val streamDf = spark.readStream.table("parquet_streaming_tbl")
+      val filteredDf = streamDf.filter("key = 'aaa'")
+
+      val clock = new StreamManualClock()
+      testStream(filteredDf)(
+        StartStream(triggerClock = clock, trigger = Trigger.ProcessingTime(100)),
+        Execute { _ =>
+          spark.createDataFrame(Seq("aaa" -> 1, "AAA" -> 2, "bbb" -> 3, "aa" -> 4))
+            .toDF("key", "value_stream")
+            .write.format("parquet").mode(SaveMode.Append)
+            .saveAsTable("parquet_streaming_tbl")
+        },
+        AdvanceManualClock(150),
+        waitUntilBatchProcessed(clock),
+        CheckLastBatch(("aaa", 1), ("AAA", 2))
+      )
+    }
+  }
+
   test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
     "key must be disallowed") {
     val tableName = "parquet_dummy_tbl"
-    val collationName = "UTF8_BINARY_LCASE"
+    val collationName = "UTF8_LCASE"
 
     withTable(tableName) {
       sql(
@@ -1396,10 +1425,27 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
         errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
         parameters = Map(
-          "schema" -> ".+\"type\":\"string collate UTF8_BINARY_LCASE\".+"
+          "schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"
         ),
         matchPVals = true
       )
+    }
+  }
+
+  test("SPARK-48447: check state store provider class before invoking the constructor") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
+      val input = MemoryStream[Int]
+      input.addData(1)
+      val query = input.toDF().limit(2).writeStream
+        .trigger(Trigger.AvailableNow())
+        .format("console")
+        .start()
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
     }
   }
 

@@ -30,7 +30,8 @@ import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.TransportContext
@@ -216,7 +217,7 @@ private[netty] class NettyRpcEnv(
       if (!promise.tryFailure(e)) {
         e match {
           case e : RpcEnvStoppedException => logDebug(s"Ignored failure: $e")
-          case _ => logWarning(s"Ignored failure: $e")
+          case _ => logWarning(log"Ignored failure: ${MDC(ERROR, e)}")
         }
       }
     }
@@ -225,7 +226,7 @@ private[netty] class NettyRpcEnv(
       case RpcFailure(e) => onFailure(e)
       case rpcReply =>
         if (!promise.trySuccess(rpcReply)) {
-          logWarning(s"Ignored message: $reply")
+          logWarning(log"Ignored message: ${MDC(MESSAGE, reply)}")
         }
     }
 

@@ -262,15 +262,17 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         sql("INSERT INTO t VALUES(1)")
         val dir = new File(f.getCanonicalPath + "/data")
         dir.mkdir()
-        sql("set mapreduce.input.fileinputformat.input.dir.recursive=true")
-        assert(sql("select * from t").collect().head.getLong(0) == 1)
-        sql("set mapreduce.input.fileinputformat.input.dir.recursive=false")
-        val e = intercept[IOException] {
-          sql("SELECT * FROM t").collect()
+        withSQLConf("mapreduce.input.fileinputformat.input.dir.recursive" -> "true") {
+          assert(sql("select * from t").collect().head.getLong(0) == 1)
         }
-        assert(e.getMessage.contains(s"Path: ${dir.getAbsoluteFile} is a directory, " +
-          s"which is not supported by the record reader " +
-          s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
+        withSQLConf("mapreduce.input.fileinputformat.input.dir.recursive" -> "false") {
+          val e = intercept[IOException] {
+            sql("SELECT * FROM t").collect()
+          }
+          assert(e.getMessage.contains(s"Path: ${dir.getAbsoluteFile} is a directory, " +
+            s"which is not supported by the record reader " +
+            s"when `mapreduce.input.fileinputformat.input.dir.recursive` is false."))
+        }
         dir.delete()
       }
     }

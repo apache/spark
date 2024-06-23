@@ -37,7 +37,8 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -733,7 +734,8 @@ private[spark] class PythonAccumulatorV2(
   private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
-      logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
+      logInfo(log"Connected to AccumulatorServer at host: ${MDC(HOST, serverHost)}" +
+        log" port: ${MDC(PORT, serverPort)}")
       // send the secret just for the initial authentication when opening a new connection
       socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
     }

@@ -95,6 +95,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        self.assertTrue(q.exception() is None)
 
     def test_apply_in_pandas_with_state_basic(self):
         def func(key, pdf_iter, state):
@@ -109,10 +110,10 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [key[0]], "countAsString": [str(total_len)]})
 
         def check_results(batch_df, _):
-            self.assertEqual(
-                set(batch_df.sort("key").collect()),
-                {Row(key="hello", countAsString="1"), Row(key="this", countAsString="1")},
-            )
+            assert set(batch_df.sort("key").collect()) == {
+                Row(key="hello", countAsString="1"),
+                Row(key="this", countAsString="1"),
+            }
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
@@ -123,14 +124,11 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [key[0], "foo"], "countAsString": ["100", "222"]})
 
         def check_results(batch_df, _):
-            self.assertEqual(
-                set(batch_df.sort("key").collect()),
-                {
-                    Row(key="hello", countAsString="100"),
-                    Row(key="this", countAsString="100"),
-                    Row(key="foo", countAsString="222"),
-                },
-            )
+            assert set(batch_df.sort("key").collect()) == {
+                Row(key="hello", countAsString="100"),
+                Row(key="this", countAsString="100"),
+                Row(key="foo", countAsString="222"),
+            }
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
@@ -141,7 +139,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [], "countAsString": []})
 
         def check_results(batch_df, _):
-            self.assertTrue(len(set(batch_df.sort("key").collect())) == 0)
+            assert len(set(batch_df.sort("key").collect())) == 0
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
@@ -156,16 +154,13 @@ class GroupedApplyInPandasWithStateTestsMixin:
             )
 
         def check_results(batch_df, _):
-            self.assertEqual(
-                set(batch_df.sort("key").collect()),
-                {
-                    Row(key="hello", countAsString="1"),
-                    Row(key="foo", countAsString="666"),
-                    Row(key="hello_2", countAsString="2"),
-                    Row(key="this", countAsString="1"),
-                    Row(key="this_2", countAsString="2"),
-                },
-            )
+            assert set(batch_df.sort("key").collect()) == {
+                Row(key="hello", countAsString="1"),
+                Row(key="foo", countAsString="666"),
+                Row(key="hello_2", countAsString="2"),
+                Row(key="this", countAsString="1"),
+                Row(key="this_2", countAsString="2"),
+            }
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
@@ -177,7 +172,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [], "countAsString": []})
 
         def check_results(batch_df, _):
-            self.assertTrue(len(set(batch_df.sort("key").collect())) == 0)
+            assert len(set(batch_df.sort("key").collect())) == 0
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 
@@ -194,10 +189,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
             yield pd.DataFrame({"key": [None], "countAsString": [str(total_len)]})
 
         def check_results(batch_df, _):
-            self.assertEqual(
-                set(batch_df.sort("key").collect()),
-                {Row(key=None, countAsString="1")},
-            )
+            assert set(batch_df.sort("key").collect()) == {Row(key=None, countAsString="1")}
 
         self._test_apply_in_pandas_with_state_basic(func, check_results)
 

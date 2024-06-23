@@ -30,9 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A {@link TrustManager} implementation that reloads its configuration when
@@ -46,7 +45,8 @@ import org.slf4j.LoggerFactory;
 public final class ReloadingX509TrustManager
         implements X509TrustManager, Runnable {
 
-  private static final Logger logger = LoggerFactory.getLogger(ReloadingX509TrustManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReloadingX509TrustManager.class);
 
   private final String type;
   private final File file;
@@ -211,13 +211,13 @@ public final class ReloadingX509TrustManager
             this.reloadCount += 1;
           } catch (Exception ex) {
             logger.warn(
-              "Could not load truststore (keep using existing one) : " + ex.toString(),
+              "Could not load truststore (keep using existing one) : ",
               ex
             );
           }
         }
       } catch (IOException ex) {
-       logger.warn("Could not check whether truststore needs reloading: " + ex.toString(), ex);
+       logger.warn("Could not check whether truststore needs reloading: ", ex);
       }
       needsReloadCheckCounts++;
     }

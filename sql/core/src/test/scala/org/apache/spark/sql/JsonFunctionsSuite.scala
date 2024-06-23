@@ -1164,8 +1164,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      parameters = Map("other" -> """{"a":123}"""))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> """{"a":123}"""))
 
     val invalidDataType = "MAP<INT, cow>"
     val invalidDataTypeReason = "Unrecognized token 'MAP': " +

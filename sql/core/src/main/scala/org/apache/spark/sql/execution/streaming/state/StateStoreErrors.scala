@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -37,6 +37,16 @@ object StateStoreErrors {
       msg = s"Failed to find time values for timeMode=$timeMode",
       category = "TWS"
     )
+  }
+
+  def keyRowFormatValidationFailure(errorMsg: String):
+    StateStoreKeyRowFormatValidationFailure = {
+    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+  }
+
+  def valueRowFormatValidationFailure(errorMsg: String):
+    StateStoreValueRowFormatValidationFailure = {
+    new StateStoreValueRowFormatValidationFailure(errorMsg)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -127,6 +137,18 @@ object StateStoreErrors {
       stateName: String): StatefulProcessorTTLMustBePositive = {
     new StatefulProcessorTTLMustBePositive(operationType, stateName)
   }
+
+  def stateStoreKeySchemaNotCompatible(
+      storedKeySchema: String,
+      newKeySchema: String): StateStoreKeySchemaNotCompatible = {
+    new StateStoreKeySchemaNotCompatible(storedKeySchema, newKeySchema)
+  }
+
+  def stateStoreValueSchemaNotCompatible(
+      storedValueSchema: String,
+      newValueSchema: String): StateStoreValueSchemaNotCompatible = {
+    new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -214,3 +236,31 @@ class StatefulProcessorTTLMustBePositive(
   extends SparkUnsupportedOperationException(
     errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
+
+class StateStoreKeySchemaNotCompatible(
+    storedKeySchema: String,
+    newKeySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedKeySchema" -> storedKeySchema,
+      "newKeySchema" -> newKeySchema))
+
+class StateStoreValueSchemaNotCompatible(
+    storedValueSchema: String,
+    newValueSchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+    messageParameters = Map(
+      "storedValueSchema" -> storedValueSchema,
+      "newValueSchema" -> newValueSchema))
+
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))

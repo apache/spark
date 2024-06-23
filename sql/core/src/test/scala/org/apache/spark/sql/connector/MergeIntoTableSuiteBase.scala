@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
@@ -1317,7 +1317,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
 
       Seq(1, 4).toDF("pk").createOrReplaceTempView("source")
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[SparkRuntimeException] {
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -1326,9 +1326,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | UPDATE SET s = named_struct('n_i', null, 'n_l', -1L)
              |""".stripMargin)
       }
-      assert(e1.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+      assert(e1.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[SparkRuntimeException] {
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -1337,9 +1337,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | UPDATE SET s = named_struct('n_i', null, 'n_l', -1L)
              |""".stripMargin)
       }
-      assert(e2.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+      assert(e2.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
 
-      val e3 = intercept[SparkException] {
+      val e3 = intercept[SparkRuntimeException] {
         sql(
           s"""MERGE INTO $tableNameAsString t
              |USING source s
@@ -1348,7 +1348,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase {
              | INSERT (pk, s, dep) VALUES (s.pk, named_struct('n_i', null, 'n_l', -1L), 'invalid')
              |""".stripMargin)
       }
-      assert(e3.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+      assert(e3.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

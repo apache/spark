@@ -14,7 +14,7 @@ FROM (
 Project [elt(2, col1#x, cast(col2#xL as string), col3#x, cast(col4#x as string), cast(col5#x as string), false) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [prefix_ AS col1#x, id#xL AS col2#xL, cast((id#xL + cast(1 as bigint)) as string) AS col3#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col4#x, cast(id#xL as double) AS col5#x]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -31,7 +31,7 @@ FROM (
 Project [elt(3, col1#x, col2#x, cast(col3#x as string), cast(col4#x as string), false) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [cast(id#xL as string) AS col1#x, cast((id#xL + cast(1 as bigint)) as string) AS col2#x, encode(cast((id#xL + cast(2 as bigint)) as string), utf-8, false) AS col3#x, encode(cast((id#xL + cast(3 as bigint)) as string), utf-8, false) AS col4#x]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -52,7 +52,7 @@ FROM (
 Project [elt(1, cast(col1#x as string), cast(col2#x as string), false) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -73,4 +73,4 @@ FROM (
 Project [elt(2, col1#x, col2#x, false) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [encode(cast(id#xL as string), utf-8, false) AS col1#x, encode(cast((id#xL + cast(1 as bigint)) as string), utf-8, false) AS col2#x]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)

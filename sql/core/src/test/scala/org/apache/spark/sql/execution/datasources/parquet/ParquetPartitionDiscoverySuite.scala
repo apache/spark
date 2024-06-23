@@ -112,7 +112,8 @@ abstract class ParquetPartitionDiscoverySuite
       "hdfs://host:9000/path/a=10.5/b=hello")
 
     var exception = intercept[AssertionError] {
-      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId)
+      parsePartitions(
+        paths.map(new Path(_)), true, Set.empty[Path], None, true, true, timeZoneId, false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -129,7 +130,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Valid
     paths = Seq(
@@ -145,7 +147,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Valid
     paths = Seq(
@@ -161,7 +164,8 @@ abstract class ParquetPartitionDiscoverySuite
       None,
       true,
       true,
-      timeZoneId)
+      timeZoneId,
+      false)
 
     // Invalid
     paths = Seq(
@@ -177,7 +181,8 @@ abstract class ParquetPartitionDiscoverySuite
         None,
         true,
         true,
-        timeZoneId)
+        timeZoneId,
+        false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -200,7 +205,8 @@ abstract class ParquetPartitionDiscoverySuite
         None,
         true,
         true,
-        timeZoneId)
+        timeZoneId,
+        false)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
   }
@@ -296,7 +302,8 @@ abstract class ParquetPartitionDiscoverySuite
           None,
           true,
           true,
-          timeZoneId)
+          timeZoneId,
+          false)
       assert(actualSpec.partitionColumns === spec.partitionColumns)
       assert(actualSpec.partitions.length === spec.partitions.length)
       actualSpec.partitions.zip(spec.partitions).foreach { case (actual, expected) =>
@@ -427,7 +434,7 @@ abstract class ParquetPartitionDiscoverySuite
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
       val actualSpec =
         parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], None,
-          true, true, timeZoneId)
+          true, true, timeZoneId, false)
       assert(actualSpec === spec)
     }
 

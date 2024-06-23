@@ -49,13 +49,12 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.util.JavaUtils;
 
 public class SSLFactory {
-  private static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SSLFactory.class);
 
   /**
    * For a configuration specifying keystore/truststore files
@@ -136,7 +135,7 @@ public class SSLFactory {
           try {
             manager.destroy();
           } catch (InterruptedException ex) {
-            logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
+            logger.info("Interrupted while destroying trust manager: ", ex);
           }
         }
       }

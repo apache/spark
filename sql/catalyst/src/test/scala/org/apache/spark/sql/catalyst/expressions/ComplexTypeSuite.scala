@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -357,6 +357,38 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
           "dataType" -> "[\"INT\", \"STRING\"]")
       )
     )
+  }
+
+  // map key can't be variant
+  val map6 = CreateMap(Seq(
+    Literal.create(new VariantVal(Array[Byte](), Array[Byte]())),
+    Literal.create(1)
+  ))
+  map6.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess => fail("should not allow variant as a part of map key")
+    case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+      assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+      assert(messageParameters === Map("keyType" -> "\"VARIANT\""))
+  }
+
+  // map key can't contain variant
+  val map7 = CreateMap(
+    Seq(
+      CreateStruct(
+        Seq(Literal.create(1), Literal.create(new VariantVal(Array[Byte](), Array[Byte]())))
+      ),
+      Literal.create(1)
+    )
+  )
+  map7.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess => fail("should not allow variant as a part of map key")
+    case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
+      assert(errorSubClass == "INVALID_MAP_KEY_TYPE")
+      assert(
+        messageParameters === Map(
+          "keyType" -> "\"STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>\""
+        )
+      )
   }
 
   test("MapFromArrays") {

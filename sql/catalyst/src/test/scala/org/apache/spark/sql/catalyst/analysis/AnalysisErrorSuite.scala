@@ -361,6 +361,40 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "requiredType" -> "\"INT\""))
 
   errorClassTest(
+    "the buckets of ntile window function is not foldable",
+    testRelation2.select(
+      WindowExpression(
+        NTile(Literal(99.9f)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(99.9)\"",
+      "paramIndex" -> "first",
+      "inputSql" -> "\"99.9\"",
+      "inputType" -> "\"FLOAT\"",
+      "requiredType" -> "\"INT\""))
+
+
+  errorClassTest(
+    "the buckets of ntile window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        NTile(AttributeReference("b", IntegerType)()),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+    messageParameters = Map(
+      "sqlExpr" -> "\"ntile(b)\"",
+      "inputName" -> "`buckets`",
+      "inputExpr" -> "\"b\"",
+      "inputType" -> "\"INT\""))
+
+  errorClassTest(
     "unresolved attributes",
     testRelation.select($"abcd"),
     "UNRESOLVED_COLUMN.WITH_SUGGESTION",

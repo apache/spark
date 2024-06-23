@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.math.BigInteger
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.json4s.JsonAST._
@@ -693,6 +694,22 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("transform works on stream of children") {
+    @nowarn("cat=deprecation")
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
+    // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
+    // stream's first element is typically materialized, so in order to not trip the TreeNode change
+    // detection logic, we should not change the first element in the sequence.
+    val result = before.transform {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    @nowarn("cat=deprecation")
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
+  test("SPARK-45685: transform works on LazyList of children") {
     val before = Coalesce(LazyList(Literal(1), Literal(2)))
     // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
     // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
@@ -707,6 +724,16 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("withNewChildren on stream of children") {
+    @nowarn("cat=deprecation")
+    val before = Coalesce(Stream(Literal(1), Literal(2)))
+    @nowarn("cat=deprecation")
+    val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
+    @nowarn("cat=deprecation")
+    val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
+  test("SPARK-45685: withNewChildren on LazyList of children") {
     val before = Coalesce(LazyList(Literal(1), Literal(2)))
     val result = before.withNewChildren(LazyList(Literal(1), Literal(3)))
     val expected = Coalesce(LazyList(Literal(1), Literal(3)))

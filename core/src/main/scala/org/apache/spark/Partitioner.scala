@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.log10
@@ -149,7 +150,9 @@ private[spark] class KeyGroupedPartitioner(
     override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = {
     val keys = key.asInstanceOf[Seq[Any]]
-    valueMap.getOrElseUpdate(keys, Utils.nonNegativeMod(keys.hashCode, numPartitions))
+    val normalizedKeys = ArraySeq.from(keys)
+    valueMap.getOrElseUpdate(normalizedKeys,
+      Utils.nonNegativeMod(normalizedKeys.hashCode, numPartitions))
   }
 }
 

@@ -397,8 +397,7 @@ class StaxXmlParser(
                     row(anyIndex) = values :+ newValue
                 }
               } else {
-                StaxXmlParserUtils.skipChildren(parser)
-                StaxXmlParserUtils.skipNextEndElement(parser, field, options)
+                StaxXmlParserUtils.skipChildren(parser, field, options)
               }
           }
         } catch {

@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 
@@ -123,7 +124,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       val name = iter.next
         postMessage(name, message, (e) => { e match {
           case e: RpcEnvStoppedException => logDebug(s"Message $message dropped. ${e.getMessage}")
-          case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
+          case e: Throwable =>
+            logWarning(log"Message ${MDC(MESSAGE, message)} dropped. ${MDC(ERROR, e.getMessage)}")
         }}
       )}
   }
@@ -154,7 +156,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
         // cluster in spark shell.
         case re: RpcEnvStoppedException => logDebug(s"Message $message dropped. ${re.getMessage}")
         case e if SparkEnv.get.isStopped =>
-          logWarning(s"Message $message dropped due to sparkEnv is stopped. ${e.getMessage}")
+          logWarning(log"Message ${MDC(MESSAGE, message)} dropped due to sparkEnv " +
+            log"is stopped. ${MDC(ERROR, e.getMessage)}")
         case e => throw e
       })
   }

@@ -34,7 +34,7 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
-  protected val baseResourcePath: Path = {
+  protected def baseResourcePath: Path = {
     getWorkspaceFilePath(
       "connector",
       "connect",
@@ -45,7 +45,7 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "resources").toAbsolutePath
   }
 
-  protected val commonResourcePath: Path = {
+  protected def commonResourcePath: Path = {
     getWorkspaceFilePath(
       "connector",
       "connect",

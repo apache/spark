@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -1048,6 +1048,15 @@ object TypeCoercion extends TypeCoercionBase {
           }
         }
 
+      case (MapType(fromKeyType, fromValueType, fn), AbstractMapType(toKeyType, toValueType)) =>
+        val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+        val newValueType = implicitCast(fromValueType, toValueType).orNull
+        if (newKeyType != null && newValueType != null) {
+          MapType(newKeyType, newValueType, fn)
+        } else {
+          null
+        }
+
       case _ => null
     }
     Option(ret)
@@ -1111,22 +1120,22 @@ object TypeCoercion extends TypeCoercionBase {
 
       case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
         if !isIntervalType(right.dataType) =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
+        a.withNewChildren(Seq(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringTypeExpression())
         if !isIntervalType(left.dataType) =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+        a.withNewChildren(Seq(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
       case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
+        p.withNewChildren(Seq(Cast(left, TimestampType), right))
       case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+        p.withNewChildren(Seq(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+        p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
 

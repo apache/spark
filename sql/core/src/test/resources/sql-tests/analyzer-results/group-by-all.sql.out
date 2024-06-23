@@ -18,7 +18,7 @@ CreateViewCommand `data`, select * from values
   ("China", "Shanghai", "Shanghaiese", 5, 15.0),
   ("Korea", "Seoul", "Hyukjin", 6, 16.0),
   ("UK", "London", "Sean", 7, 17.0)
-  as data(country, city, name, id, power), false, false, LocalTempView, true
+  as data(country, city, name, id, power), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [country#x, city#x, name#x, id#x, power#x]
       +- SubqueryAlias data
          +- LocalRelation [country#x, city#x, name#x, id#x, power#x]

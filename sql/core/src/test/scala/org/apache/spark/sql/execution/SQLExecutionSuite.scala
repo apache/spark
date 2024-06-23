@@ -29,12 +29,13 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
-class SQLExecutionSuite extends SparkFunSuite {
+class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
   test("concurrent query execution (SPARK-10548)") {
     val conf = new SparkConf()
@@ -194,9 +195,9 @@ class SQLExecutionSuite extends SparkFunSuite {
           start.physicalPlanDescription.toLowerCase(Locale.ROOT).contains("project")
       })
       spark.sql("SELECT 1").collect()
-      spark.sql("SET k2 = v2")
-      spark.sql("SET redaction.password = 123")
-      spark.sql("SELECT 1").collect()
+      withSQLConf("k2" -> "v2", "redaction.password" -> "123") {
+        spark.sql("SELECT 1").collect()
+      }
       spark.sparkContext.listenerBus.waitUntilEmpty()
       assert(index.get() == 2)
     } finally {

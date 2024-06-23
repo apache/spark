@@ -162,7 +162,7 @@ EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query analysis
-ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, FormattedMode
+ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, COMPENSATION, FormattedMode
 
 
 -- !query

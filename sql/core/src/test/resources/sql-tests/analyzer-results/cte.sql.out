@@ -2,7 +2,7 @@
 -- !query
 create temporary view t as select * from values 0, 1, 2 as t(id)
 -- !query analysis
-CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]
@@ -11,7 +11,7 @@ CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, Loca
 -- !query
 create temporary view t2 as select * from values 0, 1 as t(id)
 -- !query analysis
-CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]

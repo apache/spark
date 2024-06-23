@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
@@ -56,7 +56,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
     withTable("t") {
       sql(s"CREATE TABLE t (s STRING, i INT NOT NULL) USING $FORMAT")
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql("SELECT 'txt' AS s, null AS i")
           inputDF.writeTo("t").append()
@@ -64,7 +64,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
           sql("INSERT INTO t VALUES ('txt', null)")
         }
       }
-      assertNotNullException(e, Seq("i"))
+      assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 
@@ -88,7 +88,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
            |USING $FORMAT
          """.stripMargin)
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -106,7 +106,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       assertNotNullException(e1, Seq("s", "ns"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -124,7 +124,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       assertNotNullException(e2, Seq("s", "arr"))
 
-      val e3 = intercept[SparkException] {
+      val e3 = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -177,7 +177,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       checkAnswer(spark.table("t"), Row(1, Row(1, null)))
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -224,7 +224,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       checkAnswer(spark.table("t"), Row(1, null))
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -279,7 +279,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       checkAnswer(spark.table("t"), Row(1, List(null, Row(1, 1))))
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -325,7 +325,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       checkAnswer(spark.table("t"), Row(1, null))
 
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql("SELECT 1 AS i, map(1, null) AS m")
           inputDF.writeTo("t").append()
@@ -364,7 +364,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       checkAnswer(spark.table("t"), Row(1, Map(Row(1, 1) -> null)))
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -382,7 +382,7 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
       }
       assertNotNullException(e1, Seq("m", "key", "x"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[SparkRuntimeException] {
         if (byName) {
           val inputDF = sql(
             s"""SELECT
@@ -402,11 +402,9 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
     }
   }
 
-  private def assertNotNullException(e: SparkException, colPath: Seq[String]): Unit = {
+  private def assertNotNullException(e: SparkRuntimeException, colPath: Seq[String]): Unit = {
     e.getCause match {
-      case npe: NullPointerException =>
-        assert(npe.getMessage.contains("Null value appeared in non-nullable field"))
-        assert(npe.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
+      case _ if e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION" =>
       case other =>
         fail(s"Unexpected exception cause: $other")
     }

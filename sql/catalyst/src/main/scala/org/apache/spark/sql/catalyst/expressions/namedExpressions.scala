@@ -205,10 +205,18 @@ case class Alias(child: Expression, name: String)(
     ""
   }
 
+  /**
+   * This function is performance-sensitive, so we should avoid `MetadataBuilder` manipulation,
+   * because it performs heavy operations on maps
+   */
   private def removeNonInheritableMetadata(metadata: Metadata): Metadata = {
-    val builder = new MetadataBuilder().withMetadata(metadata)
-    nonInheritableMetadataKeys.foreach(builder.remove)
-    builder.build()
+    if (metadata.isEmpty || nonInheritableMetadataKeys.forall(!metadata.contains(_))) {
+      metadata
+    } else {
+      val builder = new MetadataBuilder().withMetadata(metadata)
+      nonInheritableMetadataKeys.foreach(builder.remove)
+      builder.build()
+    }
   }
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"

@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.SparkSession
@@ -270,14 +270,15 @@ object FileFormatWriter extends Logging {
       val ret = f
       val commitMsgs = ret.map(_.commitMsg)
 
-      logInfo(s"Start to commit write Job ${description.uuid}.")
+      logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
       val (_, duration) = Utils
         .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
-      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
+      logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
       processStats(
         description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
-      logInfo(s"Finished processing stats for write job ${description.uuid}.")
+      logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)

@@ -1,0 +1,19 @@
+================================================================================================
+Benchmark LZFCompressionCodec
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1021-azure
+AMD EPYC 7763 64-Core Processor
+Compress small objects:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Compression 256000000 int values in parallel                602            612           6        425.1           2.4       1.0X
+Compression 256000000 int values single-threaded            610            617           5        419.8           2.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1021-azure
+AMD EPYC 7763 64-Core Processor
+Compress large objects:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Compression 1024 array values in 1 threads                35             43           6          0.0       33806.8       1.0X
+Compression 1024 array values single-threaded             32             32           0          0.0       30990.4       1.1X
+
+

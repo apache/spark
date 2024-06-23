@@ -94,16 +94,17 @@ sealed abstract class UserDefinedFunction {
 }
 
 /**
- * Holder class for a scalar user-defined function and it's input/output encoder(s).
+ * Holder class for a scala user-defined function and it's input/output encoder(s).
  */
-case class ScalarUserDefinedFunction private[sql] (
+case class ScalaUserDefinedFunction private[sql] (
     // SPARK-43198: Eagerly serialize to prevent the UDF from containing a reference to this class.
     serializedUdfPacket: Array[Byte],
     inputTypes: Seq[proto.DataType],
     outputType: proto.DataType,
     name: Option[String],
     override val nullable: Boolean,
-    override val deterministic: Boolean)
+    override val deterministic: Boolean,
+    aggregate: Boolean)
     extends UserDefinedFunction {
 
   private[this] lazy val udf = {
@@ -114,6 +115,7 @@ case class ScalarUserDefinedFunction private[sql] (
       .addAllInputTypes(inputTypes.asJava)
       .setOutputType(outputType)
       .setNullable(nullable)
+      .setAggregate(aggregate)
 
     scalaUdfBuilder.build()
   }
@@ -129,11 +131,11 @@ case class ScalarUserDefinedFunction private[sql] (
     name.foreach(udfBuilder.setFunctionName)
   }
 
-  override def withName(name: String): ScalarUserDefinedFunction = copy(name = Option(name))
+  override def withName(name: String): ScalaUserDefinedFunction = copy(name = Option(name))
 
-  override def asNonNullable(): ScalarUserDefinedFunction = copy(nullable = false)
+  override def asNonNullable(): ScalaUserDefinedFunction = copy(nullable = false)
 
-  override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
+  override def asNondeterministic(): ScalaUserDefinedFunction = copy(deterministic = false)
 
   def toProto: proto.CommonInlineUserDefinedFunction = {
     val builder = proto.CommonInlineUserDefinedFunction.newBuilder()
@@ -146,7 +148,7 @@ case class ScalarUserDefinedFunction private[sql] (
   }
 }
 
-object ScalarUserDefinedFunction {
+object ScalaUserDefinedFunction {
   private val LAMBDA_DESERIALIZATION_ERR_MSG: String =
     "cannot assign instance of java.lang.invoke.SerializedLambda to field"
 
@@ -169,9 +171,9 @@ object ScalarUserDefinedFunction {
   private[sql] def apply(
       function: AnyRef,
       returnType: TypeTag[_],
-      parameterTypes: TypeTag[_]*): ScalarUserDefinedFunction = {
+      parameterTypes: TypeTag[_]*): ScalaUserDefinedFunction = {
 
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       function = function,
       // Input can be a row because the input data schema can be found from the plan.
       inputEncoders =
@@ -183,22 +185,24 @@ object ScalarUserDefinedFunction {
   private[sql] def apply(
       function: AnyRef,
       inputEncoders: Seq[AgnosticEncoder[_]],
-      outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
+      outputEncoder: AgnosticEncoder[_],
+      aggregate: Boolean = false): ScalaUserDefinedFunction = {
     SparkConnectClosureCleaner.clean(function)
     val udfPacketBytes =
       SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
     checkDeserializable(udfPacketBytes)
-    ScalarUserDefinedFunction(
+    ScalaUserDefinedFunction(
       serializedUdfPacket = udfPacketBytes,
       inputTypes = inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType),
       outputType = DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType),
       name = None,
       nullable = true,
-      deterministic = true)
+      deterministic = true,
+      aggregate = aggregate)
   }
 
-  private[sql] def apply(function: AnyRef, returnType: DataType): ScalarUserDefinedFunction = {
-    ScalarUserDefinedFunction(
+  private[sql] def apply(function: AnyRef, returnType: DataType): ScalaUserDefinedFunction = {
+    ScalaUserDefinedFunction(
       function = function,
       inputEncoders = Seq.empty[AgnosticEncoder[_]],
       outputEncoder = RowEncoder.encoderForDataType(returnType, lenient = false))

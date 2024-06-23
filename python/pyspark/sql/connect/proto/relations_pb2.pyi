@@ -608,7 +608,9 @@ class Unknown(google.protobuf.message.Message):
 global___Unknown = Unknown
 
 class RelationCommon(google.protobuf.message.Message):
-    """Common metadata of all relations."""
+    """Common metadata of all relations.
+    TODO(SPARK-48639): Add origin like Expression.ExpressionCommon
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1865,7 +1867,10 @@ class Sample(google.protobuf.message.Message):
     with_replacement: builtins.bool
     """(Optional) Whether to sample with replacement."""
     seed: builtins.int
-    """(Optional) The random seed."""
+    """(Required) The random seed.
+    This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
+    however, still keep it 'optional' here for backward compatibility.
+    """
     deterministic_order: builtins.bool
     """(Required) Explicitly sort the underlying plan to make the ordering deterministic or cache it.
     This flag is true when invoking `dataframe.randomSplit` to randomly splits DataFrame with the
@@ -2545,7 +2550,10 @@ class StatSampleBy(google.protobuf.message.Message):
         If a stratum is not specified, we treat its fraction as zero.
         """
     seed: builtins.int
-    """(Optional) The random seed."""
+    """(Required) The random seed.
+    This field is required to avoid generating mutable dataframes (see SPARK-48184 for details),
+    however, still keep it 'optional' here for backward compatibility.
+    """
     def __init__(
         self,
         *,

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util
 
+import java.util.HexFormat
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
@@ -101,11 +102,16 @@ object SparkStringUtils extends Logging {
     truncatedString(seq, "", sep, "", maxFields)
   }
 
+  private final lazy val SPACE_DELIMITED_UPPERCASE_HEX =
+    HexFormat.of().withDelimiter(" ").withUpperCase()
+
   /**
    * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
    * between them. For example, [1A C0].
    */
-  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
+  def getHexString(bytes: Array[Byte]): String = {
+    s"[${SPACE_DELIMITED_UPPERCASE_HEX.formatHex(bytes)}]"
+  }
 
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)

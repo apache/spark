@@ -279,4 +279,12 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(sql("select CAST(c as STRING) from t"), Row("2018-11-17 13:33:33"))
     }
   }
+
+  test("SPARK-48033: default columns using runtime replaceable expression works") {
+    withTable("t") {
+      sql("CREATE TABLE t(v VARIANT DEFAULT parse_json('1')) USING PARQUET")
+      sql("INSERT INTO t VALUES(DEFAULT)")
+      checkAnswer(sql("select v from t"), sql("select parse_json('1')").collect())
+    }
+  }
 }

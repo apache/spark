@@ -25,7 +25,7 @@ import java.util.zip.Checksum
 import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ERROR, PATH}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
@@ -126,6 +126,12 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsCommitted = 0L
 
+  // For testing only.
+  private[storage] def getSerializerWrappedStream: OutputStream = bs
+
+  // For testing only.
+  private[storage] def getSerializationStream: SerializationStream = objOut
+
   /**
    * Set the checksum that the checksumOutputStream should use
    */
@@ -174,19 +180,36 @@ private[spark] class DiskBlockObjectWriter(
    * Should call after committing or reverting partial writes.
    */
   private def closeResources(): Unit = {
-    if (initialized) {
-      Utils.tryWithSafeFinally {
-        mcs.manualClose()
-      } {
-        channel = null
-        mcs = null
-        bs = null
-        fos = null
-        ts = null
-        objOut = null
-        initialized = false
-        streamOpen = false
-        hasBeenClosed = true
+    try {
+      if (streamOpen) {
+        Utils.tryWithSafeFinally {
+          if (null != objOut) objOut.close()
+          bs = null
+        } {
+          objOut = null
+          if (null != bs) bs.close()
+          bs = null
+        }
+      }
+    } catch {
+      case e: IOException =>
+        logInfo(log"Exception occurred while closing the output stream" +
+          log"${MDC(ERROR, e.getMessage)}")
+    } finally {
+      if (initialized) {
+        Utils.tryWithSafeFinally {
+          mcs.manualClose()
+        } {
+          channel = null
+          mcs = null
+          bs = null
+          fos = null
+          ts = null
+          objOut = null
+          initialized = false
+          streamOpen = false
+          hasBeenClosed = true
+        }
       }
     }
   }
@@ -297,7 +320,7 @@ private[spark] class DiskBlockObjectWriter(
       }
     } {
       if (!Files.deleteIfExists(file.toPath)) {
-        logWarning(s"Error deleting $file")
+        logWarning(log"Error deleting ${MDC(FILE_NAME, file)}")
       }
     }
   }

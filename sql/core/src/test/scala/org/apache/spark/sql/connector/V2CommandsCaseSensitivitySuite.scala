@@ -306,7 +306,7 @@ class V2CommandsCaseSensitivitySuite
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
           None))),
-      "FIELDS_ALREADY_EXISTS",
+      "FIELD_ALREADY_EXISTS",
       Map(
         "op" -> "add",
         "fieldNames" -> "`ID`",
@@ -317,7 +317,7 @@ class V2CommandsCaseSensitivitySuite
   test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
     alterTableErrorClass(
       RenameColumn(table, UnresolvedFieldName(Array("id").toImmutableArraySeq), "DATA"),
-      "FIELDS_ALREADY_EXISTS",
+      "FIELD_ALREADY_EXISTS",
       Map(
         "op" -> "rename",
         "fieldNames" -> "`DATA`",

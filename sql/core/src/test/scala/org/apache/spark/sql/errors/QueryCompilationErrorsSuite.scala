@@ -926,6 +926,37 @@ class QueryCompilationErrorsSuite
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
     )
   }
+
+  test("SPARK-48556: Ensure UNRESOLVED_COLUMN is thrown when query has grouping expressions " +
+      "with invalid column name") {
+    case class UnresolvedDummyColumnTest(query: String, pos: Int)
+
+    withTable("t1") {
+      sql("create table t1(a int, b int) using parquet")
+      val tests = Seq(
+        UnresolvedDummyColumnTest("select grouping(a), dummy from t1 group by a with rollup", 20),
+        UnresolvedDummyColumnTest("select dummy, grouping(a) from t1 group by a with rollup", 7),
+        UnresolvedDummyColumnTest(
+          "select a, case when grouping(a) = 1 then 0 else b end, count(dummy) from t1 " +
+            "group by 1 with rollup",
+          61),
+        UnresolvedDummyColumnTest(
+          "select a, max(dummy), case when grouping(a) = 1 then 0 else b end " +
+            "from t1 group by 1 with rollup",
+          14)
+      )
+      tests.foreach(test => {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(test.query)
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> "`dummy`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "dummy", start = test.pos, stop = test.pos + 4)
+        )
+      })
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

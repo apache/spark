@@ -11,9 +11,6 @@ import info.ganglia.gmetric4j.gmetric.GMetricSlope;
 import info.ganglia.gmetric4j.gmetric.GMetricType;
 import info.ganglia.gmetric4j.gmetric.GangliaException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +18,11 @@ import java.util.SortedMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import static com.codahale.metrics.MetricAttribute.*;
@@ -201,7 +203,7 @@ public class GangliaReporter extends ScheduledReporter {
         }
     }
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GangliaReporter.class);
+    private static final SparkLogger LOGGER = SparkLoggerFactory.getLogger(GangliaReporter.class);
 
     private final GMetric gmetric;
     private final GMetric[] gmetrics;
@@ -292,7 +294,8 @@ public class GangliaReporter extends ScheduledReporter {
 
             reportMetered(sanitizedName, timer, group, "calls");
         } catch (GangliaException e) {
-            LOGGER.warn("Unable to report timer {}", sanitizedName, e);
+            LOGGER.warn("Unable to report timer {}", e,
+                MDC.of(LogKeys.METRIC_NAME$.MODULE$, sanitizedName));
         }
     }
 
@@ -302,7 +305,8 @@ public class GangliaReporter extends ScheduledReporter {
         try {
             reportMetered(sanitizedName, meter, group, "events");
         } catch (GangliaException e) {
-            LOGGER.warn("Unable to report meter {}", name, e);
+            LOGGER.warn("Unable to report meter {}", e,
+                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
         }
     }
 
@@ -333,7 +337,8 @@ public class GangliaReporter extends ScheduledReporter {
             announceIfEnabled(P99, sanitizedName, group, snapshot.get99thPercentile(), "");
             announceIfEnabled(P999, sanitizedName, group, snapshot.get999thPercentile(), "");
         } catch (GangliaException e) {
-            LOGGER.warn("Unable to report histogram {}", sanitizedName, e);
+            LOGGER.warn("Unable to report histogram {}", e,
+                MDC.of(LogKeys.METRIC_NAME$.MODULE$, sanitizedName));
         }
     }
 
@@ -343,7 +348,8 @@ public class GangliaReporter extends ScheduledReporter {
         try {
             announce(prefix(sanitizedName, COUNT.getCode()), group, Long.toString(counter.getCount()), GMetricType.DOUBLE, "");
         } catch (GangliaException e) {
-            LOGGER.warn("Unable to report counter {}", name, e);
+            LOGGER.warn("Unable to report counter {}", e,
+                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
         }
     }
 
@@ -356,7 +362,8 @@ public class GangliaReporter extends ScheduledReporter {
         try {
             announce(name(prefix, sanitizedName), group, value, type, "");
         } catch (GangliaException e) {
-            LOGGER.warn("Unable to report gauge {}", name, e);
+            LOGGER.warn("Unable to report gauge {}", e,
+                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
         }
     }
 

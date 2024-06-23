@@ -122,7 +122,8 @@ private[columnar]
 class DoubleColumnBuilder extends NativeColumnBuilder(new DoubleColumnStats, DOUBLE)
 
 private[columnar]
-class StringColumnBuilder extends NativeColumnBuilder(new StringColumnStats, STRING)
+class StringColumnBuilder(dataType: StringType)
+  extends NativeColumnBuilder(new StringColumnStats(dataType), STRING(dataType))
 
 private[columnar]
 class BinaryColumnBuilder extends ComplexColumnBuilder(new BinaryColumnStats, BINARY)
@@ -185,7 +186,7 @@ private[columnar] object ColumnBuilder {
         new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
-      case StringType => new StringColumnBuilder
+      case s: StringType => new StringColumnBuilder(s)
       case BinaryType => new BinaryColumnBuilder
       case CalendarIntervalType => new IntervalColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>

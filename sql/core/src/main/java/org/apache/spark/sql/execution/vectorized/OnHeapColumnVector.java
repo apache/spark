@@ -216,7 +216,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(byteData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;
@@ -276,7 +278,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(shortData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;
@@ -337,7 +341,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(intData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToInt(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;
@@ -409,7 +415,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(longData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = dictionary.decodeToLong(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToLong(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;
@@ -466,7 +474,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(floatData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = dictionary.decodeToFloat(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToFloat(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;
@@ -525,7 +535,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       System.arraycopy(doubleData, rowId, array, 0, count);
     } else {
       for (int i = 0; i < count; i++) {
-        array[i] = dictionary.decodeToDouble(dictionaryIds.getDictId(rowId + i));
+        if (!isNullAt(rowId + i)) {
+          array[i] = dictionary.decodeToDouble(dictionaryIds.getDictId(rowId + i));
+        }
       }
     }
     return array;

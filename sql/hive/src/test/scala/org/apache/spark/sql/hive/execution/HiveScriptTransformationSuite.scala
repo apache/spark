@@ -391,7 +391,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[AnalysisException] {
         val plan = createScriptTransformationExec(
@@ -403,7 +403,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
     }
   }
 
@@ -416,7 +416,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
       ).toDF("a", "b", "c")
       df.createTempView("v")
-
       val e1 = intercept[AnalysisException] {
         sql(
           """
@@ -424,7 +423,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
 
       val e2 = intercept[AnalysisException] {
         sql(
@@ -433,7 +432,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
     }
   }
 

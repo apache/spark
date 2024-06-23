@@ -161,7 +161,9 @@ class ParquetReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest {
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 
@@ -183,7 +185,9 @@ class VectorizedParquetReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest {
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 
@@ -205,7 +209,9 @@ class MergedParquetReadSchemaSuite
   with HideColumnInTheMiddleTest
   with AddNestedColumnTest
   with HideNestedColumnTest
-  with ChangePositionTest {
+  with ChangePositionTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
 
   override val format: String = "parquet"
 

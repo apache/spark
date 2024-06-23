@@ -75,3 +75,19 @@ select getbit(11L, 2 + 1), getbit(11L, 3 - 1), getbit(10L + 1, 1 * 1), getbit(ca
 select getbit(11L, 63);
 select getbit(11L, -1);
 select getbit(11L, 64);
+
+SELECT 20181117 >> 2;
+SELECT 20181117 << 2;
+SELECT 20181117 >>> 2;
+SELECT 20181117 > > 2;
+SELECT 20181117 < < 2;
+SELECT 20181117 > >> 2;
+SELECT 20181117 <<< 2;
+SELECT 20181117 >>>> 2;
+select cast(null as array<array<int>>), 20181117 >> 2;
+select cast(null as array<array<int>>), 20181117 >>> 2;
+select cast(null as map<int, array<int>>), 20181117 >> 2;
+
+select 1 << 1 + 2 as plus_over_shift; -- if correct, the result is 8. otherwise, 4
+select 2 >> 1 << 1 as left_to_right; -- if correct, the result is 2. otherwise, 0
+select 1 & 2 >> 1 as shift_over_ampersand; -- if correct, the result is 1. otherwise, 0

@@ -19,9 +19,8 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
@@ -123,7 +122,7 @@ public abstract class RpcHandler {
 
   private static class OneWayRpcCallback implements RpcResponseCallback {
 
-    private static final Logger logger = LoggerFactory.getLogger(OneWayRpcCallback.class);
+    private static final SparkLogger logger = SparkLoggerFactory.getLogger(OneWayRpcCallback.class);
 
     @Override
     public void onSuccess(ByteBuffer response) {
