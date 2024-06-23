@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client
 
-import io.grpc.ManagedChannel
+import org.sparkproject.connect.grpc.ManagedChannel
 
 import org.apache.spark.internal.Logging
 

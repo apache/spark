@@ -25,8 +25,8 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
-import com.google.protobuf.ByteString
-import io.grpc._
+import org.sparkproject.connect.grpc._
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto

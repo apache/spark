@@ -39,54 +39,6 @@
             <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty</artifactId>
-            <version>${io.grpc.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-protobuf</artifactId>
-            <version>${io.grpc.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-services</artifactId>
-            <version>${io.grpc.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-stub</artifactId>
-            <version>${io.grpc.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-inprocess</artifactId>
-            <version>${io.grpc.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler-proxy</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport-native-unix-common</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
         <dependency> <!-- necessary for Java 9+ -->
             <groupId>org.apache.tomcat</groupId>
             <artifactId>annotations-api</artifactId>
@@ -104,14 +56,6 @@
         </dependency>
     </dependencies>
     <build>
-        <!-- Protobuf compilation for Spark Connect -->
-        <extensions>
-            <extension>
-                <groupId>kr.motd.maven</groupId>
-                <artifactId>os-maven-plugin</artifactId>
-                <version>1.6.2</version>
-            </extension>
-        </extensions>
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
         <plugins>
@@ -133,97 +77,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <configuration>
-                    <shadedArtifactAttached>false</shadedArtifactAttached>
-                    <artifactSet>
-                        <includes>
-                            <include>org.spark-project.spark:unused</include>
-                            <include>org.apache.tomcat:annotations-api</include>
-                        </includes>
-                    </artifactSet>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
-    <profiles>
-        <profile>
-            <id>default-protoc</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <build>
-                <plugins>
-                    <!-- Add protobuf-maven-plugin and provide ScalaPB as a code generation plugin -->
-                    <plugin>
-                        <groupId>org.xolstice.maven.plugins</groupId>
-                        <artifactId>protobuf-maven-plugin</artifactId>
-                        <version>0.6.1</version>
-                        <configuration>
-                            <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
-                            <pluginId>grpc-java</pluginId>
-                            <pluginArtifact>io.grpc:protoc-gen-grpc-java:${io.grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
-                            <protoSourceRoot>src/main/protobuf</protoSourceRoot>
-                            <includes>
-                                <include>../api/src/main/protobuf</include>
-                            </includes>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>compile</goal>
-                                    <goal>compile-custom</goal>
-                                    <goal>test-compile</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>user-defined-protoc</id>
-            <properties>
-                <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
-                <connect.plugin.executable.path>${env.CONNECT_PLUGIN_EXEC_PATH}</connect.plugin.executable.path>
-            </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.xolstice.maven.plugins</groupId>
-                        <artifactId>protobuf-maven-plugin</artifactId>
-                        <version>0.6.1</version>
-                        <configuration>
-                            <protocExecutable>${spark.protoc.executable.path}</protocExecutable>
-                            <pluginId>grpc-java</pluginId>
-                            <pluginExecutable>${connect.plugin.executable.path}</pluginExecutable>
-                            <protoSourceRoot>src/main/protobuf</protoSourceRoot>
-                            <includes>
-                                <include>../api/src/main/protobuf</include>
-                            </includes>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>compile</goal>
-                                    <goal>compile-custom</goal>
-                                    <goal>test-compile</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

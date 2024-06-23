@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
-import io.grpc.ManagedChannel
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.ManagedChannel
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 

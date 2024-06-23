@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.client
 
 import scala.util.control.NonFatal
 
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}

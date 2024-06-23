@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.connect.client
 
-import com.google.protobuf.GeneratedMessageV3
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.GeneratedMessageV3
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
