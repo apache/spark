@@ -293,22 +293,25 @@ class Dataset[T] private[sql](
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
+    def truncateStr(input: String): String = {
+      // Escapes meta-characters not to break the `showString` format
+      val str = SchemaUtils.escapeMetaCharacters(input)
+      if (truncate > 0 && str.length > truncate) {
+        // do not show ellipses for strings shorter than 4 characters.
+        if (truncate < 4) str.substring(0, truncate)
+        else str.substring(0, truncate - 3) + "..."
+      } else {
+        str
+      }
+    }
+
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    (schema.fieldNames
-      .map(SchemaUtils.escapeMetaCharacters).toImmutableArraySeq +: data.map { row =>
+    (schema.fieldNames.map(truncateStr).toImmutableArraySeq +: data.map { row =>
       row.toSeq.map { cell =>
         assert(cell != null, "ToPrettyString is not nullable and should not return null value")
-        // Escapes meta-characters not to break the `showString` format
-        val str = SchemaUtils.escapeMetaCharacters(cell.toString)
-        if (truncate > 0 && str.length > truncate) {
-          // do not show ellipses for strings shorter than 4 characters.
-          if (truncate < 4) str.substring(0, truncate)
-          else str.substring(0, truncate - 3) + "..."
-        } else {
-          str
-        }
+        truncateStr(cell.toString)
       }: Seq[String]
     }).toImmutableArraySeq
   }

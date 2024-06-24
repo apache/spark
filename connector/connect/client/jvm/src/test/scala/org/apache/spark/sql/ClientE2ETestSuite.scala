@@ -710,6 +710,17 @@ class ClientE2ETestSuite
       "+---+--------------------+",
       "| id|                 val|",
       "|  0|very_very_very_lo...|")
+
+    val wideDfNoAlias =
+      spark.range(4).selectExpr("id", "concat('very_very_very_long_string', id)")
+    testCapturedStdOut(
+      wideDfNoAlias.show(true),
+      8,
+      26,
+      "+---+--------------------+",
+      "| id|concat('very_very...|",
+      "|  0|very_very_very_lo...|")
+
     testCapturedStdOut(
       wideDf.show(false),
       8,
