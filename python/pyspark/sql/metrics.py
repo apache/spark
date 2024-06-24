@@ -133,7 +133,7 @@ class CollectedMetrics:
             if m.name in base_metrics:
                 metric_buffer.append(f"{m.name}: {m.value} ({m.metric_type})")
 
-        buffer = f"{prefix}- {current.name}({','.join(metric_buffer)})\n"
+        buffer = f"{prefix}+- {current.name}({','.join(metric_buffer)})\n"
         for i, child in enumerate(current.children):
             c = graph[child]
             new_prefix = prefix + "  " if i == len(c.children) - 1 else prefix
