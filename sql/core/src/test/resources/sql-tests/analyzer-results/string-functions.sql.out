@@ -384,21 +384,21 @@ Project [btrim(xyxtrimyyx, xy) AS btrim(xyxtrimyyx, xy)#x]
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query analysis
-Project [btrim(encode( xyz , utf-8, false)) AS btrim(encode( xyz , utf-8))#x]
+Project [btrim(encode( xyz , utf-8)) AS btrim(encode( xyz , utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(yxTomxx, utf-8, false), encode(xyz, utf-8, false)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
+Project [btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)) AS btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query analysis
-Project [btrim(encode(xxxbarxxx, utf-8, false), encode(x, utf-8, false)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
+Project [btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)) AS btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8))#x]
 +- OneRowRelation
 
 
@@ -649,14 +649,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(true))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, true) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, true) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -670,14 +670,14 @@ SetCommand (spark.sql.legacy.javaCharsets,Some(false))
 -- !query
 select encode('hello', 'WINDOWS-1252')
 -- !query analysis
-Project [encode(hello, WINDOWS-1252, false) AS encode(hello, WINDOWS-1252)#x]
+Project [encode(hello, WINDOWS-1252) AS encode(hello, WINDOWS-1252)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -685,14 +685,56 @@ Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
 -- !query
 select encode('hello', 'Windows-xxx')
 -- !query analysis
-Project [encode(hello, Windows-xxx, false) AS encode(hello, Windows-xxx)#x]
+Project [encode(hello, Windows-xxx) AS encode(hello, Windows-xxx)#x]
 +- OneRowRelation
 
 
 -- !query
 select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
 -- !query analysis
-Project [encode(scol#x, ecol#x, false) AS encode(scol, ecol)#x]
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
+
+
+-- !query
+select encode('渭城朝雨浥轻尘', 'US-ASCII')
+-- !query analysis
+Project [encode(渭城朝雨浥轻尘, US-ASCII) AS encode(渭城朝雨浥轻尘, US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
+
+
+-- !query
+select encode('客舍青青柳色新', 'US-ASCII')
+-- !query analysis
+Project [encode(客舍青青柳色新, US-ASCII) AS encode(客舍青青柳色新, US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 +- SubqueryAlias t
    +- LocalRelation [scol#x, ecol#x]
 
@@ -746,14 +788,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select decode(encode('abc', 'utf-8'), 'utf-8')
 -- !query analysis
-Project [decode(encode(abc, utf-8, false), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
+Project [decode(encode(abc, utf-8), utf-8) AS decode(encode(abc, utf-8), utf-8)#x]
 +- OneRowRelation
 
 
 -- !query
 select decode(encode('大千世界', 'utf-32'), 'utf-32')
 -- !query analysis
-Project [decode(encode(大千世界, utf-32, false), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
+Project [decode(encode(大千世界, utf-32), utf-32) AS decode(encode(大千世界, utf-32), utf-32)#x]
 +- OneRowRelation
 
 
@@ -857,6 +899,48 @@ Project [decode(0x68656C6C6F, WINDOWS-1252) AS decode(X'68656C6C6F', WINDOWS-125
 
 -- !query
 select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(true))
+
+
+-- !query
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+-- !query analysis
+Project [decode(0xE58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592, US-ASCII) AS decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+-- !query analysis
+Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query analysis
+SetCommand (spark.sql.legacy.codingErrorAction,Some(false))
+
+
+-- !query
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+-- !query analysis
+Project [decode(0xE8A5BFE587BAE998B3E585B3E697A0E69585E4BABA, US-ASCII) AS decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', US-ASCII)#x]
++- OneRowRelation
+
+
+-- !query
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
 -- !query analysis
 Project [decode(scol#x, ecol#x) AS decode(scol, ecol)#x]
 +- SubqueryAlias t
