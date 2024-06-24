@@ -219,7 +219,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-  }a
+  }
 }
 
 /**
