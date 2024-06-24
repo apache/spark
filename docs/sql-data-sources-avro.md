@@ -225,6 +225,24 @@ write.stream(
 {% endhighlight %}
 </div>
 
+<div data-lang="sql" markdown="1">
+{% highlight sql %}
+CREATE TABLE t AS
+  SELECT NAMED_STRUCT('u', NAMED_STRUCT('member0', member0, 'member1', member1)) AS s
+  FROM VALUES (1, NULL), (NULL,  'a') tab(member0, member1);
+DECLARE avro_schema STRING;
+SET VARIABLE avro_schema =
+  '{ "type": "record", "name": "struct", "fields": [{ "name": "u", "type": ["int","string"] }] }';
+
+SELECT TO_AVRO(s, avro_schema) AS RESULT FROM t;
+
+SELECT FROM_AVRO(result, avro_schema, MAP()).u FROM (
+  SELECT TO_AVRO(s, avro_schema) AS RESULT FROM t);
+
+DROP TEMPORARY VARIABLE avro_schema;
+DROP TABLE t;
+{% endhighlight %}
+</div>
 </div>
 
 ## Data Source Option
