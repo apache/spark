@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExam
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -542,25 +542,20 @@ class DatasetSuite extends QueryTest
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
 
-    val e1 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
-    }.getMessage
-    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+    def checkJoinWithJoinType(joinType: String): Unit = {
+      val semiErrorParameters = Map("joinType" -> JoinType(joinType).sql)
+      checkError(
+        exception = intercept[AnalysisException](
+          ds1.joinWith(ds2, $"a.value" === $"b.value", joinType)
+        ),
+        errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
+        sqlState = "42613",
+        parameters = semiErrorParameters
+      )
+    }
 
-    val e2 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "semi")
-    }.getMessage
-    assert(e2.contains("Invalid join type in joinWith: " + LeftSemi.sql))
-
-    val e3 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
-    }.getMessage
-    assert(e3.contains("Invalid join type in joinWith: " + LeftAnti.sql))
-
-    val e4 = intercept[AnalysisException] {
-      ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
-    }.getMessage
-    assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
+    Seq("leftsemi", "left_semi", "semi", "leftanti", "left_anti", "anti")
+      .foreach(checkJoinWithJoinType(_))
   }
 
   test("groupBy function, keys") {

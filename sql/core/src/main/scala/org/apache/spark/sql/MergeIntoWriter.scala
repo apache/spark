@@ -42,7 +42,7 @@ class MergeIntoWriter[T] private[sql] (
     table: String,
     ds: Dataset[T],
     on: Column,
-    schemaEvolutionEnabled: Boolean = false) {
+    private[sql] val schemaEvolutionEnabled: Boolean = false) {
 
   private val df: DataFrame = ds.toDF()
 
