@@ -2741,6 +2741,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "charset" -> charset))
   }
 
+  def malformedCharacterCoding(functionName: String, charset: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_CHARACTER_CODING",
+      messageParameters = Map(
+        "function" -> toSQLId(functionName),
+        "charset" -> charset))
+  }
+
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
