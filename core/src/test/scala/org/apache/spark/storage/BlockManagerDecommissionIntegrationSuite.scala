@@ -17,6 +17,7 @@
 
 package org.apache.spark.storage
 
+import java.io.File
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
@@ -356,6 +357,18 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   }
 
   test("SPARK-46957: Migrated shuffle files should be able to cleanup from executor") {
+
+    val sparkTempDir = System.getProperty("java.io.tmpdir")
+
+    def shuffleFiles: Seq[File] = {
+      FileUtils
+        .listFiles(new File(sparkTempDir), Array("data", "index"), true)
+        .asScala
+        .toSeq
+    }
+
+    val existingShuffleFiles = shuffleFiles
+
     val conf = new SparkConf()
       .setAppName("SPARK-46957")
       .setMaster("local-cluster[2,1,1024]")
@@ -406,19 +419,14 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .map(_.asInstanceOf[ShuffleIndexBlockId].shuffleId)
       .get
 
-    val sparkTempDir = System.getProperty("java.io.tmpdir")
-
-    def numShuffleFiles: Int = {
-      FileUtils.listFiles(new java.io.File(sparkTempDir), Array("data", "index"), true).asScala.size
-    }
-
-    assert(numShuffleFiles >= shuffleBlockUpdates.size)
+    val newShuffleFiles = shuffleFiles.diff(existingShuffleFiles)
+    assert(newShuffleFiles.size >= shuffleBlockUpdates.size)
 
     // Remove the shuffle data
     sc.shuffleDriverComponents.removeShuffle(shuffleId, true)
 
     eventually(timeout(1.minute), interval(10.milliseconds)) {
-      assert(numShuffleFiles === 0)
+      assert(newShuffleFiles.intersect(shuffleFiles).isEmpty)
     }
   }
 }
