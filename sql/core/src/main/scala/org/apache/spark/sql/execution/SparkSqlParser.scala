@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.command.v2.UnsetNamespacePropertiesCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -1097,5 +1098,25 @@ class SparkSqlAstBuilder extends AstBuilder {
       serde = storage.serde.orElse(default.serde))
 
     (ctx.LOCAL != null, finalStorage, Some(DDLUtils.HIVE_PROVIDER))
+  }
+
+  /**
+   * Create a [[UnsetNamespacePropertiesCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA|NAMESPACE) database
+   *   UNSET (DBPROPERTIES | PROPERTIES) [IF EXISTS] ('comment', 'key');
+   * }}}
+   */
+  override def visitUnsetNamespaceProperties(
+      ctx: UnsetNamespacePropertiesContext): LogicalPlan = withOrigin(ctx) {
+    val properties = visitPropertyKeys(ctx.propertyList)
+    val cleanedProperties = cleanNamespaceProperties(properties.map(_ -> "").toMap, ctx).keys.toSeq
+    val ifExists = ctx.EXISTS != null
+    UnsetNamespacePropertiesCommand(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      cleanedProperties,
+      ifExists)
   }
 }

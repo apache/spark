@@ -15,34 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespaces}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
  * Physical plan node for unsetting properties of namespace.
  */
 case class AlterNamespaceUnsetPropertiesExec(
     catalog: SupportsNamespaces,
-    namespace: Seq[String],
+    namespace1: Seq[String],
+    namespace: ResolvedNamespace,
     propKeys: Seq[String],
     ifExists: Boolean) extends LeafV2CommandExec {
+
   override protected def run(): Seq[InternalRow] = {
     if (!ifExists) {
-      val ns = catalog.loadNamespaceMetadata(namespace.toArray)
-      val nonexistentKeys = propKeys.filter(key => !ns.containsKey(key))
+      val properties = namespace.metadata
+      val nonexistentKeys = propKeys.filter(key => !properties.contains(key))
       if (nonexistentKeys.nonEmpty) {
         throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, namespace)
+          nonexistentKeys, namespace.namespace)
       }
     }
     val changes = propKeys.map {
       NamespaceChange.removeProperty
     }
-    catalog.alterNamespace(namespace.toArray, changes: _*)
+    // catalog.alterNamespace(namespace.toArray, changes: _*)
     Seq.empty
   }
 

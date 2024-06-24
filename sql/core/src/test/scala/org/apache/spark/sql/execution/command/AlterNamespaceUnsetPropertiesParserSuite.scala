@@ -16,29 +16,43 @@
  */
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.UnsetNamespaceProperties
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.command.v2.UnsetNamespacePropertiesCommand
+import org.apache.spark.sql.test.SharedSparkSession
 
-class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest {
+class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedSparkSession {
+
+  private lazy val parser = new SparkSqlParser()
+
+  private def parseException(sqlText: String): SparkThrowable = {
+    intercept[ParseException](sql(sqlText).collect())
+  }
+
+  private def parsePlan(sqlText: String): LogicalPlan = {
+    parser.parsePlan(sqlText)
+  }
 
   test("unset namespace properties") {
     Seq("DATABASE", "SCHEMA", "NAMESPACE").foreach { nsToken =>
       Seq("PROPERTIES", "DBPROPERTIES").foreach { propToken =>
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a', 'b', 'c')"),
-          UnsetNamespaceProperties(
-            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = false))
+          UnsetNamespacePropertiesCommand(
+            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = false))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken IF EXISTS ('a', 'b', 'c')"),
-          UnsetNamespaceProperties(
-            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = true))
+          UnsetNamespacePropertiesCommand(
+            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = true))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a')"),
-          UnsetNamespaceProperties(
-            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a"), ifExists = false))
+          UnsetNamespacePropertiesCommand(
+            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a"), ifExists = false))
       }
     }
   }
@@ -46,7 +60,7 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest {
   test("property values must not be set") {
     val sql = "ALTER NAMESPACE my_db UNSET PROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
-      exception = parseException(parsePlan)(sql),
+      exception = parseException(sql),
       errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
       context = ExpectedContext(
