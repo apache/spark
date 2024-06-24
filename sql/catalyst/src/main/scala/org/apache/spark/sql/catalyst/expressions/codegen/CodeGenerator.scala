@@ -1561,9 +1561,9 @@ object CodeGenerator extends Logging {
   private def logGeneratedCode(code: CodeAndComment): Unit = {
     val maxLines = SQLConf.get.loggingMaxLinesForCodegen
     if (Utils.isTesting) {
-      logError(s"\n${CodeFormatter.format(code, maxLines)}")
+      logError(log"\n${MDC(LogKeys.FORMATTED_CODE, CodeFormatter.format(code, maxLines))}")
     } else {
-      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+      logInfo(log"\n${MDC(LogKeys.FORMATTED_CODE, CodeFormatter.format(code, maxLines))}")
     }
   }
 
