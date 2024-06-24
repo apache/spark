@@ -1041,9 +1041,8 @@ private[spark] class Executor(
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
-            throw SparkException.internalError(
-              s"Killing executor JVM because killed task $taskId could not be stopped within " +
-                s"$killTimeoutMs ms.", category = "EXECUTOR")
+            throw new KilledByTaskReaperException(s"Killing executor JVM because killed task " +
+              s"$taskId could not be stopped within $killTimeoutMs ms.")
           }
         }
       } finally {
@@ -1328,3 +1327,5 @@ private[spark] object Executor {
     }
   }
 }
+
+class KilledByTaskReaperException(message: String) extends SparkException(message)

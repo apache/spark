@@ -33,6 +33,9 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
+Apache Hadoop does not support Java 17 as of 3.4.0, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
+Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
+
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
 These configs are used to write to HDFS and connect to the YARN ResourceManager. The
 configuration contained in this directory will be distributed to the YARN cluster so that all
@@ -1032,3 +1035,34 @@ and one should be configured with:
   spark.shuffle.service.name = spark_shuffle_y
   spark.shuffle.service.port = <other value>
 ```
+
+# Configuring different JDKs for Spark Applications
+
+In some cases it may be desirable to use a different JDK from YARN node manager to run Spark applications,
+this can be achieved by setting the `JAVA_HOME` environment variable for YARN containers and the `spark-submit`
+process.
+
+Note that, Spark assumes that all JVM processes runs in one application use the same version of JDK, otherwise,
+you may encounter JDK serialization issues.
+
+To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-17`:
+
+    $ export JAVA_HOME=/opt/openjdk-17
+    $ ./bin/spark-submit --class path.to.your.Class \
+        --master yarn \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-17 \
+        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-17 \
+        <app jar> [app options]
+
+Optionally, the user may want to avoid installing a different JDK on the YARN cluster nodes, in such a case,
+it's also possible to distribute the JDK using YARN's Distributed Cache. For example, to use Java 21 to run
+a Spark application, prepare a JDK 21 tarball `openjdk-21.tar.gz` and untar it to `/opt` on the local node,
+then submit a Spark application:
+
+    $ export JAVA_HOME=/opt/openjdk-21
+    $ ./bin/spark-submit --class path.to.your.Class \
+        --master yarn \
+        --archives path/to/openjdk-21.tar.gz \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
+        --conf spark.executorEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
+        <app jar> [app options]
