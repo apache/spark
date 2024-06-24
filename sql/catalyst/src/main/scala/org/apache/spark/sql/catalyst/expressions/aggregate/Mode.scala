@@ -94,13 +94,8 @@ case class Mode(
       * The Mode class uses special collation awareness logic
       *  to handle string data types with various collations.
       *
-      * In the Mode class, we first check if the child data type is a StringType
-      * and if it does not support binary equality. If these conditions are met,
-      * we create a new map where the keys are the collation keys of the original
-      * keys. The collation keys are generated using the
-      * CollationFactory.getCollationKey method, which takes a string and a
-      * collation ID as parameters. The collation ID is used to determine the
-      * specific collation rules to apply.
+      * For string types that don't support binary equality,
+      * we create a new map where the keys are the collation keys of the original strings.
       *
       * Keys from the original map are aggregated based on the corresponding collation keys.
       *  The groupMapReduce method groups the entries by collation key and maps each group
