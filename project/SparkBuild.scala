@@ -154,11 +154,15 @@ object SparkBuild extends PomBuild {
 
   // We special case the 'println' lint rule to only be a warning on compile, because adding
   // printlns for debugging is a common use case and is easy to remember to remove.
+  // We special case the 'inlineVariableMDC' lint rule to be a warning on compile to account for
+  // cases we don't migrate to the Structured Logging Framework (e.g. test files or SparkLogger use)
   val scalaStyleOnCompileConfig: String = {
     val in = "scalastyle-config.xml"
     val out = "scalastyle-on-compile.generated.xml"
     val replacements = Map(
-      """customId="println" level="error"""" -> """customId="println" level="warn""""
+      """customId="println" level="error"""" -> """customId="println" level="warn"""",
+      """customId="inlineVariableMDC" level="error"""" ->
+        """customId="inlineVariableMDC" level="warn""""
     )
     val source = Source.fromFile(in)
     try {
