@@ -2817,7 +2817,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
     def test_udt_as_udtf_return_type(self):
         class TestUDTF:
             def eval(self):
-                yield Row(point=ExamplePoint(0, 1)),
+                yield ExamplePoint(0, 1),
 
         schema = StructType().add("point", ExamplePointUDT())
         self._check_result_or_exception(TestUDTF, schema, [Row(point=ExamplePoint(1.0, 2.0))])
