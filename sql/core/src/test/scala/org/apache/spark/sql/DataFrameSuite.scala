@@ -1010,7 +1010,7 @@ class DataFrameSuite extends QueryTest
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = Seq(
-      Seq("value"),
+      Seq("val"),
       Seq("1"),
       Seq("111"))
     assert(df.getRows(10, 3) === expectedAnswerForFalse)

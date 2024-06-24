@@ -718,7 +718,7 @@ class ClientE2ETestSuite
       8,
       26,
       "+---+--------------------+",
-      "| id|concat('very_very...|",
+      "| id|concat(very_very_...|",
       "|  0|very_very_very_lo...|")
 
     testCapturedStdOut(
