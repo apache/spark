@@ -2820,10 +2820,10 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 yield ExamplePoint(0, 1),
 
         schema = StructType().add("point", ExamplePointUDT())
-        [row] = udtf(TestUDTF, returnType=schema, useArrow=False).collect()
+        [row] = udtf(TestUDTF, returnType=schema, useArrow=False)().collect()
         self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
         with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CAST_ERROR"):
-            udtf(TestUDTF, returnType=schema, useArrow=True).collect()
+            udtf(TestUDTF, returnType=schema, useArrow=True)().collect()
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
