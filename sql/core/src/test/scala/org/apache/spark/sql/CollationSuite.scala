@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
@@ -1431,4 +1432,37 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("cache table with collated columns") {
+    val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+    val lazyOptions = Seq(false, true)
+
+    for (
+      collation <- collations;
+      lazyTable <- lazyOptions
+    ) {
+      val lazyStr = if (lazyTable) "LAZY" else ""
+
+      def checkCacheTable(values: String): Unit = {
+        sql(s"CACHE $lazyStr TABLE tbl AS SELECT col FROM VALUES ($values) AS (col)")
+        // Checks in-memory fetching code path.
+        val all = sql("SELECT col FROM tbl")
+        assert(all.queryExecution.executedPlan.collectFirst {
+          case _: InMemoryTableScanExec => true
+        }.nonEmpty)
+        checkAnswer(all, Row("a"))
+        // Checks column stats code path.
+        checkAnswer(sql("SELECT col FROM tbl WHERE col = 'a'"), Row("a"))
+        checkAnswer(sql("SELECT col FROM tbl WHERE col = 'b'"), Seq.empty)
+      }
+
+      withTable("tbl") {
+        checkCacheTable(s"'a' COLLATE $collation")
+      }
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+        withTable("tbl") {
+          checkCacheTable("'a'")
+        }
+      }
+    }
+  }
 }

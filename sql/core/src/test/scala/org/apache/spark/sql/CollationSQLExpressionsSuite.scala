@@ -1276,6 +1276,16 @@ class CollationSQLExpressionsSuite
            |    <A>true</A>
            |    <B>2.0</B>
            |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_LCASE",
+        s"""<ROW>
+           |    <A>aa</A>
+           |    <B>bb</B>
+           |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_BINARY",
+        s"""<ROW>
+           |    <A>aa</A>
+           |    <B>bb</B>
+           |</ROW>""".stripMargin),
       StructsToXmlTestCase("named_struct()", "UNICODE",
         "<ROW/>"),
       StructsToXmlTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",

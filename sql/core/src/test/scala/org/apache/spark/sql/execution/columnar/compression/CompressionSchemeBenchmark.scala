@@ -27,6 +27,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, INT, LONG, NativeColumnType, SHORT, STRING}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils._
 
 /**
@@ -231,8 +232,8 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     }
     testData.rewind()
 
-    runEncodeBenchmark("STRING Encode", iters, count, STRING, testData)
-    runDecodeBenchmark("STRING Decode", iters, count, STRING, testData)
+    runEncodeBenchmark("STRING Encode", iters, count, STRING(StringType), testData)
+    runDecodeBenchmark("STRING Decode", iters, count, STRING(StringType), testData)
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
