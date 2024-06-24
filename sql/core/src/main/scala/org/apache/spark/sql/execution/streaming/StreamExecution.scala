@@ -372,7 +372,7 @@ abstract class StreamExecution(
           case _ => None
         }
 
-        logError(log"Query ${MDC(QUERY_ID, prettyIdString)} terminated with error", e)
+        logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} terminated with error", e)
         getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them

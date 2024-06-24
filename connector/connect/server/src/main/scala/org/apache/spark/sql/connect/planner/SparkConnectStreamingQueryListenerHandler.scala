@@ -57,11 +57,10 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
       case StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
           case true =>
-            logWarning(
-              log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
-                log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-                log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
-                log"Redundant server side listener added. Exiting.")
+            logWarning(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
+              log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
+              log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
+              log"Redundant server side listener added. Exiting.")
             return
           case false =>
             // This transfers sending back the response to the client until
@@ -87,7 +86,8 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
                 logError(
                   log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
                     log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-                    log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+                    log"[operationId: " +
+                    log"${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
                     log"Error sending listener added response.",
                   e)
                 listenerHolder.cleanUp()
@@ -96,7 +96,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
         }
         logInfo(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
           log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-          log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+          log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
           log"Server side listener added. Now blocking until " +
           log"all client side listeners are removed or there is error transmitting the event back.")
         // Block the handling thread, and have serverListener continuously send back new events
@@ -104,7 +104,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
         logInfo(
           log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
             log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-            log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+            log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
             log"Server side listener long-running handling thread ended.")
       case StreamingQueryListenerBusCommand.CommandCase.REMOVE_LISTENER_BUS_LISTENER =>
         listenerHolder.isServerSideListenerRegistered match {
@@ -113,7 +113,7 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
           case false =>
             logWarning(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}]" +
               log"[UserId: ${MDC(LogKeys.USER_ID, userId)}]" +
-              log"[operationId: ${MDC(LogKeys.OPERATION_ID, executeHolder.operationId)}] " +
+              log"[operationId: ${MDC(LogKeys.OPERATION_HANDLE_ID, executeHolder.operationId)}] " +
               log"No active server side listener bus listener but received remove listener call. " +
               log"Exiting.")
             return
