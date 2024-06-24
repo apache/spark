@@ -455,12 +455,16 @@ case class Upper(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Upper.exec(v, collationId)
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Upper.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
@@ -483,12 +487,16 @@ case class Lower(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Lower.exec(v, collationId)
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Lower.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId, useICU))
   }
 
   override def prettyName: String =
