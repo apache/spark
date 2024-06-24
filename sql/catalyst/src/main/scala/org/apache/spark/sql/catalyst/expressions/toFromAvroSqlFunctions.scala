@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{MapType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -107,8 +108,12 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
       case _ =>
         Map.empty
     }
-    val constructor =
+    val constructor = try {
       Utils.classForName("org.apache.spark.sql.avro.AvroDataToCatalyst").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "FROM_AVRO")
+    }
     val expr = constructor.newInstance(child, schemaValue, optionsValue)
     expr.asInstanceOf[Expression]
   }
@@ -167,8 +172,12 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
       case s: UTF8String =>
         Some(s.toString)
     }
-    val constructor =
+    val constructor = try {
       Utils.classForName("org.apache.spark.sql.avro.CatalystDataToAvro").getConstructors().head
+    } catch {
+      case _: java.lang.ClassNotFoundException =>
+        throw QueryCompilationErrors.avroNotLoadedSqlFunctionsUnusable(functionName = "TO_AVRO")
+    }
     val expr = constructor.newInstance(child, schemaValue)
     expr.asInstanceOf[Expression]
   }
