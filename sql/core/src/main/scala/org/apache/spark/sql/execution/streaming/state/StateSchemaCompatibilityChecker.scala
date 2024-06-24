@@ -42,7 +42,13 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  def check(
+  /**
+   * Function to check if new state store schema is compatible with the existing schema.
+   * @param oldSchema - old state schema
+   * @param newSchema - new state schema
+   * @param ignoreValueSchema - whether to ignore value schema or not
+   */
+  private def check(
       oldSchema: (StructType, StructType),
       newSchema: (StructType, StructType),
       ignoreValueSchema: Boolean) : Unit = {
@@ -94,7 +100,7 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-  def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
+  private def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
     createSchemaFile(keySchema, valueSchema, schemaWriter)
   }
 
