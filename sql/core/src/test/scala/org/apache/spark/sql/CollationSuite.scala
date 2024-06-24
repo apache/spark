@@ -1469,10 +1469,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("compute statistics on collated columns") {
     val tableName = "tbl"
+    val v2TableName = "tbl_v2"
     val analyzeQueries = Seq(
       s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS",
       s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS col"
     )
+
     analyzeQueries.foreach(analyzeQuery => {
       withTable(tableName) {
         val catalogImpl = spark.conf.get(V2_SESSION_CATALOG_IMPLEMENTATION.key)
@@ -1497,18 +1499,17 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         // Restores original session catalog.
         spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, catalogImpl)
       }
-    })
 
-    val v2TableName = "tbl_v2"
-    withTable(v2TableName) {
-      sql(s"CREATE TABLE $v2TableName(col STRING COLLATE UTF8_LCASE) USING parquet")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $v2TableName COMPUTE STATISTICS FOR ALL COLUMNS")
-        },
-        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
-        parameters = Map("cmd" -> "ANALYZE TABLE")
-      )
-    }
+      withTable(v2TableName) {
+        sql(s"CREATE TABLE $v2TableName(col STRING COLLATE UTF8_LCASE) USING parquet")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $v2TableName COMPUTE STATISTICS FOR ALL COLUMNS")
+          },
+          errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+          parameters = Map("cmd" -> "ANALYZE TABLE")
+        )
+      }
+    })
   }
 }
