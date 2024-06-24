@@ -30,6 +30,7 @@ import org.apache.spark.network.util.ByteBufferWriteableChannel;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
@@ -127,8 +128,7 @@ public class GcmTransportCipher implements TransportCipher {
             // If the ciphertext buffer cannot be fully written the target, transferTo may
             // return with it containing some unwritten data. The initial call we'll explicitly
             // set its limit to 0 to indicate the first call to transferTo.
-            this.ciphertextBuffer.limit(0);
-
+            ((Buffer) this.ciphertextBuffer).limit(0);
             this.bytesToRead = getReadableBytes();
             this.encryptedCount =
                     LENGTH_HEADER_BYTES + aesGcmHkdfStreaming.expectedCiphertextSize(bytesToRead);
@@ -141,11 +141,12 @@ public class GcmTransportCipher implements TransportCipher {
         // [8 byte length][Internal IV and header][Ciphertext][Auth Tag]
         private ByteBuffer createHeaderByteBuffer() {
             ByteBuffer encrypterHeader = encrypter.getHeader();
-            return ByteBuffer
+            ByteBuffer output = ByteBuffer
                     .allocate(encrypterHeader.remaining() + LENGTH_HEADER_BYTES)
                     .putLong(encryptedCount)
-                    .put(encrypterHeader)
-                    .flip();
+                    .put(encrypterHeader);
+            ((Buffer) output).flip();
+            return output;
         }
 
         @Override
@@ -229,7 +230,7 @@ public class GcmTransportCipher implements TransportCipher {
                 if (plaintextMessage instanceof ByteBuf) {
                     ByteBuf byteBuf = (ByteBuf) plaintextMessage;
                     Preconditions.checkState(0 == plaintextBuffer.position());
-                    plaintextBuffer.limit(readLimit);
+                    ((Buffer) plaintextBuffer).limit(readLimit);
                     byteBuf.readBytes(plaintextBuffer);
                     Preconditions.checkState(readLimit == plaintextBuffer.position());
                 } else if (plaintextMessage instanceof FileRegion) {
@@ -245,16 +246,16 @@ public class GcmTransportCipher implements TransportCipher {
                     }
                 }
                 boolean lastSegment = getReadableBytes() == 0;
-                plaintextBuffer.flip();
+                ((Buffer) plaintextBuffer).flip();
                 bytesRead += plaintextBuffer.remaining();
-                ciphertextBuffer.clear();
+                ((Buffer) ciphertextBuffer).clear();
                 try {
                     encrypter.encryptSegment(plaintextBuffer, lastSegment, ciphertextBuffer);
                 } catch (GeneralSecurityException e) {
                     throw new IllegalStateException("GeneralSecurityException from encrypter", e);
                 }
-                plaintextBuffer.clear();
-                ciphertextBuffer.flip();
+                ((Buffer) plaintextBuffer).clear();
+                ((Buffer) ciphertextBuffer).flip();
                 int written = target.write(ciphertextBuffer);
                 transferredThisCall += written;
                 this.transferred += written;
@@ -321,7 +322,7 @@ public class GcmTransportCipher implements TransportCipher {
                     // We did not read enough bytes to initialize the expected length.
                     return false;
                 }
-                expectedLengthBuffer.flip();
+                ((Buffer) expectedLengthBuffer).flip();
                 expectedLength = expectedLengthBuffer.getLong();
                 if (expectedLength < 0) {
                     throw new IllegalStateException("Invalid expected ciphertext length.");
@@ -341,7 +342,7 @@ public class GcmTransportCipher implements TransportCipher {
                     // We did not read enough bytes to initialize the header.
                     return false;
                 }
-                headerBuffer.flip();
+                ((Buffer) headerBuffer).flip();
                 byte[] lengthAad = Longs.toByteArray(expectedLength);
                 decrypter.init(headerBuffer, lengthAad);
                 decrypterInit = true;
@@ -382,7 +383,7 @@ public class GcmTransportCipher implements TransportCipher {
                     int expectedRemaining = (int) (expectedLength - ciphertextRead);
                     int bytesToRead = Integer.min(readableBytes, expectedRemaining);
                     // The smallest ciphertext size is 16 bytes for the auth tag
-                    ciphertextBuffer.limit(ciphertextBuffer.position() + bytesToRead);
+                    ((Buffer) ciphertextBuffer).limit(((Buffer) ciphertextBuffer).position() + bytesToRead);
                     ciphertextNettyBuf.readBytes(ciphertextBuffer);
                     ciphertextRead += bytesToRead;
                     // Check if this is the last segment
@@ -395,7 +396,7 @@ public class GcmTransportCipher implements TransportCipher {
                     // then decrypt it and fire a read.
                     if (ciphertextBuffer.limit() == ciphertextBuffer.capacity() || completed) {
                         ByteBuffer plaintextBuffer = ByteBuffer.allocate(plaintextSegmentSize);
-                        ciphertextBuffer.flip();
+                        ((Buffer) ciphertextBuffer).flip();
                         decrypter.decryptSegment(
                                 ciphertextBuffer,
                                 segmentNumber,
@@ -403,12 +404,12 @@ public class GcmTransportCipher implements TransportCipher {
                                 plaintextBuffer);
                         segmentNumber++;
                         // Clear the ciphertext buffer because it's been read
-                        ciphertextBuffer.clear();
-                        plaintextBuffer.flip();
+                        ((Buffer) ciphertextBuffer).clear();
+                        ((Buffer) plaintextBuffer).flip();
                         ctx.fireChannelRead(Unpooled.wrappedBuffer(plaintextBuffer));
                     } else {
                         // Set the ciphertext buffer up to read the next chunk
-                        ciphertextBuffer.limit(ciphertextBuffer.capacity());
+                        ((Buffer) ciphertextBuffer).limit(ciphertextBuffer.capacity());
                     }
                     nettyBufReadableBytes = ciphertextNettyBuf.readableBytes();
                 }

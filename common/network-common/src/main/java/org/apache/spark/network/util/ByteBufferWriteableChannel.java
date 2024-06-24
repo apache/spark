@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
@@ -41,9 +42,10 @@ public class ByteBufferWriteableChannel implements WritableByteChannel {
         if (bytesToWrite == 0) {
             return 0;
         }
-        ByteBuffer temp = src.slice().limit(bytesToWrite);
+        ByteBuffer temp = src.slice();
+        ((Buffer) temp).limit(bytesToWrite);
         destination.put(temp);
-        src.position(src.position() + bytesToWrite);
+        ((Buffer) src).position(((Buffer) src).position() + bytesToWrite);
         return bytesToWrite;
     }
 

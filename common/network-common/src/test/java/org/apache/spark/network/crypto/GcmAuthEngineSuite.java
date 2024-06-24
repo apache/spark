@@ -30,6 +30,7 @@ import org.mockito.ArgumentCaptor;
 
 import javax.crypto.AEADBadTagException;
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
@@ -87,7 +88,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       ByteBufferWriteableChannel channel =
               new ByteBufferWriteableChannel(ciphertextBuffer);
       encrypted.transferTo(channel, 0);
-      ciphertextBuffer.flip();
+      ((Buffer) ciphertextBuffer).flip();
       ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
 
       // Capture the decrypted values and verify them
@@ -216,7 +217,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       }
       assertEquals(encrypted.count(), ciphertextTransferred);
 
-      ciphertextBuffer.flip();
+      ((Buffer) ciphertextBuffer).flip();
       ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
 
       // Capture the decrypted values and verify them
@@ -272,7 +273,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       ByteBufferWriteableChannel channel =
               new ByteBufferWriteableChannel(ciphertextBuffer);
       encrypted.transferTo(channel, 0);
-      ciphertextBuffer.flip();
+      ((Buffer) ciphertextBuffer).flip();
       ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
 
       // Split up the ciphertext into some different sized chunks
@@ -330,7 +331,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       ByteBufferWriteableChannel channel =
               new ByteBufferWriteableChannel(ciphertextBuffer);
       encrypted.transferTo(channel, 0);
-      ciphertextBuffer.flip();
+      ((Buffer) ciphertextBuffer).flip();
       ByteBuf ciphertext = Unpooled.wrappedBuffer(ciphertextBuffer);
 
       byte b = ciphertext.getByte(100);
