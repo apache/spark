@@ -653,7 +653,7 @@ class SparkContext:
         if getattr(self, "_jsc", None):
             try:
                 self._jsc.stop()
-            except Py4JError:
+            except (Py4JError, ConnectionRefusedError):
                 # Case: SPARK-18523
                 warnings.warn(
                     "Unable to cleanly shutdown Spark JVM process."
