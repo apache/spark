@@ -42,6 +42,11 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
     s""".*$level $className: This is a log message\nThis is a new line \t other msg\n"""
   }
 
+  override def expectedPatternForMsgWithMDCAndEscapeChar(level: Level): String = {
+    s""".*$level $className: The first message\nthe first new line\tthe first other msg\n""" +
+      s"""[\\s\\S]*The second message\nthe second new line\tthe second other msg\n"""
+  }
+
   override def expectedPatternForBasicMsgWithException(level: Level): String = {
     s""".*$level $className: This is a log message\n[\\s\\S]*"""
   }

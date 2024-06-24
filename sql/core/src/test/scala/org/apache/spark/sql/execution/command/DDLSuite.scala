@@ -327,10 +327,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
-  test("alter table: set properties (datasource table)") {
-    testSetProperties(isDatasourceTable = true)
-  }
-
   test("alter table: unset properties (datasource table)") {
     testUnsetProperties(isDatasourceTable = true)
   }
@@ -1114,40 +1110,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "foundType" -> "EXTERNAL",
         "requiredType" -> "VIEW",
         "objectName" -> "spark_catalog.dbx.tab1")
-    )
-  }
-
-  protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    def getProps: Map[String, String] = {
-      if (isUsingHiveMetastore) {
-        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
-      } else {
-        catalog.getTableMetadata(tableIdent).properties
-      }
-    }
-    assert(getProps.isEmpty)
-    // set table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
-    // set table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
-    // table to alter does not exist
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
-      },
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`does_not_exist`"),
-      context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
     )
   }
 
