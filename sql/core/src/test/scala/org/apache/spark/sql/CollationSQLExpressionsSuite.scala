@@ -2081,6 +2081,49 @@ class CollationSQLExpressionsSuite
     assert(typeException.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD")
   }
 
+  test("HyperLogLogPlusPlus expression with collation") {
+    case class HyperLogLogPlusPlusTestCase(
+      values: Seq[String],
+      collation: String,
+      result: Int)
+
+    def performCheck(check: HyperLogLogPlusPlusTestCase, collation: Option[String]): Unit = {
+      val tableName = "test_hyper_log_log_plus_plus"
+      val collatedType = if (collation.isDefined) s"STRING COLLATE ${collation.get}" else "STRING"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(col $collatedType) USING parquet")
+        sql(s"INSERT INTO TABLE $tableName VALUES " +
+          check.values.map(v => s"('$v')").mkString(","))
+        checkAnswer(sql(s"SELECT approx_count_distinct(col) FROM $tableName"), Row(check.result))
+      }
+    }
+
+    val checks = Seq(
+      HyperLogLogPlusPlusTestCase(Seq("a", "A"), "UTF8_BINARY", 2),
+      HyperLogLogPlusPlusTestCase(Seq("a", "b", "c"), "UTF8_BINARY", 3),
+      HyperLogLogPlusPlusTestCase(Seq("a", "A"), "UTF8_LCASE", 1),
+      HyperLogLogPlusPlusTestCase(Seq("aaa", "AAA", "AaA", "AAa", "aaA", "aaa"), "UTF8_LCASE", 1),
+      HyperLogLogPlusPlusTestCase(Seq("aA", "bB", "Aa", "Bb", "AA", "aa", "bb", "BB", "aa", "bb"),
+        "UTF8_LCASE", 2),
+      HyperLogLogPlusPlusTestCase(Seq("a", "A"), "UNICODE", 2),
+      HyperLogLogPlusPlusTestCase(Seq("aaa", "AAA", "AaA", "AAa", "aaA", "aaa"), "UNICODE", 5),
+      HyperLogLogPlusPlusTestCase(Seq("aA", "bB", "Aa", "Bb", "AA", "aa", "bb", "BB", "aa", "bb"),
+        "UNICODE", 8),
+      HyperLogLogPlusPlusTestCase(Seq("a", "A"), "UNICODE_CI", 1),
+      HyperLogLogPlusPlusTestCase(Seq("aaa", "AAA", "AaA", "AAa", "aaA", "aaa"), "UNICODE_CI", 1),
+      HyperLogLogPlusPlusTestCase(Seq("aA", "bB", "Aa", "Bb", "AA", "aa", "bb", "BB", "aa", "bb"),
+        "UNICODE_CI", 2),
+      HyperLogLogPlusPlusTestCase(Seq("a", "Ö", "ǒ", "Ä"), "UNICODE_CI_AI", 2),
+      HyperLogLogPlusPlusTestCase(Seq("ŠšÜ", "usš", "ssu", "ÙŞŞ"), "UNICODE_CI_AI", 2)
+    )
+    checks.foreach(check => {
+      performCheck(check, Some(check.collation))
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> check.collation) {
+        performCheck(check, None)
+      }
+    })
+  }
+
   // TODO: Add more tests for other SQL expressions
 
 }
