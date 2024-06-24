@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
@@ -78,14 +78,16 @@ class RocksDB(
     checkpointDir: File,
     version: Long,
     numKeys: Long,
-    fileManagerInstance: RocksDBFileManager) {
+    fileMappings: RocksDBFileMappings) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
   }
 
+
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
+  private val oldSnapshots = new ListBuffer[Option[RocksDBSnapshot]]
 
   RocksDBLoader.loadLibrary()
 
@@ -150,6 +152,8 @@ class RocksDB(
   private val nativeStats = dbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
+  private val fileManager = new RocksDBFileManager(dfsRootDir, createTempDir("fileManager"),
+    hadoopConf, conf.compressionCodec, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
@@ -161,13 +165,6 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
-  @volatile private var fileManager: RocksDBFileManager = new RocksDBFileManager(
-    dfsRootDir,
-    createTempDir("fileManager"),
-    hadoopConf,
-    conf.compressionCodec,
-    loggingId = loggingId
-  )
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
@@ -192,7 +189,7 @@ class RocksDB(
         closeDB()
         // deep copy is needed to avoid race condition
         // between maintenance and task threads
-        fileManager = fileManager.deepCopy()
+        fileManager.copyFileMapping()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
@@ -595,19 +592,17 @@ class RocksDB(
           // background operations.
           val cp = Checkpoint.create(db)
           cp.createCheckpoint(checkpointDir.toString)
-          synchronized {
-            // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
-            // inside the uploadSnapshot() called below.
-            // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
-            // during state store maintenance.
-            latestSnapshot.foreach(_.close())
-            latestSnapshot = Some(
-              RocksDBSnapshot(checkpointDir,
-                newVersion,
-                numKeysOnWritingVersion,
-                fileManager))
-            lastSnapshotVersion = newVersion
-          }
+          // if changelog checkpointing is disabled, the snapshot is uploaded synchronously
+          // inside the uploadSnapshot() called below.
+          // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
+          // during state store maintenance.
+          oldSnapshots.addOne(latestSnapshot)
+          latestSnapshot = Some(
+            RocksDBSnapshot(checkpointDir,
+              newVersion,
+              numKeysOnWritingVersion,
+              fileManager.captureFileMapReference()))
+          lastSnapshotVersion = newVersion
         }
       }
 
@@ -665,17 +660,21 @@ class RocksDB(
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys, previousFileManager)) =>
+      case Some(RocksDBSnapshot(localDir, version, numKeys, capturedFileMappings)) =>
         try {
           val uploadTime = timeTakenMs {
-            previousFileManager.saveCheckpointToDfs(localDir, version, numKeys)
-            fileManagerMetrics = previousFileManager.latestSaveCheckpointMetrics
+            fileManager.saveCheckpointToDfs(localDir, version, numKeys, capturedFileMappings)
+            fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
           logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
             log"${MDC(LogKeys.VERSION_NUM, version)}," +
             log" time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms")
         } finally {
           localCheckpoint.foreach(_.close())
+
+          // Clean up old latestSnapshots
+          oldSnapshots.foreach(snapshot => snapshot.foreach(_.close()))
+          oldSnapshots.clear()
         }
       case _ =>
     }

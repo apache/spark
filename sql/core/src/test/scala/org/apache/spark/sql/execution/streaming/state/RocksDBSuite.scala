@@ -877,41 +877,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     )
   }
 
-  testWithChangelogCheckpointingEnabled("RocksDBFileManager: deepCopy") {
-    withTempDir { dir =>
-      val dfsRootDir = dir.getAbsolutePath
-      val originalFileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
-      val copiedFileManager = originalFileManager.deepCopy()
-
-      // Save a version of checkpoint files
-      val cpFiles = Seq(
-        "001.sst" -> 10,
-        "002.sst" -> 10,
-        "003.sst" -> 10
-      )
-      saveCheckpointFiles(originalFileManager, cpFiles, 1, 101)
-
-      // Ensure checkpoint metrics are different
-      assert(originalFileManager.latestSaveCheckpointMetrics.filesCopied == 3L)
-      assert(originalFileManager.latestSaveCheckpointMetrics.bytesCopied == 30L)
-      assert(copiedFileManager.latestSaveCheckpointMetrics.filesCopied == 0L)
-      assert(copiedFileManager.latestSaveCheckpointMetrics.bytesCopied == 0L)
-
-      // Checkpoint the same files
-      saveCheckpointFiles(originalFileManager, cpFiles, 2, 101)
-      saveCheckpointFiles(copiedFileManager, cpFiles, 2, 101)
-
-      // Original file manager should skip since files already uploaded
-      assert(originalFileManager.latestSaveCheckpointMetrics.filesCopied == 0L)
-      assert(originalFileManager.latestSaveCheckpointMetrics.bytesCopied == 0L)
-
-      // Copied file manager should not skip since these are new files
-      assert(copiedFileManager.latestSaveCheckpointMetrics.filesCopied == 3L)
-      assert(copiedFileManager.latestSaveCheckpointMetrics.bytesCopied == 30L)
-    }
-  }
-
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: " +
     "background snapshot upload doesn't acquire RocksDB instance lock") {
     // Create a custom ExecutionContext
@@ -2381,7 +2346,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       numKeys: Int): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
+    fileManager.saveCheckpointToDfs(
+      checkpointDir,
+      version,
+      numKeys,
+      fileManager.captureFileMapReference())
   }
 
   def loadAndVerifyCheckpointFiles(
