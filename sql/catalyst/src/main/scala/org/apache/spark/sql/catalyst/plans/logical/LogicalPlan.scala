@@ -104,7 +104,20 @@ abstract class LogicalPlan
    */
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
-  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
+  override protected def statePrefix = {
+    if (!resolved) {
+      "'"
+    } else {
+      val prefixFromSuper = super.statePrefix
+      // Ancestor class could mark something on the prefix, including 'invalid'. Add a marker for
+      // `streaming` only when there is no marker from ancestor class.
+      if (prefixFromSuper.isEmpty && isStreaming) {
+        "~"
+      } else {
+        prefixFromSuper
+      }
+    }
+  }
 
   /**
    * Returns true if all its children of this query plan have been resolved.

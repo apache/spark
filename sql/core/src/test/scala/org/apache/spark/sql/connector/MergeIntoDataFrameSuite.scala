@@ -943,4 +943,32 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           Row(3, Row("y1 ", "y2"), "hr"))) // update (not matched by source)
     }
   }
+
+  test("withSchemaEvolution carries over existing when clauses") {
+    withTempView("source") {
+      Seq(1, 2, 4).toDF("pk").createOrReplaceTempView("source")
+
+      // an arbitrary merge
+      val writer1 = spark.table("source")
+        .mergeInto("dummy", $"col" === $"col")
+        .whenMatched(col("col") === 1)
+        .updateAll()
+        .whenMatched()
+        .delete()
+        .whenNotMatched(col("col") === 1)
+        .insertAll()
+        .whenNotMatchedBySource(col("col") === 1)
+        .delete()
+      val writer2 = writer1.withSchemaEvolution()
+
+      assert(writer1.matchedActions.length === 2)
+      assert(writer1.notMatchedActions.length === 1)
+      assert(writer1.notMatchedBySourceActions.length === 1)
+
+      assert(writer1.matchedActions === writer2.matchedActions)
+      assert(writer1.notMatchedActions === writer2.notMatchedActions)
+      assert(writer1.notMatchedBySourceActions === writer2.notMatchedBySourceActions)
+      assert(writer2.schemaEvolutionEnabled)
+    }
+  }
 }

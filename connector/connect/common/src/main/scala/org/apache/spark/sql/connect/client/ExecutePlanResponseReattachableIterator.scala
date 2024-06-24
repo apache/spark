@@ -42,7 +42,8 @@ import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryException
  * ReattachExecute request. ReattachExecute request is provided the responseId of last returned
  * ExecutePlanResponse on the iterator to return a new iterator from server that continues after
  * that. If the initial ExecutePlan did not even reach the server, and hence reattach fails with
- * INVALID_HANDLE.OPERATION_NOT_FOUND, we attempt to retry ExecutePlan.
+ * INVALID_HANDLE.OPERATION_NOT_FOUND or INVALID_HANDLE.SESSION_NOT_FOUND, we attempt to retry
+ * ExecutePlan.
  *
  * In reattachable execute the server does buffer some responses in case the client needs to
  * backtrack. To let server release this buffer sooner, this iterator asynchronously sends
@@ -66,7 +67,8 @@ class ExecutePlanResponseReattachableIterator(
     // Add operation id, if not present.
     // with operationId set by the client, the client can use it to try to reattach on error
     // even before getting the first response. If the operation in fact didn't even reach the
-    // server, that will end with INVALID_HANDLE.OPERATION_NOT_FOUND error.
+    // server, that will end with INVALID_HANDLE.OPERATION_NOT_FOUND or
+    // INVALID_HANDLE.SESSION_NOT_FOUND error.
     UUID.randomUUID.toString
   }
 
@@ -234,10 +236,14 @@ class ExecutePlanResponseReattachableIterator(
     } catch {
       case ex: StatusRuntimeException
           if Option(StatusProto.fromThrowable(ex))
-            .exists(_.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND")) =>
+            .exists(ex => {
+              ex.getMessage.contains("INVALID_HANDLE.OPERATION_NOT_FOUND") ||
+              ex.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND")
+            }) =>
         if (lastReturnedResponseId.isDefined) {
           throw new IllegalStateException(
-            "OPERATION_NOT_FOUND on the server but responses were already received from it.",
+            "OPERATION_NOT_FOUND/SESSION_NOT_FOUND on the server but responses were already " +
+              "received from it.",
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.

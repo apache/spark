@@ -67,12 +67,12 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
 
   private val keySchemaWithCollation = new StructType()
     .add(StructField("key1", IntegerType, nullable = true))
-    .add(StructField("key2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("key2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("key3", structSchema, nullable = true))
 
   private val valueSchemaWithCollation = new StructType()
     .add(StructField("value1", IntegerType, nullable = true))
-    .add(StructField("value2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("value2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("value3", structSchema, nullable = true))
 
   // Checks on adding/removing (nested) field.
