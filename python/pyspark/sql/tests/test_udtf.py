@@ -2820,7 +2820,7 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 yield ExamplePoint(0, 1),
 
         schema = StructType().add("point", ExamplePointUDT())
-        [row] =udtf(TestUDTF, returnType=schema, useArrow=True)(lit()).collect()
+        [row] = udtf(TestUDTF, returnType=schema, useArrow=True)().collect()
         self.assertEqual(row[0], ExamplePoint(1.0, 2.0))
 
 
