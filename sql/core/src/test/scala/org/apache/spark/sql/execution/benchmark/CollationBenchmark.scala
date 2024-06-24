@@ -19,18 +19,12 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.collection.OpenHashMap
 
-abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchmark {
+abstract class CollationBenchmarkBase extends BenchmarkBase {
   protected val collationTypes: Seq[String] =
-    Seq("UTF8_LCASE", "UNICODE", "UTF8_BINARY", "UNICODE_CI")
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
 
   def generateSeqInput(n: Long): Seq[UTF8String]
 
@@ -191,94 +185,6 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
     }
     benchmark.run()
   }
-
-  def benchmarkMode(
-      collationTypes: Seq[String],
-      value: Seq[UTF8String]): Unit = {
-    val benchmark = new Benchmark(
-      s"collation unit benchmarks - mode - ${value.size} elements",
-      value.size * 10,
-      warmupTime = 10.seconds,
-      output = output)
-    collationTypes.foreach { collationType => {
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.foreach(v => {
-        buffer.update(v, (v.hashCode() % 1000).toLong)
-      })
-      val modeCurrent = Mode(child =
-        Literal.create("some_column_name", StringType(collationType)))
-      benchmark.addCase(s"$collationType - mode - ${value.size} elements") { _ =>
-        (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
-        }
-      }
-    }
-    }
-
-    benchmark.run()
-  }
-
-  def benchmarkModeStruct(
-      collationTypes: Seq[String],
-      value: Seq[UTF8String]): Unit = {
-    val benchmark = new Benchmark(
-      s"collation unit benchmarks - mode [struct] - ${value.size} elements",
-      value.size * 10,
-      warmupTime = 10.seconds,
-      output = output)
-    collationTypes.foreach { collationType => {
-      val buffer = new OpenHashMap[AnyRef, Long](value.size)
-      value.foreach(v => {
-        buffer.update(InternalRow.fromSeq(
-          Seq(v, v, 3)),
-          (v.hashCode() % 1000).toLong)
-      })
-      val st = StructType(Seq(
-        StructField("a", StringType(collationType)),
-        StructField("b", StringType(collationType)),
-        StructField("c", IntegerType)
-      ))
-      val modeCurrent = Mode(child = Literal.default(st))
-      benchmark.addCase(s"$collationType - mode struct - ${value.size} elements") { _ =>
-        (0 to 10) foreach { _ =>
-          modeCurrent.eval(buffer)
-        }
-      }
-    }
-    }
-
-    benchmark.run()
-  }
-  protected def generateDataframeInput(l: Long): DataFrame = {
-    spark.createDataFrame(generateSeqInput(l).map(_.toString).map(Tuple1.apply)).toDF("s1")
-  }
-
-  /**
-   * Benchmark to measure performance of mode function on a DataFrame column with collation.
-   * This is necessary for when we attempt to switch to a different mode implementation.
-   * Replacing changes to eval() with changes to update() in the Mode class.
-   */
-  def benchmarkModeOnDataFrame(
-      collationTypes: Seq[String],
-      dfUncollated: DataFrame): Unit = {
-    val benchmark =
-      new Benchmark(
-        s"collation e2e benchmarks - mode - ${dfUncollated.count()} elements",
-        dfUncollated.count(),
-        warmupTime = 4.seconds,
-        output = output)
-    collationTypes.foreach(collationType => {
-      val columnName = s"s_$collationType"
-      val dfCollated = dfUncollated.selectExpr(
-        s"collate(s1,  '$collationType') as $columnName")
-      benchmark.addCase(s"mode df column with collation - $collationType") { _ =>
-        dfCollated.selectExpr(s"mode($columnName)")
-          .noop()
-      }
-    }
-    )
-    benchmark.run()
-  }
 }
 
 /**
@@ -295,34 +201,15 @@ abstract class CollationBenchmarkBase extends BenchmarkBase with SqlBasedBenchma
  */
 object CollationBenchmark extends CollationBenchmarkBase {
 
-  private val baseInputStrings = Seq("ABC", "ABC", "aBC", "aBC", "abc",
-    "abc", "DEF", "DEF", "def", "def",
-    "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
-    "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
-    "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
-
-  /*
-    * Generate input strings for the benchmark. The input strings are a sequence of base strings
-    * repeated n / input.size times.
-   */
-  private def generateBaseInputStrings(n: Long): Seq[UTF8String] = {
-    val input = baseInputStrings.map(UTF8String.fromString)
-    (0L until n).map(i => input(i.toInt % input.size))
+  override def generateSeqInput(n: Long): Seq[UTF8String] = {
+    val input = Seq("ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def",
+      "GHI", "ghi", "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx",
+      "ABC", "ABC", "aBC", "aBC", "abc", "abc", "DEF", "DEF", "def", "def", "GHI", "ghi",
+      "JKL", "jkl", "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ")
+      .map(UTF8String.fromString)
+    val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
+    inputLong
   }
-
-  /*
-  Lowercase and some repeated strings to test the performance of the collation functions.
-   */
-  def generateBaseInputStringswithUniqueGroupNumber(n: Long): Seq[UTF8String] = {
-    (0 to n.toInt / baseInputStrings.size).flatMap(k => baseInputStrings.map(
-        x => UTF8String.fromString(x + "_" + k)))
-      .flatMap(
-        x => Seq(x, x.repeat(4), x.repeat(8))) // Variable Lengths...
-      .sortBy(f => f.reverse().hashCode()) // Shuffle the input
-  }
-
-  override def generateSeqInput(n: Long): Seq[UTF8String] =
-    generateBaseInputStrings(n)
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val inputs = generateSeqInput(10000L)
@@ -332,11 +219,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, generateBaseInputStringswithUniqueGroupNumber(10000L))
-    benchmarkModeStruct(collationTypes.filter(c => c == "UNICODE" || c == "UTF8_BINARY"),
-      generateBaseInputStringswithUniqueGroupNumber(10000L))
-    benchmarkModeOnDataFrame(collationTypes, generateDataframeInput(10000L))
-  }
+  }a
 }
 
 /**
@@ -365,7 +248,5 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
-    benchmarkMode(collationTypes, inputs)
-    benchmarkModeStruct(collationTypes.filter(c => c == "UNICODE" || c == "UTF8_BINARY"), inputs)
   }
 }
