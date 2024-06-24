@@ -2196,15 +2196,13 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def collectFirstColumnValues(): Seq[Any] = {
-
-    // This is to prevent unintended OOM errors when the number of distinct values is large
+    // TODO: configurable maxValues
     val maxValues = 5000
-    // Get the distinct values of the column and sort them so its consistent
     val firstColumn = col(this.columns.head)
     val values = this.select(firstColumn)
       .distinct()
       .limit(maxValues + 1)
-      .sort(firstColumn) // ensure that the output columns are in a consistent logical order
+      .sort(firstColumn)
       .collect()
       .map(_.get(0))
       .toImmutableArraySeq
