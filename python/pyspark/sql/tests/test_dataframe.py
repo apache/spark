@@ -529,7 +529,7 @@ class DataFrameTestsMixin:
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
