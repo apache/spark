@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
   protected val collationTypes: Seq[String] =
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+    Seq("UNICODE_CI", "UNICODE", "UTF8_LCASE", "UTF8_BINARY")
 
   def generateSeqInput(n: Long): Seq[UTF8String]
 
