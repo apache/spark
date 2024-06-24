@@ -91,10 +91,8 @@ case class Mode(
       return null
     }
     /*
-      * The Mode class uses collation awareness logic to handle string data
-      * types with a specific collation. Collation is a set of rules that
-      * determine how data is sorted and compared in a database. It can define
-      * case sensitivity, accent marks, character set, etc.
+      * The Mode class uses special collation awareness logic
+      *  to handle string data types with various collations.
       *
       * In the Mode class, we first check if the child data type is a StringType
       * and if it does not support binary equality. If these conditions are met,
@@ -104,14 +102,9 @@ case class Mode(
       * collation ID as parameters. The collation ID is used to determine the
       * specific collation rules to apply.
       *
-      * The values of the new map are the same as the values of the original map.
-      * If two or more keys from the original map have the same collation key,
-      * their counts are added together in the new map. The choice of key in the new map
-      * is not the collation key itself. The key is `x._1` which is the key encountered.
-      * The choice of which is currently undefined, for the sake of simplicity and performance.
-      * The groupMapReduce method, which groups the entries by collation key, maps
-      * each group to a single value (the sum of the counts), and reduces the
-      * groups to a single map.
+      * Keys from the original map are aggregated based on the corresponding collation keys.
+      *  The groupMapReduce method groups the entries by collation key and maps each group
+      *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
       *
       * The new map is then used in the rest of the Mode evaluation logic.
       */
