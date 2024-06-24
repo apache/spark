@@ -1469,29 +1469,35 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("compute statistics on collated columns") {
     val tableName = "tbl"
-    withTable(tableName) {
-      val catalogImpl = spark.conf.get(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-      // Unset this config to use the default v2 session catalog.
-      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    val analyzeQueries = Seq(
+      s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS",
+      s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS col"
+    )
+    analyzeQueries.foreach(analyzeQuery => {
+      withTable(tableName) {
+        val catalogImpl = spark.conf.get(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+        // Unset this config to use the default v2 session catalog.
+        spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
 
-      sql(s"CREATE TABLE $tableName(col STRING COLLATE UTF8_LCASE) USING parquet")
-      sql(s"INSERT INTO $tableName VALUES ('a'), ('A'), ('b')")
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS")
-      val stats = sql(s"DESC EXTENDED $tableName col").collect()
+        sql(s"CREATE TABLE $tableName(col STRING COLLATE UTF8_LCASE) USING parquet")
+        sql(s"INSERT INTO $tableName VALUES ('a'), ('A'), ('b')")
+        sql(analyzeQuery)
+        val stats = sql(s"DESC EXTENDED $tableName col").collect()
 
-      def getStatsValue(statsName: String): String =
-        stats.filter(r => r.getString(0) == statsName).head.getString(1)
+        def getStatsValue(statsName: String): String =
+          stats.filter(r => r.getString(0) == statsName).head.getString(1)
 
-      assert(getStatsValue("min") == "NULL")
-      assert(getStatsValue("max") == "NULL")
-      assert(getStatsValue("histogram") == "NULL")
-      assert(getStatsValue("num_nulls") == "0")
-      assert(getStatsValue("avg_col_len") == "1")
-      assert(getStatsValue("max_col_len") == "1")
+        assert(getStatsValue("min") == "NULL")
+        assert(getStatsValue("max") == "NULL")
+        assert(getStatsValue("histogram") == "NULL")
+        assert(getStatsValue("num_nulls") == "0")
+        assert(getStatsValue("avg_col_len") == "1")
+        assert(getStatsValue("max_col_len") == "1")
 
-      // Restores original session catalog.
-      spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, catalogImpl)
-    }
+        // Restores original session catalog.
+        spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION.key, catalogImpl)
+      }
+    })
 
     val v2TableName = "tbl_v2"
     withTable(v2TableName) {
