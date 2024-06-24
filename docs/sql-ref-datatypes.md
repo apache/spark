@@ -192,8 +192,8 @@ please use factory methods provided in
 |**DoubleType**|double or Double|DataTypes.DoubleType|
 |**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
 |**StringType**|String|DataTypes.StringType|
-|**CharType(length)**|String|Not supported|
-|**VarcharType(length)**|String|Not supported|
+|**CharType(length)**|String|DataTypes.createCharType(length)|
+|**VarcharType(length)**|String|DataTypes.createVarcharType(length)|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
