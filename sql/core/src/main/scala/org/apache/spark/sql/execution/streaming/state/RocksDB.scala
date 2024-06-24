@@ -673,8 +673,18 @@ class RocksDB(
           localCheckpoint.foreach(_.close())
 
           // Clean up old latestSnapshots
-          oldSnapshots.foreach(snapshot => snapshot.foreach(_.close()))
-          oldSnapshots.clear()
+          // Convert mutable list buffer to immutable to prevent
+          // race condition with commit where old snapshot is added
+          var oldSnapshotsImmutable: List[Option[RocksDBSnapshot]] = Nil
+          synchronized {
+            oldSnapshotsImmutable = oldSnapshots.toList
+            oldSnapshots.clear()
+          }
+
+          for (snapshot <- oldSnapshotsImmutable) {
+            snapshot.foreach(_.close())
+          }
+
         }
       case _ =>
     }
