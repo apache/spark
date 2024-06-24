@@ -6291,6 +6291,9 @@ class DataFrame:
         query execution after the successful execution. Accessing this member before
         the query execution will return None.
 
+        If the same DataFrame is executed multiple times, the execution info will be
+        overwritten by the latest operation.
+
         .. versionadded:: 4.0.0
 
         Returns
