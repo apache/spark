@@ -716,7 +716,8 @@ object DataSourceStrategy
     // Data source filters that cannot be handled by `relation`. An unhandled filter means
     // the data source cannot guarantee the rows returned can pass the filter.
     // As a result we must return it so Spark can plan an extra filter operator.
-    val unhandledFilters = relation.unhandledFilters(pushedFilters.toArray).toSet
+    val unhandledFilters = relation.unhandledFilters(
+      translatedMap.values.map(_.filter).toArray).toSet
     val unhandledPredicates = translatedMap.filter { case (p, f) =>
       unhandledFilters.contains(f.filter)
     }.keys
