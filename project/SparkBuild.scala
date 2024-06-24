@@ -152,24 +152,19 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleOnTest = taskKey[Unit]("scalaStyleOnTest")
 
-  lazy val scalaStyleOnProd = taskKey[Unit]("scalaStyleOnProd")
-
-  val defaultStyleConfig = "scalastyle-config.xml"
-  val prodStyleConfig = "scalastyle-config-prod-only.xml"
-
-  def getStyleConfig(isProd: Boolean): String = if (isProd) prodStyleConfig else defaultStyleConfig
-
   // We special case the 'println' lint rule to only be a warning on compile, because adding
   // printlns for debugging is a common use case and is easy to remember to remove.
   val scalaStyleOnCompileConfig: String = {
-    val in = "scalastyle-config.xml"
+    val base_style_config = "scalastyle-config.xml"
+    val prod_style_config = "scalastyle-config-prod.xml"
     val out = "scalastyle-on-compile.generated.xml"
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    val source = Source.fromFile(in)
+    val base_source = Source.fromFile(base_style_config)
+    val prod_source = Source.fromFile(prod_style_config)
     try {
-      var contents = source.getLines.mkString("\n")
+      var contents = base_source.getLines.mkString("\n") + prod_source.getLines.mkString("\n")
       for ((k, v) <- replacements) {
         require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
         contents = contents.replace(k, v)
@@ -180,24 +175,23 @@ object SparkBuild extends PomBuild {
       }
       out
     } finally {
-      source.close()
+      base_source.close()
+      prod_source.close()
     }
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
-  private def cachedScalaStyle(config: Configuration, isProd: Boolean = false)
-    = Def.task {
+  private def cachedScalaStyle(config: Configuration) = Def.task {
     val logger = streams.value.log
+    // We need a different cache dir per Configuration, otherwise they collide
     val cacheDir = target.value / s"scalastyle-cache-${config.name}"
-    val cachedFun = sbt.util.FileFunction.cached(
-      cacheDir, sbt.util.FilesInfo.lastModified, sbt.util.FilesInfo.exists
-    ) {
-      (inFiles: Set[File]) =>
+    val cachedFun = FileFunction.cached(cacheDir, FilesInfo.lastModified, FilesInfo.exists) {
+      (inFiles: Set[File]) => {
         val args: Seq[String] = Seq.empty
         val scalaSourceV = Seq(file((config / scalaSource).value.getAbsolutePath))
-        val configV = (ThisBuild / baseDirectory).value / getStyleConfig(isProd)
+        val configV = (ThisBuild / baseDirectory).value / scalaStyleOnCompileConfig
         val configUrlV = (config / scalastyleConfigUrl).value
-        val streamsV = (config / streams).value
+        val streamsV = ((config / streams).value: @sbtUnchecked)
         val failOnErrorV = true
         val failOnWarningV = false
         val scalastyleTargetV = (config / scalastyleTarget).value
@@ -205,17 +199,16 @@ object SparkBuild extends PomBuild {
         val targetV = (config / target).value
         val configCacheFileV = (config / scalastyleConfigUrlCacheFile).value
 
-        logger.info(s"Running scalastyle on ${name.value} in ${config.name} with isProd = $isProd")
-        org.scalastyle.sbt.Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV,
-          failOnWarningV, scalaSourceV, scalastyleTargetV, streamsV, configRefreshHoursV,
-          targetV, configCacheFileV)
+        logger.info(s"Running scalastyle on ${name.value} in ${config.name}")
+        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, failOnWarningV, scalaSourceV,
+          scalastyleTargetV, streamsV, configRefreshHoursV, targetV, configCacheFileV)
 
         Set.empty
+      }
     }
 
     cachedFun(findFiles((config / scalaSource).value))
   }
-
 
   private def findFiles(file: File): Set[File] = if (file.isDirectory) {
     file.listFiles().toSet.flatMap(findFiles) + file
