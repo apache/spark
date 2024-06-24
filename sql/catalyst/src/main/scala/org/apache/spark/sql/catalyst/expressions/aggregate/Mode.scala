@@ -51,6 +51,11 @@ case class Mode(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
+      /*
+        * The Mode class uses collation awareness logic to handle string data.
+        * Complex types with collated fields are not yet supported.
+       */
+      // TODO: SPARK-48700: Mode expression for complex types (all collations)
       super.checkInputDataTypes()
     } else {
       TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was" +
@@ -85,6 +90,31 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
+    /*
+      * The Mode class uses collation awareness logic to handle string data
+      * types with a specific collation. Collation is a set of rules that
+      * determine how data is sorted and compared in a database. It can define
+      * case sensitivity, accent marks, character set, etc.
+      *
+      * In the Mode class, we first check if the child data type is a StringType
+      * and if it does not support binary equality. If these conditions are met,
+      * we create a new map where the keys are the collation keys of the original
+      * keys. The collation keys are generated using the
+      * CollationFactory.getCollationKey method, which takes a string and a
+      * collation ID as parameters. The collation ID is used to determine the
+      * specific collation rules to apply.
+      *
+      * The values of the new map are the same as the values of the original map.
+      * If two or more keys from the original map have the same collation key,
+      * their counts are added together in the new map. The choice of key in the new map
+      * is not the collation key itself. The key is `x._1` which is the key encountered.
+      * The choice of which is currently undefined, for the sake of simplicity and performance.
+      * The groupMapReduce method, which groups the entries by collation key, maps
+      * each group to a single value (the sum of the counts), and reduces the
+      * groups to a single map.
+      *
+      * The new map is then used in the rest of the Mode evaluation logic.
+      */
     val collationAwareBuffer = child.dataType match {
       case c: StringType if
         !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
@@ -148,6 +178,7 @@ case class Mode(
     copy(child = newChild)
 }
 
+// TODO: SPARK-48701: PandasMode (all collations)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
