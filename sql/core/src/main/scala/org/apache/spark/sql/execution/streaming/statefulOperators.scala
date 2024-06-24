@@ -75,7 +75,7 @@ trait StatefulOperator extends SparkPlan {
 
   // Function used to record state schema for the first time and validate it against proposed
   // schema changes in the future. Runs as part of a planning rule on the driver.
-  def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit
+  def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit
 }
 
 /**
@@ -430,8 +430,8 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
   }
 
@@ -497,8 +497,8 @@ case class StateStoreSaveExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
   }
 
@@ -706,8 +706,8 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
   }
 
@@ -793,8 +793,8 @@ case class SessionWindowStateStoreSaveExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
   }
 
@@ -1106,8 +1106,8 @@ case class StreamingDeduplicateExec(
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
   }
 }
@@ -1181,8 +1181,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   override def shortName: String = "dedupeWithinWatermark"
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
   }
 

@@ -42,21 +42,6 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  def check(keySchema: StructType, valueSchema: StructType): Unit = {
-    check(keySchema, valueSchema, ignoreValueSchema = false)
-  }
-
-  def check(keySchema: StructType, valueSchema: StructType, ignoreValueSchema: Boolean): Unit = {
-    if (fm.exists(schemaFileLocation)) {
-      logDebug(s"Schema file for provider $providerId exists. Comparing with provided schema.")
-      check(readSchemaFile(), (keySchema, valueSchema), ignoreValueSchema)
-    } else {
-      // schema doesn't exist, create one now
-      logDebug(s"Schema file for provider $providerId doesn't exist. Creating one.")
-      createSchemaFile(keySchema, valueSchema)
-    }
-  }
-
   def check(
       oldSchema: (StructType, StructType),
       newSchema: (StructType, StructType),
@@ -130,7 +115,7 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-  def validateAndMaybeEvolveSchema(
+  def validateAndMaybeEvolveStateSchema(
       newKeySchema: StructType,
       newValueSchema: StructType,
       ignoreValueSchema: Boolean): Unit = {
@@ -174,7 +159,7 @@ object StateSchemaCompatibilityChecker {
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
    */
-  def validateAndMaybeEvolveSchema(
+  def validateAndMaybeEvolveStateSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,
       newKeySchema: StructType,
@@ -202,7 +187,7 @@ object StateSchemaCompatibilityChecker {
     // if the format validation for value schema is disabled, we also disable the schema
     // compatibility checker for value schema as well.
     val result = Try(
-      checker.validateAndMaybeEvolveSchema(newKeySchema, newValueSchema,
+      checker.validateAndMaybeEvolveStateSchema(newKeySchema, newValueSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue)
     ).toEither.fold(Some(_), _ => None)
 

@@ -246,8 +246,8 @@ case class StreamingSymmetricHashJoinExec(
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
-    val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
       left.output, leftKeys, stateFormatVersion)
@@ -258,7 +258,7 @@ case class StreamingSymmetricHashJoinExec(
 
     // validate and maybe evolve schema for all state stores across both sides of the join
     result.foreach { case (stateStoreName, (keySchema, valueSchema)) =>
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(getStateInfo, hadoopConf,
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
     }
   }

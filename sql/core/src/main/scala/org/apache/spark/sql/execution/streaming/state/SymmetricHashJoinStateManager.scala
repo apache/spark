@@ -771,8 +771,8 @@ object SymmetricHashJoinStateManager {
       joinSide: JoinSide,
       inputValueAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
-      stateFormatVersion: Int): scala.collection.mutable.Map[String, (StructType, StructType)] = {
-    val result = scala.collection.mutable.Map[String, (StructType, StructType)]()
+      stateFormatVersion: Int): Map[String, (StructType, StructType)] = {
+    var result: Map[String, (StructType, StructType)] = Map.empty
 
     // get the key and value schema for the KeyToNumValues state store
     val keySchema = StructType(

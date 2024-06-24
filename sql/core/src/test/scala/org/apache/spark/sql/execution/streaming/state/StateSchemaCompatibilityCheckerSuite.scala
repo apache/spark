@@ -289,28 +289,13 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     StructType(newFields)
   }
 
-  private def runSchemaChecker(
-      dir: String,
-      queryId: UUID,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean): Unit = {
-    // in fact, Spark doesn't support online state schema change, so need to check
-    // schema only once for each running of JVM
-    val providerId = StateStoreProviderId(
-      StateStoreId(dir, opId, partitionId), queryId)
-
-    new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-      .check(newKeySchema, newValueSchema, ignoreValueSchema = ignoreValueSchema)
-  }
-
-  private def verifyExceptionViaSchemaValidation(
+  private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
       newValueSchema: StructType,
-      ignoreValueSchema: Boolean,
-      keyCollationChecks: Boolean): Unit = {
+      ignoreValueSchema: Boolean = false,
+      keyCollationChecks: Boolean = false): Unit = {
     val dir = newDir()
     val runId = UUID.randomUUID()
     val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
@@ -319,7 +304,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       -> formatValidationForValue.toString)
 
     val result = Try(
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(stateInfo, hadoopConf,
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
     ).toEither.fold(Some(_), _ => None)
 
@@ -327,7 +312,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       result.get.asInstanceOf[SparkUnsupportedOperationException]
     } else {
       intercept[SparkUnsupportedOperationException] {
-        StateSchemaCompatibilityChecker.validateAndMaybeEvolveSchema(stateInfo, hadoopConf,
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
           newKeySchema, newValueSchema, spark.sessionState, extraOptions)
       }
     }
@@ -348,48 +333,6 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     }
   }
 
-  private def verifyExceptionViaSchemaChecker(
-      oldKeySchema: StructType,
-      oldValueSchema: StructType,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean): Unit = {
-    val dir = newDir()
-    val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
-
-    val e = intercept[SparkUnsupportedOperationException] {
-      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
-        ignoreValueSchema = ignoreValueSchema)
-    }
-
-    // if value schema is ignored, the mismatch has to be on the key schema
-    if (ignoreValueSchema) {
-      assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
-    } else {
-      assert(e.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
-        e.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
-    }
-    assert(e.getMessage.contains("does not match existing"))
-  }
-
-  private def verifyException(
-      oldKeySchema: StructType,
-      oldValueSchema: StructType,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean = false,
-      keyCollationChecks: Boolean = false): Unit = {
-    // verify through the schema validation method
-    verifyExceptionViaSchemaValidation(oldKeySchema, oldValueSchema, newKeySchema, newValueSchema,
-      ignoreValueSchema, keyCollationChecks)
-
-    // verify through invoking the schema checker directly
-    verifyExceptionViaSchemaChecker(oldKeySchema, oldValueSchema, newKeySchema, newValueSchema,
-      ignoreValueSchema)
-  }
-
   private def verifySuccess(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
@@ -397,10 +340,16 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       newValueSchema: StructType,
       ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
-    val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
-    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
+
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+      oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+      newKeySchema, newValueSchema, spark.sessionState, extraOptions)
   }
 }

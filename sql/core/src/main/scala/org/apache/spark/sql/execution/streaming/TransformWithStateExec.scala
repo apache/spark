@@ -340,7 +340,7 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveSchema(hadoopConf: Configuration): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
     // TODO: transformWithState is special because we don't have the schema of the state directly
     // within the passed args. We need to gather this after running the init function
     // within the stateful processor on the driver. This also requires a schema format change
