@@ -90,6 +90,11 @@
         "message" : [
           "The input argument `tolerance` must be a constant."
         ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
+        ]
       }
     },
     "sqlState" : "42604"
@@ -98,6 +103,13 @@
     "message" : [
       "Cannot convert Avro <avroPath> to SQL <sqlPath> because the original encoded data type is <avroType>, however you're trying to read the field as <sqlType>, which would lead to an incorrect answer.",
       "To allow reading this field, enable the SQL configuration: \"spark.sql.legacy.avro.allowIncompatibleSchema\"."
+    ],
+    "sqlState" : "22KD3"
+  },
+  "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE" : {
+    "message" : [
+      "Cannot call the <functionName> SQL function because the Avro data source is not loaded.",
+      "Please restart your job or session with the 'spark-avro' package loaded, such as by using the --packages argument on the command line, and then retry your query or command again."
     ],
     "sqlState" : "22KD3"
   },
@@ -2358,6 +2370,12 @@
     },
     "sqlState" : "42K0K"
   },
+  "INVALID_JOIN_TYPE_FOR_JOINWITH" : {
+    "message" : [
+      "Invalid join type in joinWith: <joinType>."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
@@ -2988,6 +3006,12 @@
     ],
     "sqlState" : "42710"
   },
+  "MALFORMED_CHARACTER_CODING" : {
+    "message" : [
+      "Invalid value found when performing <function> with <charset>"
+    ],
+    "sqlState" : "22000"
+  },
   "MALFORMED_CSV_RECORD" : {
     "message" : [
       "Malformed CSV record: <badRecord>"
@@ -3327,6 +3351,12 @@
       "Row ID attributes cannot be nullable: <nullableRowIdAttrs>."
     ],
     "sqlState" : "42000"
+  },
+  "NULL_DATA_SOURCE_OPTION" : {
+    "message" : [
+      "Data source read/write option <option> cannot have null value."
+    ],
+    "sqlState" : "22024"
   },
   "NULL_MAP_KEY" : {
     "message" : [
@@ -4685,6 +4715,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type '<typ>'. Supported join types include: <supported>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_MERGE_CONDITION" : {
     "message" : [
@@ -6160,11 +6196,6 @@
   "_LEGACY_ERROR_TEMP_1316" : {
     "message" : [
       "Invalid partition transformation: <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1319" : {
-    "message" : [
-      "Invalid join type in joinWith: <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1320" : {
@@ -8144,16 +8175,6 @@
   "_LEGACY_ERROR_TEMP_3215" : {
     "message" : [
       "Expected a Boolean type expression in replaceNullWithFalse, but got the type <dataType> in <expr>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3216" : {
-    "message" : [
-      "Unsupported join type '<typ>'. Supported join types include: <supported>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3217" : {
-    "message" : [
-      "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
     ]
   },
   "_LEGACY_ERROR_TEMP_3218" : {

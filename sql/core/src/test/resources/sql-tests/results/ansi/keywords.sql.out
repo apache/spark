@@ -20,6 +20,7 @@ AS	true
 ASC	false
 AT	false
 AUTHORIZATION	true
+BEGIN	false
 BETWEEN	false
 BIGINT	false
 BINARY	false
@@ -31,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALLED	false
 CASCADE	false
 CASE	true
 CAST	true
@@ -57,6 +59,7 @@ COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
 CONSTRAINT	true
+CONTAINS	false
 COST	false
 CREATE	true
 CROSS	true
@@ -83,10 +86,12 @@ DECIMAL	false
 DECLARE	false
 DEFAULT	false
 DEFINED	false
+DEFINER	false
 DELETE	false
 DELIMITED	false
 DESC	false
 DESCRIBE	false
+DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
@@ -146,6 +151,7 @@ INDEX	false
 INDEXES	false
 INNER	true
 INPATH	false
+INPUT	false
 INPUTFORMAT	false
 INSERT	false
 INT	false
@@ -153,10 +159,12 @@ INTEGER	false
 INTERSECT	true
 INTERVAL	false
 INTO	true
+INVOKER	false
 IS	true
 ITEMS	false
 JOIN	true
 KEYS	false
+LANGUAGE	false
 LAST	false
 LATERAL	true
 LAZY	false
@@ -184,6 +192,7 @@ MILLISECONDS	false
 MINUS	false
 MINUTE	false
 MINUTES	false
+MODIFIES	false
 MONTH	false
 MONTHS	false
 MSCK	false
@@ -228,6 +237,7 @@ PURGE	false
 QUARTER	false
 QUERY	false
 RANGE	false
+READS	false
 REAL	false
 RECORDREADER	false
 RECORDWRITER	false
@@ -242,6 +252,8 @@ REPLACE	false
 RESET	false
 RESPECT	false
 RESTRICT	false
+RETURN	false
+RETURNS	false
 REVOKE	false
 RIGHT	true
 ROLE	false
@@ -254,6 +266,7 @@ SCHEMA	false
 SCHEMAS	false
 SECOND	false
 SECONDS	false
+SECURITY	false
 SELECT	true
 SEMI	false
 SEPARATED	false
@@ -271,6 +284,8 @@ SOME	true
 SORT	false
 SORTED	false
 SOURCE	false
+SPECIFIC	false
+SQL	true
 START	false
 STATISTICS	false
 STORED	false
@@ -408,6 +423,7 @@ RIGHT
 SELECT
 SESSION_USER
 SOME
+SQL
 TABLE
 THEN
 TIME
