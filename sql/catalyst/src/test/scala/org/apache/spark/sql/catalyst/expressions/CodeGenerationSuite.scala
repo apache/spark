@@ -104,10 +104,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
-      strExpr = StringDecode(Encode(strExpr, "utf-8"), "utf-8")
+      strExpr = StringTrimRight(StringTrimLeft(strExpr))
     }
 
-    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr)).map(replace)
+    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(null).toSeq(expressions.map(_.dataType))
     assert(actual.length == 1)
