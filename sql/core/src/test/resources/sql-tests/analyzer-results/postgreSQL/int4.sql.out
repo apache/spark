@@ -411,14 +411,14 @@ Project [(cast((2 + 2) as double) / cast(2 as double)) AS two#x]
 -- !query
 SELECT string(shiftleft(int(-1), 31))
 -- !query analysis
-Project [cast((cast(-1 as int) << 31) as string) AS (-1 << 31)#x]
+Project [cast(shiftleft(cast(-1 as int), 31) as string) AS shiftleft(-1, 31)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT string(int(shiftleft(int(-1), 31))+1)
 -- !query analysis
-Project [cast((cast((cast(-1 as int) << 31) as int) + 1) as string) AS ((-1 << 31) + 1)#x]
+Project [cast((cast(shiftleft(cast(-1 as int), 31) as int) + 1) as string) AS (shiftleft(-1, 31) + 1)#x]
 +- OneRowRelation
 
 

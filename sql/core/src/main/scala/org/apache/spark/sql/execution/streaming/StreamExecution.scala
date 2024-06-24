@@ -32,7 +32,7 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -322,7 +322,8 @@ abstract class StreamExecution(
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
           // Log logical plan at the start of the query to help debug issues related to
           // plan changes.
-          logInfo(s"Finish initializing with logical plan:\n$logicalPlan")
+          logInfo(log"Finish initializing with logical plan:\n" +
+            log"${MDC(LogKeys.QUERY_PLAN, logicalPlan)}")
 
           // Unblock `awaitInitialization`
           initializationLatch.countDown()
@@ -372,7 +373,8 @@ abstract class StreamExecution(
           case _ => None
         }
 
-        logError(s"Query $prettyIdString terminated with error", e)
+        logError(log"Query ${MDC(LogKeys.PRETTY_ID_STRING, prettyIdString)} " +
+          log"terminated with error", e)
         getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them

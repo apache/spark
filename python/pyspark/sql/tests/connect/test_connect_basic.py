@@ -20,6 +20,8 @@ import gc
 import unittest
 import shutil
 import tempfile
+import io
+from contextlib import redirect_stdout
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
@@ -352,6 +354,24 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         result = df._explain_string()
         self.assertGreater(len(result), 0)
 
+    def _check_print_schema(self, query: str):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.sql(query).printSchema()
+            print1 = buf.getvalue()
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.connect.sql(query).printSchema()
+            print2 = buf.getvalue()
+        self.assertEqual(print1, print2, query)
+
+        for level in [-1, 0, 1, 2, 3, 4]:
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.spark.sql(query).printSchema(level)
+                print1 = buf.getvalue()
+            with io.StringIO() as buf, redirect_stdout(buf):
+                self.connect.sql(query).printSchema(level)
+                print2 = buf.getvalue()
+            self.assertEqual(print1, print2, query)
+
     def test_schema(self):
         schema = self.connect.read.table(self.tbl_name).schema
         self.assertEqual(
@@ -373,6 +393,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test TimestampType, DateType
         query = """
@@ -386,6 +407,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test DayTimeIntervalType
         query = """ SELECT INTERVAL '100 10:30' DAY TO MINUTE AS interval """
@@ -393,6 +415,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test MapType
         query = """
@@ -406,6 +429,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test ArrayType
         query = """
@@ -419,6 +443,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
         # test StructType
         query = """
@@ -432,6 +457,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).schema,
             self.connect.sql(query).schema,
         )
+        self._check_print_schema(query)
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
@@ -542,7 +568,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_print_schema(self):
         # SPARK-41216: Test print schema
-        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y").schema.treeString()
         # root
         #  |-- X: integer (nullable = false)
         #  |-- Y: integer (nullable = false)
@@ -631,6 +657,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
+        self.assert_eq(
+            df.drop_duplicates(["name"]).toPandas(), df2.drop_duplicates(["name"]).toPandas()
+        )
+        self.assert_eq(
+            df.dropDuplicates(["name", "id"]).toPandas(),
+            df2.dropDuplicates(["name", "id"]).toPandas(),
+        )
+        self.assert_eq(
+            df.drop_duplicates(["name", "id"]).toPandas(),
+            df2.drop_duplicates(["name", "id"]).toPandas(),
+        )
+        self.assert_eq(df.dropDuplicates("name").toPandas(), df2.dropDuplicates("name").toPandas())
 
     def test_drop(self):
         # SPARK-41169: test drop

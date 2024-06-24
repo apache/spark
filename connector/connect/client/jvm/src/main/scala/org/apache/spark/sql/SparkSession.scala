@@ -73,11 +73,7 @@ class SparkSession private[sql] (
     with Logging {
 
   private[this] val allocator = new RootAllocator()
-  private var shouldStopCleaner = false
-  private[sql] lazy val cleaner = {
-    shouldStopCleaner = true
-    new SessionCleaner(this)
-  }
+  private[sql] lazy val cleaner = new SessionCleaner(this)
 
   // a unique session ID for this session from client.
   private[sql] def sessionId: String = client.sessionId
@@ -719,9 +715,6 @@ class SparkSession private[sql] (
     if (releaseSessionOnClose) {
       client.releaseSession()
     }
-    if (shouldStopCleaner) {
-      cleaner.stop()
-    }
     client.shutdown()
     allocator.close()
     SparkSession.onSessionClose(this)
@@ -836,10 +829,16 @@ object SparkSession extends Logging {
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet.
+   * they are not set yet or the associated [[SparkConnectClient]] is unusable.
    */
   private def setDefaultAndActiveSession(session: SparkSession): Unit = {
-    defaultSession.compareAndSet(null, session)
+    val currentDefault = defaultSession.getAcquire
+    if (currentDefault == null || !currentDefault.client.isSessionValid) {
+      // Update `defaultSession` if it is null or the contained session is not valid. There is a
+      // chance that the following `compareAndSet` fails if a new default session has just been set,
+      // but that does not matter since that event has happened after this method was invoked.
+      defaultSession.compareAndSet(currentDefault, session)
+    }
     if (getActiveSession.isEmpty) {
       setActiveSession(session)
     }
@@ -979,7 +978,7 @@ object SparkSession extends Logging {
     def appName(name: String): Builder = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
-      if (client != null) {
+      if (client != null && client.isSessionValid) {
         Option(new SparkSession(client, planIdGenerator))
       } else {
         None
@@ -1031,7 +1030,16 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = {
       val session = tryCreateSessionFromClient()
-        .getOrElse(sessions.get(builder.configuration))
+        .getOrElse({
+          var existingSession = sessions.get(builder.configuration)
+          if (!existingSession.client.isSessionValid) {
+            // If the cached session has become invalid, e.g., due to a server restart, the cache
+            // entry is invalidated.
+            sessions.invalidate(builder.configuration)
+            existingSession = sessions.get(builder.configuration)
+          }
+          existingSession
+        })
       setDefaultAndActiveSession(session)
       applyOptions(session)
       session
@@ -1039,11 +1047,13 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the default SparkSession.
+   * Returns the default SparkSession. If the previously set default SparkSession becomes
+   * unusable, returns None.
    *
    * @since 3.5.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get())
+  def getDefaultSession: Option[SparkSession] =
+    Option(defaultSession.get()).filter(_.client.isSessionValid)
 
   /**
    * Sets the default SparkSession.
@@ -1064,11 +1074,13 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Returns the active SparkSession for the current thread.
+   * Returns the active SparkSession for the current thread. If the previously set active
+   * SparkSession becomes unusable, returns None.
    *
    * @since 3.5.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get())
+  def getActiveSession: Option[SparkSession] =
+    Option(activeThreadSession.get()).filter(_.client.isSessionValid)
 
   /**
    * Changes the SparkSession that will be returned in this thread and its children when

@@ -81,7 +81,7 @@
 | org.apache.spark.sql.catalyst.expressions.Chr | char | SELECT char(65) | struct<char(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Chr | chr | SELECT chr(65) | struct<chr(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Coalesce | coalesce | SELECT coalesce(NULL, 1, NULL) | struct<coalesce(NULL, 1, NULL):int> |
-| org.apache.spark.sql.catalyst.expressions.CollateExpressionBuilder | collate | SELECT COLLATION('Spark SQL' collate UTF8_BINARY_LCASE) | struct<collation(collate(Spark SQL)):string> |
+| org.apache.spark.sql.catalyst.expressions.CollateExpressionBuilder | collate | SELECT COLLATION('Spark SQL' collate UTF8_LCASE) | struct<collation(collate(Spark SQL)):string> |
 | org.apache.spark.sql.catalyst.expressions.Collation | collation | SELECT collation('Spark SQL') | struct<collation(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Concat | concat | SELECT concat('Spark', 'SQL') | struct<concat(Spark, SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.ConcatWs | concat_ws | SELECT concat_ws(' ', 'Spark', 'SQL') | struct<concat_ws( , Spark, SQL):string> |
@@ -289,12 +289,12 @@
 | org.apache.spark.sql.catalyst.expressions.Sha1 | sha | SELECT sha('Spark') | struct<sha(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.Sha1 | sha1 | SELECT sha1('Spark') | struct<sha1(Spark):string> |
 | org.apache.spark.sql.catalyst.expressions.Sha2 | sha2 | SELECT sha2('Spark', 256) | struct<sha2(Spark, 256):string> |
-| org.apache.spark.sql.catalyst.expressions.ShiftLeft | << | SELECT shiftleft(2, 1) | struct<(2 << 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftLeft | shiftleft | SELECT shiftleft(2, 1) | struct<(2 << 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRight | >> | SELECT shiftright(4, 1) | struct<(4 >> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<(4 >> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | >>> | SELECT shiftrightunsigned(4, 1) | struct<(4 >>> 1):int> |
-| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<(4 >>> 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftLeft | << | SELECT shiftleft(2, 1) | struct<shiftleft(2, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftLeft | shiftleft | SELECT shiftleft(2, 1) | struct<shiftleft(2, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRight | >> | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRight | shiftright | SELECT shiftright(4, 1) | struct<shiftright(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | >>> | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
+| org.apache.spark.sql.catalyst.expressions.ShiftRightUnsigned | shiftrightunsigned | SELECT shiftrightunsigned(4, 1) | struct<shiftrightunsigned(4, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.Shuffle | shuffle | SELECT shuffle(array(1, 20, 3, 5)) | struct<shuffle(array(1, 20, 3, 5)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.Signum | sign | SELECT sign(40) | struct<sign(40):double> |
 | org.apache.spark.sql.catalyst.expressions.Signum | signum | SELECT signum(40) | struct<SIGNUM(40):double> |
