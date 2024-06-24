@@ -2178,7 +2178,7 @@ class Dataset[T] private[sql](
   /**
    * Transpose a DataFrame, switching rows to columns.
    * This function transforms the DataFrame such that the distinct values in the first column become
-   * the new columns of the DataFrame.
+   * the new columns of the DataFrame. Note that values transposed must share the least common type.
    *
    * @group untypedrel
    * @since 4.0.0

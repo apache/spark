@@ -44,4 +44,17 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       Row("id", 1) :: Nil
     )
   }
+
+  test("transpose frame with columns of mismatch types") {
+    // TODO: designated error class for Transpose
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.transpose()
+      },
+      errorClass = "UNPIVOT_VALUE_DATA_TYPE_MISMATCH",
+      parameters = Map(
+        "types" -> """"INT" (`age`), "STRING" (`name`)"""
+      )
+    )
+  }
 }
