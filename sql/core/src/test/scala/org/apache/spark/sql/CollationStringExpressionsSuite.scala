@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.jdk.CollectionConverters.MapHasAsScala
+
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -719,10 +721,12 @@ class CollationStringExpressionsSuite
       withSQLConf(SQLConf.DEFAULT_COLLATION.key -> testCase.collationName) {
         val query = s"SELECT validate_utf8(${testCase.input})"
         if (testCase.result == None) {
-          // check for exception
-          assert(intercept[SparkIllegalArgumentException] {
+          // Exception thrown
+          val e = intercept[SparkIllegalArgumentException] {
             sql(query).collect()
-          }.getErrorClass == "INVALID_UTF8_STRING")
+          }
+          assert(e.getErrorClass == "INVALID_UTF8_STRING")
+          assert(e.getMessageParameters.asScala == Map("str" -> "\\xFF"))
         } else {
           // Result & data type
           checkAnswer(sql(query), Row(testCase.result))

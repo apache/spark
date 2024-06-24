@@ -215,7 +215,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkIllegalArgumentException(
       errorClass = "INVALID_UTF8_STRING",
       messageParameters = Map(
-        "str" -> str.toString
+        "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
       )
     )
   }

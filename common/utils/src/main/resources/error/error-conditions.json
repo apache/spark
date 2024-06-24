@@ -2895,7 +2895,7 @@
     "message" : [
       "Invalid UTF8 byte sequence found in string: <str>."
     ],
-    "sqlState" : "HV00A"
+    "sqlState" : "22029"
   },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
