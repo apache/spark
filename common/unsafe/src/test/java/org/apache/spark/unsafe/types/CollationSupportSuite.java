@@ -171,10 +171,10 @@ public class CollationSupportSuite {
     // Surrogate pairs are treated as invalid UTF8 sequences
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), false);
+      UTF8String.fromString("\uFFFD\uFFFD"), false);
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), true);
+      UTF8String.fromString("\uFFFD\uFFFD"), true);
   }
 
   /**
