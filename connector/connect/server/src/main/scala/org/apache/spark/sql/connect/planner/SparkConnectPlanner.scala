@@ -1697,7 +1697,7 @@ class SparkConnectPlanner(
         inputEncoders = udfPacket.inputEncoders.map(e => Try(ExpressionEncoder(e)).toOption),
         outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
         udfName = Option(fun.getFunctionName),
-        nullable = udf.getNullable,
+        outputNullable = udf.getNullable,
         udfDeterministic = fun.getDeterministic)
     }
   }
@@ -2071,7 +2071,7 @@ class SparkConnectPlanner(
       inputEncoders = f.inputEncoders,
       outputEncoder = f.outputEncoder,
       udfName = f.name,
-      nullable = f.nullable,
+      outputNullable = f.nullable,
       udfDeterministic = f.deterministic)
   }
 

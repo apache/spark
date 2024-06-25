@@ -52,9 +52,13 @@ case class ScalaUDF(
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
     outputEncoder: Option[ExpressionEncoder[_]] = None,
     udfName: Option[String] = None,
-    nullable: Boolean = true,
+    outputNullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
+
+  // The Rule HandleNullInputsForUDF makes the UDF null-propagatable for primitive nullable inputs.
+  override lazy val nullable: Boolean = outputNullable || inputPrimitives.zip(children)
+    .exists {case (isPrimitive, child) => isPrimitive && child.nullable}
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

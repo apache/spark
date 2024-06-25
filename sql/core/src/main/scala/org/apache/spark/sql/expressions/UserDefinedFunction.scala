@@ -108,7 +108,7 @@ private[spark] case class SparkUserDefinedFunction(
       inputEncoders,
       outputEncoder,
       udfName = name,
-      nullable = nullable,
+      outputNullable = nullable,
       udfDeterministic = deterministic)
   }
 

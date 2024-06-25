@@ -1802,7 +1802,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       function = (i: Int) => i + 1,
       dataType = IntegerType,
       children = $"a" :: Nil,
-      nullable = false,
+      outputNullable = false,
       inputEncoders = Seq(Some(ExpressionEncoder[Int]().resolveAndBind())))
     val plan = testRelation.select(udf.as("u")).select($"u").analyze
     assert(plan.output.head.nullable)
