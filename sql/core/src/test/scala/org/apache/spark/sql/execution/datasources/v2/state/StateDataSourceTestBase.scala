@@ -383,7 +383,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     }
   }
 
-  protected def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
+  private def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 

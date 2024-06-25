@@ -123,9 +123,9 @@ case class StateSourceOptions(
 
   override def toString: String = {
     s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide" +
-      snapshotStartBatchId.map(", snapshotStartBatchId=" + _).getOrElse("") +
-      snapshotPartitionId.map(", snapshotPartitionId=" + _).getOrElse("") + ")"
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
+      s"snapshotStartBatchId=${snapshotStartBatchId.getOrElse("None")}, " +
+      s"snapshotPartitionId=${snapshotPartitionId.getOrElse("None")})"
   }
 }
 

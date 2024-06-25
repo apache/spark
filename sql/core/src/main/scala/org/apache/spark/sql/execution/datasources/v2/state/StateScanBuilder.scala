@@ -85,6 +85,7 @@ class StateScan(
         case None => partitionNums.map { pn =>
           new StateStoreInputPartition(pn, queryId, sourceOptions)
         }.toArray
+
         case Some(snapshotPartitionId) =>
           if (partitionNums.contains(snapshotPartitionId)) {
             Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
