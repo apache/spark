@@ -3006,6 +3006,12 @@
     ],
     "sqlState" : "42710"
   },
+  "MALFORMED_CHARACTER_CODING" : {
+    "message" : [
+      "Invalid value found when performing <function> with <charset>"
+    ],
+    "sqlState" : "22000"
+  },
   "MALFORMED_CSV_RECORD" : {
     "message" : [
       "Malformed CSV record: <badRecord>"
