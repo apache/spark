@@ -135,6 +135,12 @@ class ParserUtilsSuite extends SparkFunSuite {
     // String with an invalid '\' as the last character.
     assert(unescapeSQLString(""""abc\"""") == "abc\\")
 
+    // Strings containing invalid Unicode escapes with non-hex characters.
+    assert(unescapeSQLString("\"abc\\uXXXXa\"") == "abcuXXXXa")
+    assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
+    assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
+    assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+
     // scalastyle:on nonascii
   }
 
