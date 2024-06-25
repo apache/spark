@@ -362,7 +362,8 @@ case class StaticInvoke(
   }
 
   override def toString: String = "static_invoke(" +
-    s"${staticObject.getSimpleName.stripSuffix("$")}.$functionName(${arguments.mkString(", ")}))"
+    s"${objectName.split('.').takeRight(3).mkString(".")}." +
+    s"$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
