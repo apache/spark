@@ -741,6 +741,32 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "truncate", "arg_type": "str"},
         )
 
+    def test_df_merge_into(self):
+        try:
+            # InMemoryRowLevelOperationTableCatalog is a test catalog that is included in the catalyst-test package.
+            # If Spark complains that it can't find this class, make sure the catalyst-test JAR does exist in
+            # "SPARK_HOME/assembly/target/scala-x.xx/jars" directory. If not, build it with `build/sbt test:assembly`
+            # and copy it over.
+            self.spark.conf.set(
+                "spark.sql.catalog.testcat",
+                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog")
+            with (self.table("testcat.ns1.target")):
+                self.spark.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"]) \
+                    .write.saveAsTable("testcat.ns1.target")
+                source = self.spark.createDataFrame([(1, "Charlie"), (3, "David")], ["id", "name"])  # type: DataFrame
+                from pyspark.sql.functions import col
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(source.id == 1).update({"name": source.name}) \
+                    .whenNotMatched().insertAll() \
+                    .whenNotMatchedBySource().delete() \
+                    .merge()
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [Row(id=1, name="Charlie"), Row(id=3, name="David")])
+        finally:
+            self.spark.conf.unset("spark.sql.catalog.testcat")
+
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
