@@ -314,13 +314,19 @@ class StatefulProcessorHandleImpl(
   }
 }
 
+/**
+ * This DriverStatefulProcessorHandleImpl is used within TransformWithExec
+ * on the driver side to collect the columnFamilySchemas before any processing is
+ * actually done. We need this class because we can only collect the schemas after
+ * the StatefulProcessor is initialized.
+ */
 class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
 
   private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
 
   /**
-   * Function to create new or return existing single value state variable of given type.
+   * Function to add the ValueState schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    *
@@ -336,11 +342,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Function to create new or return existing single value state variable of given type
-   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
-   * from the state store. Any state update resets the ttl to current processing time plus
-   * ttlDuration.
-   *
+   * Function to add the ValueStateWithTTL schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    *
@@ -360,8 +362,9 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Creates new or returns existing list state associated with stateName.
-   * The ListState persists values of type T.
+   * Function to add the ListState schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
    *
    * @param stateName  - name of the state variable
    * @param valEncoder - SQL encoder for state variable
@@ -375,11 +378,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Function to create new or return existing list state variable of given type
-   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
-   * from the state store. Any values in listState which have expired after ttlDuration will not
-   * be returned on get() and will be eventually removed from the state.
-   *
+   * Function to add the ListStateWithTTL schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    *
@@ -399,9 +398,9 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Creates new or returns existing map state associated with stateName.
-   * The MapState persists Key-Value pairs of type [K, V].
-   *
+   * Function to add the MapState schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
    * @param stateName  - name of the state variable
    * @param userKeyEnc - spark sql encoder for the map key
    * @param valEncoder - spark sql encoder for the map value
@@ -419,14 +418,9 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Function to create new or return existing map state variable of given type
-   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
-   * from the state store. Any values in mapState which have expired after ttlDuration will not
-   * returned on get() and will be eventually removed from the state.
-   *
+   * Function to add the MapStateWithTTL schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
-   *
    * @param stateName  - name of the state variable
    * @param userKeyEnc - spark sql encoder for the map key
    * @param valEncoder - SQL encoder for state variable
@@ -451,43 +445,14 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   }
 
   /**
-   * Function to register a processing/event time based timer for given implicit grouping key
-   * and provided timestamp
-   *
-   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   * Methods that are only included to satisfy the interface.
+   * These methods are no-ops on the driver side
    */
-  override def registerTimer(expiryTimestampMs: Long): Unit = {
+  override def registerTimer(expiryTimestampMs: Long): Unit = {}
 
-  }
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {}
 
-  /**
-   * Function to delete a processing/event time based timer for given implicit grouping key
-   * and provided timestamp
-   *
-   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
-   */
-  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+  override def listTimers(): Iterator[Long] = Iterator.empty
 
-  }
-
-  /**
-   * Function to list all the timers registered for given implicit grouping key
-   * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
-   * will return all the unprocessed registered timers, including the one being fired within the
-   * invocation of `handleInputRows`.
-   *
-   * @return - list of all the registered timers for given implicit grouping key
-   */
-  override def listTimers(): Iterator[Long] = {
-    Iterator.empty
-  }
-
-  /**
-   * Function to delete and purge state variable if defined previously
-   *
-   * @param stateName - name of the state variable
-   */
-  override def deleteIfExists(stateName: String): Unit = {
-
-  }
+  override def deleteIfExists(stateName: String): Unit = {}
 }
