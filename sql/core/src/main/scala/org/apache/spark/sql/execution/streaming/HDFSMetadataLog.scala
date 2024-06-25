@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
@@ -48,8 +49,20 @@ import org.apache.spark.util.ArrayImplicits._
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
+class HDFSMetadataLog[T <: AnyRef : ClassTag](
+    hadoopConf: Configuration,
+    path: String,
+    val metadataCacheEnabled: Boolean = false)
   extends MetadataLog[T] with Logging {
+
+  def this(sparkSession: SparkSession, path: String) = {
+    this(
+      sparkSession.sessionState.newHadoopConf(),
+      path,
+      metadataCacheEnabled = sparkSession.sessionState.conf.getConf(
+        SQLConf.STREAMING_METADATA_CACHE_ENABLED)
+    )
+  }
 
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
@@ -64,14 +77,11 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
 
   protected val fileManager =
-    CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf())
+    CheckpointFileManager.create(metadataPath, hadoopConf)
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
-
-  protected val metadataCacheEnabled: Boolean
-    = sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_METADATA_CACHE_ENABLED)
 
   /**
    * Cache the latest two batches. [[StreamExecution]] usually just accesses the latest two batches
@@ -322,6 +332,19 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       fileManager.delete(path)
       if (metadataCacheEnabled) batchCache.remove(batchId)
       logTrace(s"Removed metadata log file: $path")
+    }
+  }
+
+  def purgeOldest(minEntriesToMaintain: Int): Unit = {
+    val batchIds = listBatches.sorted
+    if (batchIds.length > minEntriesToMaintain) {
+      val filesToDelete = batchIds.take(batchIds.length - minEntriesToMaintain)
+      filesToDelete.foreach { batchId =>
+        val path = batchIdToPath(batchId)
+        fileManager.delete(path)
+        if (metadataCacheEnabled) batchCache.remove(batchId)
+        logTrace(s"Removed metadata log file: $path")
+      }
     }
   }
 
