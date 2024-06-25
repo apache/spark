@@ -185,13 +185,13 @@ object DataTypeProtoConverter {
               .build())
           .build()
 
-      case CharType(length) =>
+      case CharType(length, _) =>
         proto.DataType
           .newBuilder()
           .setChar(proto.DataType.Char.newBuilder().setLength(length).build())
           .build()
 
-      case VarcharType(length) =>
+      case VarcharType(length, _) =>
         proto.DataType
           .newBuilder()
           .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())

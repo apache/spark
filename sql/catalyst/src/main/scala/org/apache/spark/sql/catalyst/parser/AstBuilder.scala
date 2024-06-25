@@ -2306,11 +2306,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case context: PrimitiveDataTypeContext =>
         val typeCtx = context.`type`()
         if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
+          ctx.children.asScala.toSeq match {
+            case _ :+ (dtypeCtx: PrimitiveDataTypeContext) :+ _ =>
+              dtypeCtx.children.asScala.toSeq match {
+                case _ :+ (collateCtx: CollateClauseContext) =>
+                  throw QueryParsingErrors.dataTypeUnsupportedError(
+                    rawDataType.typeName,
+                    ctx.dataType().asInstanceOf[PrimitiveDataTypeContext]
+                  )
+                case _ =>
+              }
             case _ =>
           }
         }
@@ -2339,11 +2344,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case context: PrimitiveDataTypeContext =>
         val typeCtx = context.`type`()
         if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
+          ctx.children.asScala.toSeq match {
+            case _ :+ (dtypeCtx: PrimitiveDataTypeContext) =>
+              dtypeCtx.children.asScala.toSeq match {
+                case _ :+ (collateCtx: CollateClauseContext) =>
+                  throw QueryParsingErrors.dataTypeUnsupportedError(
+                    rawDataType.typeName,
+                    ctx.dataType().asInstanceOf[PrimitiveDataTypeContext]
+                  )
+                case _ =>
+              }
             case _ =>
           }
         }

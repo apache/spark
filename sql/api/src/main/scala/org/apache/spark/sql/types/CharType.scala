@@ -18,9 +18,11 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.internal.SqlApiConf
 
 @Experimental
-case class CharType(length: Int) extends AtomicType {
+case class CharType(length: Int, collationId: Int = SqlApiConf.get.defaultStringType.collationId)
+  extends AtomicType {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def defaultSize: Int = length

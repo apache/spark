@@ -63,7 +63,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharWithVarchar(field.dataType))
       })
-    case CharType(length) => VarcharType(length)
+    case CharType(length, collationId) => VarcharType(length, collationId)
     case _ => dt
   }
 
@@ -161,18 +161,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       charFuncName: Option[String],
       varcharFuncName: Option[String]): Expression = {
     dt match {
-      case CharType(length) if charFuncName.isDefined =>
+      case CharType(length, collationId) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          StringType(collationId),
           charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
-      case VarcharType(length) if varcharFuncName.isDefined =>
+      case VarcharType(length, collationId) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          StringType(collationId),
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
@@ -254,8 +254,8 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   private def typeWithWiderCharLength(type1: DataType, type2: DataType): DataType = {
     (type1, type2) match {
-      case (CharType(len1), CharType(len2)) =>
-        CharType(math.max(len1, len2))
+      case (CharType(len1, collationId), CharType(len2, _)) =>
+        CharType(math.max(len1, len2), collationId)
       case (StructType(fields1), StructType(fields2)) =>
         assert(fields1.length == fields2.length)
         StructType(fields1.zip(fields2).map { case (left, right) =>
@@ -272,7 +272,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       rawType: DataType,
       typeWithTargetCharLength: DataType): Option[Expression] = {
     (rawType, typeWithTargetCharLength) match {
-      case (CharType(len), CharType(target)) if target > len =>
+      case (CharType(len, _), CharType(target, _)) if target > len =>
         Some(StringRPad(expr, Literal(target)))
 
       case (StructType(fields), StructType(targets)) =>

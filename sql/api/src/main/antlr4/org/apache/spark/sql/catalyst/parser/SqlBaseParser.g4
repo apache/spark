@@ -1159,7 +1159,7 @@ type
     | DOUBLE
     | DATE
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
-    | STRING collateClause?
+    | STRING
     | CHARACTER | CHAR
     | VARCHAR
     | BINARY
@@ -1179,7 +1179,7 @@ dataType
     | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
       (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
     | type (LEFT_PAREN INTEGER_VALUE
-      (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
+      (COMMA INTEGER_VALUE)* RIGHT_PAREN)? collateClause?       #primitiveDataType
     ;
 
 qualifiedColTypeWithPositionList

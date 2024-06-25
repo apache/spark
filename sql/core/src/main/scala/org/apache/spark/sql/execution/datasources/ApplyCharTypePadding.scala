@@ -113,7 +113,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case i @ In(e @ AttrOrOuterRef(attr), list)
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
-            case CharType(length) =>
+            case CharType(length, _) =>
               val (nulls, literalChars) =
                 list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
               val literalCharLengths = literalChars.map(_.numChars())
@@ -169,7 +169,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       lit: Expression): Option[Seq[Expression]] = {
     if (expr.dataType == StringType) {
       CharVarcharUtils.getRawType(metadata).flatMap {
-        case CharType(length) =>
+        case CharType(length, _) =>
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
             None
