@@ -311,14 +311,12 @@ package object debug {
 
   case class DebugInlineColumnsCountExec(
     child: SparkPlan,
-    sampleColumns: Seq[Expression],
-    name: Option[String] = None) extends UnaryExecNode {
+    sampleColumns: Seq[Expression]) extends UnaryExecNode {
 
     val accumulator = new DebugAccumulator
     accumulator.register(
       session.sparkContext,
-      Some(s"${name.map(n => s"[$n] ").getOrElse("")}top values " +
-        s"for ${sampleColumns.mkString(",")}"))
+      Some(s"${child.simpleStringWithNodeId()} top values for ${sampleColumns.mkString(",")}"))
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)
@@ -334,8 +332,6 @@ package object debug {
           row
         }
       }
-
-      // TODO figure out how to print counts once completed
     }
 
     override def output: Seq[Attribute] = child.output
@@ -344,8 +340,8 @@ package object debug {
   object DebugPlanner extends SparkStrategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case DebugInlineColumnsCount(child, sampleColumns, name) =>
-          DebugInlineColumnsCountExec(planLater(child), sampleColumns, name) :: Nil
+        case DebugInlineColumnsCount(child, sampleColumns) =>
+          DebugInlineColumnsCountExec(planLater(child), sampleColumns) :: Nil
         case _ => Nil
       }
     }
