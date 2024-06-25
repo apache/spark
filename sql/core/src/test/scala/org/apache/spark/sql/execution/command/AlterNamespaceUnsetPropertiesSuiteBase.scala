@@ -71,6 +71,7 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
       sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES ('b')")
       assert(getProperties(ns) === "((a,a), (c,c))")
 
+      // unset non-existent properties
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES ('b')")
@@ -94,7 +95,7 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.ALTER_NAMESPACE_PROPERTY",
+            errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
             parameters = Map("property" -> key, "msg" -> ".*"),
             sqlState = None,
             context = ExpectedContext(

@@ -25,11 +25,12 @@ import org.apache.spark.sql.connector.catalog.NamespaceChange
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * A command that ALTER NAMESPACE UNSET PROPERTIES command.
+ * A command that unsets database/schema/namespace properties.
  *
  * The syntax of this command is:
  * {{{
- *     ALTER (DATABASE|SCHEMA|NAMESPACE) ... UNSET (DBPROPERTIES|PROPERTIES) [IF EXISTS] ...;
+ *    ALTER (DATABASE|SCHEMA|NAMESPACE) ...
+ *      UNSET (DBPROPERTIES|PROPERTIES) [IF EXISTS] ('key1', 'key2', ...);
  * }}}
  */
 case class UnsetNamespacePropertiesCommand(

@@ -88,7 +88,7 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.ALTER_NAMESPACE_PROPERTY",
+            errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
             parameters = Map("property" -> key, "msg" -> ".*"),
             sqlState = None,
             context = ExpectedContext(
