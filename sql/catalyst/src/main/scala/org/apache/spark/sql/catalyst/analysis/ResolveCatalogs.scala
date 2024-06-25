@@ -53,9 +53,24 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
     case UnresolvedNamespace(Seq(), fetchMetadata) =>
-      ResolveCatalogs.resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
+      resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
-      ResolveCatalogs.resolveNamespace(catalog, ns, fetchMetadata)
+      resolveNamespace(catalog, ns, fetchMetadata)
+  }
+
+  private def resolveNamespace(
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
+    }
   }
 
   private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
@@ -80,23 +95,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     } else {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-    }
-  }
-}
-
-object ResolveCatalogs {
-  def resolveNamespace(
-      catalog: CatalogPlugin,
-      ns: Seq[String],
-      fetchMetadata: Boolean): ResolvedNamespace = {
-    catalog match {
-      case supportsNS: SupportsNamespaces if fetchMetadata =>
-        ResolvedNamespace(
-          catalog,
-          ns,
-          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
-      case _ =>
-        ResolvedNamespace(catalog, ns)
     }
   }
 }

@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{ResolveCatalogs, ResolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.NamespaceChange
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -37,27 +38,18 @@ case class UnsetNamespacePropertiesCommand(
     ifExists: Boolean) extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val ResolvedIdentifier(catalog, ident) = child
-    val ns = ResolveCatalogs.resolveNamespace(
-      catalog, ident.namespace.toSeq :+ ident.name, fetchMetadata = true)
+    val ResolvedNamespace(catalog, ns, metadata) = child
     if (!ifExists) {
-      val properties = ns.metadata
-      val nonexistentKeys = propKeys.filter(key => !properties.contains(key))
+      val nonexistentKeys = propKeys.filter(key => !metadata.contains(key))
       if (nonexistentKeys.nonEmpty) {
         throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, ns.namespace)
+          nonexistentKeys, ns)
       }
     }
     val changes = propKeys.map {
       NamespaceChange.removeProperty
     }
-    catalog match {
-      case supportsNS: SupportsNamespaces =>
-        supportsNS.alterNamespace(ns.namespace.toArray, changes: _*)
-      case _ =>
-        QueryCompilationErrors.catalogOperationNotSupported(
-          catalog, "UNSET (DBPROPERTIES|PROPERTIES)")
-    }
+    catalog.asNamespaceCatalog.alterNamespace(ns.toArray, changes: _*)
 
     Seq.empty
   }

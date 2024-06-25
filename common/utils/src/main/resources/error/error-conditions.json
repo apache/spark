@@ -4231,7 +4231,7 @@
   },
   "UNSET_NONEXISTENT_PROPERTIES" : {
     "message" : [
-      "Attempted to unset non-existent properties [<properties>] in relation <relationId>."
+      "Attempted to unset non-existent properties [<properties>] in table or namespace <name>."
     ],
     "sqlState" : "42K0J"
   },
@@ -4411,6 +4411,11 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_NAMESPACE_PROPERTY" : {
+        "message" : [
+          "<property> is a reserved namespace property, <msg>."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -4574,11 +4579,6 @@
       "REPLACE_NESTED_COLUMN" : {
         "message" : [
           "The replace function does not support nested column <colName>."
-        ]
-      },
-      "SET_NAMESPACE_PROPERTY" : {
-        "message" : [
-          "<property> is a reserved namespace property, <msg>."
         ]
       },
       "SET_OPERATION_ON_MAP_TYPE" : {

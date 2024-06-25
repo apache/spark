@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlParser
@@ -41,17 +41,17 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a', 'b', 'c')"),
           UnsetNamespacePropertiesCommand(
-            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = false))
+            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = false))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken IF EXISTS ('a', 'b', 'c')"),
           UnsetNamespacePropertiesCommand(
-            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = true))
+            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c"), ifExists = true))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a')"),
           UnsetNamespacePropertiesCommand(
-            UnresolvedIdentifier(Seq("a", "b", "c")), Seq("a"), ifExists = false))
+            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a"), ifExists = false))
       }
     }
   }

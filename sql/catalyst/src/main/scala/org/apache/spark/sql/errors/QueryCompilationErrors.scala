@@ -2664,7 +2664,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "UNSET_NONEXISTENT_PROPERTIES",
       messageParameters = Map(
         "properties" -> properties.map(toSQLId).mkString(", "),
-        "relationId" -> toSQLId(nameParts))
+        "name" -> toSQLId(nameParts))
     )
   }
 

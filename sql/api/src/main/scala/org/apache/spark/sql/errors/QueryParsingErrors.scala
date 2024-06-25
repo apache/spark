@@ -339,7 +339,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_NAMESPACE_PROPERTY",
       messageParameters = Map("property" -> property, "msg" -> msg),
       ctx)
   }

@@ -562,7 +562,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
     val sqlText = "CREATE NAMESPACE IF NOT EXISTS a.b.c WITH PROPERTIES ('location'='/home/user/db')"
     checkError(
       exception = parseException(sqlText),
-      errorClass = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_NAMESPACE_PROPERTY",
       sqlState = "0A000",
       parameters = Map(
         "property" -> "location",
