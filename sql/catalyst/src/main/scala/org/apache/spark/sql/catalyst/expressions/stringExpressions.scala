@@ -2835,7 +2835,7 @@ case class Encode(
 object Encode {
   def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
 
-  private[expressions] final lazy val VALID_CHARSETS =
+  private[sql] final lazy val VALID_CHARSETS =
     Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
 
   def encode(
@@ -2844,6 +2844,9 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
+    if (input.numBytes == 0 || "UTF-8".equalsIgnoreCase(toCharset)) {
+      return input.getBytes
+    }
     if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
       val encoder = try {
         val codingErrorAction = if (legacyErrorAction) {

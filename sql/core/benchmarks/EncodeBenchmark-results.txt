@@ -1,0 +1,6 @@
+OpenJDK 64-Bit Server VM 17.0.10+0 on Mac OS X 14.5
+Apple M2 Max
+encode:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+UTF-8                                             79270          79698         448          0.3        3963.5       1.0X
+
