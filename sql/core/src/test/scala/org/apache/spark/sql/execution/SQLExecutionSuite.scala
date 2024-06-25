@@ -234,6 +234,38 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       spark.stop()
     }
   }
+
+  test("jobGroupId property") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    // Disable photon. The job below launches many tasks, which can cause Photon OOMs
+    val JobGroupId = "test-JobGroupId"
+    try {
+      spark.sparkContext.setJobGroup(JobGroupId, "job Group id")
+
+      var jobGroupIdOpt: Option[String] = None
+      var sqlJobGroupIdOpt: Option[String] = None
+      spark.sparkContext.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobGroupIdOpt = Some(jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        }
+
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case e: SparkListenerSQLExecutionStart =>
+              sqlJobGroupIdOpt = e.jobGroupId
+          }
+        }
+      })
+
+      spark.range(1).collect()
+
+      assert(jobGroupIdOpt.contains(JobGroupId))
+      assert(sqlJobGroupIdOpt.contains(JobGroupId))
+    } finally {
+      spark.sparkContext.clearJobGroup()
+      spark.stop()
+    }
+  }
 }
 
 object SQLExecutionSuite {
