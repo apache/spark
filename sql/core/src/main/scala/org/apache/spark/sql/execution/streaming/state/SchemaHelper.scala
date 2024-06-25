@@ -20,6 +20,10 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.StringReader
 
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
+import org.json4s.{DefaultFormats, JsonAST}
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
 import org.apache.spark.sql.types.StructType
@@ -28,6 +32,59 @@ import org.apache.spark.util.Utils
 /**
  * Helper classes for reading/writing state schema.
  */
+
+sealed trait ColumnFamilySchema extends Serializable {
+  def jsonValue: JsonAST.JObject
+
+  def json: String
+}
+
+case class ColumnFamilySchemaV1(
+    val columnFamilyName: String,
+    val keySchema: StructType,
+    val valueSchema: StructType,
+    val keyStateEncoderSpec: KeyStateEncoderSpec,
+    val multipleValuesPerKey: Boolean) extends ColumnFamilySchema {
+  def jsonValue: JsonAST.JObject = {
+    ("columnFamilyName" -> JString(columnFamilyName)) ~
+      ("keySchema" -> keySchema.json) ~
+      ("valueSchema" -> valueSchema.json) ~
+      ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
+      ("multipleValuesPerKey" -> JBool(multipleValuesPerKey))
+  }
+
+  def json: String = {
+    compact(render(jsonValue))
+  }
+}
+
+object ColumnFamilySchemaV1 {
+  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilySchema] = {
+    assert(json.isInstanceOf[List[_]])
+
+    json.map { colFamilyMap =>
+      new ColumnFamilySchemaV1(
+        colFamilyMap("columnFamilyName").asInstanceOf[String],
+        StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String]),
+        StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
+        KeyStateEncoderSpec.fromJson(colFamilyMap("keyStateEncoderSpec")
+          .asInstanceOf[Map[String, Any]]),
+        colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean]
+      )
+    }
+  }
+
+  def fromJValue(jValue: JValue): List[ColumnFamilySchema] = {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val deserializedList: List[Any] = jValue.extract[List[Any]]
+    assert(deserializedList.isInstanceOf[List[_]],
+      s"Expected List but got ${deserializedList.getClass}")
+    val columnFamilyMetadatas = deserializedList.asInstanceOf[List[Map[String, Any]]]
+    // Extract each JValue to StateVariableInfo
+    ColumnFamilySchemaV1.fromJson(columnFamilyMetadatas)
+  }
+}
+
 object SchemaHelper {
 
   sealed trait SchemaReader {

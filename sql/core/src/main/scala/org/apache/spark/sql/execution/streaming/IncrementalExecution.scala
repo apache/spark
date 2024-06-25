@@ -203,7 +203,7 @@ class IncrementalExecution(
   object StateSchemaValidationRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case statefulOp: StatefulOperator if isFirstBatch =>
-        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf)
+        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
         statefulOp
     }
   }

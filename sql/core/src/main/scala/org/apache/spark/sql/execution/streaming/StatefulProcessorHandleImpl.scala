@@ -313,3 +313,181 @@ class StatefulProcessorHandleImpl(
     }
   }
 }
+
+class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
+
+  private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
+    new util.ArrayList[ColumnFamilySchema]()
+
+  /**
+   * Function to create new or return existing single value state variable of given type.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @tparam T - type of state variable
+   * @return - instance of ValueState of type T that can be used to store state persistently
+   */
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
+    val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to create new or return existing single value state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any state update resets the ttl to current processing time plus
+   * ttlDuration.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ValueState of type T that can be used to store state persistently
+   */
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Creates new or returns existing list state associated with stateName.
+   * The ListState persists values of type T.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
+    val colFamilySchema = ListStateImpl.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * be returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T] = {
+    val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Creates new or returns existing map state associated with stateName.
+   * The MapState persists Key-Value pairs of type [K, V].
+   *
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc - spark sql encoder for the map key
+   * @param valEncoder - spark sql encoder for the map value
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V]): MapState[K, V] = {
+    val colFamilySchema = MapStateImpl.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to create new or return existing map state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in mapState which have expired after ttlDuration will not
+   * returned on get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc - spark sql encoder for the map key
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V],
+      ttlConfig: TTLConfig): MapState[K, V] = {
+    val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /** Function to return queryInfo for currently running task */
+  override def getQueryInfo(): QueryInfo = {
+    new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
+  }
+
+  /**
+   * Function to register a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  override def registerTimer(expiryTimestampMs: Long): Unit = {
+
+  }
+
+  /**
+   * Function to delete a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
+   *
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+
+  }
+
+  /**
+   * Function to list all the timers registered for given implicit grouping key
+   * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
+   * will return all the unprocessed registered timers, including the one being fired within the
+   * invocation of `handleInputRows`.
+   *
+   * @return - list of all the registered timers for given implicit grouping key
+   */
+  override def listTimers(): Iterator[Long] = {
+    Iterator.empty
+  }
+
+  /**
+   * Function to delete and purge state variable if defined previously
+   *
+   * @param stateName - name of the state variable
+   */
+  override def deleteIfExists(stateName: String): Unit = {
+
+  }
+}

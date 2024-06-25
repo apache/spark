@@ -19,7 +19,12 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.jdk.CollectionConverters.CollectionHasAsScala
+
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.json4s.JArray
+import org.json4s.JsonAST.JValue
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -90,6 +95,25 @@ case class TransformWithStateExec(
     } else {
       false
     }
+  }
+
+  private def getDriverProcessorHandle: DriverStatefulProcessorHandleImpl = {
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    driverProcessorHandle
+  }
+  def getNewSchema(): JValue = {
+    val driverProcessorHandle = getDriverProcessorHandle
+    val columnFamilySchemas = JArray(driverProcessorHandle.
+      columnFamilySchemas.asScala.map(_.jsonValue).toList)
+    closeProcessorHandle()
+    columnFamilySchemas
+  }
+
+  private def closeProcessorHandle(): Unit = {
+    statefulProcessor.close()
+    statefulProcessor.setHandle(null)
   }
 
   /**
@@ -340,11 +364,54 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Unit = {
     // TODO: transformWithState is special because we don't have the schema of the state directly
     // within the passed args. We need to gather this after running the init function
     // within the stateful processor on the driver. This also requires a schema format change
     // when recording this information persistently.
+    val newColumnFamilySchemas = getNewSchema()
+    val schemaFile = new StateSchemaV3File(
+      hadoopConf, stateSchemaFilePath().toString).getLatest()
+    schemaFile match {
+      case Some((_, oldSchema)) =>
+        compareSchemas(oldSchema, newColumnFamilySchemas)
+      case None =>
+    }
+    // Write the new schema to the schema file
+    new StateSchemaV3File(hadoopConf, stateSchemaFilePath().toString).
+      add(batchId, newColumnFamilySchemas)
+  }
+
+  def compareSchemas(oldSchema: JValue, newSchema: JValue): Unit = {
+    val oldColumnFamilies = ColumnFamilySchemaV1.fromJValue(oldSchema)
+    val newColumnFamilies = ColumnFamilySchemaV1.fromJValue(newSchema).map {
+      case c1: ColumnFamilySchemaV1 =>
+        c1.columnFamilyName -> c1
+    }.toMap
+    oldColumnFamilies.foreach {
+      case oldColumnFamily: ColumnFamilySchemaV1 =>
+        newColumnFamilies.get(oldColumnFamily.columnFamilyName) match {
+          case Some(newColumnFamily) if oldColumnFamily.json != newColumnFamily.json =>
+            throw new RuntimeException(
+              s"State variable with name ${newColumnFamily.columnFamilyName}" +
+                s" already exists with different schema.")
+          case _ => // do nothing
+        }
+    }
+  }
+
+  private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
+    def stateInfo = getStateInfo
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+    storeName match {
+      case Some(storeName) =>
+        val storeNamePath = new Path(stateCheckpointPath, storeName)
+        new Path(new Path(storeNamePath, "_metadata"), "schema")
+      case None =>
+        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
