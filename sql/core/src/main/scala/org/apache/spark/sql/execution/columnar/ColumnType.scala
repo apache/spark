@@ -491,8 +491,8 @@ private[columnar] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType
   }
 }
 
-private[columnar] object STRING
-  extends NativeColumnType(PhysicalStringType(StringType.collationId), 8)
+private[columnar] case class STRING(collationId: Int)
+  extends NativeColumnType(PhysicalStringType(collationId), 8)
     with DirectCopyColumnType[UTF8String] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
@@ -530,6 +530,12 @@ private[columnar] object STRING
   }
 
   override def clone(v: UTF8String): UTF8String = v.clone()
+}
+
+private[columnar] object STRING {
+  def apply(dt: StringType): STRING = {
+    STRING(dt.collationId)
+  }
 }
 
 private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
@@ -821,7 +827,7 @@ private[columnar] object ColumnType {
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
-      case StringType => STRING
+      case s: StringType => STRING(s)
       case BinaryType => BINARY
       case i: CalendarIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)

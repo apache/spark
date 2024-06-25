@@ -434,8 +434,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
-                microsecond=ts % 1000000
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
@@ -675,13 +675,13 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     def toInternal(self, obj: Any) -> Any:
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+            message_parameters={"feature": "CalendarIntervalType.toInternal"},
         )
 
     def fromInternal(self, obj: Any) -> Any:
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+            message_parameters={"feature": "CalendarIntervalType.fromInternal"},
         )
 
 

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.UnsupportedEncodingException
+import java.nio.{ByteBuffer, CharBuffer}
+import java.nio.charset.{CharacterCodingException, Charset, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
@@ -25,6 +26,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.QueryContext
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -455,12 +457,16 @@ case class Upper(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Upper.exec(v, collationId)
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Upper.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Upper.genCode(c, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): Upper = copy(child = newChild)
@@ -483,12 +489,16 @@ case class Lower(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
-  override def convert(v: UTF8String): UTF8String = CollationSupport.Lower.exec(v, collationId)
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
+  override def convert(v: UTF8String): UTF8String =
+    CollationSupport.Lower.exec(v, collationId, useICU)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UPPER_OR_LOWER)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId))
+    defineCodeGen(ctx, ev, c => CollationSupport.Lower.genCode(c, collationId, useICU))
   }
 
   override def prettyName: String =
@@ -2708,62 +2718,69 @@ case class Decode(params: Seq[Expression], replacement: Expression)
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Boolean)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class StringDecode(
+    bin: Expression,
+    charset: Expression,
+    legacyCharsets: Boolean,
+    legacyErrorAction: Boolean)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(bin: Expression, charset: Expression) =
-    this(bin, charset, SQLConf.get.legacyJavaCharsets)
+    this(bin, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override def left: Expression = bin
-  override def right: Expression = charset
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
-
-  private val supportedCharsets = Set(
-    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val fromCharset = input2.asInstanceOf[UTF8String].toString
-    try {
-      if (legacyCharsets || supportedCharsets.contains(fromCharset.toUpperCase(Locale.ROOT))) {
-        UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
-      } else throw new UnsupportedEncodingException
-    } catch {
-      case _: UnsupportedEncodingException =>
-        throw QueryExecutionErrors.invalidCharsetError(prettyName, fromCharset)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (bytes, charset) => {
-      val fromCharset = ctx.freshName("fromCharset")
-      val sc = JavaCode.global(
-        ctx.addReferenceObj("supportedCharsets", supportedCharsets),
-        supportedCharsets.getClass)
-      s"""
-        String $fromCharset = $charset.toString();
-        try {
-          if ($legacyCharsets || $sc.contains($fromCharset.toUpperCase(java.util.Locale.ROOT))) {
-            ${ev.value} = UTF8String.fromString(new String($bytes, $fromCharset));
-          } else {
-            throw new java.io.UnsupportedEncodingException();
-          }
-        } catch (java.io.UnsupportedEncodingException e) {
-          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $fromCharset);
-        }
-      """
-    })
-  }
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): StringDecode =
-    copy(bin = newLeft, charset = newRight)
-
   override def prettyName: String = "decode"
+  override def toString: String = s"$prettyName($bin, $charset)"
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[StringDecode],
+    SQLConf.get.defaultStringType,
+    "decode",
+    Seq(bin, charset, Literal(legacyCharsets), Literal(legacyErrorAction)),
+    Seq(BinaryType, StringTypeAnyCollation, BooleanType, BooleanType))
+
+  override def children: Seq[Expression] = Seq(bin, charset)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(bin = newChildren(0), charset = newChildren(1))
 }
 
 object StringDecode {
   def apply(bin: Expression, charset: Expression): StringDecode = new StringDecode(bin, charset)
+  def decode(
+      input: Array[Byte],
+      charset: UTF8String,
+      legacyCharsets: Boolean,
+      legacyErrorAction: Boolean): UTF8String = {
+    val fromCharset = charset.toString
+    if (legacyCharsets || Encode.VALID_CHARSETS.contains(fromCharset.toUpperCase(Locale.ROOT))) {
+      val decoder = try {
+        val codingErrorAction = if (legacyErrorAction) {
+          CodingErrorAction.REPLACE
+        } else {
+          CodingErrorAction.REPORT
+        }
+        Charset.forName(fromCharset)
+          .newDecoder()
+          .onMalformedInput(codingErrorAction)
+          .onUnmappableCharacter(codingErrorAction)
+      } catch {
+        case _: IllegalCharsetNameException |
+             _: UnsupportedCharsetException |
+             _: IllegalArgumentException =>
+          throw QueryExecutionErrors.invalidCharsetError("decode", fromCharset)
+      }
+      try {
+        val cb = decoder.decode(ByteBuffer.wrap(input))
+        UTF8String.fromString(cb.toString)
+      } catch {
+        case _: CharacterCodingException =>
+          throw QueryExecutionErrors.malformedCharacterCoding("decode", fromCharset)
+      }
+    } else {
+      throw QueryExecutionErrors.invalidCharsetError("decode", fromCharset)
+    }
+  }
 }
 
 /**
@@ -2785,59 +2802,76 @@ object StringDecode {
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Encode(str: Expression, charset: Expression, legacyCharsets: Boolean)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class Encode(
+    str: Expression,
+    charset: Expression,
+    legacyCharsets: Boolean,
+    legacyErrorAction: Boolean)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(value: Expression, charset: Expression) =
-    this(value, charset, SQLConf.get.legacyJavaCharsets)
+    this(value, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override def left: Expression = str
-  override def right: Expression = charset
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  private val supportedCharsets = Set(
-    "US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
+  override val replacement: Expression = StaticInvoke(
+    classOf[Encode],
+    BinaryType,
+    "encode",
+    Seq(
+      str, charset, Literal(legacyCharsets, BooleanType), Literal(legacyErrorAction, BooleanType)),
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, BooleanType, BooleanType))
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val toCharset = input2.asInstanceOf[UTF8String].toString
-    try {
-      if (legacyCharsets || supportedCharsets.contains(toCharset.toUpperCase(Locale.ROOT))) {
-        input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
-      } else throw new UnsupportedEncodingException
-    } catch {
-      case _: UnsupportedEncodingException =>
-        throw QueryExecutionErrors.invalidCharsetError(prettyName, toCharset)
-    }
-  }
+  override def toString: String = s"$prettyName($str, $charset)"
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (string, charset) => {
-      val toCharset = ctx.freshName("toCharset")
-      val sc = JavaCode.global(
-        ctx.addReferenceObj("supportedCharsets", supportedCharsets),
-        supportedCharsets.getClass)
-      s"""
-        String $toCharset = $charset.toString();
-        try {
-          if ($legacyCharsets || $sc.contains($toCharset.toUpperCase(java.util.Locale.ROOT))) {
-            ${ev.value} = $string.toString().getBytes($toCharset);
-          } else {
-            throw new java.io.UnsupportedEncodingException();
-          }
-        } catch (java.io.UnsupportedEncodingException e) {
-          throw QueryExecutionErrors.invalidCharsetError("$prettyName", $toCharset);
-        }"""
-    })
-  }
+  override def children: Seq[Expression] = Seq(str, charset)
 
-  override protected def withNewChildrenInternal(
-    newLeft: Expression, newRight: Expression): Encode = copy(str = newLeft, charset = newRight)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(str = newChildren.head, charset = newChildren(1))
 }
 
 object Encode {
   def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
+
+  private[expressions] final lazy val VALID_CHARSETS =
+    Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
+
+  def encode(
+      input: UTF8String,
+      charset: UTF8String,
+      legacyCharsets: Boolean,
+      legacyErrorAction: Boolean): Array[Byte] = {
+    val toCharset = charset.toString
+    if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
+      val encoder = try {
+        val codingErrorAction = if (legacyErrorAction) {
+          CodingErrorAction.REPLACE
+        } else {
+          CodingErrorAction.REPORT
+        }
+        Charset.forName(toCharset)
+          .newEncoder()
+          .onMalformedInput(codingErrorAction)
+          .onUnmappableCharacter(codingErrorAction)
+      } catch {
+        case _: IllegalCharsetNameException |
+             _: UnsupportedCharsetException |
+             _: IllegalArgumentException =>
+          throw QueryExecutionErrors.invalidCharsetError("encode", toCharset)
+      }
+      try {
+        val bb = encoder.encode(CharBuffer.wrap(input.toString))
+        JavaUtils.bufferToArray(bb)
+      } catch {
+        case _: CharacterCodingException =>
+          throw QueryExecutionErrors.malformedCharacterCoding("encode", toCharset)
+      }
+    } else {
+      throw QueryExecutionErrors.invalidCharsetError("encode", toCharset)
+    }
+  }
 }
 
 /**
