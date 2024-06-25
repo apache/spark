@@ -41,7 +41,7 @@ class DataFrameQueryContextTestsMixin:
                 error_class="DIVIDE_BY_ZERO",
                 message_parameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="divide",
+                fragment="__truediv__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - plus
@@ -57,7 +57,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="plus",
+                fragment="__add__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - minus
@@ -73,7 +73,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="minus",
+                fragment="__sub__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - multiply
@@ -89,7 +89,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="multiply",
+                fragment="__mul__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - mod
@@ -105,7 +105,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="mod",
+                fragment="__mod__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - equalTo
@@ -121,7 +121,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="__eq__",
+                fragment="__eq__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - lt
@@ -137,7 +137,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="lt",
+                fragment="__lt__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - leq
@@ -153,7 +153,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="leq",
+                fragment="__le__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - geq
@@ -169,7 +169,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="geq",
+                fragment="__ge__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - gt
@@ -185,7 +185,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="gt",
+                fragment="__gt__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - eqNullSafe
@@ -201,7 +201,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="eqNullSafe",
+                fragment="eqNullSafe",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - bitwiseOR
@@ -217,7 +217,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="bitwiseOR",
+                fragment="bitwiseOR",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - bitwiseAND
@@ -233,7 +233,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="bitwiseAND",
+                fragment="bitwiseAND",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - bitwiseXOR
@@ -249,7 +249,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="bitwiseXOR",
+                fragment="bitwiseXOR",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - chained (`divide` is problematic)
@@ -262,7 +262,7 @@ class DataFrameQueryContextTestsMixin:
                 error_class="DIVIDE_BY_ZERO",
                 message_parameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="divide",
+                fragment="__truediv__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - chained (`plus` is problematic)
@@ -282,7 +282,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="plus",
+                fragment="__add__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - chained (`minus` is problematic)
@@ -302,7 +302,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="minus",
+                fragment="__sub__",
             )
 
             # DataFrameQueryContext with pysparkLoggingInfo - chained (`multiply` is problematic)
@@ -320,7 +320,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="multiply",
+                fragment="__mul__",
             )
 
             # Multiple expressions in df.select (`divide` is problematic)
@@ -331,7 +331,7 @@ class DataFrameQueryContextTestsMixin:
                 error_class="DIVIDE_BY_ZERO",
                 message_parameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="divide",
+                fragment="__truediv__",
             )
 
             # Multiple expressions in df.select (`plus` is problematic)
@@ -347,7 +347,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="plus",
+                fragment="__add__",
             )
 
             # Multiple expressions in df.select (`minus` is problematic)
@@ -363,7 +363,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="minus",
+                fragment="__sub__",
             )
 
             # Multiple expressions in df.select (`multiply` is problematic)
@@ -379,7 +379,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="multiply",
+                fragment="__mul__",
             )
 
             # Multiple expressions with pre-declared expressions (`divide` is problematic)
@@ -392,7 +392,7 @@ class DataFrameQueryContextTestsMixin:
                 error_class="DIVIDE_BY_ZERO",
                 message_parameters={"config": '"spark.sql.ansi.enabled"'},
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="divide",
+                fragment="__truediv__",
             )
 
             # Multiple expressions with pre-declared expressions (`plus` is problematic)
@@ -410,7 +410,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="plus",
+                fragment="__add__",
             )
 
             # Multiple expressions with pre-declared expressions (`minus` is problematic)
@@ -428,7 +428,7 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="minus",
+                fragment="__sub__",
             )
 
             # Multiple expressions with pre-declared expressions (`multiply` is problematic)
@@ -446,20 +446,11 @@ class DataFrameQueryContextTestsMixin:
                     "ansiConfig": '"spark.sql.ansi.enabled"',
                 },
                 query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="multiply",
+                fragment="__mul__",
             )
 
-            # DataFrameQueryContext without pysparkLoggingInfo
-            with self.assertRaises(AnalysisException) as pe:
-                df.select("non-existing-column")
-            self.check_error(
-                exception=pe.exception,
-                error_class="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                message_parameters={"objectName": "`non-existing-column`", "proposal": "`id`"},
-                query_context_type=QueryContextType.DataFrame,
-                pyspark_fragment="",
-            )
-
+    def test_sql_query_context(self):
+        with self.sql_conf({"spark.sql.ansi.enabled": True}):
             # SQLQueryContext
             with self.assertRaises(ArithmeticException) as pe:
                 self.spark.sql("select 10/0").collect()

@@ -27,7 +27,7 @@ import org.apache.hive.service.cli.operation.GetFunctionsOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -51,9 +51,11 @@ private[hive] class SparkGetFunctionsOperation(
 
   override def runInternal(): Unit = {
     // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
-    logInfo(s"$logMsg with $statementId")
+    val cmdMDC = log"catalog : ${MDC(LogKeys.CATALOG_NAME, catalogName)}, " +
+      log"schemaPattern : ${MDC(LogKeys.DATABASE_NAME, schemaName)}"
+    val logMDC = log"Listing functions '" + cmdMDC +
+      log", functionName : ${MDC(LogKeys.FUNCTION_NAME, functionName)}'"
+    logInfo(logMDC + log" with ${MDC(LogKeys.STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -69,13 +71,13 @@ private[hive] class SparkGetFunctionsOperation(
       // authorize this call on the schema objects
       val privObjs =
         HivePrivilegeObjectUtils.getHivePrivDbObjects(matchingDbs.asJava)
-      authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdMDC.message)
     }
 
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
+      logMDC.message,
       statementId,
       parentSession.getUsername)
 

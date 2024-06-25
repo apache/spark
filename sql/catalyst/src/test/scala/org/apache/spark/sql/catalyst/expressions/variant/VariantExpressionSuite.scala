@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
@@ -859,5 +860,51 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         Row(0)),
       StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
     check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
+  }
+
+  test("schema_of_variant - schema merge") {
+    val nul = Literal(null, StringType)
+    val boolean = Literal.default(BooleanType)
+    val long = Literal.default(LongType)
+    val string = Literal.default(StringType)
+    val double = Literal.default(DoubleType)
+    val date = Literal.default(DateType)
+    val timestamp = Literal.default(TimestampType)
+    val timestampNtz = Literal.default(TimestampNTZType)
+    val float = Literal.default(FloatType)
+    val binary = Literal.default(BinaryType)
+    val decimal = Literal(Decimal("123.456"), DecimalType(6, 3))
+    val array1 = Literal(Array(0L))
+    val array2 = Literal(Array(0.0))
+    val struct1 = Literal.default(StructType.fromDDL("a string"))
+    val struct2 = Literal.default(StructType.fromDDL("a boolean, b bigint"))
+    val inputs = Seq(nul, boolean, long, string, double, date, timestamp, timestampNtz, float,
+      binary, decimal, array1, array2, struct1, struct2)
+
+    val results = mutable.HashMap.empty[(Literal, Literal), String]
+    for (i <- inputs) {
+      val inputType = if (i.value == null) "VOID" else i.dataType.sql
+      results.put((nul, i), inputType)
+      results.put((i, i), inputType)
+    }
+    results.put((long, double), "DOUBLE")
+    results.put((long, float), "FLOAT")
+    results.put((long, decimal), "DECIMAL(23,3)")
+    results.put((double, float), "DOUBLE")
+    results.put((double, decimal), "DOUBLE")
+    results.put((date, timestamp), "TIMESTAMP")
+    results.put((date, timestampNtz), "TIMESTAMP_NTZ")
+    results.put((timestamp, timestampNtz), "TIMESTAMP")
+    results.put((float, decimal), "DOUBLE")
+    results.put((array1, array2), "ARRAY<DOUBLE>")
+    results.put((struct1, struct2), "STRUCT<a: VARIANT, b: BIGINT>")
+
+    for (i1 <- inputs) {
+      for (i2 <- inputs) {
+        val expected = results.getOrElse((i1, i2), results.getOrElse((i2, i1), "VARIANT"))
+        val array = CreateArray(Seq(Cast(i1, VariantType), Cast(i2, VariantType)))
+        checkEvaluation(SchemaOfVariant(Cast(array, VariantType)).replacement, s"ARRAY<$expected>")
+      }
+    }
   }
 }

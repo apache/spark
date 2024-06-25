@@ -836,6 +836,70 @@ org.apache.spark.SparkIllegalArgumentException
 
 
 -- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	true
+
+
+-- !query
+select encode('渭城朝雨浥轻尘', 'US-ASCII')
+-- !query schema
+struct<encode(渭城朝雨浥轻尘, US-ASCII):binary>
+-- !query output
+???????
+
+
+-- !query
+select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+???????
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	false
+
+
+-- !query
+select encode('客舍青青柳色新', 'US-ASCII')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`encode`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`encode`"
+  }
+}
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>
@@ -1053,6 +1117,70 @@ org.apache.spark.SparkIllegalArgumentException
     "charset" : "WINDOWS-1252",
     "functionName" : "`decode`",
     "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	true
+
+
+-- !query
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+-- !query schema
+struct<decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII):string>
+-- !query output
+���������������������
+
+
+-- !query
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<decode(scol, ecol):string>
+-- !query output
+���������������������
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	false
+
+
+-- !query
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
   }
 }
 
