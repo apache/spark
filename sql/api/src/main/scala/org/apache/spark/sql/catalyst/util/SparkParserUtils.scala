@@ -44,7 +44,7 @@ trait SparkParserUtils {
     }
 
     def allCharsAreHex(s: String, start: Int, length: Int): Boolean = {
-      val end = start + length - 1
+      val end = start + length
       var i = start
       while (i < end) {
         val c = s.charAt(i)

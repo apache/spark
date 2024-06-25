@@ -140,6 +140,8 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
     assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
     assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+    // Guard against off-by-one errors in the "all chars are hex" routine:
+    assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
 
     // scalastyle:on nonascii
   }
