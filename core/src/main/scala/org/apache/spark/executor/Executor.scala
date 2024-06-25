@@ -83,7 +83,7 @@ private[spark] class Executor(
   extends Logging {
 
   logInfo(log"Starting executor ID ${LogMDC(LogKeys.EXECUTOR_ID, executorId)}" +
-    log" on host ${LogMDC(HOST_NAME, executorHostname)}")
+    log" on host ${LogMDC(HOST, executorHostname)}")
   logInfo(log"OS info ${LogMDC(OS_NAME, System.getProperty("os.name"))}," +
     log" ${LogMDC(OS_VERSION, System.getProperty("os.version"))}, " +
     log"${LogMDC(OS_ARCH, System.getProperty("os.arch"))}")

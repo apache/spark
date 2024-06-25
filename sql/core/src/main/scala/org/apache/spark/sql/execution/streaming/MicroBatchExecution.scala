@@ -419,12 +419,12 @@ class MicroBatchExecution(
   def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
     if (latestBatchId != 0) {
       Some(offsetLog.get(latestBatchId - 1).getOrElse {
-        logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
-          s"which is required to restart the query from the latest batch $latestBatchId " +
-          "from the offset log. Please ensure there are two subsequent offset logs " +
-          "available for the latest batch via manually deleting the offset file(s). " +
-          "Please also ensure the latest batch for commit log is equal or one batch " +
-          "earlier than the latest batch for offset log.")
+        logError(log"The offset log for batch ${MDC(LogKeys.BATCH_ID, latestBatchId - 1)} " +
+          log"doesn't exist, which is required to restart the query from the latest batch " +
+          log"${MDC(LogKeys.LATEST_BATCH_ID, latestBatchId)} from the offset log. Please ensure " +
+          log"there are two subsequent offset logs available for the latest batch via manually " +
+          log"deleting the offset file(s). Please also ensure the latest batch for commit log is " +
+          log"equal or one batch earlier than the latest batch for offset log.")
         throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
       })
     } else {
