@@ -6299,6 +6299,11 @@ class DataFrame:
         Returns
         -------
         An instance of QueryExecution or None when the value is not set yet.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
         """
         ...
 
