@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifie
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.command.v2.UnsetNamespacePropertiesCommand
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedSparkSession {
