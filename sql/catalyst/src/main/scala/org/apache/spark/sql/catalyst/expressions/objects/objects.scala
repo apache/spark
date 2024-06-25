@@ -361,8 +361,14 @@ case class StaticInvoke(
     }
   }
 
-  override def toString: String = "static_invoke(" +
-    s"${staticObject.getSimpleName.stripSuffix("$")}.$functionName(${arguments.mkString(", ")}))"
+  override def toString: String =
+    s"static_invoke(${
+      if (objectName.startsWith("org.apache.spark.")) {
+        cls.getSimpleName
+      } else {
+        objectName
+      }
+    }.$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
