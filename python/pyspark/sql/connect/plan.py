@@ -55,9 +55,9 @@ from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
+    AnalysisException,
     PySparkValueError,
     PySparkPicklingError,
-    IllegalArgumentException,
 )
 
 if TYPE_CHECKING:
@@ -887,7 +887,7 @@ class Join(LogicalPlan):
         elif how == "cross":
             join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
         else:
-            raise IllegalArgumentException(
+            raise AnalysisException(
                 error_class="UNSUPPORTED_JOIN_TYPE",
                 message_parameters={"join_type": how},
             )

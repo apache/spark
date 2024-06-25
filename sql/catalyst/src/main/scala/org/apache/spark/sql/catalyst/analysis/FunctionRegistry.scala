@@ -601,6 +601,10 @@ object FunctionRegistry {
     expression[RegExpCount]("regexp_count"),
     expression[RegExpSubStr]("regexp_substr"),
     expression[RegExpInStr]("regexp_instr"),
+    expression[IsValidUTF8]("is_valid_utf8"),
+    expression[MakeValidUTF8]("make_valid_utf8"),
+    expression[ValidateUTF8]("validate_utf8"),
+    expression[TryValidateUTF8]("try_validate_utf8"),
 
     // url functions
     expression[UrlEncode]("url_encode"),
@@ -860,7 +864,11 @@ object FunctionRegistry {
     // Xml
     expression[XmlToStructs]("from_xml"),
     expression[SchemaOfXml]("schema_of_xml"),
-    expression[StructsToXml]("to_xml")
+    expression[StructsToXml]("to_xml"),
+
+    // Avro
+    expression[FromAvro]("from_avro"),
+    expression[ToAvro]("to_avro")
   )
 
   val builtin: SimpleFunctionRegistry = {

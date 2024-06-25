@@ -184,10 +184,10 @@ public class CollationSupportSuite {
     // Surrogate pairs are treated as invalid UTF8 sequences
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), false);
+      UTF8String.fromString("\uFFFD\uFFFD"), false);
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), true);
+      UTF8String.fromString("\uFFFD\uFFFD"), true);
   }
 
   /**
@@ -619,7 +619,11 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId));
+    // Testing the new ICU-based implementation of the Upper function.
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Upper function.
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
   @Test
@@ -673,7 +677,11 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId));
+    // Testing the new ICU-based implementation of the Lower function.
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Lower function.
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
   @Test
