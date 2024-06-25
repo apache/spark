@@ -53,7 +53,8 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $path (stream: $fsDataOutputStream)", e)
+            logWarning(log"Error cancelling write to ${MDC(LogKeys.PATH, path)} " +
+              log"(stream: ${MDC(LogKeys.FS_DATA_OUTPUT_STREAM, fsDataOutputStream)})", e)
       } finally {
         terminated = true
       }
@@ -71,7 +72,8 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error closing $path (stream: $fsDataOutputStream)", e)
+            logWarning(log"Error closing ${MDC(LogKeys.PATH, path)} " +
+              log"(stream: ${MDC(LogKeys.FS_DATA_OUTPUT_STREAM, fsDataOutputStream)})", e)
       } finally {
         terminated = true
       }
