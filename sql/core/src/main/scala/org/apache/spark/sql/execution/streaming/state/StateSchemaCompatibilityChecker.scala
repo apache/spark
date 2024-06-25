@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
@@ -80,7 +80,7 @@ class StateSchemaCompatibilityChecker(
       schemaReader.read(inStream)
     } catch {
       case e: Throwable =>
-        logError(s"Fail to read schema file from $schemaFileLocation", e)
+        logError(log"Fail to read schema file from ${MDC(LogKeys.PATH, schemaFileLocation)}", e)
         throw e
     } finally {
       inStream.close()
@@ -115,7 +115,7 @@ class StateSchemaCompatibilityChecker(
       outStream.close()
     } catch {
       case e: Throwable =>
-        logError(s"Fail to write schema file to $schemaFileLocation", e)
+        logError(log"Fail to write schema file to ${MDC(LogKeys.PATH, schemaFileLocation)}", e)
         outStream.cancel()
         throw e
     }
