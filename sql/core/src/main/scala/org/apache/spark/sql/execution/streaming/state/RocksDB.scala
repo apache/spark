@@ -233,10 +233,11 @@ class RocksDB(
    *
    * @param startVersion version of the snapshot to start with
    * @param endVersion end version
-   * @param readOnly whether the RocksDB instance is read-only
-   * @return A RocksDB instance loaded with the state endVersion replayed from startVersion
+   * @return A RocksDB instance loaded with the state endVersion replayed from startVersion.
+   *         Note that the instance will be read-only since this method is only used in State Data
+   *         Source.
    */
-  def load(startVersion: Long, endVersion: Long, readOnly: Boolean): RocksDB = {
+  def loadFromSnapshot(startVersion: Long, endVersion: Long): RocksDB = {
     assert(startVersion >= 0 && endVersion >= startVersion)
     acquire(LoadStore)
     recordedMetrics = None
@@ -244,7 +245,7 @@ class RocksDB(
       log"Loading ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
       log"${MDC(LogKeys.VERSION_NUM, startVersion)}")
     try {
-      loadFromCheckpoint(startVersion, endVersion)
+      replayFromCheckpoint(startVersion, endVersion)
 
       logInfo(
         log"Loaded ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
@@ -253,11 +254,6 @@ class RocksDB(
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
         throw t
-    }
-    if (enableChangelogCheckpointing && !readOnly) {
-      // Make sure we don't leak resource.
-      changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(endVersion + 1, useColumnFamilies))
     }
     this
   }
@@ -270,7 +266,7 @@ class RocksDB(
    * @param startVersion start checkpoint version
    * @param endVersion end version
    */
-  def loadFromCheckpoint(startVersion: Long, endVersion: Long): Any = {
+  private def replayFromCheckpoint(startVersion: Long, endVersion: Long): Any = {
     if (loadedVersion != startVersion) {
       closeDB()
       val metadata = fileManager.loadCheckpointFromDfs(startVersion, workingDir)

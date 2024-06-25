@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -96,9 +96,10 @@ class StatePartitionReader(
     partition.sourceOptions.snapshotStartBatchId match {
       case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
 
-      case Some(snapshotStartBatchId) => provider.getReadStore(
-        snapshotStartBatchId + 1,
-        partition.sourceOptions.batchId + 1)
+      case Some(snapshotStartBatchId) =>
+        provider.asInstanceOf[FineGrainedStateSource].replayReadStoreFromSnapshot(
+          snapshotStartBatchId + 1,
+          partition.sourceOptions.batchId + 1)
     }
   }
 
