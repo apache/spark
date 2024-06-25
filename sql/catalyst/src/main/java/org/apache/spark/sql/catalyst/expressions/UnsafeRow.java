@@ -157,7 +157,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     if (baseObject instanceof byte[] bytes) {
       int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
-      if (bytes.length < offsetInByteArray + sizeInBytes) {
+      if (offsetInByteArray < 0 || sizeInBytes < 0 ||
+          bytes.length < offsetInByteArray + sizeInBytes) {
         throw new ArrayIndexOutOfBoundsException(
           "byte array length: " + bytes.length +
             ", offset: " + offsetInByteArray + ", size: " + sizeInBytes

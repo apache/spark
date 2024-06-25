@@ -188,4 +188,31 @@ class UnsafeRowSuite extends SparkFunSuite {
     unsafeRow.setDecimal(0, d2, 38)
     assert(unsafeRow.getDecimal(0, 38, 18) === null)
   }
+
+  test("SPARK-48713: throw ArrayIndexOutOfBoundsException for illegal UnsafeRow.pointTo") {
+    val emptyRow = UnsafeRow.createFromByteArray(64, 2)
+    val byteArray = new Array[Byte](64)
+
+    // Out of bounds
+    var errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+      emptyRow.pointTo(byteArray, Platform.BYTE_ARRAY_OFFSET + 50, 32)
+    }.getMessage
+    assert(errorMsg.contains("byte array length: 64, offset: 50, size: 32"))
+
+    // Negative size
+    errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+      emptyRow.pointTo(byteArray, Platform.BYTE_ARRAY_OFFSET + 50, -32)
+    }.getMessage
+    assert(errorMsg.contains("byte array length: 64, offset: 50, size: -32"))
+
+    // Negative offset
+    errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+      emptyRow.pointTo(byteArray, -5, 32)
+    }.getMessage
+    assert(
+      errorMsg.contains(
+        s"byte array length: 64, offset: ${-5 - Platform.BYTE_ARRAY_OFFSET}, size: 32"
+      )
+    )
+  }
 }
