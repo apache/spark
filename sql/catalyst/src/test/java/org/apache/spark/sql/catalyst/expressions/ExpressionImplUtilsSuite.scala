@@ -363,7 +363,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
           },
           errorClass = "INVALID_UTF8_STRING",
           parameters = Map(
-            "str" -> str.toString
+            "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
           )
         )
       } else {

@@ -2072,9 +2072,9 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_UTF8_STRING",
-  "sqlState" : "HV00A",
+  "sqlState" : "22029",
   "messageParameters" : {
-    "str" : "�"
+    "str" : "\\x80"
   }
 }
 
