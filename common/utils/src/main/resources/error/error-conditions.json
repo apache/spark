@@ -4476,6 +4476,11 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
+      "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
+        "message" : [
+          "Lambda function with Python UDF <funcName> in a higher order function."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
@@ -4644,11 +4649,6 @@
       "TRANSFORM_NON_HIVE" : {
         "message" : [
           "TRANSFORM with SERDE is only supported in hive mode."
-        ]
-      },
-      "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
-        "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       }
     },
