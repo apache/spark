@@ -116,8 +116,9 @@ class CollectedMetrics:
         ----------
         current: Node
             Current node in the graph.
-        graph: Dict[int, Node]
-            The full graph of all nodes in the executed plan.
+        graph: dict
+            A dictionary representing the full graph mapping from node ID (int) to the node itself.
+            The node is an instance of :class:`CollectedMetrics:Node`.
         prefix: str
             String prefix used for generating the output buffer.
 
