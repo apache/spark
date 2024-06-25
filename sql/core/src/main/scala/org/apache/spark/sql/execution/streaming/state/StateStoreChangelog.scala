@@ -25,7 +25,7 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -176,8 +176,7 @@ class StateStoreChangelogWriterV1(
     } catch {
       case e: Throwable =>
         abort()
-        logError(log"Fail to commit changelog file ${MDC(LogKeys.FILE_NAME, file)} " +
-          log"because of exception ${MDC(LogKeys.EXCEPTION, e)}")
+        logError(log"Fail to commit changelog file ${MDC(PATH, file)} because of exception", e)
         throw e
     } finally {
       backingFileStream = null
@@ -256,8 +255,7 @@ class StateStoreChangelogWriterV2(
     } catch {
       case e: Throwable =>
         abort()
-        logError(log"Fail to commit changelog file ${MDC(LogKeys.FILE_NAME, file)} " +
-          log"because of exception ${MDC(LogKeys.EXCEPTION, e)}")
+        logError(log"Fail to commit changelog file ${MDC(PATH, file)} because of exception", e)
         throw e
     } finally {
       backingFileStream = null
