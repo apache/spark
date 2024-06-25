@@ -381,14 +381,3 @@ case class AlwaysFalse() extends Filter {
 @Evolving
 object AlwaysFalse extends AlwaysFalse {
 }
-
-/**
- * Filter that can be translated partially. It can be pushed down but if it is not fully translated
- * then the original expression needs to be evaluated as well.
- */
-@Evolving
-case class TranslatedFilter(filter: Filter, fullyTranslated: Boolean) {
-  def withFilter(newFilter: Filter): TranslatedFilter = {
-    copy(filter = newFilter)
-  }
-}

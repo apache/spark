@@ -53,7 +53,8 @@ import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils => CatalystPartitioningUtils}
+import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -572,11 +573,10 @@ object DataSourceStrategy
   /**
    * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
    *
-   * @return a `Some[TranslatedFilter]` if the input [[Expression]] is at least partially
-   *         convertible, otherwise a `None`.
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilter(
-      predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[TranslatedFilter] = {
+      predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
     translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
   }
 
@@ -588,24 +588,19 @@ object DataSourceStrategy
    *                               translated [[Filter]]. The map is used for rebuilding
    *                               [[Expression]] from [[Filter]].
    * @param nestedPredicatePushdownEnabled Whether nested predicate pushdown is enabled.
-   * @return a `Some[TranslatedFilter]` if the input [[Expression]] is at least partially
-   *         convertible, otherwise a `None`.
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilterWithMapping(
       predicate: Expression,
-      translatedFilterToExpr: Option[mutable.HashMap[Filter, Expression]],
+      translatedFilterToExpr: Option[mutable.HashMap[sources.Filter, Expression]],
       nestedPredicatePushdownEnabled: Boolean)
-    : Option[TranslatedFilter] = {
+    : Option[Filter] = {
 
-    def translateAndRecordLeafNodeFilter(filter: Expression, canBeFullyTranslated: Boolean = true)
-      : Option[TranslatedFilter] = {
+    def translateAndRecordLeafNodeFilter(filter: Expression): Option[Filter] = {
       val translatedFilter =
-        translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled)) match {
-          case Some(f) => Some(TranslatedFilter(f, canBeFullyTranslated))
-          case None => None
-        }
+        translateLeafNodeFilter(filter, PushableColumn(nestedPredicatePushdownEnabled))
       if (translatedFilter.isDefined && translatedFilterToExpr.isDefined) {
-        translatedFilterToExpr.get(translatedFilter.get.filter) = predicate
+        translatedFilterToExpr.get(translatedFilter.get) = predicate
       }
       translatedFilter
     }
@@ -626,8 +621,7 @@ object DataSourceStrategy
             left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           rightFilter <- translateFilterWithMapping(
             right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-        } yield TranslatedFilter(sources.And(leftFilter.filter, rightFilter.filter),
-            leftFilter.fullyTranslated && rightFilter.fullyTranslated)
+        } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {
@@ -635,28 +629,24 @@ object DataSourceStrategy
             left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           rightFilter <- translateFilterWithMapping(
             right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-        } yield TranslatedFilter(sources.Or(leftFilter.filter, rightFilter.filter),
-            leftFilter.fullyTranslated && rightFilter.fullyTranslated)
+        } yield sources.Or(leftFilter, rightFilter)
 
-      case notNull @ expressions.IsNotNull(_: AttributeReference | _: GetStructField) =>
+      case notNull @ expressions.IsNotNull(_: AttributeReference) =>
         // Not null filters on attribute references can always be pushed, also for collated columns.
         translateAndRecordLeafNodeFilter(notNull)
 
-      case isNull @ expressions.IsNull(_: AttributeReference | _: GetStructField) =>
+      case isNull @ expressions.IsNull(_: AttributeReference) =>
         // Is null filters on attribute references can always be pushed, also for collated columns.
         translateAndRecordLeafNodeFilter(isNull)
 
-      case p if DataSourceUtils.referencesNonUTF8BinaryCollation(p) =>
-        // The filter cannot be pushed and we widen it to be AlwaysTrue() and set it
-        // as partially translated so it has to get evaluated by the engine as well.
-        // This is only valid if the result of the filter is not negated by a
-        // Not expression it is wrapped in.
-        translateAndRecordLeafNodeFilter(Literal.TrueLiteral, canBeFullyTranslated = false)
+      case p if p.references.exists(ref => SchemaUtils.hasNonUTF8BinaryCollation(ref.dataType)) =>
+        // The filter cannot be pushed and we widen it to be AlwaysTrue(). This is only valid if
+        // the result of the filter is not negated by a Not expression it is wrapped in.
+        translateAndRecordLeafNodeFilter(Literal.TrueLiteral)
 
       case expressions.Not(child) =>
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          .map(translatedFilter =>
-            translatedFilter.withFilter(sources.Not(translatedFilter.filter)))
+          .map(sources.Not)
 
       case other =>
         translateAndRecordLeafNodeFilter(other)
@@ -703,23 +693,21 @@ object DataSourceStrategy
     // If a predicate is not in this map, it means it cannot be pushed down.
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // SPARK-41636: we keep the order of the predicates to avoid CodeGenerator cache misses
-    val translatedMap: Map[Expression, TranslatedFilter] = ListMap(predicates.flatMap { p =>
+    val translatedMap: Map[Expression, Filter] = ListMap(predicates.flatMap { p =>
       translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
     }: _*)
 
-    val pushedFilters: Seq[Filter] = translatedMap.values.map(_.filter).toSeq
+    val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
-    // Catalyst predicate expressions that cannot be fully converted to data source filters.
-    val nonconvertiblePredicates = predicates.filter(predicate =>
-        !translatedMap.contains(predicate) || !translatedMap(predicate).fullyTranslated)
+    // Catalyst predicate expressions that cannot be converted to data source filters.
+    val nonconvertiblePredicates = predicates.filterNot(translatedMap.contains)
 
     // Data source filters that cannot be handled by `relation`. An unhandled filter means
     // the data source cannot guarantee the rows returned can pass the filter.
     // As a result we must return it so Spark can plan an extra filter operator.
-    val unhandledFilters = relation.unhandledFilters(
-      translatedMap.values.map(_.filter).toArray).toSet
+    val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
     val unhandledPredicates = translatedMap.filter { case (p, f) =>
-      unhandledFilters.contains(f.filter)
+      unhandledFilters.contains(f)
     }.keys
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 

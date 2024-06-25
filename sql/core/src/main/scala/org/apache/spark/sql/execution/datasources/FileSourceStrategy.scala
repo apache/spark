@@ -203,7 +203,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
-        .map(_.filter)
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.

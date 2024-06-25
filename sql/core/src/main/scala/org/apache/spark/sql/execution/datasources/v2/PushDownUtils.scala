@@ -58,10 +58,7 @@ object PushDownUtils {
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
-            translatedFilters += translated.get.filter
-            if (!translated.get.fullyTranslated) {
-              untranslatableExprs += filterExpr
-            }
+            translatedFilters += translated.get
           }
         }
 

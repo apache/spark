@@ -79,7 +79,7 @@ abstract class FileScanBuilder(
     for (filterExpr <- dataFilters) {
       val translated = DataSourceStrategy.translateFilter(filterExpr, true)
       if (translated.nonEmpty) {
-        translatedFilters += translated.get.filter
+        translatedFilters += translated.get
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
