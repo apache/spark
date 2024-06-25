@@ -74,12 +74,12 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   test("showString: truncate = [3, 17]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
-    val expectedAnswerForFalse = """+-----+
-                                   ||value|
-                                   |+-----+
-                                   ||    1|
-                                   ||  111|
-                                   |+-----+
+    val expectedAnswerForFalse = """+---+
+                                   ||val|
+                                   |+---+
+                                   ||  1|
+                                   ||111|
+                                   |+---+
                                    |""".stripMargin
     assert(df.showString(10, truncate = 3) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+-----------------+
@@ -95,10 +95,10 @@ class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   test("showString: truncate = [3, 17], vertical = true") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
-    val expectedAnswerForFalse = "-RECORD 0----\n" +
-                                 " value | 1   \n" +
-                                 "-RECORD 1----\n" +
-                                 " value | 111 \n"
+    val expectedAnswerForFalse = "-RECORD 0--\n" +
+                                 " val | 1   \n" +
+                                 "-RECORD 1--\n" +
+                                 " val | 111 \n"
     assert(df.showString(10, truncate = 3, vertical = true) === expectedAnswerForFalse)
     val expectedAnswerForTrue = "-RECORD 0------------------\n" +
                                 " value | 1                 \n" +
