@@ -78,7 +78,7 @@ class RocksDB(
     checkpointDir: File,
     version: Long,
     numKeys: Long,
-    fileMappings: RocksDBFileMappings) {
+    capturedFileMappings: RocksDBFileMappings) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -596,7 +596,7 @@ class RocksDB(
           // inside the uploadSnapshot() called below.
           // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
           // during state store maintenance.
-          oldSnapshots.addOne(latestSnapshot)
+          oldSnapshots += latestSnapshot
           latestSnapshot = Some(
             RocksDBSnapshot(checkpointDir,
               newVersion,

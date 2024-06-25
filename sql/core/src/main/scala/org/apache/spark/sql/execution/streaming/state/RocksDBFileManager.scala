@@ -770,7 +770,7 @@ class RocksDBFileManager(
 
 /**
  * Track file mappings in RocksDB across local and remote directories
- * @param versionToRocksDBFiles Mapping of version to DFS files
+ * @param versionToRocksDBFiles Mapping of RocksDB files used across versions for maintenance
  * @param localFilesToDfsFiles Mapping of the exact Dfs file used to create a local SST file
  * The reason localFilesToDfsFiles is a separate map because versionToRocksDBFiles can contain
  *  multiple similar SST files to a particular local file (for example 1.sst can map to 1-UUID1.sst
