@@ -155,6 +155,15 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
+    if (baseObject instanceof byte[] bytes) {
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
+      if (bytes.length < offsetInByteArray + sizeInBytes) {
+        throw new ArrayIndexOutOfBoundsException(
+          "byte array length: " + bytes.length +
+            ", offset: " + offsetInByteArray + ", size: " + sizeInBytes
+        );
+      }
+    }
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
