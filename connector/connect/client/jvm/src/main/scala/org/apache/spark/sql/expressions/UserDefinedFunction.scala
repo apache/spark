@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto

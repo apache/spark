@@ -23,11 +23,11 @@ import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
-import io.grpc.{ManagedChannel, Server}
-import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.scalatest.BeforeAndAfterEach
+import org.sparkproject.connect.grpc.{ManagedChannel, Server}
+import org.sparkproject.connect.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration

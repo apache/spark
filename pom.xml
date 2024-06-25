@@ -92,6 +92,7 @@
     <module>streaming</module>
     <module>sql/api</module>
     <module>sql/catalyst</module>
+    <module>sql/connect-api</module>
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>
@@ -103,7 +104,6 @@
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/shaded-grpc-deps</module>
     <module>connector/connect/server</module>
     <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>

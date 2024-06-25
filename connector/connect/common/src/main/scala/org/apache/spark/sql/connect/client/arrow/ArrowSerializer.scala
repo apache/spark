@@ -25,13 +25,13 @@ import java.util.{Map => JMap, Objects}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.ipc.{ArrowStreamWriter, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{IpcOption, MessageSerializer}
 import org.apache.arrow.vector.util.Text
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams

@@ -24,10 +24,10 @@ import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
-import com.google.protobuf.util.JsonFormat
-import com.google.protobuf.util.JsonFormat.TypeRegistry
-import io.grpc.inprocess.InProcessChannelBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.sparkproject.connect.grpc.inprocess.InProcessChannelBuilder
+import org.sparkproject.connect.protobuf.util.JsonFormat
+import org.sparkproject.connect.protobuf.util.JsonFormat.TypeRegistry
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
@@ -3242,7 +3242,7 @@ class PlanGenerationTestSuite
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
+    session.newDataFrame(_.setExtension(org.sparkproject.connect.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3256,7 +3256,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(Column(_.setExtension(org.sparkproject.connect.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {

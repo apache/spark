@@ -39,11 +39,6 @@
             <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency> <!-- necessary for Java 9+ -->
-            <groupId>org.apache.tomcat</groupId>
-            <artifactId>annotations-api</artifactId>
-            <version>${tomcat.annotations.api.version}</version>
-        </dependency>
         <!--
           This spark-tags test-dep is needed even though it isn't used in this module,
           otherwise testing-cmds that excludethem will yield errors.

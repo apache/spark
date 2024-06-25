@@ -20,9 +20,9 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-import io.grpc.Server
-import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import org.scalatest.BeforeAndAfterEach
+import org.sparkproject.connect.grpc.Server
+import org.sparkproject.connect.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.client.{DummySparkConnectService, SparkConnectClient}
