@@ -613,11 +613,8 @@ class RelationCommon(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    SOURCE_INFO_FIELD_NUMBER: builtins.int
     PLAN_ID_FIELD_NUMBER: builtins.int
     ORIGIN_FIELD_NUMBER: builtins.int
-    source_info: builtins.str
-    """(Optional) Shared relation metadata."""
     plan_id: builtins.int
     """(Optional) A per-client globally unique id for a given connect plan."""
     @property
@@ -626,7 +623,6 @@ class RelationCommon(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        source_info: builtins.str = ...,
         plan_id: builtins.int | None = ...,
         origin: pyspark.sql.connect.proto.common_pb2.Origin | None = ...,
     ) -> None: ...
@@ -639,14 +635,7 @@ class RelationCommon(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_plan_id",
-            b"_plan_id",
-            "origin",
-            b"origin",
-            "plan_id",
-            b"plan_id",
-            "source_info",
-            b"source_info",
+            "_plan_id", b"_plan_id", "origin", b"origin", "plan_id", b"plan_id"
         ],
     ) -> None: ...
     def WhichOneof(
