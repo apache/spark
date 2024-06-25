@@ -621,16 +621,16 @@ class DataFrameTestsMixin:
                 |"""
             self.assertEqual(re.sub(pattern, "", expected1), df.__repr__())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
-                expected2 = """+---+-----+
+                expected2 = """+---+---+
                 ||key|val|
                 |+---+---+
                 ||  1|  1|
                 ||222|222|
-                |+---+-----+
+                |+---+---+
                 |"""
                 self.assertEqual(re.sub(pattern, "", expected2), df.__repr__())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
-                    expected3 = """+---+-----+
+                    expected3 = """+---+---+
                     ||key|val|
                     |+---+---+
                     ||  1|  1|
