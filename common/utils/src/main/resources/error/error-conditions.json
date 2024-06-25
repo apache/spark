@@ -4648,7 +4648,7 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Python UDFs with a lambda function at a higher order function is unsupported. However, a Python UDF <funcName> was found."
+          "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       }
     },
