@@ -20,8 +20,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
+
+object ListStateImpl {
+  def columnFamilySchema(stateName: String): ColumnFamilySchemaV1 = {
+    new ColumnFamilySchemaV1(
+      stateName,
+      KEY_ROW_SCHEMA,
+      VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+      true)
+  }
+}
 
 /**
  * Provides concrete implementation for list of values associated with a state variable

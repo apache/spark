@@ -19,10 +19,20 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
+object ListStateImplWithTTL {
+  def columnFamilySchema(stateName: String): ColumnFamilySchemaV1 = {
+    new ColumnFamilySchemaV1(
+      stateName,
+      KEY_ROW_SCHEMA,
+      VALUE_ROW_SCHEMA_WITH_TTL,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+      true)
+  }
+}
 /**
  * Class that provides a concrete implementation for a list state state associated with state
  * variables (with ttl expiration support) used in the streaming transformWithState operator.
