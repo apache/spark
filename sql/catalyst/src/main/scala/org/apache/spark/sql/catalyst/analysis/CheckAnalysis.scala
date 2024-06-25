@@ -259,7 +259,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
             val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
             hof.failAnalysis(
-              errorClass = "INVALID_LAMBDA_FUNCTION_CALL.PYTHON_UDF",
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
               messageParameters = Map("funcName" -> toSQLExpr(u)))
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
