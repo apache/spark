@@ -534,101 +534,129 @@ abstract class OrcQueryTest extends OrcTest {
     assert(df.count() == 20)
   }
 
-  test("Enabling/disabling ignoreCorruptFiles") {
-    def testIgnoreCorruptFiles(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
+  protected def testIgnoreCorruptFiles(): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+      spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+      val df = spark.read.orc(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString,
+        new Path(basePath, "third").toString)
+      checkAnswer(df, Seq(Row(0), Row(1)))
     }
+  }
 
-    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.schema("a long").orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
+  protected def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+      spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+      val df = spark.read.schema("a long").orc(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString,
+        new Path(basePath, "third").toString)
+      checkAnswer(df, Seq(Row(0), Row(1)))
     }
+  }
 
-    def testAllCorruptFiles(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
-        val df = spark.read.orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString)
-        assert(df.count() == 0)
-      }
+  protected def testAllCorruptFiles(): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+      val df = spark.read.orc(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString)
+      assert(df.count() == 0)
     }
+  }
 
-    def testAllCorruptFilesWithoutSchemaInfer(): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
-        val df = spark.read.schema("a long").orc(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString)
-        assert(df.count() == 0)
-      }
+  def testAllCorruptFilesWithoutSchemaInfer(): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+      val df = spark.read.schema("a long").orc(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString)
+      assert(df.count() == 0)
     }
+  }
 
-    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+  protected def testIgnoreCorruptFilesEffective(): Unit = {
+    testIgnoreCorruptFiles()
+    testIgnoreCorruptFilesWithoutSchemaInfer()
+    checkError(
+      exception = intercept[AnalysisException] {
+        testAllCorruptFiles()
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "ORC")
+    )
+    testAllCorruptFilesWithoutSchemaInfer()
+  }
+
+  protected def testIgnoreCorruptFilesIneffective(): Unit = {
+    val e1 = intercept[SparkException] {
       testIgnoreCorruptFiles()
+    }
+    assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
+    assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
+      // Hive ORC table scan uses a different code path and has one more error stack
+      e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
+    val e2 = intercept[SparkException] {
       testIgnoreCorruptFilesWithoutSchemaInfer()
-      checkError(
-        exception = intercept[AnalysisException] {
-          testAllCorruptFiles()
-        },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
-        parameters = Map("format" -> "ORC")
-      )
+    }
+    assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
+    assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
+      // Hive ORC table scan uses a different code path and has one more error stack
+      e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testAllCorruptFiles()
+      },
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+    val e4 = intercept[SparkException] {
       testAllCorruptFilesWithoutSchemaInfer()
+    }
+    assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
+    assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
+      // Hive ORC table scan uses a different code path and has one more error stack
+      e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      testIgnoreCorruptFilesEffective()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-      val e1 = intercept[SparkException] {
-        testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesIneffective()
+    }
+  }
+
+  test("SPARK-39901: Enabling/disabling ignoreCorruptFilesErrorClasses") {
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+        "org.apache.orc.FileFormatException:Malformed ORC file") {
+          testIgnoreCorruptFilesEffective()
       }
-      assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
-      assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
-        // Hive ORC table scan uses a different code path and has one more error stack
-        e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
-      val e2 = intercept[SparkException] {
-        testIgnoreCorruptFilesWithoutSchemaInfer()
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+        "java.io.RuntimeException:Malformed ORC file") {
+        testIgnoreCorruptFilesIneffective()
       }
-      assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
-      assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
-        // Hive ORC table scan uses a different code path and has one more error stack
-        e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
-      checkErrorMatchPVals(
-        exception = intercept[SparkException] {
-          testAllCorruptFiles()
-        },
-        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-        parameters = Map("path" -> "file:.*")
-      )
-      val e4 = intercept[SparkException] {
-        testAllCorruptFilesWithoutSchemaInfer()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+        "org.apache.orc.FileFormatException:Malformed ORC file") {
+        testIgnoreCorruptFilesIneffective()
       }
-      assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
-      assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
-        // Hive ORC table scan uses a different code path and has one more error stack
-        e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
     }
   }
 

@@ -42,7 +42,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{IgnoreCorruptFilesError, IgnoreCorruptFilesUtils, SerializableConfiguration, ShutdownHookManager, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class NewHadoopPartition(
@@ -69,6 +69,8 @@ private[spark] class NewHadoopPartition(
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param ignoreCorruptFiles Whether to ignore corrupt files.
  * @param ignoreMissingFiles Whether to ignore missing files.
+ * @param ignoreCorruptFilesErrorClasses Error classes used to determine whether corput files
+ *   need to be ignored.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
@@ -81,7 +83,8 @@ class NewHadoopRDD[K, V](
     valueClass: Class[V],
     @transient private val _conf: Configuration,
     ignoreCorruptFiles: Boolean,
-    ignoreMissingFiles: Boolean)
+    ignoreMissingFiles: Boolean,
+    ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError])
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
@@ -97,7 +100,9 @@ class NewHadoopRDD[K, V](
       valueClass,
       _conf,
       ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
-      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES))
+      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES),
+      ignoreCorruptFilesErrorClasses = IgnoreCorruptFilesUtils.errorClassesStrToSeq(
+        sc.conf.get(IGNORE_CORRUPT_FILES_ERROR_CLASSES)))
   }
 
 
@@ -253,7 +258,8 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
-          case e: IOException if ignoreCorruptFiles =>
+          case e: IOException if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+            ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e) =>
             logWarning(
               log"Skipped the rest content in the corrupted file: " +
                 log"${MDC(PATH, split.serializableHadoopSplit)}",
@@ -282,7 +288,8 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
-            case e: IOException if ignoreCorruptFiles =>
+            case e: IOException if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+              ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e) =>
               logWarning(
                 log"Skipped the rest content in the corrupted file: " +
                   log"${MDC(PATH, split.serializableHadoopSplit)}",

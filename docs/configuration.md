@@ -2266,6 +2266,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.files.ignoreCorruptFiles.errorClasses</code></td>
+  <td>false</td>
+  <td>
+    A comma-separated list of error classes used to determine which exceptions can be ignored, allowing Spark jobs to 
+    continue running when encountering corrupted files. You can specify the key message of an exception by adding a 
+    colon (:) after the class name, for example: `java.lang.IOException:not a SequenceFile file`. This configuration 
+    is effective only when `spark.files.ignoreCorruptFiles` is set to true. If this configuration is not set, the 
+    behavior of Spark handling corrupted files is the same as before.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.files.ignoreMissingFiles</code></td>
   <td>false</td>
   <td>

@@ -36,8 +36,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{IgnoreCorruptFilesUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
@@ -57,6 +57,7 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
     forTimestampNTZ = true)
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreCorruptFilesErrorClasses = options.ignoreCorruptFilesErrorClasses
   private val ignoreMissingFiles = options.ignoreMissingFiles
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
   private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
@@ -110,7 +111,9 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
             logWarning("Skipped missing file", e)
             Some(StructType(Nil))
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
-          case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
+          case e @ (_: IOException | _: RuntimeException)
+            if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+              ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e.asInstanceOf[Exception]) =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             Some(StructType(Nil))
         }

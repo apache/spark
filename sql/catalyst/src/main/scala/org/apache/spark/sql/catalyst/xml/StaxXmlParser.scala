@@ -44,6 +44,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 class StaxXmlParser(
     schema: StructType,
@@ -655,7 +656,10 @@ class XmlTokenizer(
             e)
         case NonFatal(e) =>
           ExceptionUtils.getRootCause(e) match {
-            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+            case _: RuntimeException | _: IOException if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+              options.ignoreCorruptFiles,
+              options.ignoreCorruptFilesErrorClasses,
+              e.asInstanceOf[Exception]) =>
               logWarning(
                 "Skipping the rest of" +
                   " the content in the corrupted file during schema inference",

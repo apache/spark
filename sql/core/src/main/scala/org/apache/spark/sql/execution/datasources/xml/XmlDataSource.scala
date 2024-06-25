@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 /**
  * Common functions for parsing XML files
@@ -190,7 +191,11 @@ object MultiLineXmlDataSource extends XmlDataSource {
             Iterator.empty[String]
           case NonFatal(e) =>
             ExceptionUtils.getRootCause(e) match {
-              case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
+              case _: RuntimeException | _: IOException
+                if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+                  parsedOptions.ignoreCorruptFiles,
+                  parsedOptions.ignoreCorruptFilesErrorClasses,
+                  e.asInstanceOf[Exception]) =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
                 Iterator.empty[String]
               case o => throw o

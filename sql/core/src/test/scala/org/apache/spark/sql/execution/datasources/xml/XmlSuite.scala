@@ -2886,6 +2886,48 @@ class XmlSuite
     }
   }
 
+  test("SPARK-39901: Enabling/disabling ignoreCorruptFilesErrorClasses") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+        val e = intercept[SparkException] {
+          spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", false)
+            .xml(inputFile.toURI.toString)
+            .collect()
+        }
+        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
+        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+      }
+
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.RuntimeException:Unexpected end of input stream") {
+          val e = intercept[SparkException] {
+            spark.read
+              .option("rowTag", "ROW")
+              .option("multiLine", false)
+              .xml(inputFile.toURI.toString)
+              .collect()
+          }
+          assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
+          assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        }
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+          val result = spark.read
+            .option("rowTag", "ROW")
+            .option("multiLine", false)
+            .xml(inputFile.toURI.toString)
+            .collect()
+          assert(result.isEmpty)
+        }
+      }
+    })
+  }
+
   test("SPARK-46248: Read from a corrupted compressed file") {
     withTempDir { dir =>
       val format = "xml"

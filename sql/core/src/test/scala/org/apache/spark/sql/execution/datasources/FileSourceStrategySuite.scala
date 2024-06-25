@@ -457,7 +457,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("spark.files.ignoreCorruptFiles should work in SQL") {
+  protected def withCorruptFile(f: File => Unit): Unit = {
     val inputFile = File.createTempFile("input-", ".gz")
     try {
       // Create a corrupt gzip file
@@ -476,6 +476,14 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       } finally {
         o.close()
       }
+      f(inputFile)
+    } finally {
+      inputFile.delete()
+    }
+  }
+
+  test("spark.files.ignoreCorruptFiles should work in SQL") {
+    withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val e = intercept[SparkException] {
           spark.read.text(inputFile.toURI.toString).collect()
@@ -486,9 +494,35 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
       }
-    } finally {
-      inputFile.delete()
-    }
+    })
+  }
+
+  test("SPARK-39901 spark.files.ignoreCorruptFilesErrorClasses should work in SQL") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+        val e = intercept[SparkException] {
+          spark.read.text(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.RuntimeException:Unexpected end of input stream") {
+          val e = intercept[SparkException] {
+            spark.read.text(inputFile.toURI.toString).collect()
+          }
+          assert(e.getCause.isInstanceOf[EOFException])
+          assert(e.getCause.getMessage === "Unexpected end of input stream")
+        }
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+          assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+        }
+      }
+    })
   }
 
   test("[SPARK-18753] keep pushed-down null literal as a filter in Spark-side post-filter") {

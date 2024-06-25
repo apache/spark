@@ -44,7 +44,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{IgnoreCorruptFilesError, IgnoreCorruptFilesUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 object OrcUtils extends Logging {
@@ -72,8 +72,11 @@ object OrcUtils extends Logging {
     paths
   }
 
-  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[TypeDescription] = {
+  def readSchema(
+      file: Path,
+      conf: Configuration,
+      ignoreCorruptFiles: Boolean,
+      ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError]): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
@@ -87,7 +90,8 @@ object OrcUtils extends Logging {
       }
     } catch {
       case e: org.apache.orc.FileFormatException =>
-        if (ignoreCorruptFiles) {
+        if (IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+          ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e)) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
           None
         } else {
@@ -146,8 +150,12 @@ object OrcUtils extends Logging {
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
+    val ignoreCorruptFilesErrorClasses =
+      new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFilesErrorClasses
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
+    files.iterator.map(file =>
+      readSchema(file.getPath, conf, ignoreCorruptFiles, ignoreCorruptFilesErrorClasses)
+    ).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         toCatalystSchema(schema)
@@ -159,9 +167,17 @@ object OrcUtils extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    files: Seq[FileStatus],
+    conf: Configuration,
+    ignoreCorruptFiles: Boolean,
+    ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError]): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
+      OrcUtils.readSchema(
+        currentFile.getPath,
+        conf,
+        ignoreCorruptFiles,
+        ignoreCorruptFilesErrorClasses
+      ).map(toCatalystSchema)
     }.flatten
   }
 

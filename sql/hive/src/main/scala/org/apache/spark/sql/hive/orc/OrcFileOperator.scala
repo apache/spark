@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{IgnoreCorruptFilesError, IgnoreCorruptFilesUtils, ThreadUtils}
 
 private[hive] object OrcFileOperator extends Logging {
   /**
@@ -53,7 +53,8 @@ private[hive] object OrcFileOperator extends Logging {
    */
   def getFileReader(basePath: String,
       config: Option[Configuration] = None,
-      ignoreCorruptFiles: Boolean = false)
+      ignoreCorruptFiles: Boolean = false,
+      ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError] = Seq.empty)
       : Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
@@ -77,7 +78,8 @@ private[hive] object OrcFileOperator extends Logging {
         Some(OrcFile.createReader(fs, path))
       } catch {
         case e: IOException =>
-          if (ignoreCorruptFiles) {
+          if (IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+            ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e)) {
             logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
             None
           } else {
@@ -90,16 +92,19 @@ private[hive] object OrcFileOperator extends Logging {
     }
   }
 
-  def readSchema(paths: Seq[String], conf: Option[Configuration], ignoreCorruptFiles: Boolean)
+  def readSchema(
+      paths: Seq[String], conf: Option[Configuration],
+      ignoreCorruptFiles: Boolean, ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError])
       : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.iterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
-      case Some(reader) =>
-        val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-        val schema = readerInspector.getTypeName
-        logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+    paths.iterator.map(getFileReader(_, conf, ignoreCorruptFiles, ignoreCorruptFilesErrorClasses))
+      .collectFirst {
+        case Some(reader) =>
+          val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+          val schema = readerInspector.getTypeName
+          logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
+          CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
     }
   }
 
@@ -108,7 +113,8 @@ private[hive] object OrcFileOperator extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-      partFiles: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean)
+      partFiles: Seq[FileStatus], conf: Configuration,
+      ignoreCorruptFiles: Boolean, ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError])
       : Seq[StructType] = {
     ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
       val file = currentFile.getPath.toString

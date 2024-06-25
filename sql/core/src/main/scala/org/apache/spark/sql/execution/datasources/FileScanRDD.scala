@@ -38,8 +38,8 @@ import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.{IgnoreCorruptFilesUtils, NextIterator}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.NextIterator
 
 /**
  * A part (i.e. "block") of a single file that should be read, along with partition column values
@@ -87,6 +87,7 @@ class FileScanRDD(
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreCorruptFilesErrorClasses = options.ignoreCorruptFilesErrorClasses
   private val ignoreMissingFiles = options.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
@@ -266,7 +267,11 @@ class FileScanRDD(
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                  case e @ (_: RuntimeException | _: IOException)
+                    if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+                      ignoreCorruptFiles,
+                      ignoreCorruptFilesErrorClasses,
+                      e.asInstanceOf[Exception]) =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
                       log"${MDC(PATH, currentFile)}", e)
                     finished = true

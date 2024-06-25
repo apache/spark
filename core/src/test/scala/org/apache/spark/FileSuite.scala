@@ -515,7 +515,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
-  test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {
+  protected def withCorruptFile(f: File => Unit): Unit = {
     val inputFile = File.createTempFile("input-", ".gz")
     try {
       // Create a corrupt gzip file
@@ -534,7 +534,14 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       } finally {
         o.close()
       }
+      f(inputFile)
+    } finally {
+      inputFile.delete()
+    }
+  }
 
+  test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {
+    withCorruptFile(inputFile => {
       // Reading a corrupt gzip file should throw EOFException
       sc = new SparkContext("local", "test")
       // Test HadoopRDD
@@ -567,9 +574,72 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
           classOf[LongWritable],
           classOf[Text]).collect().isEmpty
       }
-    } finally {
-      inputFile.delete()
-    }
+    })
+  }
+
+  test("SPARK-39901: spark.files.ignoreCorruptFilesErrorClasses should work both " +
+    "HadoopRDD and NewHadoopRDD") {
+    withCorruptFile(inputFile => {
+      // ignoreCorrupt set false, ignoreCorruptFilesErrorClasses set with right error classes
+      var conf = new SparkConf().set(
+        IGNORE_CORRUPT_FILES_ERROR_CLASSES, "java.io.EOFException:Unexpected end of input stream")
+      sc = new SparkContext("local", "test")
+      // Test HadoopRDD
+      var e = intercept[SparkException] {
+        sc.textFile(inputFile.toURI.toString).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      // Test NewHadoopRDD
+      e = intercept[SparkException] {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      sc.stop()
+
+      // ignoreCorrupt set true, ignoreCorruptFilesErrorClasses set with wrong error classes
+      conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
+        .set(IGNORE_CORRUPT_FILES_ERROR_CLASSES,
+          "java.io.RuntimeException:Unexpected end of input stream")
+      sc = new SparkContext("local", "test", conf)
+      // Test HadoopRDD
+      e = intercept[SparkException] {
+        sc.textFile(inputFile.toURI.toString).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      // Test NewHadoopRDD
+      e = intercept[SparkException] {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      sc.stop()
+
+      // ignoreCorrupt set true, ignoreCorruptFilesErrorClasses set with right error classes
+      conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
+        .set(IGNORE_CORRUPT_FILES_ERROR_CLASSES, "java.io.EOFException:Unexpected end of input stream")
+      sc = new SparkContext("local", "test", conf)
+      // Test HadoopRDD
+      assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
+      // Test NewHadoopRDD
+      assert {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect().isEmpty
+      }
+    })
   }
 
   test("spark.hadoopRDD.ignoreEmptySplits work correctly (old Hadoop API)") {

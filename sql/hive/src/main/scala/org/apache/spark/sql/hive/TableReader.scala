@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{IgnoreCorruptFilesUtils, SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -331,7 +331,10 @@ class HadoopTableReader(
       classOf[Writable],
       _minSplitsPerRDD,
       ignoreCorruptFiles = conf.ignoreCorruptFiles,
-      ignoreMissingFiles = conf.ignoreMissingFiles)
+      ignoreMissingFiles = conf.ignoreMissingFiles,
+      ignoreCorruptFilesErrorClasses = IgnoreCorruptFilesUtils.errorClassesStrToSeq(
+        conf.ignoreCorruptFilesErrorClasses)
+    )
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
@@ -367,7 +370,10 @@ class HadoopTableReader(
       classOf[Writable],
       jobConf,
       ignoreCorruptFiles = conf.ignoreCorruptFiles,
-      ignoreMissingFiles = conf.ignoreMissingFiles)
+      ignoreMissingFiles = conf.ignoreMissingFiles,
+      ignoreCorruptFilesErrorClasses = IgnoreCorruptFilesUtils.errorClassesStrToSeq(
+        conf.ignoreCorruptFilesErrorClasses)
+    )
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)

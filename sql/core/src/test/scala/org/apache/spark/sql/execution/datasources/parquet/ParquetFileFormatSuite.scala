@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.time.{Duration, Period}
-
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -37,7 +36,9 @@ abstract class ParquetFileFormatSuite
   override protected def dataSourceFormat = "parquet"
 
   test("read parquet footers in parallel") {
-    def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
+    def testReadFooters(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String = ""): Unit = {
       withTempDir { dir =>
         val fs = FileSystem.get(spark.sessionState.newHadoopConf())
         val basePath = dir.getCanonicalPath
@@ -54,7 +55,9 @@ abstract class ParquetFileFormatSuite
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          spark.sessionState.newHadoopConf(), fileStatuses,
+          ignoreCorruptFiles,
+          IgnoreCorruptFilesUtils.errorClassesStrToSeq(ignoreCorruptFilesErrorClasses))
 
         assert(footers.size == 2)
       }
@@ -64,6 +67,22 @@ abstract class ParquetFileFormatSuite
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
         testReadFooters(false)
+      }.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+
+    testReadFooters(true, "java.lang.RuntimeException:not a Parquet file")
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testReadFooters(true, "java.lang.EOFException:not a Parquet file")
+      }.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testReadFooters(false, "java.lang.RuntimeException:not a Parquet file")
       }.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")

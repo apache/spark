@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.logging.log4j.Level
@@ -32,15 +31,14 @@ import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIREC
 import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.test.{SQLTestUtilsBase, SharedSparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{IgnoreCorruptFilesError, Utils}
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -198,9 +196,12 @@ abstract class OrcSuite
 
   protected def testMergeSchemasInParallel(
       ignoreCorruptFiles: Boolean,
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      ignoreCorruptFilesErrorClasses: String,
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
+        => Seq[StructType]): Unit = {
     withSQLConf(
       SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
+      SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key -> ignoreCorruptFilesErrorClasses,
       SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
       withTempDir { dir =>
         val fs = FileSystem.get(spark.sessionState.newHadoopConf())
@@ -229,11 +230,34 @@ abstract class OrcSuite
   }
 
   protected def testMergeSchemasInParallel(
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
-    testMergeSchemasInParallel(true, schemaReader)
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
+        => Seq[StructType]): Unit = {
+    testMergeSchemasInParallel(true, "", schemaReader)
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
-        testMergeSchemasInParallel(false, schemaReader)
+        testMergeSchemasInParallel(false, "", schemaReader)
+      }.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+
+    testMergeSchemasInParallel(true,
+      "org.apache.orc.FileFormatException:Malformed ORC file",
+      schemaReader)
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testMergeSchemasInParallel(true,
+          "java.io.RuntimeException:Malformed ORC file",
+          schemaReader)
+      }.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testMergeSchemasInParallel(false,
+          "org.apache.orc.FileFormatException:Malformed ORC file",
+          schemaReader)
       }.getCause.getCause.asInstanceOf[SparkException],
       errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
       parameters = Map("path" -> "file:.*")
