@@ -346,6 +346,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       PullOutNondeterministic),
     Batch("ScalaUDF", Once,
       HandleNullInputsForUDF),
+    // The below batch must be put after `HandleNullInputsForUDF`, as `HandleNullInputsForUDF`
+    // may wrap the `ScalaUDF` with `If` expression to return null for null inputs, so the
+    // result can be null even if `ScalaUDF#nullable` is false. We need to update the nullability
+    // of the UDF output attributes in downstream operators.
     Batch("UpdateNullability", Once,
       UpdateAttributeNullability),
     Batch("UDF", Once,
