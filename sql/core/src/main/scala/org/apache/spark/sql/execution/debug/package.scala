@@ -316,7 +316,7 @@ package object debug {
     val accumulator = new DebugAccumulator
     accumulator.register(
       session.sparkContext,
-      Some(s"${child.simpleStringWithNodeId()} top values for ${sampleColumns.mkString(",")}"))
+      Some(s"${child.nodeName} top values for ${sampleColumns.mkString(",")}"))
 
     override protected def withNewChildInternal(newChild: SparkPlan): DebugInlineColumnsCountExec =
       copy(child = newChild)

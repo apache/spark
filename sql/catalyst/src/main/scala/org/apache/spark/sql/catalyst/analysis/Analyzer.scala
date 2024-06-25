@@ -4138,7 +4138,10 @@ object DebugInlineColumnsCountInference extends Rule[LogicalPlan] {
     plan.transform {
       case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
       _, _, _), sampleColumns) if sampleColumns.isEmpty =>
-          DebugInlineColumnsCount(j, leftKeys)
+        val left = DebugInlineColumnsCount(j.left, leftKeys)
+        val right = DebugInlineColumnsCount(j.right, rightKeys)
+        val joinWithInputDebug = j.withNewChildren(Seq(left, right))
+        DebugInlineColumnsCount(joinWithInputDebug, leftKeys)
     }
   }
 }
