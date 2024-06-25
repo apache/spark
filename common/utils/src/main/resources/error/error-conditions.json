@@ -2425,6 +2425,11 @@
         "message" : [
           "A higher order function expects <expectedNumArgs> arguments, but got <actualNumArgs>."
         ]
+      },
+      "PYTHON_UDF" : {
+        "message" : [
+          "Python UDFs should be used in a lambda function at a higher order function. However, <funcName> was a Python UDF."
+        ]
       }
     },
     "sqlState" : "42K0D"
