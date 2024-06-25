@@ -20,6 +20,7 @@ import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
@@ -323,8 +324,9 @@ public final class CollationFactory {
        */
       protected static SparkException collationInvalidNameException(String collationName) {
         Map<String, String> params = new HashMap<>();
+        final int maxSuggestions = 3;
         params.put("collationName", collationName);
-        params.put("proposal", getClosestSuggestionOnInvalidName(collationName));
+        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
         return new SparkException("COLLATION_INVALID_NAME",
           SparkException.constructMessageParams(params), null);
       }
@@ -336,15 +338,6 @@ public final class CollationFactory {
           return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
-        }
-      }
-
-      private static boolean isCollationNameValid(String collationName) {
-        try {
-          collationNameToId(collationName);
-          return true;
-        } catch (SparkException e) {
-          return false;
         }
       }
 
@@ -846,7 +839,8 @@ public final class CollationFactory {
   /**
    * Returns same string if collation name is valid or the closest suggestion if it is invalid.
    */
-  public static String getClosestSuggestionOnInvalidName(String collationName) {
+  public static String getClosestSuggestionsOnInvalidName(
+      String collationName, int maxSuggestions) {
     String[] validRootNames;
     String[] validModifiers;
     if (collationName.startsWith("UTF8_")) {
@@ -882,13 +876,46 @@ public final class CollationFactory {
       modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
     }
 
-    // Find the closest locale name.
     final String finalLocaleName = localeName;
-    String closestLocale = Collections.min(List.of(validRootNames), Comparator.comparingInt(
-            c -> UTF8String.fromString(c.toUpperCase()).levenshteinDistance(
-                    UTF8String.fromString(finalLocaleName))));
-    final String proposal = closestLocale + String.join("", modifiers);
-    assert(Collation.CollationSpec.isCollationNameValid(proposal));
-    return proposal;
+    Comparator<String> distanceComparator = (c1, c2) -> {
+      int distance1 = UTF8String.fromString(c1.toUpperCase())
+              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+      int distance2 = UTF8String.fromString(c2.toUpperCase())
+              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+      return Integer.compare(distance1, distance2);
+    };
+
+    String[] rootNamesByDistance = Arrays.copyOf(validRootNames, validRootNames.length);
+    Arrays.sort(rootNamesByDistance, distanceComparator);
+    Function<String, Boolean> isCollationNameValid = name -> {
+      try {
+        collationNameToId(name);
+        return true;
+      } catch (SparkException e) {
+        return false;
+      }
+    };
+
+    final int suggestionThreshold = 3;
+    final ArrayList<String> suggestions = new ArrayList<>(maxSuggestions);
+    for (int i = 0; i < maxSuggestions; i++) {
+      // Add at least one suggestion.
+      // Add others if distance from the original is lower than threshold.
+      String suggestion = rootNamesByDistance[i] + String.join("", modifiers);
+      assert(isCollationNameValid.apply(suggestion));
+      if (suggestions.isEmpty()) {
+        suggestions.add(suggestion);
+      } else {
+        int distance = UTF8String.fromString(suggestion.toUpperCase())
+          .levenshteinDistance(UTF8String.fromString(collationName.toUpperCase()));
+        if (distance < suggestionThreshold) {
+          suggestions.add(suggestion);
+        } else {
+          break;
+        }
+      }
+    }
+
+    return String.join(", ", suggestions);
   }
 }

@@ -783,7 +783,7 @@ object SQLConf {
         },
         "DEFAULT_COLLATION",
         collationName => Map(
-          "proposal" -> CollationFactory.getClosestSuggestionOnInvalidName(collationName)))
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =

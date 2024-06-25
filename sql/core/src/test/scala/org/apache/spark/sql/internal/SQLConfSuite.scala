@@ -515,7 +515,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "confValue" -> "UNICODE_C",
         "confName" -> "spark.sql.session.collation.default",
-        "proposal" -> "UNICODE"
+        "proposals" -> "UNICODE"
       ))
 
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
