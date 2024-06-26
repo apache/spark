@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.Collections
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkIllegalArgumentException
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -107,28 +109,41 @@ private[sql] object CatalogV2Util {
    * Apply properties changes to a map and return the result.
    */
   def applyPropertiesChanges(
+      catalogName: String,
+      ident: Identifier,
       properties: Map[String, String],
       changes: Seq[TableChange]): Map[String, String] = {
-    applyPropertiesChanges(properties.asJava, changes).asScala.toMap
+    applyPropertiesChanges(catalogName, ident, properties.asJava, changes).asScala.toMap
   }
 
   /**
    * Apply properties changes to a Java map and return the result.
    */
   def applyPropertiesChanges(
+      catalogName: String,
+      ident: Identifier,
       properties: util.Map[String, String],
       changes: Seq[TableChange]): util.Map[String, String] = {
     val newProperties = new util.HashMap[String, String](properties)
 
+    val nonexistentKeys = mutable.ArrayBuilder.make[String]
     changes.foreach {
       case set: SetProperty =>
         newProperties.put(set.property, set.value)
 
       case unset: RemoveProperty =>
+        if (!unset.ifExists && !properties.containsKey(unset.property)) {
+          nonexistentKeys += unset.property
+        }
         newProperties.remove(unset.property)
 
       case _ =>
       // ignore non-property changes
+    }
+
+    if (!nonexistentKeys.result().isEmpty) {
+      throw QueryCompilationErrors.unsetNonExistentPropertiesError(
+        nonexistentKeys.result().toSeq, catalogName +: ident.asMultipartIdentifier)
     }
 
     Collections.unmodifiableMap(newProperties)

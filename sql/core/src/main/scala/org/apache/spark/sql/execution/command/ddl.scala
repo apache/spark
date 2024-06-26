@@ -340,7 +340,7 @@ case class AlterTableUnsetPropertiesCommand(
         && key != TableCatalog.PROP_COMMENT)
       if (nonexistentKeys.nonEmpty) {
         throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, table.identifier)
+          nonexistentKeys, table.identifier.nameParts)
       }
     }
     // If comment is in the table property, we reset it to None

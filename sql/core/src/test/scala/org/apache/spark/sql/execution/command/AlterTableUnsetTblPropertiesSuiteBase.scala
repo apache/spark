@@ -25,21 +25,21 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. SET TBLPROPERTIES`
+ * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES`
  * command that check V1 and V2 table catalogs. The tests that cannot run for all supported
  * catalogs are located in more specific test suites:
  *
  *   - V2 table catalog tests:
- *     `org.apache.spark.sql.execution.command.v2.AlterTableSetTblPropertiesSuite`
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableUnsetTblPropertiesSuite`
  *   - V1 table catalog tests:
- *     `org.apache.spark.sql.execution.command.v1.AlterTableSetTblPropertiesSuiteBase`
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuiteBase`
  *     - V1 In-Memory catalog:
- *       `org.apache.spark.sql.execution.command.v1.AlterTableSetTblPropertiesSuite`
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuite`
  *     - V1 Hive External catalog:
- *        `org.apache.spark.sql.hive.execution.command.AlterTableSetTblPropertiesSuite`
+ *        `org.apache.spark.sql.hive.execution.command.AlterTableUnsetTblPropertiesSuite`
  */
-trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
-  override val command = "ALTER TABLE .. SET TBLPROPERTIES"
+trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "ALTER TABLE .. UNSET TBLPROPERTIES"
 
   def checkTblProps(tableIdent: TableIdentifier, expectedTblProps: Map[String, String]): Unit
 
@@ -47,36 +47,51 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val sqlText = s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1')"
+      val sqlText = s"ALTER TABLE $t UNSET TBLPROPERTIES ('k1')"
       checkError(
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> toSQLId(t)),
-      context = ExpectedContext(
-        fragment = t,
-        start = 12,
-        stop = 11 + t.length)
+        context = ExpectedContext(
+          fragment = t,
+          start = 12,
+          stop = 11 + t.length)
       )
     }
   }
 
-  test("alter table set tblproperties") {
+  test("alter table unset tblproperties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
       val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
       checkTblProps(tableIdent, Map.empty[String, String])
 
-      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3')")
-      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3"))
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3', 'k4' = 'v4')")
+      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3", "k4" -> "v4"))
 
+      // unset table properties
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k1')")
+      checkTblProps(tableIdent, Map("k2" -> "v2", "k3" -> "v3", "k4" -> "v4"))
+
+      // unset table properties without explicitly specifying database
       sql(s"USE $catalog.ns")
-      sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3')")
-      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3"))
+      sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('k2')")
+      checkTblProps(tableIdent, Map("k3" -> "v3", "k4" -> "v4"))
 
-      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v8')")
-      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v8", "k3" -> "v3"))
+      // property to unset does not exist
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k3', 'k5')")
+        },
+        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
+        parameters = Map("properties" -> "`k5`", "table" -> toSQLId(tableIdent.nameParts))
+      )
+
+      // property to unset does not exist, but "IF EXISTS" is specified
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('k3', 'k5')")
+      checkTblProps(tableIdent, Map("k4" -> "v4"))
     }
   }
 
@@ -91,7 +106,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespaceAndTable("ns", "tbl") { t =>
-          val sqlText = s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='bar')"
+          val sqlText = s"ALTER TABLE $t UNSET TBLPROPERTIES ('$key')"
           checkError(
             exception = intercept[ParseException] {
               sql(sqlText)
@@ -104,7 +119,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
             context = ExpectedContext(
               fragment = sqlText,
               start = 0,
-              stop = 40 + t.length + key.length))
+              stop = 36 + t.length + key.length))
         }
       }
     }
@@ -118,7 +133,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
             val originValue = getTblPropertyValue(tableIdent, key)
             assert(originValue != "bar", "reserved properties should not have side effects")
 
-            sql(s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='newValue')")
+            sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('$key')")
             assert(getTblPropertyValue(tableIdent, key) == originValue,
               "reserved properties should not have side effects")
           }

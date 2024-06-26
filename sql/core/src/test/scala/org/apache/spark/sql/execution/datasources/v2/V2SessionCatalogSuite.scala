@@ -323,7 +323,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
-    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1", false))
     val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map())
 
@@ -341,7 +341,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(filterV2TableProperties(table.properties) == Map())
 
-    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1", true))
     val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map())
 
