@@ -25,12 +25,11 @@ import org.apache.spark.sql.test.SharedSparkSession
  * SQL Scripting interpreter tests.
  * Output from the parser is provided to the interpreter.
  * Output from the interpreter (iterator over executable statements) is then checked - statements
- * are executed and output DataFrames are compared with expected outputs.
+ *   are executed and output DataFrames are compared with expected outputs.
  */
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(
-      sqlText: String, expected: Seq[Seq[Row]]): Unit = {
+  private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
     val interpreter = SqlScriptingInterpreter()
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
     val executionPlan = interpreter.buildExecutionPlan(compoundBody)
@@ -45,7 +44,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }.toArray
 
     assert(result.length == expected.length)
-    result.zip(expected).foreach{ case (df, expectedAnswer) => checkAnswer(df, expectedAnswer)}
+    result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
 
   // Tests
@@ -68,8 +67,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // select with filter
-        Seq(Row(1))
-      )
+        Seq(Row(1)))
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -93,8 +91,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert #1
         Seq.empty[Row], // insert #2
-        Seq(Row(false))
-      )
+        Seq(Row(false)))
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -146,7 +143,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       Seq.empty[Row], // declare var
       Seq.empty[Row], // set var
       Seq(Row(4)), // select
-      Seq.empty[Row], // drop var
+      Seq.empty[Row] // drop var
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -166,7 +163,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(sqlScript, Seq.empty)
     }
     assert(e.getErrorClass === "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-    assert{e.getMessage.contains("testVarName")}
+    assert(e.getMessage.contains("testVarName"))
   }
 
   test("session vars - drop var statement") {

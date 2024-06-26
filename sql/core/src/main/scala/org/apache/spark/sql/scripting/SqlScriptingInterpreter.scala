@@ -26,12 +26,15 @@ import org.apache.spark.sql.catalyst.trees.Origin
  * SQL scripting interpreter - builds SQL script execution plan.
  */
 case class SqlScriptingInterpreter() {
+
   /**
    * Build execution plan and return statements that need to be executed,
    *   wrapped in the execution node.
    *
-   * @param compound CompoundBody for which to build the plan.
-   * @return Iterator through collection of statements to be executed.
+   * @param compound
+   *   CompoundBody for which to build the plan.
+   * @return
+   *   Iterator through collection of statements to be executed.
    */
   def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
@@ -39,8 +42,10 @@ case class SqlScriptingInterpreter() {
 
   /**
    * Fetch the name of the Create Variable plan.
-   * @param plan Plan to fetch the name from.
-   * @return Name of the variable.
+   * @param plan
+   *   Plan to fetch the name from.
+   * @return
+   *   Name of the variable.
    */
   private def getDeclareVarNameFromPlan(plan: LogicalPlan): Option[UnresolvedIdentifier] =
     plan match {
@@ -50,8 +55,10 @@ case class SqlScriptingInterpreter() {
 
   /**
    * Transform the parsed tree to the executable node.
-   * @param node Root node of the parsed tree.
-   * @return Executable statement.
+   * @param node
+   *   Root node of the parsed tree.
+   * @return
+   *   Executable statement.
    */
   private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
