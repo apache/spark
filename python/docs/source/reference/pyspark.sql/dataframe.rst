@@ -55,6 +55,7 @@ DataFrame
     DataFrame.dropna
     DataFrame.dtypes
     DataFrame.exceptAll
+    DataFrame.executionInfo
     DataFrame.explain
     DataFrame.fillna
     DataFrame.filter

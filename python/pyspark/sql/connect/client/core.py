@@ -61,6 +61,7 @@ from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
+from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.client.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
@@ -447,56 +448,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             return self._secure_channel(self.endpoint, creds)
 
 
-class MetricValue:
-    def __init__(self, name: str, value: Union[int, float], type: str):
-        self._name = name
-        self._type = type
-        self._value = value
-
-    def __repr__(self) -> str:
-        return f"<{self._name}={self._value} ({self._type})>"
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def value(self) -> Union[int, float]:
-        return self._value
-
-    @property
-    def metric_type(self) -> str:
-        return self._type
-
-
-class PlanMetrics:
-    def __init__(self, name: str, id: int, parent: int, metrics: List[MetricValue]):
-        self._name = name
-        self._id = id
-        self._parent_id = parent
-        self._metrics = metrics
-
-    def __repr__(self) -> str:
-        return f"Plan({self._name})={self._metrics}"
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def plan_id(self) -> int:
-        return self._id
-
-    @property
-    def parent_plan_id(self) -> int:
-        return self._parent_id
-
-    @property
-    def metrics(self) -> List[MetricValue]:
-        return self._metrics
-
-
-class PlanObservedMetrics:
+class PlanObservedMetrics(ObservedMetrics):
     def __init__(self, name: str, metrics: List[pb2.Expression.Literal], keys: List[str]):
         self._name = name
         self._metrics = metrics
@@ -512,6 +464,13 @@ class PlanObservedMetrics:
     @property
     def metrics(self) -> List[pb2.Expression.Literal]:
         return self._metrics
+
+    @property
+    def pairs(self) -> dict[str, Any]:
+        result = {}
+        for x in range(len(self._metrics)):
+            result[self.keys[x]] = LiteralExpression._to_value(self.metrics[x])
+        return result
 
     @property
     def keys(self) -> List[str]:
@@ -888,7 +847,7 @@ class SparkConnectClient(object):
         logger.info("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties) = self.execute_command(cmd)
+        (_, properties, _) = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
 
@@ -915,18 +874,23 @@ class SparkConnectClient(object):
 
     def to_table(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
-    ) -> Tuple["pa.Table", Optional[StructType]]:
+    ) -> Tuple["pa.Table", Optional[StructType], ExecutionInfo]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, schema, _, _, _ = self._execute_and_fetch(req, observations)
-        assert table is not None
-        return table, schema
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req, observations)
 
-    def to_pandas(self, plan: pb2.Plan, observations: Dict[str, Observation]) -> "pd.DataFrame":
+        # Create a query execution object.
+        ei = ExecutionInfo(metrics, observed_metrics)
+        assert table is not None
+        return table, schema, ei
+
+    def to_pandas(
+        self, plan: pb2.Plan, observations: Dict[str, Observation]
+    ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
         """
@@ -941,6 +905,7 @@ class SparkConnectClient(object):
             req, observations, self_destruct=self_destruct
         )
         assert table is not None
+        ei = ExecutionInfo(metrics, observed_metrics)
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
@@ -1007,7 +972,7 @@ class SparkConnectClient(object):
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
             pdf.attrs["observed_metrics"] = observed_metrics
-        return pdf
+        return pdf, ei
 
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
@@ -1051,7 +1016,7 @@ class SparkConnectClient(object):
 
     def execute_command(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
-    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any], ExecutionInfo]:
         """
         Execute given command.
         """
@@ -1060,11 +1025,15 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, _, properties = self._execute_and_fetch(req, observations or {})
+        data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
+            req, observations or {}
+        )
+        # Create a query execution object.
+        ei = ExecutionInfo(metrics, observed_metrics)
         if data is not None:
-            return (data.to_pandas(), properties)
+            return (data.to_pandas(), properties, ei)
         else:
-            return (None, properties)
+            return (None, properties, ei)
 
     def execute_command_as_iterator(
         self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
@@ -1849,6 +1818,6 @@ class SparkConnectClient(object):
         logger.info("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
-        (_, properties) = self.execute_command(cmd)
+        (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
