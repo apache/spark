@@ -349,14 +349,14 @@ package object debug {
   }
 
   class DebugAccumulator extends AccumulatorV2[String, Map[String, Long]]  {
-    val keyToCount = mutable.Map.empty[String, Long]
-    val countToKeys = mutable.TreeMap.empty[Long, mutable.Set[String]]
+    private val keyToCount = mutable.Map.empty[String, Long]
+    private val countToKeys = mutable.TreeMap.empty[Long, mutable.Set[String]]
 
     /**
      * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
      * value; for a list accumulator, Nil is zero value.
      */
-    override def isZero: Boolean = keyToCount.isEmpty
+    override def isZero: Boolean = this.synchronized { keyToCount.isEmpty }
 
     /**
      * Creates a new copy of this accumulator.
@@ -371,15 +371,15 @@ package object debug {
      * Resets this accumulator, which is zero value. i.e. call `isZero` must
      * return true.
      */
-    override def reset(): Unit = keyToCount.clear()
+    override def reset(): Unit = this.synchronized { keyToCount.clear() }
 
     /**
      * Takes the inputs and accumulates.
      */
     override def add(v: String): Unit = add(v, 1)
 
-    private def add(v: String, add: Long): Unit = {
-      val count = keyToCount.getOrElse(v, 0) + add
+    private def add(v: String, add: Long): Unit = this.synchronized {
+      val count = keyToCount.getOrElse(v, 0L) + add
       keyToCount.put(v, count)
 
       val keys = countToKeys.getOrElseUpdate(count, mutable.Set[String]())
@@ -407,16 +407,19 @@ package object debug {
      * Merges another same-type accumulator into this one and update its state, i.e. this should be
      * merge-in-place.
      */
-    override def merge(other: AccumulatorV2[String, Map[String, Long]]): Unit =
+    override def merge(other: AccumulatorV2[String, Map[String, Long]]): Unit = this.synchronized {
       other match {
-        case o: DebugAccumulator => o.keyToCount.foreach { case (k, v) => add(k, v)}
+        case o: DebugAccumulator => o.keyToCount.foreach { case (k, v) => add(k, v) }
         case _ =>
           throw new UnsupportedOperationException(s"Cannot merge with ${other.getClass.getName}")
       }
+    }
 
     /**
      * Defines the current value of this accumulator
      */
-    override def value: Map[String, Long] = keyToCount.toMap
+    override def value: Map[String, Long] = this.synchronized {
+      keyToCount.toMap
+    }
   }
 }
