@@ -87,7 +87,7 @@ class RocksDB(
 
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
-  private val oldSnapshots = new ListBuffer[Option[RocksDBSnapshot]]
+  private val oldSnapshots = new ListBuffer[RocksDBSnapshot]
 
   RocksDBLoader.loadLibrary()
 
@@ -598,7 +598,7 @@ class RocksDB(
           // during state store maintenance.
           synchronized {
             if (latestSnapshot.isDefined) {
-              oldSnapshots += latestSnapshot
+              oldSnapshots += latestSnapshot.get
             }
             latestSnapshot = Some(
               RocksDBSnapshot(checkpointDir,
@@ -658,7 +658,7 @@ class RocksDB(
   }
 
   private def uploadSnapshot(): Unit = {
-    var oldSnapshotsImmutable: List[Option[RocksDBSnapshot]] = Nil
+    var oldSnapshotsImmutable: List[RocksDBSnapshot] = Nil
     val localCheckpoint = synchronized {
       val checkpoint = latestSnapshot
       latestSnapshot = None
@@ -685,7 +685,7 @@ class RocksDB(
 
           // Clean up old latestSnapshots
           for (snapshot <- oldSnapshotsImmutable) {
-            snapshot.foreach(_.close())
+            snapshot.close()
           }
 
         }
