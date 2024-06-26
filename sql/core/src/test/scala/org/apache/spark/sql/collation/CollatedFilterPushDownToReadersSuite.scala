@@ -89,7 +89,10 @@ class CollatedFilterPushDownToReadersSuite extends QueryTest
     val pattern = "PushedFilters: \\[(.*?)\\]".r
 
     pattern.findFirstMatchIn(explain) match {
-      case Some(m) => m.group(1).split(", ").toSeq
+      case Some(m) =>
+        m.group(1)
+          .split(", ")
+          .toSeq.filterNot(_ == "")
       case None => Seq.empty
     }
   }
@@ -101,37 +104,42 @@ class CollatedFilterPushDownToReadersSuite extends QueryTest
 
   testV1AndV2PushDown(
     filterString = s"$collatedCol = 'aaa'",
-    expectedPushedFilters = Seq("AlwaysTrue()", s"IsNotNull($collatedCol)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedCol)"),
     expectedRowCount = 2)
 
   testV1AndV2PushDown(
+    filterString = s"$collatedCol = 'aaa' AND $nonCollatedCol = 'aaa'",
+    expectedPushedFilters = Seq(
+      s"IsNotNull($collatedCol)", s"IsNotNull($nonCollatedCol)", s"EqualTo($nonCollatedCol,aaa)"),
+    expectedRowCount = 1)
+
+  testV1AndV2PushDown(
     filterString = s"$collatedCol = 'aaa' OR $nonCollatedCol = 'aaa'",
-    expectedPushedFilters = Seq(s"Or(AlwaysTrue(),EqualTo($nonCollatedCol,aaa))"),
+    expectedPushedFilters = Seq.empty,
     expectedRowCount = 2)
 
   testV1AndV2PushDown(
     filterString = s"$collatedCol != 'aaa'",
-    expectedPushedFilters = Seq("AlwaysTrue()", s"IsNotNull($collatedCol)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedCol)"),
     expectedRowCount = 1)
 
   testV1AndV2PushDown(
     filterString = s"NOT($collatedCol == 'aaa')",
-    expectedPushedFilters = Seq("AlwaysTrue()", s"IsNotNull($collatedCol)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedCol)"),
     expectedRowCount = 1)
 
   testV1AndV2PushDown(
     filterString = s"$collatedStructFieldAccess = 'aaa'",
-    expectedPushedFilters = Seq(
-      "AlwaysTrue()", s"IsNotNull($collatedStructFieldAccess)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedStructFieldAccess)"),
     expectedRowCount = 2)
 
   testV1AndV2PushDown(
     filterString = s"$collatedArrayCol = array(collate('aaa', $lcaseCollation))",
-    expectedPushedFilters = Seq("AlwaysTrue()", s"IsNotNull($collatedArrayCol)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedArrayCol)"),
     expectedRowCount = 2)
 
   testV1AndV2PushDown(
     filterString = s"map_keys($collatedMapCol) != array(collate('aaa', $lcaseCollation))",
-    expectedPushedFilters = Seq("AlwaysTrue()", s"IsNotNull($collatedMapCol)"),
+    expectedPushedFilters = Seq(s"IsNotNull($collatedMapCol)"),
     expectedRowCount = 1)
 }
