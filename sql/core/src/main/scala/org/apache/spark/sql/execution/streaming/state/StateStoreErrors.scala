@@ -160,6 +160,11 @@ object StateStoreErrors {
     StateStoreSnapshotPartitionNotFound = {
     new StateStoreSnapshotPartitionNotFound(snapshotPartitionId, operatorId, checkpointLocation)
   }
+
+  def stateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String):
+    StateStoreProviderDoesNotSupportFineGrainedReplay = {
+    new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -291,3 +296,8 @@ class StateStoreValueRowFormatValidationFailure(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
     messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
+ extends SparkUnsupportedOperationException(
+   errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
+   messageParameters = Map("inputClass" -> inputClass))

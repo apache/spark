@@ -23,7 +23,6 @@ import scala.annotation.tailrec
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkException
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
@@ -495,10 +494,8 @@ class SymmetricHashJoinStateManager(
           useMultipleValuesPerKey = false)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplayFromSnapshot]) {
-            throw new SparkException(
-              errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
-              messageParameters = Map("inputClass" -> stateStoreProvider.getClass.toString),
-              cause = null)
+            StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+              stateStoreProvider.getClass.toString)
           }
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
             .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
