@@ -390,10 +390,12 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("A"), except = false)
     validateUTF8(UTF8String.fromBytes(Array[Byte](0x61)),
       UTF8String.fromString("a"), except = false)
+    // scalastyle:off nonascii
     validateUTF8(UTF8String.fromBytes(Array[Byte](0x80.toByte)),
       UTF8String.fromString("\uFFFD"), except = true)
     validateUTF8(UTF8String.fromBytes(Array[Byte](0xFF.toByte)),
       UTF8String.fromString("\uFFFD"), except = true)
+    // scalastyle:on nonascii
   }
 
   test("TryValidate UTF8 string") {
