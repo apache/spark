@@ -691,6 +691,9 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
   test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
    "changing the join condition (key schema) should fail the query") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint.
+    // In the checkpoint we define the input schema as (Int, Long), which does not have name
+    // in both left and right.
     val inputStream = MemoryStream[(Int, Long, String)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
@@ -758,6 +761,9 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
   test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
    "changing the value schema should fail the query") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint.
+    // In the checkpoint we define the input schema as (Int, Long), which does not have name
+    // in both left and right.
     val inputStream = MemoryStream[(Int, Long, String)]
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
