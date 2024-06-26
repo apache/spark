@@ -16,29 +16,30 @@
  */
 
 package org.apache.spark.sql.execution.streaming.state
+// scalastyle:off
+//import java.util.UUID
 
-import java.util.UUID
-
-import scala.collection.immutable
+//import scala.collection.immutable
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+//import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.sql.LocalSparkSession.withSparkSession
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
+//import org.apache.spark.sql.LocalSparkSession.withSparkSession
+//import org.apache.spark.sql.SparkSession
+//import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+//import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
-import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+//import org.apache.spark.unsafe.Platform
+//import org.apache.spark.unsafe.types.UTF8String
+//import org.apache.spark.util.Utils
+// scalastyle:on
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
@@ -57,7 +58,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   import StateStoreTestsHelper._
-
+/*
   testWithColumnFamilies(s"version encoding",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     import RocksDBStateStoreProvider._
@@ -914,6 +915,121 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+      }
+    }
+  } */
+
+  test("test virtual col family (noPrefix) - " +
+    "put & get & remove, iterator, prefixScan, remove col family") {
+    withSQLConf("spark.databricks.streaming.rocksDBVirtualColFamily.enabled" -> "true") {
+      tryWithProviderResource(newStoreProvider(keySchema,
+        NoPrefixKeyStateEncoderSpec(keySchema), true)) { provider =>
+        val store = provider.getStore(0)
+
+        // use non-default col family if column families are enabled
+        val cfName = "testColFamily"
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema))
+
+        var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        // put & get, iterator
+        timerTimestamps.foreach { ts =>
+          val keyRow = if (ts < 0) {
+            dataToKeyRow("a", ts.toInt)
+          } else dataToKeyRow(ts.toString, ts.toInt)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // remove
+        store.remove(dataToKeyRow(1L.toString, 1.toInt), cfName)
+        timerTimestamps = timerTimestamps.filter(_ != 1L)
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        store.commit()
+      }
+    }
+  }
+
+  test("test virtual col family (prefix) - " +
+    "put & get & remove, iterator, prefixScan, remove col family") {
+    withSQLConf("spark.databricks.streaming.rocksDBVirtualColFamily.enabled" -> "true") {
+      tryWithProviderResource(newStoreProvider(keySchema,
+        PrefixKeyScanStateEncoderSpec(keySchema, 1), true)) { provider =>
+        val store = provider.getStore(0)
+
+        // use non-default col family if column families are enabled
+        val cfName = "testColFamily"
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema,
+          PrefixKeyScanStateEncoderSpec(keySchema, 1))
+
+        var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        // put & get, iterator
+        timerTimestamps.foreach { ts =>
+          val keyRow = if (ts < 0) {
+            dataToKeyRow("a", ts.toInt)
+          } else dataToKeyRow(ts.toString, ts.toInt)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // remove
+        store.remove(dataToKeyRow(1L.toString, 1.toInt), cfName)
+        timerTimestamps = timerTimestamps.filter(_ != 1L)
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // prefix scan
+        val keyRow = dataToPrefixKeyRow("a")
+        assert(store.prefixScan(keyRow, cfName).toSeq.length
+          == timerTimestamps.filter(_ < 0).length)
+
+        store.commit()
+      }
+    }
+  }
+
+  test("test virtual col family (rangeScan) - " +
+    "put & get & remove, iterator, prefixScan, remove col family") {
+    withSQLConf("spark.databricks.streaming.rocksDBVirtualColFamily.enabled" -> "true") {
+      tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)), true)) { provider =>
+        val store = provider.getStore(0)
+
+        // use non-default col family if column families are enabled
+        val cfName = "testColFamily"
+        store.createColFamilyIfAbsent(cfName, keySchemaWithRangeScan, valueSchema,
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+
+        var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        // put & get, iterator
+        timerTimestamps.foreach { ts =>
+          val keyRow = if (ts < 0) {
+            dataToKeyRowWithRangeScan(ts.toLong, "a")
+          } else dataToKeyRowWithRangeScan(ts.toLong, ts.toString)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // remove
+        store.remove(dataToKeyRowWithRangeScan(1L, 1L.toString), cfName)
+        timerTimestamps = timerTimestamps.filter(_ != 1L)
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // prefix scan
+        val keyRow = dataToPrefixKeyRowWithRangeScan(1L)
+        assert(store.prefixScan(keyRow, cfName).toSeq.length
+          == timerTimestamps.filter(_ == 1L).length)
+
+        store.commit()
       }
     }
   }

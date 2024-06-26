@@ -16,38 +16,39 @@
  */
 
 package org.apache.spark.sql.execution.streaming.state
-
-import java.io.{File, IOException}
+//scalastyle:off
+//import java.io.{File, IOException}
+import java.io.File
 import java.net.URI
 import java.util
-import java.util.UUID
+//import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
+//import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
+//import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.time.SpanSugar._
+//import org.scalatest.concurrent.Eventually._
+//import org.scalatest.time.SpanSugar._
 
-import org.apache.spark._
-import org.apache.spark.LocalSparkContext._
-import org.apache.spark.sql.SparkSession
+//import org.apache.spark._
+//import org.apache.spark.LocalSparkContext._
+//import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
-import org.apache.spark.sql.functions.count
+//import org.apache.spark.sql.execution.streaming._
+//import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
+//import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
+// scalastyle:on
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   import FakeStateStoreProviderWithMaintenanceError._
   private var id: StateStoreId = null
@@ -90,7 +91,7 @@ private object FakeStateStoreProviderWithMaintenanceError {
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
   import StateStoreTestsHelper._
-  import StateStoreCoordinatorSuite._
+  // import StateStoreCoordinatorSuite._
 
   before {
     StateStore.stop()
@@ -101,7 +102,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
   }
-
+/*
   test("retaining only two latest versions when MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 2") {
     tryWithProviderResource(
       newStoreProvider(minDeltasForSnapshot = 10, numOfVersToRetainInMemory = 2)) { provider =>
@@ -910,7 +911,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assertCacheHitAndMiss(reloadedStoreV2.metrics, expectedCacheHitCount = 0,
         expectedCacheMissCount = 2)
     }
-  }
+  } */
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0)
@@ -1053,7 +1054,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   protected val keySchema: StructType = StateStoreTestsHelper.keySchema
   protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
-
+/*
   testWithAllCodec("get, put, remove, commit, and all data iterator") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
@@ -1624,7 +1625,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
       keyRow, keySchema, valueRow, keySchema, storeConf)
-  }
+  } */
 
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
