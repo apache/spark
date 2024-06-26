@@ -112,6 +112,32 @@ public class ExpressionImplUtils {
     return checkSum % 10 == 0;
   }
 
+  /**
+   * Function to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, throw exception otherwise.
+   */
+  public static UTF8String validateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else throw QueryExecutionErrors.invalidUTF8StringError(utf8String);
+  }
+
+  /**
+   * Function to try to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, null otherwise.
+   */
+  public static UTF8String tryValidateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else return null;
+  }
+
   public static byte[] aesEncrypt(byte[] input,
                                   byte[] key,
                                   UTF8String mode,

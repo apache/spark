@@ -70,6 +70,7 @@ private[connect] object MetricGenerator extends AdaptiveSparkPlanHelper {
       .newBuilder()
       .setName(p.nodeName)
       .setPlanId(p.id)
+      .setParent(parentId)
       .putAllExecutionMetrics(mv.asJava)
       .build()
     Seq(mo) ++ transformChildren(p)

@@ -682,7 +682,7 @@ class RocksDBFileManager(
       case e: Exception =>
         // Cancel the actual output stream first, so that zout.close() does not write the file
         out.cancel()
-        logError(s"Error zipping to $filesStr", e)
+        logError(log"Error zipping to ${MDC(LogKeys.FILE_NAME, filesStr)}", e)
         throw e
     } finally {
       // Close everything no matter what happened

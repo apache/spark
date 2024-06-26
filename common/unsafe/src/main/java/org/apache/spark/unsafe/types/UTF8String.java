@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.Function;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -496,24 +497,30 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Method for ASCII character conversion using a functional interface for chars.
+   */
+
+  private UTF8String convertAscii(Function<Character, Character> charConverter) {
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+        bytes[i] = (byte) charConverter.apply((char) getByte(i)).charValue();
+    }
+    return fromBytes(bytes);
+  }
+
+  /**
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - do char level uppercase conversion in case of chars in ASCII range
-    for (int i = 0; i < numBytes; i++) {
-      if (getByte(i) < 0) {
-        // non-ASCII
-        return toUpperCaseSlow();
-      }
-    }
-    byte[] bytes = new byte[numBytes];
-    for (int i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toUpperCase(getByte(i));
-    }
-    return fromBytes(bytes);
+
+    return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlow();
+  }
+
+  public UTF8String toUpperCaseAscii() {
+    return convertAscii(Character::toUpperCase);
   }
 
   private UTF8String toUpperCaseSlow() {
@@ -544,12 +551,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(toString().toLowerCase());
   }
 
-  private UTF8String toLowerCaseAscii() {
-    final var bytes = new byte[numBytes];
-    for (var i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toLowerCase(getByte(i));
-    }
-    return fromBytes(bytes);
+  public UTF8String toLowerCaseAscii() {
+    return convertAscii(Character::toLowerCase);
   }
 
   /**

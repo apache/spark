@@ -782,7 +782,8 @@ object SQLConf {
           }
         },
         "DEFAULT_COLLATION",
-        _ => Map())
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
 
   val ICU_CASE_MAPPINGS_ENABLED =

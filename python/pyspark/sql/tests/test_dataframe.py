@@ -37,6 +37,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -849,7 +850,15 @@ class DataFrameTestsMixin:
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_query_execution_unsupported_in_classic(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.range(1).executionInfo
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            message_parameters={"member": "queryExecution"},
+        )
 
 
 if __name__ == "__main__":
