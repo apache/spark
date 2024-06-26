@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
 import org.json4s.{DefaultFormats, JsonAST}
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
@@ -32,7 +33,6 @@ import org.apache.spark.util.Utils
 /**
  * Helper classes for reading/writing state schema.
  */
-
 sealed trait ColumnFamilySchema extends Serializable {
   def jsonValue: JsonAST.JObject
 
@@ -59,29 +59,20 @@ case class ColumnFamilySchemaV1(
 }
 
 object ColumnFamilySchemaV1 {
-  def fromJson(json: List[Map[String, Any]]): List[ColumnFamilySchema] = {
-    assert(json.isInstanceOf[List[_]])
 
-    json.map { colFamilyMap =>
-      new ColumnFamilySchemaV1(
-        colFamilyMap("columnFamilyName").asInstanceOf[String],
-        StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String]),
-        StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
-        KeyStateEncoderSpec.fromJson(colFamilyMap("keyStateEncoderSpec")
-          .asInstanceOf[Map[String, Any]]),
-        colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean]
-      )
-    }
-  }
-
-  def fromJValue(jValue: JValue): List[ColumnFamilySchema] = {
+  def fromJson(json: String): ColumnFamilySchema = {
     implicit val formats: DefaultFormats.type = DefaultFormats
-    val deserializedList: List[Any] = jValue.extract[List[Any]]
-    assert(deserializedList.isInstanceOf[List[_]],
-      s"Expected List but got ${deserializedList.getClass}")
-    val columnFamilyMetadatas = deserializedList.asInstanceOf[List[Map[String, Any]]]
-    // Extract each JValue to StateVariableInfo
-    ColumnFamilySchemaV1.fromJson(columnFamilyMetadatas)
+    val colFamilyMap = JsonMethods.parse(json).extract[Map[String, Any]]
+    assert(colFamilyMap.isInstanceOf[Map[_, _]],
+      s"Expected Map but got ${colFamilyMap.getClass}")
+    new ColumnFamilySchemaV1(
+      colFamilyMap("columnFamilyName").asInstanceOf[String],
+      StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String]),
+      StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
+      KeyStateEncoderSpec.fromJson(colFamilyMap("keyStateEncoderSpec")
+        .asInstanceOf[Map[String, Any]]),
+      colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean]
+    )
   }
 }
 

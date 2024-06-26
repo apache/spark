@@ -20,12 +20,15 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.UUID
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -781,6 +784,49 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         // try restart again
         createFile("d", srcDir)
         startTriggerAvailableNowQueryAndCheck(14)
+      }
+    }
+  }
+
+  private def fetchColumnFamilySchemas(
+      checkpointDir: String,
+      operatorId: Int): List[ColumnFamilySchema] = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val stateChkptPath = new Path(checkpointDir, s"state/$operatorId")
+    val stateSchemaPath = new Path(new Path(stateChkptPath, "_metadata"), "schema")
+    val schemaV3File = new StateSchemaV3File(hadoopConf, stateSchemaPath.toString)
+    schemaV3File.getLatest().get._2
+  }
+
+  test("transformWithState - verify StateSchemaV3 file") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+        val columnFamilySchemas = fetchColumnFamilySchemas(chkptDir.getCanonicalPath, 0)
+        val expected = ColumnFamilySchemaV1(
+          "countState",
+          KEY_ROW_SCHEMA,
+          VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          false
+        )
+        val actual = columnFamilySchemas.head.asInstanceOf[ColumnFamilySchemaV1]
+        assert(expected == actual)
       }
     }
   }

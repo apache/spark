@@ -23,8 +23,6 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.JArray
-import org.json4s.JsonAST.JValue
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -103,12 +101,11 @@ case class TransformWithStateExec(
     statefulProcessor.init(outputMode, timeMode)
     driverProcessorHandle
   }
-  def getNewSchema(): JValue = {
+  def getNewSchema(): List[ColumnFamilySchema] = {
     val driverProcessorHandle = getDriverProcessorHandle
-    val columnFamilySchemas = JArray(driverProcessorHandle.
-      columnFamilySchemas.asScala.map(_.jsonValue).toList)
+    val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
     closeProcessorHandle()
-    columnFamilySchemas
+    columnFamilySchemas.asScala.toList
   }
 
   private def closeProcessorHandle(): Unit = {
@@ -370,17 +367,19 @@ case class TransformWithStateExec(
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaFilePath().toString)
     schemaFile.getLatest() match {
-      case Some((_, oldSchema)) =>
-        compareSchemas(oldSchema, newColumnFamilySchemas)
+      case Some((_, oldColumnFamilySchemas)) =>
+        validateSchemas(oldColumnFamilySchemas, newColumnFamilySchemas)
       case None =>
     }
     // Write the new schema to the schema file
-    val newSchemaFile = schemaFile.
+    schemaFile.
       add(batchId, newColumnFamilySchemas)
     Some(schemaFile.getPathFromBatchId(batchId))
   }
 
-  def compareSchemas(oldSchema: JValue, newSchema: JValue): Unit = {
+  private def validateSchemas(
+      oldSchema: List[ColumnFamilySchema],
+      newSchema: List[ColumnFamilySchema]): Unit = {
     // TODO: Implement logic that allows for schema evolution
   }
 
