@@ -10938,11 +10938,15 @@ def substring(
         target column to work on.
     pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
+
+        .. versionchanged:: 4.0.0
+            `pos` now accepts Columns or names of Columns.
+
     len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
         .. versionchanged:: 4.0.0
-            `pos` and `len` now also accept Columns or names of Columns.
+            `len` now accepts Columns or names of Columns.
 
     Returns
     -------
@@ -10962,11 +10966,9 @@ def substring(
     >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
     [Row(s='par')]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    pos = _to_java_column(lit(pos) if isinstance(pos, int) else pos)
-    len = _to_java_column(lit(len) if isinstance(len, int) else len)
-    return _invoke_function("substring", _to_java_column(str), pos, len)
+    pos = lit(pos) if isinstance(pos, int) else pos
+    len = lit(len) if isinstance(len, int) else len
+    return _invoke_function_over_columns("substring", str, pos, len)
 
 
 @_try_remote_functions
