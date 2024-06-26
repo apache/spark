@@ -2835,7 +2835,7 @@ case class Encode(
 object Encode {
   def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
 
-  private[sql] final lazy val VALID_CHARSETS =
+  private[expressions] final lazy val VALID_CHARSETS =
     Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
 
   def encode(

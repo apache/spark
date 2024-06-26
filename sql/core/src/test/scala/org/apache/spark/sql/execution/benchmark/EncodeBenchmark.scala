@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 
 /**
- * Benchmark for measuring perf of different Base64 implementations
+ * Benchmark for encode
  * To run this benchmark:
  * {{{
  *   1. without sbt:
@@ -53,16 +53,21 @@ object EncodeBenchmark extends SqlBasedBenchmark {
         (str, str * 3, str * 5, str * 9, "")
       }.write.parquet(path.getCanonicalPath)
 
-      val utf8 = new Benchmark("encode", N, output = output)
-      utf8.addCase("UTF-8", 3) { _ =>
-        spark.read.parquet(path.getCanonicalPath).selectExpr(
-          "encode(_1, 'UTF-8')",
-          "encode(_2, 'UTF-8')",
-          "encode(_3, 'UTF-8')",
-          "encode(_4, 'UTF-8')",
-          "encode(_5, 'UTF-8')").noop()
+      val benchmark = new Benchmark("encode", N, output = output)
+      def addBenchmarkCase(charset: String): Unit = {
+        benchmark.addCase(charset, 3) { _ =>
+          spark.read.parquet(path.getCanonicalPath).selectExpr(
+            s"encode(_1, '$charset')",
+            s"encode(_2, '$charset')",
+            s"encode(_3, '$charset')",
+            s"encode(_4, '$charset')",
+            s"encode(_5, '$charset')").noop()
+        }
       }
-      utf8.run()
+      addBenchmarkCase("UTF-16")
+      addBenchmarkCase("UTF-8")
+      addBenchmarkCase("UTF-32")
+      benchmark.run()
     }
   }
 }
