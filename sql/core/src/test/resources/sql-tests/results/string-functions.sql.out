@@ -2166,3 +2166,106 @@ select luhn_check(123.456)
 struct<luhn_check(123.456):boolean>
 -- !query output
 false
+
+
+-- !query
+select is_valid_utf8('')
+-- !query schema
+struct<is_valid_utf8():boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query schema
+struct<is_valid_utf8(abc):boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query schema
+struct<is_valid_utf8(X'80'):boolean>
+-- !query output
+false
+
+
+-- !query
+select make_valid_utf8('')
+-- !query schema
+struct<make_valid_utf8():string>
+-- !query output
+
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query schema
+struct<make_valid_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query schema
+struct<make_valid_utf8(X'80'):string>
+-- !query output
+�
+
+
+-- !query
+select validate_utf8('')
+-- !query schema
+struct<validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select validate_utf8('abc')
+-- !query schema
+struct<validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_UTF8_STRING",
+  "sqlState" : "22029",
+  "messageParameters" : {
+    "str" : "\\x80"
+  }
+}
+
+
+-- !query
+select try_validate_utf8('')
+-- !query schema
+struct<try_validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query schema
+struct<try_validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query schema
+struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL

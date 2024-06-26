@@ -149,6 +149,11 @@
       "Cannot <condition1> without <condition2>."
     ]
   },
+  "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
+    "message": [
+      "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
+    ]
+  },
   "COLLATION_INVALID_PROVIDER" : {
     "message" : [
       "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."
