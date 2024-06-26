@@ -13618,10 +13618,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |      true|
     +----------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = value._jc if isinstance(value, Column) else value
-    return _invoke_function("array_contains", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_contains", col, lit(value))
 
 
 @_try_remote_functions
@@ -14064,10 +14061,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
 
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("array_position", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_position", col, lit(value))
 
 
 @_try_remote_functions
@@ -14515,10 +14509,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     |                 [2, 3]|
     +-----------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    element = _to_java_column(element) if isinstance(element, Column) else element
-    return _invoke_function("array_remove", _to_java_column(col), element)
+    return _invoke_function_over_columns("array_remove", col, lit(element))
 
 
 @_try_remote_functions
@@ -17327,10 +17318,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     |                       true|
     +---------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("map_contains_key", _to_java_column(col), value)
+    return _invoke_function_over_columns("map_contains_key", col, lit(value))
 
 
 @_try_remote_functions
