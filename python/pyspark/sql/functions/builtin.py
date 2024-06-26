@@ -10940,13 +10940,13 @@ def substring(
         starting position in str.
 
         .. versionchanged:: 4.0.0
-            `pos` now accepts Columns or names of Columns.
+            `pos` now accepts column and column name.
 
     len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
         .. versionchanged:: 4.0.0
-            `len` now accepts Columns or names of Columns.
+            `len` now accepts column and column name.
 
     Returns
     -------
