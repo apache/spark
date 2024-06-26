@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -185,6 +187,11 @@ trait FlatMapGroupsWithStateExecBase
       setStoreMetrics(store)
       setOperatorMetrics()
     })
+  }
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

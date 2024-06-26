@@ -23,13 +23,12 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -524,9 +523,6 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
-  @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
-
   private val maintenanceThreadPoolLock = new Object
 
   // Shared exception between threads in thread pool that the scheduling thread
@@ -649,15 +645,6 @@ object StateStore extends Logging {
     storeProvider.getStore(version)
   }
 
-  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
-    if (!UnsafeRowUtils.isBinaryStable(schema)) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        messageParameters = Map("schema" -> schema.json)
-      )
-    }
-  }
-
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -669,40 +656,6 @@ object StateStore extends Logging {
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
-
-      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
-        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
-          // SPARK-47776: collation introduces the concept of binary (in)equality, which means
-          // in some collation we no longer be able to just compare the binary format of two
-          // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
-          // same in case insensitive collation.
-          // State store is basically key-value storage, and the most provider implementations
-          // rely on the fact that all the columns in the key schema support binary equality.
-          // We need to disallow using binary inequality column in the key schema, before we
-          // could support this in majority of state store providers (or high-level of state
-          // store.)
-          disallowBinaryInequalityColumn(keySchema)
-
-          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
-          // regardless of configuration, we check compatibility to at least write schema file
-          // if necessary
-          // if the format validation for value schema is disabled, we also disable the schema
-          // compatibility checker for value schema as well.
-          val ret = Try(
-            checker.check(keySchema, valueSchema,
-              ignoreValueSchema = !storeConf.formatValidationCheckValue)
-          ).toEither.fold(Some(_), _ => None)
-          if (storeConf.stateSchemaCheckEnabled) {
-            ret
-          } else {
-            None
-          }
-        })
-
-        if (result.isDefined) {
-          throw result.get
-        }
-      }
 
       // SPARK-42567 - Track load time for state store provider and log warning if takes longer
       // than 2s.

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -336,6 +338,13 @@ case class TransformWithStateExec(
       StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
         "Number of values removed due to TTL expiry")
     )
+  }
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    // TODO: transformWithState is special because we don't have the schema of the state directly
+    // within the passed args. We need to gather this after running the init function
+    // within the stateful processor on the driver. This also requires a schema format change
+    // when recording this information persistently.
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
