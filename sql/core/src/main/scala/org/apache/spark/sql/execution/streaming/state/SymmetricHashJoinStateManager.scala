@@ -493,8 +493,8 @@ class SymmetricHashJoinStateManager(
           useColumnFamilies = false, storeConf, hadoopConf,
           useMultipleValuesPerKey = false)
         if (snapshotStartVersion.isDefined) {
-          stateStoreProvider.asInstanceOf[FineGrainedStateSource]
-            .replayStoreFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
+          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
+            .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
         } else {
           stateStoreProvider.getStore(stateInfo.get.storeVersion)
         }

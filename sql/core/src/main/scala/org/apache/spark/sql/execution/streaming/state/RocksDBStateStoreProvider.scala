@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
-  extends StateStoreProvider with Logging with Closeable with FineGrainedStateSource {
+  extends StateStoreProvider with Logging with Closeable
+    with SupportsFineGrainedReplayFromSnapshot {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
@@ -309,45 +310,13 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  override def replayStoreFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
-    try {
-      if (startVersion < 1) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
-      }
-      if (endVersion < startVersion) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
-      }
-      rocksDB.loadFromSnapshot(startVersion, endVersion)
-      new RocksDBStateStore(endVersion)
-    }
-    catch {
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
-    }
-  }
-
   override def getReadStore(version: Long): StateStore = {
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
-      rocksDB.load(version, readOnly = true)
+      rocksDB.load(version, true)
       new RocksDBStateStore(version)
-    }
-    catch {
-      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
-    }
-  }
-
-  override def replayReadStoreFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
-    try {
-      if (startVersion < 1) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
-      }
-      if (endVersion < startVersion) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
-      }
-      rocksDB.loadFromSnapshot(startVersion, endVersion)
-      new RocksDBStateStore(endVersion)
     }
     catch {
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
@@ -398,6 +367,38 @@ private[sql] class RocksDBStateStoreProvider
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
+  }
+
+  override def replayStateFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
+    try {
+      if (startVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      }
+      if (endVersion < startVersion) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
+      }
+      rocksDB.loadFromSnapshot(startVersion, endVersion)
+      new RocksDBStateStore(endVersion)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  override def replayReadStateFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
+    try {
+      if (startVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      }
+      if (endVersion < startVersion) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
+      }
+      rocksDB.loadFromSnapshot(startVersion, endVersion)
+      new RocksDBStateStore(endVersion)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 }
 
