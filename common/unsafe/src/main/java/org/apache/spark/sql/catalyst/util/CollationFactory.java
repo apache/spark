@@ -845,8 +845,8 @@ public final class CollationFactory {
     String[] validModifiers;
     if (collationName.startsWith("UTF8_")) {
       validRootNames = new String[]{
-        Collation.CollationSpecUTF8Binary.UTF8_BINARY_COLLATION.collationName,
-        Collation.CollationSpecUTF8Binary.UTF8_LCASE_COLLATION.collationName
+        Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION.collationName,
+        Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION.collationName
       };
       validModifiers = new String[0];
     } else {
