@@ -21,12 +21,14 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
@@ -159,9 +161,10 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
       if (offsetInByteArray < 0 || sizeInBytes < 0 ||
           bytes.length < offsetInByteArray + sizeInBytes) {
-        throw new ArrayIndexOutOfBoundsException(
-          "byte array length: " + bytes.length +
-            ", offset: " + offsetInByteArray + ", size: " + sizeInBytes
+        throw new SparkIllegalArgumentException(
+          "INTERNAL_ERROR",
+          Map.of("message", "Invalid byte array backed UnsafeRow: byte array length=" +
+            bytes.length + ", offset=" + offsetInByteArray + ", byte size=" + sizeInBytes)
         );
       }
     }

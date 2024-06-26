@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
@@ -189,29 +189,38 @@ class UnsafeRowSuite extends SparkFunSuite {
     assert(unsafeRow.getDecimal(0, 38, 18) === null)
   }
 
-  test("SPARK-48713: throw ArrayIndexOutOfBoundsException for illegal UnsafeRow.pointTo") {
+  test("SPARK-48713: throw SparkIllegalArgumentException for illegal UnsafeRow.pointTo") {
     val emptyRow = UnsafeRow.createFromByteArray(64, 2)
     val byteArray = new Array[Byte](64)
 
     // Out of bounds
-    var errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+    var errorMsg = intercept[SparkIllegalArgumentException] {
       emptyRow.pointTo(byteArray, Platform.BYTE_ARRAY_OFFSET + 50, 32)
     }.getMessage
-    assert(errorMsg.contains("byte array length: 64, offset: 50, size: 32"))
+    assert(
+      errorMsg.contains(
+        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=32"
+      )
+    )
 
     // Negative size
-    errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+    errorMsg = intercept[SparkIllegalArgumentException] {
       emptyRow.pointTo(byteArray, Platform.BYTE_ARRAY_OFFSET + 50, -32)
     }.getMessage
-    assert(errorMsg.contains("byte array length: 64, offset: 50, size: -32"))
+    assert(
+      errorMsg.contains(
+        "Invalid byte array backed UnsafeRow: byte array length=64, offset=50, byte size=-32"
+      )
+    )
 
     // Negative offset
-    errorMsg = intercept[ArrayIndexOutOfBoundsException] {
+    errorMsg = intercept[SparkIllegalArgumentException] {
       emptyRow.pointTo(byteArray, -5, 32)
     }.getMessage
     assert(
       errorMsg.contains(
-        s"byte array length: 64, offset: ${-5 - Platform.BYTE_ARRAY_OFFSET}, size: 32"
+        s"Invalid byte array backed UnsafeRow: byte array length=64, " +
+          s"offset=${-5 - Platform.BYTE_ARRAY_OFFSET}, byte size=32"
       )
     )
   }
