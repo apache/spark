@@ -1336,6 +1336,7 @@ class StreamSuite extends StreamTest {
     val feb_error1 = ForeachBatchUserFuncException(e1)
     assert(StreamExecution.isInterruptionException(feb_error1, spark.sparkContext))
 
+    // scalastyle:off line.size.limit
     val e2 = new py4j.Py4JException(
       """
         |py4j.protocol.Py4JJavaError: An error occurred while calling o2141502.saveAsTable.
@@ -1351,6 +1352,7 @@ class StreamSuite extends StreamTest {
         |*Caused by: java.lang.InterruptedException
         |at java.util.concurrent.locks.AbstractQueuedSynchronizer.doAcquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1000)*
         |""".stripMargin)
+    // scalastyle:on line.size.limit
     val feb_error2 = ForeachBatchUserFuncException(e2)
     assert(StreamExecution.isInterruptionException(feb_error2, spark.sparkContext))
   }
