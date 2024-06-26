@@ -20,6 +20,7 @@ import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
@@ -318,9 +319,16 @@ public final class CollationFactory {
         }
       }
 
+      /**
+       * Method for constructing errors thrown on providing invalid collation name.
+       */
       protected static SparkException collationInvalidNameException(String collationName) {
+        Map<String, String> params = new HashMap<>();
+        final int maxSuggestions = 3;
+        params.put("collationName", collationName);
+        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
         return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(Map.of("collationName", collationName)), null);
+          SparkException.constructMessageParams(params), null);
       }
 
       private static int collationNameToId(String collationName) throws SparkException {
@@ -828,4 +836,86 @@ public final class CollationFactory {
     }
   }
 
+  /**
+   * Returns same string if collation name is valid or the closest suggestion if it is invalid.
+   */
+  public static String getClosestSuggestionsOnInvalidName(
+      String collationName, int maxSuggestions) {
+    String[] validRootNames;
+    String[] validModifiers;
+    if (collationName.startsWith("UTF8_")) {
+      validRootNames = new String[]{
+        Collation.CollationSpecUTF8Binary.UTF8_BINARY_COLLATION.collationName,
+        Collation.CollationSpecUTF8Binary.UTF8_LCASE_COLLATION.collationName
+      };
+      validModifiers = new String[0];
+    } else {
+      validRootNames = getICULocaleNames();
+      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
+    }
+
+    // Split modifiers and locale name.
+    final int MODIFIER_LENGTH = 3;
+    String localeName = collationName.toUpperCase();
+    List<String> modifiers = new ArrayList<>();
+    while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
+      modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
+      localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
+    }
+
+    // Suggest version with unique modifiers.
+    Collections.reverse(modifiers);
+    modifiers = modifiers.stream().distinct().toList();
+
+    // Remove conflicting settings.
+    if (modifiers.contains("_CI") && modifiers.contains(("_CS"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_CI")).toList();
+    }
+
+    if (modifiers.contains("_AI") && modifiers.contains(("_AS"))) {
+      modifiers = modifiers.stream().filter(m -> !m.equals("_AI")).toList();
+    }
+
+    final String finalLocaleName = localeName;
+    Comparator<String> distanceComparator = (c1, c2) -> {
+      int distance1 = UTF8String.fromString(c1.toUpperCase())
+              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+      int distance2 = UTF8String.fromString(c2.toUpperCase())
+              .levenshteinDistance(UTF8String.fromString(finalLocaleName));
+      return Integer.compare(distance1, distance2);
+    };
+
+    String[] rootNamesByDistance = Arrays.copyOf(validRootNames, validRootNames.length);
+    Arrays.sort(rootNamesByDistance, distanceComparator);
+    Function<String, Boolean> isCollationNameValid = name -> {
+      try {
+        collationNameToId(name);
+        return true;
+      } catch (SparkException e) {
+        return false;
+      }
+    };
+
+    final int suggestionThreshold = 3;
+    final ArrayList<String> suggestions = new ArrayList<>(maxSuggestions);
+    for (int i = 0; i < maxSuggestions; i++) {
+      // Add at least one suggestion.
+      // Add others if distance from the original is lower than threshold.
+      String suggestion = rootNamesByDistance[i] + String.join("", modifiers);
+      assert(isCollationNameValid.apply(suggestion));
+      if (suggestions.isEmpty()) {
+        suggestions.add(suggestion);
+      } else {
+        int distance = UTF8String.fromString(suggestion.toUpperCase())
+          .levenshteinDistance(UTF8String.fromString(collationName.toUpperCase()));
+        if (distance < suggestionThreshold) {
+          suggestions.add(suggestion);
+        } else {
+          break;
+        }
+      }
+    }
+
+    return String.join(", ", suggestions);
+  }
 }
