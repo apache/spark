@@ -258,7 +258,8 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   private val covarPop = new CovPopulation(right, left)
 
-  private val varPop = new VariancePop(right)
+  private val varPop = new VariancePop(If(And(IsNotNull(left), IsNotNull(right)),
+    right, Literal.create(null, right.dataType)))
 
   override def nullable: Boolean = true
 
@@ -311,7 +312,8 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   private val covarPop = new CovPopulation(right, left)
 
-  private val varPop = new VariancePop(right)
+  private val varPop = new VariancePop(If(And(IsNotNull(left), IsNotNull(right)),
+    right, Literal.create(null, right.dataType)))
 
   override def nullable: Boolean = true
 
