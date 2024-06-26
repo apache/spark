@@ -133,8 +133,8 @@
     <hive.group>io.hops.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>3.0.0.8-SNAPSHOT</hive.version>
-    <hive23.version>3.0.0.8-SNAPSHOT</hive23.version>
+    <hive.version>3.0.0.13.5</hive.version>
+    <hive23.version>3.0.0.13.5</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>3.0</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
