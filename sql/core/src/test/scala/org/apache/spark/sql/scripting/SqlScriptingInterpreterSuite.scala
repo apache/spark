@@ -67,7 +67,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // select with filter
-        Seq(Row(1)))
+        Seq(Row(1)) // select
+      )
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -91,7 +92,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert #1
         Seq.empty[Row], // insert #2
-        Seq(Row(false)))
+        Seq(Row(false)) // select
+      )
       verifySqlScriptResult(sqlScript, expected)
     }
   }
