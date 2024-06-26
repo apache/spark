@@ -282,6 +282,7 @@ private object ExecutorPodsLifecycleManager {
 
   def executorInactivationFn: UnaryOperator[Pod] = (p: Pod) => new PodBuilder(p)
     .editOrNewMetadata()
+    .withResourceVersion(null)
     .addToLabels(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
     .endMetadata()
     .build()
