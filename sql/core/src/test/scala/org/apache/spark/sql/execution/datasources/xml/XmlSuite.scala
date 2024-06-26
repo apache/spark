@@ -2828,37 +2828,46 @@ class XmlSuite
     )
   }
 
+  protected def ignoreCorruptFilesError(inputFile: File): Unit = {
+    val e = intercept[SparkException] {
+      spark.read
+        .option("rowTag", "ROW")
+        .option("multiLine", false)
+        .xml(inputFile.toURI.toString)
+        .collect()
+    }
+    assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
+    assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+    val e2 = intercept[SparkException] {
+      spark.read
+        .option("rowTag", "ROW")
+        .option("multiLine", true)
+        .xml(inputFile.toURI.toString)
+        .collect()
+    }
+    assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
+    assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+  }
+
+  protected def ignoreCorruptFilesSuccess(inputFile: File): Unit = {
+    val result = spark.read
+      .option("rowTag", "ROW")
+      .option("multiLine", false)
+      .xml(inputFile.toURI.toString)
+      .collect()
+    assert(result.isEmpty)
+  }
+
   test("SPARK-46248: Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-        val e = intercept[SparkException] {
-          spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", false)
-            .xml(inputFile.toURI.toString)
-            .collect()
-        }
-        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
-        val e2 = intercept[SparkException] {
-          spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", true)
-            .xml(inputFile.toURI.toString)
-            .collect()
-        }
-        assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        val result = spark.read
-           .option("rowTag", "ROW")
-           .option("multiLine", false)
-           .xml(inputFile.toURI.toString)
-           .collect()
-        assert(result.isEmpty)
+        ignoreCorruptFilesSuccess(inputFile)
       }
     })
+
     withTempPath { dir =>
       import org.apache.hadoop.fs.Path
       val xmlPath = new Path(dir.getCanonicalPath, "xml")
@@ -2886,43 +2895,25 @@ class XmlSuite
     }
   }
 
-  test("SPARK-39901: Enabling/disabling ignoreCorruptFilesErrorClasses") {
+  test("SPARK-39901: Setting ignoreCorruptFilesErrorClasses") {
+    // ignoreCorruptFiles: false, ignoreCorruptFilesErrorClasses: right classes
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
         SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.EOFException:Unexpected end of input stream") {
-        val e = intercept[SparkException] {
-          spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", false)
-            .xml(inputFile.toURI.toString)
-            .collect()
-        }
-        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: wrong classes
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.RuntimeException:Unexpected end of input stream") {
-          val e = intercept[SparkException] {
-            spark.read
-              .option("rowTag", "ROW")
-              .option("multiLine", false)
-              .xml(inputFile.toURI.toString)
-              .collect()
-          }
-          assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
-          assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+          ignoreCorruptFilesError(inputFile)
         }
+        // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: right classes
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.EOFException:Unexpected end of input stream") {
-          val result = spark.read
-            .option("rowTag", "ROW")
-            .option("multiLine", false)
-            .xml(inputFile.toURI.toString)
-            .collect()
-          assert(result.isEmpty)
+          ignoreCorruptFilesSuccess(inputFile)
         }
       }
     })

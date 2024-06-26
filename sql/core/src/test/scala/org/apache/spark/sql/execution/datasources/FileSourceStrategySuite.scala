@@ -482,44 +482,47 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  protected def ignoreCorruptFilesError(inputFile: File): Unit = {
+    val e = intercept[SparkException] {
+      spark.read.text(inputFile.toURI.toString).collect()
+    }
+    assert(e.getCause.isInstanceOf[EOFException])
+    assert(e.getCause.getMessage === "Unexpected end of input stream")
+  }
+
+  protected def ignoreCorruptFilesSuccess(inputFile: File): Unit = {
+    assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+  }
+
   test("spark.files.ignoreCorruptFiles should work in SQL") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-        val e = intercept[SparkException] {
-          spark.read.text(inputFile.toURI.toString).collect()
-        }
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+        ignoreCorruptFilesSuccess(inputFile)
       }
     })
   }
 
   test("SPARK-39901 spark.files.ignoreCorruptFilesErrorClasses should work in SQL") {
     withCorruptFile(inputFile => {
+      // ignoreCorruptFiles: false, ignoreCorruptFilesErrorClasses: right classes
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
         SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.EOFException:Unexpected end of input stream") {
-        val e = intercept[SparkException] {
-          spark.read.text(inputFile.toURI.toString).collect()
-        }
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: wrong classes
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.RuntimeException:Unexpected end of input stream") {
-          val e = intercept[SparkException] {
-            spark.read.text(inputFile.toURI.toString).collect()
-          }
-          assert(e.getCause.isInstanceOf[EOFException])
-          assert(e.getCause.getMessage === "Unexpected end of input stream")
+          ignoreCorruptFilesError(inputFile)
         }
+        // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: right classes
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
           "java.io.EOFException:Unexpected end of input stream") {
-          assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+          ignoreCorruptFilesSuccess(inputFile)
         }
       }
     })

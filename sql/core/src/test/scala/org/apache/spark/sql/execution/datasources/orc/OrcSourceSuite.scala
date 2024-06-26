@@ -234,36 +234,37 @@ abstract class OrcSuite
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
         => Seq[StructType]): Unit = {
-    testMergeSchemasInParallel(true, "", schemaReader)
-    checkErrorMatchPVals(
-      exception = intercept[SparkException] {
-        testMergeSchemasInParallel(false, "", schemaReader)
-      }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
-    )
+    def testMergeSchemasError(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String,
+       schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
+         => Seq[StructType]): Unit = {
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          testMergeSchemasInParallel(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, schemaReader)
+        }.getCause.getCause.asInstanceOf[SparkException],
+        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
+      )
+    }
 
-    testMergeSchemasInParallel(true,
-      "org.apache.orc.FileFormatException:Malformed ORC file",
+    def testMergeSchemasSuccess(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String,
+       schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
+         => Seq[StructType]): Unit = {
+      testMergeSchemasInParallel(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, schemaReader)
+    }
+
+    testMergeSchemasSuccess(true, "", schemaReader)
+    testMergeSchemasError(false, "", schemaReader)
+
+    // setting ignoreCorruptFilesErrorClasses
+    testMergeSchemasSuccess(true, "org.apache.orc.FileFormatException:Malformed ORC file",
       schemaReader)
-    checkErrorMatchPVals(
-      exception = intercept[SparkException] {
-        testMergeSchemasInParallel(true,
-          "java.io.RuntimeException:Malformed ORC file",
-          schemaReader)
-      }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
-    )
-    checkErrorMatchPVals(
-      exception = intercept[SparkException] {
-        testMergeSchemasInParallel(false,
-          "org.apache.orc.FileFormatException:Malformed ORC file",
-          schemaReader)
-      }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
-    )
+    testMergeSchemasError(true, "java.io.RuntimeException:Malformed ORC file", schemaReader)
+    testMergeSchemasError(false, "org.apache.orc.FileFormatException:Malformed ORC file",
+      schemaReader)
   }
 
   test("create temporary orc table") {

@@ -640,7 +640,7 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
-  test("SPARK-39901: Enabling/disabling ignoreCorruptFilesErrorClasses") {
+  test("SPARK-39901: Setting ignoreCorruptFilesErrorClasses") {
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
         "org.apache.orc.FileFormatException:Malformed ORC file") {
