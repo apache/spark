@@ -2472,14 +2472,18 @@ class MergeIntoWriter:
 
     .. versionadded: 4.0.0
     """
+
     def __init__(self, df: "DataFrame", table: str, condition: "ColumnOrName"):
         self._df = df
         self._spark = df.sparkSession
 
         from pyspark.sql.classic.column import _to_java_column
+
         self._jwriter = df._jdf.mergeInto(table, _to_java_column(condition))
 
-    def whenMatched(self, condition: Optional["ColumnOrName"] = None) -> "MergeIntoWriter.WhenMatched":
+    def whenMatched(
+        self, condition: Optional["ColumnOrName"] = None
+    ) -> "MergeIntoWriter.WhenMatched":
         """
         Initialize a `WhenMatched` action with a condition.
 
@@ -2494,7 +2498,9 @@ class MergeIntoWriter:
         """
         return self.WhenMatched(self, condition)
 
-    def whenNotMatched(self, condition: Optional["ColumnOrName"] = None) -> "MergeIntoWriter.WhenNotMatched":
+    def whenNotMatched(
+        self, condition: Optional["ColumnOrName"] = None
+    ) -> "MergeIntoWriter.WhenNotMatched":
         """
         Initialize a `WhenNotMatched` action with a condition.
         This `WhenNotMatched` action will be executed when a source row does not match any target row
@@ -2506,7 +2512,9 @@ class MergeIntoWriter:
         """
         return self.WhenNotMatched(self, condition)
 
-    def whenNotMatchedBySource(self, condition: Optional["ColumnOrName"] = None) -> "MergeIntoWriter.WhenNotMatchedBySource":
+    def whenNotMatchedBySource(
+        self, condition: Optional["ColumnOrName"] = None
+    ) -> "MergeIntoWriter.WhenNotMatchedBySource":
         """
         Initialize a `WhenNotMatchedBySource` action with a condition.
         This `WhenNotMatchedBySource` action will be executed when a target row does not match any
@@ -2537,12 +2545,14 @@ class MergeIntoWriter:
         """
         A class for defining actions to be taken when matching rows in a DataFrame during
         a merge operation."""
+
         def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
             self.writer = writer
             if condition is None:
                 self.when_matched = writer._jwriter.whenMatched()
             else:
                 from pyspark.sql.classic.column import _to_java_column
+
                 self.when_matched = writer._jwriter.whenMatched(_to_java_column(condition))
 
         def updateAll(self) -> "MergeIntoWriter":
@@ -2559,6 +2569,7 @@ class MergeIntoWriter:
             """
             jvm = self.writer._spark._jvm
             from pyspark.sql.classic.column import _to_java_column
+
             jmap = to_scala_map(jvm, {k: _to_java_column(v) for k, v in assignments.items()})
             self.writer._jwriter = self.when_matched.update(jmap)
             return self.writer
@@ -2574,12 +2585,14 @@ class MergeIntoWriter:
         """
         A class for defining actions to be taken when no matching rows are found in a DataFrame
         during a merge operation."""
+
         def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
             self.writer = writer
             if condition is None:
                 self.when_not_matched = writer._jwriter.whenNotMatched()
             else:
                 from pyspark.sql.classic.column import _to_java_column
+
                 self.when_not_matched = writer._jwriter.whenNotMatched(_to_java_column(condition))
 
         def insertAll(self) -> "MergeIntoWriter":
@@ -2596,6 +2609,7 @@ class MergeIntoWriter:
             """
             jvm = self.writer._spark._jvm
             from pyspark.sql.classic.column import _to_java_column
+
             jmap = to_scala_map(jvm, {k: _to_java_column(v) for k, v in assignments.items()})
             self.writer._jwriter = self.when_not_matched.insert(jmap)
             return self.writer
@@ -2605,13 +2619,17 @@ class MergeIntoWriter:
         A class for defining actions to be performed when there is no match by source
         during a merge operation in a MergeIntoWriter.
         """
+
         def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
             self.writer = writer
             if condition is None:
                 self.when_not_matched_by_source = writer._jwriter.whenNotMatchedBySource()
             else:
                 from pyspark.sql.classic.column import _to_java_column
-                self.when_not_matched_by_source = writer._jwriter.whenNotMatchedBySource(_to_java_column(condition))
+
+                self.when_not_matched_by_source = writer._jwriter.whenNotMatchedBySource(
+                    _to_java_column(condition)
+                )
 
         def updateAll(self) -> "MergeIntoWriter":
             """
@@ -2628,6 +2646,7 @@ class MergeIntoWriter:
             """
             jvm = self.writer._spark._jvm
             from pyspark.sql.classic.column import _to_java_column
+
             jmap = to_scala_map(jvm, {k: _to_java_column(v) for k, v in assignments.items()})
             self.writer._jwriter = self.when_not_matched_by_source.update(jmap)
             return self.writer

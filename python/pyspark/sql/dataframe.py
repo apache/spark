@@ -6019,7 +6019,6 @@ class DataFrame:
         """
         ...
 
-
     @dispatch_df_method
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None

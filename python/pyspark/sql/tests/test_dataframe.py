@@ -749,23 +749,32 @@ class DataFrameTestsMixin:
             # and copy it over.
             self.spark.conf.set(
                 "spark.sql.catalog.testcat",
-                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog")
-            with (self.table("testcat.ns1.target")):
-                self.spark.createDataFrame([(1, "Alice"), (2, "Bob")], ["id", "name"]) \
-                    .write.saveAsTable("testcat.ns1.target")
-                source = self.spark.createDataFrame([(1, "Charlie"), (3, "David")], ["id", "name"])  # type: DataFrame
+                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog",
+            )
+            with self.table("testcat.ns1.target"):
+                self.spark.createDataFrame(
+                    [(1, "Alice"), (2, "Bob")], ["id", "name"]
+                ).write.saveAsTable("testcat.ns1.target")
+                source = self.spark.createDataFrame(
+                    [(1, "Charlie"), (3, "David")], ["id", "name"]
+                )  # type: DataFrame
+
                 from pyspark.sql.functions import col
+
+                # fmt: off
                 source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
                     .whenMatched(source.id == 1).update({"name": source.name}) \
                     .whenNotMatched().insertAll() \
                     .whenNotMatchedBySource().delete() \
                     .merge()
+                # fmt: on
+
                 self.assertEqual(
                     self.spark.table("testcat.ns1.target").orderBy("id").collect(),
-                    [Row(id=1, name="Charlie"), Row(id=3, name="David")])
+                    [Row(id=1, name="Charlie"), Row(id=3, name="David")],
+                )
         finally:
             self.spark.conf.unset("spark.sql.catalog.testcat")
-
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
