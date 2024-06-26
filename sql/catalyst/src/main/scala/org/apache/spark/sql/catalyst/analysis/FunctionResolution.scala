@@ -157,10 +157,10 @@ class FunctionResolution(
             wf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
+        } else if (u.ignoreNulls.contains(true)) {
           wf match {
             case nthValue: NthValue =>
-              nthValue.copy(ignoreNulls = u.ignoreNulls)
+              nthValue.copy(ignoreNulls = true)
             case _ =>
               throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                 wf.prettyName,
@@ -181,12 +181,12 @@ class FunctionResolution(
             owf.prettyName,
             "FILTER clause"
           )
-        } else if (u.ignoreNulls) {
+        } else if (u.ignoreNulls.contains(true)) {
           owf match {
             case lead: Lead =>
-              lead.copy(ignoreNulls = u.ignoreNulls)
+              lead.copy(ignoreNulls = true)
             case lag: Lag =>
-              lag.copy(ignoreNulls = u.ignoreNulls)
+              lag.copy(ignoreNulls = true)
           }
         } else {
           owf
@@ -221,21 +221,17 @@ class FunctionResolution(
             )
           case _ =>
         }
-        if (u.ignoreNulls) {
-          val aggFunc = newAgg match {
-            case first: First => first.copy(ignoreNulls = u.ignoreNulls)
-            case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
-            case any_value: AnyValue => any_value.copy(ignoreNulls = u.ignoreNulls)
+        (u.ignoreNulls match {
+          case Some(ignoreNulls) => newAgg match {
+            case agg: SupportsIgnoreNulls => agg.withIgnoreNulls(ignoreNulls)
             case _ =>
               throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
                 newAgg.prettyName,
                 "IGNORE NULLS"
               )
           }
-          aggFunc.toAggregateExpression(u.isDistinct, u.filter)
-        } else {
-          newAgg.toAggregateExpression(u.isDistinct, u.filter)
-        }
+            case None => newAgg
+        }).toAggregateExpression(u.isDistinct, u.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
         checkUnsupportedAggregateClause(other, u)
@@ -263,7 +259,7 @@ class FunctionResolution(
         "FILTER clause"
       )
     }
-    if (u.ignoreNulls) {
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         func.prettyName,
         "IGNORE NULLS"
@@ -319,7 +315,7 @@ class FunctionResolution(
         scalarFunc.name(),
         "FILTER clause"
       )
-    } else if (u.ignoreNulls) {
+    } else if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         scalarFunc.name(),
         "IGNORE NULLS"
@@ -333,7 +329,7 @@ class FunctionResolution(
       aggFunc: V2AggregateFunction[_, _],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    if (u.ignoreNulls) {
+    if (u.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
         aggFunc.name(),
         "IGNORE NULLS"

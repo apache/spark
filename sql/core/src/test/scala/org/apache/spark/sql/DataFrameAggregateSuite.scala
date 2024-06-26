@@ -705,6 +705,18 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-48728: collect functions should collect null values if ignoreNulls is set to false") {
+    val df = Seq(("1", 2), (null, 2), ("1", 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a", ignoreNulls = lit(false))),
+      Seq(Row(Seq("1", null, "1")))
+    )
+    checkAnswer(
+      df.select(sort_array(collect_set($"a", ignoreNulls = lit(false)))),
+      Seq(Row(Seq(null, "1")))
+    )
+  }
+
   test("collect functions should be able to cast to array type with no null values") {
     val df = Seq(1, 2).toDF("a")
     checkAnswer(df.select(collect_list("a") cast ArrayType(IntegerType, false)),

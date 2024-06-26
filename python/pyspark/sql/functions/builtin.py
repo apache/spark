@@ -5518,7 +5518,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def collect_list(col: "ColumnOrName") -> Column:
+def collect_list(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
     """
     Aggregate function: Collects the values from a column into a list,
     maintaining duplicates, and returns this list of objects.
@@ -5528,10 +5528,15 @@ def collect_list(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports ignoreNulls
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The target column on which the function is computed.
+    ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
+        if ignoreNulls is true, the null values are exluded. default is to exclude null values.
 
     See Also
     --------
@@ -5584,8 +5589,23 @@ def collect_list(col: "ColumnOrName") -> Column:
     |John|     [1, 2]|
     | Ana|        [3]|
     +----+-----------+
+
+    Example 4: Collect values from a DataFrame including null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.collect_list('c', False))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                     [NULL, 1, 2]|
+    +---------------------------------+
     """
-    return _invoke_function_over_columns("collect_list", col)
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("collect_list", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("collect_list", col, ignoreNulls)
 
 
 @_try_remote_functions
@@ -5660,7 +5680,7 @@ def array_agg(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def collect_set(col: "ColumnOrName") -> Column:
+def collect_set(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
     """
     Aggregate function: Collects the values from a column into a set,
     eliminating duplicates, and returns this set of objects.
@@ -5670,10 +5690,15 @@ def collect_set(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports ignoreNulls
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The target column on which the function is computed.
+    ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
+        if ignoreNulls is true, the null values are exluded. default is to exclude null values.
 
     Returns
     -------
@@ -5726,8 +5751,23 @@ def collect_set(col: "ColumnOrName") -> Column:
     |John|    [1, 2]|
     | Ana|       [3]|
     +----+----------+
+
+    Example 4: Collect values including nulls from a DataFrame
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(2,), (5,), (5,), (None,)], ('age',))
+    >>> df.select(sf.sort_array(sf.collect_set('age', False), asc=False).alias('sorted_set')).show()
+    +------------+
+    |  sorted_set|
+    +------------+
+    |[5, 2, NULL]|
+    +------------+
     """
-    return _invoke_function_over_columns("collect_set", col)
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("collect_set", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("collect_set", col, ignoreNulls)
 
 
 @_try_remote_functions
