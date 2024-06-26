@@ -650,7 +650,7 @@ class DataFrameTestsMixin:
             self.assertEqual(re.sub(pattern, "", expected1), df._repr_html_())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
                 expected2 = """<table border='1'>
-                    |<tr><th>key</th><th>value</th></tr>
+                    |<tr><th>key</th><th>val</th></tr>
                     |<tr><td>1</td><td>1</td></tr>
                     |<tr><td>222</td><td>222</td></tr>
                     |</table>
@@ -658,7 +658,7 @@ class DataFrameTestsMixin:
                 self.assertEqual(re.sub(pattern, "", expected2), df._repr_html_())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     expected3 = """<table border='1'>
-                        |<tr><th>key</th><th>value</th></tr>
+                        |<tr><th>key</th><th>val</th></tr>
                         |<tr><td>1</td><td>1</td></tr>
                         |</table>
                         |only showing top 1 row
