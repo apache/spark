@@ -76,6 +76,8 @@ trait StatefulOperator extends SparkPlan {
 
   // Function used to record state schema for the first time and validate it against proposed
   // schema changes in the future. Runs as part of a planning rule on the driver.
+  // Returns the schema file path for operators that write this to the metadata file,
+  // otherwise None
   def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Option[String]
 }
 
