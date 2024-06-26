@@ -299,7 +299,7 @@ public final class CollationFactory {
           == DefinitionOrigin.PREDEFINED);
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
-          return CollationSpecUTF8Binary.UTF8_BINARY_COLLATION;
+          return CollationSpecUTF8.UTF8_BINARY_COLLATION;
         } else if (collationMap.containsKey(collationId)) {
           // Already in cache.
           return collationMap.get(collationId);
@@ -308,7 +308,7 @@ public final class CollationFactory {
           CollationSpec spec;
           ImplementationProvider implementationProvider = getImplementationProvider(collationId);
           if (implementationProvider == ImplementationProvider.UTF8_BINARY) {
-            spec = CollationSpecUTF8Binary.fromCollationId(collationId);
+            spec = CollationSpecUTF8.fromCollationId(collationId);
           } else {
             spec = CollationSpecICU.fromCollationId(collationId);
           }
@@ -327,7 +327,7 @@ public final class CollationFactory {
         // Collation names provided by user are treated as case-insensitive.
         String collationNameUpper = collationName.toUpperCase();
         if (collationNameUpper.startsWith("UTF8_")) {
-          return CollationSpecUTF8Binary.collationNameToId(collationName, collationNameUpper);
+          return CollationSpecUTF8.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
         }
@@ -336,7 +336,7 @@ public final class CollationFactory {
       protected abstract Collation buildCollation();
     }
 
-    private static class CollationSpecUTF8Binary extends CollationSpec {
+    private static class CollationSpecUTF8 extends CollationSpec {
 
       /**
        * Bit 0 in collation ID having value 0 for plain UTF8_BINARY and 1 for UTF8_LCASE
@@ -357,17 +357,17 @@ public final class CollationFactory {
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
       private static final int UTF8_BINARY_COLLATION_ID =
-        new CollationSpecUTF8Binary(CaseSensitivity.UNSPECIFIED).collationId;
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED).collationId;
       private static final int UTF8_LCASE_COLLATION_ID =
-        new CollationSpecUTF8Binary(CaseSensitivity.LCASE).collationId;
+        new CollationSpecUTF8(CaseSensitivity.LCASE).collationId;
       protected static Collation UTF8_BINARY_COLLATION =
-        new CollationSpecUTF8Binary(CaseSensitivity.UNSPECIFIED).buildCollation();
+        new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED).buildCollation();
       protected static Collation UTF8_LCASE_COLLATION =
-        new CollationSpecUTF8Binary(CaseSensitivity.LCASE).buildCollation();
+        new CollationSpecUTF8(CaseSensitivity.LCASE).buildCollation();
 
       private final int collationId;
 
-      private CollationSpecUTF8Binary(CaseSensitivity caseSensitivity) {
+      private CollationSpecUTF8(CaseSensitivity caseSensitivity) {
         this.collationId =
           SpecifierUtils.setSpecValue(0, CASE_SENSITIVITY_OFFSET, caseSensitivity);
       }
@@ -384,14 +384,14 @@ public final class CollationFactory {
         }
       }
 
-      private static CollationSpecUTF8Binary fromCollationId(int collationId) {
+      private static CollationSpecUTF8 fromCollationId(int collationId) {
         // Extract case sensitivity from collation ID.
         int caseConversionOrdinal = SpecifierUtils.getSpecValue(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK);
         // Verify only case sensitivity bits were set settable in UTF8_BINARY family of collations.
         assert (SpecifierUtils.removeSpec(collationId,
           CASE_SENSITIVITY_OFFSET, CASE_SENSITIVITY_MASK) == 0);
-        return new CollationSpecUTF8Binary(CaseSensitivity.values()[caseConversionOrdinal]);
+        return new CollationSpecUTF8(CaseSensitivity.values()[caseConversionOrdinal]);
       }
 
       @Override
@@ -414,7 +414,7 @@ public final class CollationFactory {
             null,
             CollationAwareUTF8String::compareLowerCase,
             "1.0",
-            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s.toString()).hashCode(),
+            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode(),
             /* supportsBinaryEquality = */ false,
             /* supportsBinaryOrdering = */ false,
             /* supportsLowercaseEquality = */ true);
@@ -727,9 +727,9 @@ public final class CollationFactory {
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
 
   public static final int UTF8_BINARY_COLLATION_ID =
-    Collation.CollationSpecUTF8Binary.UTF8_BINARY_COLLATION_ID;
+    Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
   public static final int UTF8_LCASE_COLLATION_ID =
-    Collation.CollationSpecUTF8Binary.UTF8_LCASE_COLLATION_ID;
+    Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION_ID;
   public static final int UNICODE_COLLATION_ID =
     Collation.CollationSpecICU.UNICODE_COLLATION_ID;
   public static final int UNICODE_CI_COLLATION_ID =

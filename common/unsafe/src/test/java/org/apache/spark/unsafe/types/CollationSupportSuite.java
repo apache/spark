@@ -41,7 +41,7 @@ public class CollationSupportSuite {
    */
 
   private void assertStringCompare(String s1, String s2, String collationName, int expected)
-          throws SparkException {
+      throws SparkException {
     UTF8String l = UTF8String.fromString(s1);
     UTF8String r = UTF8String.fromString(s2);
     int compare = CollationFactory.fetchCollation(collationName).comparator.compare(l, r);
@@ -129,13 +129,26 @@ public class CollationSupportSuite {
     assertStringCompare("ς", "σ", "UNICODE_CI", 0);
     assertStringCompare("ς", "Σ", "UNICODE_CI", 0);
     assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
+    // Maximum code point.
+    int maxCodePoint = Character.MAX_CODE_POINT;
+    String maxCodePointStr = new String(Character.toChars(maxCodePoint));
+    for (int i = 0; i < maxCodePoint && Character.isValidCodePoint(i); ++i) {
+      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_BINARY", -1);
+      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_LCASE", -1);
+    }
+    // Minimum code point.
+    int minCodePoint = Character.MIN_CODE_POINT;
+    String minCodePointStr = new String(Character.toChars(minCodePoint));
+    for (int i = minCodePoint + 1; i <= maxCodePoint && Character.isValidCodePoint(i); ++i) {
+      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_BINARY", 1);
+      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_LCASE", 1);
+    }
   }
 
   private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected,
       Boolean useCodePoints) {
     if (useCodePoints) {
-      assertEquals(expected.toString(),
-        CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
+      assertEquals(expected, CollationAwareUTF8String.lowerCaseCodePoints(target));
     } else {
       assertEquals(expected, target.toLowerCase());
     }
