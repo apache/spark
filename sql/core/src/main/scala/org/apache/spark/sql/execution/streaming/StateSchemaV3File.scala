@@ -17,24 +17,26 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InputStream, OutputStream, StringReader}
+import java.io.{InputStream, OutputStream}
+import java.nio.charset.StandardCharsets.UTF_8
+
+import scala.io.{Source => IOSource}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1}
 import org.apache.spark.sql.internal.SQLConf
 
 class StateSchemaV3File(
     hadoopConf: Configuration,
     path: String,
     metadataCacheEnabled: Boolean = false)
-  extends HDFSMetadataLog[JValue](hadoopConf, path, metadataCacheEnabled) {
+  extends HDFSMetadataLog[List[ColumnFamilySchema]](hadoopConf, path, metadataCacheEnabled) {
 
-  final val MAX_UTF_CHUNK_SIZE = 65535
+  val VERSION = 3
+  private val COLUMN_FAMILY_SCHEMA_VERSION = 1
+
   def this(sparkSession: SparkSession, path: String) = {
     this(
       sparkSession.sessionState.newHadoopConf(),
@@ -44,39 +46,35 @@ class StateSchemaV3File(
     )
   }
 
-  override protected def serialize(schema: JValue, out: OutputStream): Unit = {
-    val json = compact(render(schema))
-    val buf = new Array[Char](MAX_UTF_CHUNK_SIZE)
+  override def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
 
-    val outputStream = out.asInstanceOf[FSDataOutputStream]
-    // DataOutputStream.writeUTF can't write a string at once
-    // if the size exceeds 65535 (2^16 - 1) bytes.
-    // Each metadata consists of multiple chunks in schema version 3.
-    try {
-      val numMetadataChunks = (json.length - 1) / MAX_UTF_CHUNK_SIZE + 1
-      val metadataStringReader = new StringReader(json)
-      outputStream.writeInt(numMetadataChunks)
-      (0 until numMetadataChunks).foreach { _ =>
-        val numRead = metadataStringReader.read(buf, 0, MAX_UTF_CHUNK_SIZE)
-        outputStream.writeUTF(new String(buf, 0, numRead))
-      }
-      outputStream.close()
-    } catch {
-      case e: Throwable =>
-        throw e
+    if (!lines.hasNext) {
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
+    }
+
+    val version = lines.next().trim
+    validateVersion(version, VERSION)
+
+    val columnFamilySchemaVersion = lines.next().trim
+
+    columnFamilySchemaVersion match {
+      case "v1" => lines.map(ColumnFamilySchemaV1.fromJson).toList
+      case _ =>
+        throw new IllegalStateException(
+          s"Unsupported column family schema version: $columnFamilySchemaVersion")
     }
   }
 
-  override protected def deserialize(in: InputStream): JValue = {
-    val buf = new StringBuilder
-    val inputStream = in.asInstanceOf[FSDataInputStream]
-    val numKeyChunks = inputStream.readInt()
-    (0 until numKeyChunks).foreach(_ => buf.append(inputStream.readUTF()))
-    val json = buf.toString()
-   JsonMethods.parse(json)
+  override def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
+    out.write(s"v${VERSION}".getBytes(UTF_8))
+    out.write('\n')
+    out.write(s"v${COLUMN_FAMILY_SCHEMA_VERSION}".getBytes(UTF_8))
+    out.write('\n')
+    out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
   }
 
-  override def add(batchId: Long, metadata: JValue): Boolean = {
+  override def add(batchId: Long, metadata: List[ColumnFamilySchema]): Boolean = {
     require(metadata != null, "'null' metadata cannot written to a metadata log")
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
