@@ -24,9 +24,13 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.collection.OpenHashMap
 
 // scalastyle:off nonascii
 class CollationSQLExpressionsSuite
@@ -1644,6 +1648,216 @@ class CollationSQLExpressionsSuite
         }
       })
     }
+  }
+
+  test("Support mode for string expression with collation - Basic Test") {
+    Seq("utf8_binary", "UTF8_LCASE", "unicode_ci", "unicode").foreach { collationId =>
+      val query = s"SELECT mode(collate('abc', '${collationId}'))"
+      checkAnswer(sql(query), Row("abc"))
+      assert(sql(query).schema.fields.head.dataType.sameType(StringType(collationId)))
+    }
+  }
+
+  test("Support mode for string expression with collation - Advanced Test") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"('$elt')").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode"
+      withTable(s"${tableName}") {
+        sql(s"CREATE TABLE ${tableName}(i STRING) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT mode(collate(i, '${t.collationId}')) FROM ${tableName}"
+        checkAnswer(sql(query), Row(t.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationId)))
+
+      }
+    })
+  }
+
+  test("Support Mode.eval(buffer)") {
+    case class UTF8StringModeTestCase[R](
+        collationId: String,
+        bufferValues: Map[UTF8String, Long],
+        result: R)
+
+    val bufferValuesUTF8String = Map(
+      UTF8String.fromString("a") -> 5L,
+      UTF8String.fromString("b") -> 4L,
+      UTF8String.fromString("B") -> 3L,
+      UTF8String.fromString("d") -> 2L,
+      UTF8String.fromString("e") -> 1L)
+
+    val testCasesUTF8String = Seq(
+      UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
+      UTF8StringModeTestCase("UTF8_LCASE", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
+
+    testCasesUTF8String.foreach(t => {
+      val buffer = new OpenHashMap[AnyRef, Long](5)
+      val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
+      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
+    })
+  }
+
+  test("Support mode for string expression with collated strings in struct") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"named_struct('f1'," +
+          s" collate('$elt', '${t.collationId}'), 'f2', 1)").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRING COLLATE " +
+          t.collationId + ", f2: INT>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
+        if(t.collationId == "UTF8_LCASE" ||
+          t.collationId == "unicode_ci" ||
+          t.collationId == "unicode") {
+          // Cannot resolve "mode(i)" due to data type mismatch:
+          // Input to function mode was a complex type with strings collated on non-binary
+          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
+          val params = Seq(("sqlExpr", "\"mode(i)\""),
+            ("msg", "The input to the function 'mode'" +
+              " was a type of binary-unstable type that is not currently supported by mode."),
+            ("hint", "")).toMap
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query)
+            },
+            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            parameters = params,
+            queryContext = Array(
+              ExpectedContext(objectType = "",
+                objectName = "",
+                startIndex = 13,
+                stopIndex = 19,
+                fragment = "mode(i)")
+            )
+          )
+        } else {
+          checkAnswer(sql(query), Row(t.result))
+        }
+      }
+    })
+  }
+
+  test("Support mode for string expression with collated strings in recursively nested struct") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"named_struct('f1', " +
+          s"named_struct('f2', collate('$elt', '${t.collationId}')), 'f3', 1)").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_nested_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRUCT<f2: STRING COLLATE " +
+          t.collationId + ">, f3: INT>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(mode(i).f1.f2) FROM ${tableName}"
+        if(t.collationId == "UTF8_LCASE" ||
+          t.collationId == "unicode_ci" ||
+          t.collationId == "unicode") {
+          // Cannot resolve "mode(i)" due to data type mismatch:
+          // Input to function mode was a complex type with strings collated on non-binary
+          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
+          val params = Seq(("sqlExpr", "\"mode(i)\""),
+            ("msg", "The input to the function 'mode' " +
+              "was a type of binary-unstable type that is not currently supported by mode."),
+            ("hint", "")).toMap
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query)
+            },
+            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            parameters = params,
+            queryContext = Array(
+              ExpectedContext(objectType = "",
+                objectName = "",
+                startIndex = 13,
+                stopIndex = 19,
+                fragment = "mode(i)")
+            )
+          )
+        } else {
+          checkAnswer(sql(query), Row(t.result))
+        }
+      }
+    })
+  }
+
+  test("Support mode for string expression with collated strings in array complex type") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach(t => {
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"array(named_struct('s1', named_struct('a2', " +
+          s"array(collate('$elt', '${t.collationId}'))), 'f3', 1))").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_nested_struct"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(" +
+          s"i ARRAY<STRUCT<s1: STRUCT<a2: ARRAY<STRING COLLATE ${t.collationId}>>, f3: INT>>)" +
+          s" USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(element_at(element_at(mode(i), 1).s1.a2, 1)) FROM ${tableName}"
+        if(t.collationId == "UTF8_LCASE" ||
+          t.collationId == "unicode_ci" || t.collationId == "unicode") {
+          val params = Seq(("sqlExpr", "\"mode(i)\""),
+            ("msg", "The input to the function 'mode' was a type" +
+              " of binary-unstable type that is not currently supported by mode."),
+            ("hint", "")).toMap
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query)
+            },
+            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+            parameters = params,
+            queryContext = Array(
+              ExpectedContext(objectType = "",
+                objectName = "",
+                startIndex = 35,
+                stopIndex = 41,
+                fragment = "mode(i)")
+            )
+          )
+        } else {
+          checkAnswer(sql(query), Row(t.result))
+        }
+      }
+    })
   }
 
   test("SPARK-48430: Map value extraction with collations") {
