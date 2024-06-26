@@ -730,6 +730,9 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         /*
         Note: The checkpoint was generated using the following input in Spark version 3.5.1
+        The base query is different because it does not use the leftName/rightName columns
+        as part of the join keys/condition that is used as part of the key schema.
+
         AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
         // batch 1 - global watermark = 0
         // states
@@ -794,6 +797,9 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
         /*
         Note: The checkpoint was generated using the following input in Spark version 3.5.1
+        The base query is different because it does not use the leftName/rightName columns
+        as part of the generated output that is used as part of the value schema.
+
         AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
         // batch 1 - global watermark = 0
         // states
