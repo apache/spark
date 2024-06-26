@@ -23,24 +23,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable
 import org.apache.spark.sql.catalyst.trees.Origin
 
 /**
- * Trait for SQL Scripting interpreters.
+ * SQL scripting interpreter - builds SQL script execution plan.
  */
-trait ProceduralLanguageInterpreter {
+case class SqlScriptingInterpreter() {
   /**
    * Build execution plan and return statements that need to be executed,
-   *  wrapped in the execution node.
+   *   wrapped in the execution node.
+   *
    * @param compound CompoundBody for which to build the plan.
    * @return Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(compound: CompoundBody) : Iterator[CompoundStatementExec]
-}
-
-/**
- * Concrete implementation of the interpreter for SQL scripting.
- */
-case class SqlScriptingInterpreter() extends ProceduralLanguageInterpreter {
-  /** @inheritdoc */
-  override def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
     transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
   }
 

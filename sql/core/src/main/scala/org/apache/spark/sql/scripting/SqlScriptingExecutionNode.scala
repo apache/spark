@@ -74,11 +74,9 @@ class SingleStatementExec(
   override def reset(): Unit = consumed = false
 
   /** Get the SQL query text corresponding to this statement. */
-  def getText(sqlScriptText: String): String = {
-    if (origin.startIndex.isEmpty || origin.stopIndex.isEmpty) {
-      return null
-    }
-    sqlScriptText.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  def getText: String = {
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 }
 
@@ -109,8 +107,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
       case None => throw SparkException.internalError(
         "No more elements to iterate through in the current SQL compound statement.")
       case Some(statement: LeafStatementExec) =>
-        if (localIterator.hasNext) curr = Some(localIterator.next())
-        else curr = None
+        curr = if (localIterator.hasNext) Some(localIterator.next()) else None
         statement
       case Some(body: NonLeafStatementExec) =>
         if (body.hasNext) {
