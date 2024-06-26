@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.time.{Duration, Period}
+
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite

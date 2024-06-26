@@ -118,7 +118,8 @@ private[hive] object OrcFileOperator extends Logging {
       : Seq[StructType] = {
     ThreadUtils.parmap(partFiles, "readingOrcSchemas", 8) { currentFile =>
       val file = currentFile.getPath.toString
-      getFileReader(file, Some(conf), ignoreCorruptFiles).map(reader => {
+      getFileReader(file, Some(conf), ignoreCorruptFiles,
+        ignoreCorruptFilesErrorClasses).map(reader => {
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName
         logDebug(s"Reading schema from file $file., got Hive schema string: $schema")

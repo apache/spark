@@ -627,7 +627,8 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       // ignoreCorrupt set true, ignoreCorruptFilesErrorClasses set with right error classes
       conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
-        .set(IGNORE_CORRUPT_FILES_ERROR_CLASSES, "java.io.EOFException:Unexpected end of input stream")
+        .set(IGNORE_CORRUPT_FILES_ERROR_CLASSES,
+          "java.io.EOFException:Unexpected end of input stream")
       sc = new SparkContext("local", "test", conf)
       // Test HadoopRDD
       assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
