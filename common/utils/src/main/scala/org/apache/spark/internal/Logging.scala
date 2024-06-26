@@ -143,7 +143,7 @@ trait Logging {
   implicit class LogStringContext(val sc: StringContext) {
     def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
-      val sb = new StringBuilder(processedParts.next())
+      val sb = new StringBuilder(StringContext.processEscapes(processedParts.next()))
       val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
@@ -154,7 +154,7 @@ trait Logging {
         }
 
         if (processedParts.hasNext) {
-          sb.append(processedParts.next())
+          sb.append(StringContext.processEscapes(processedParts.next()))
         }
       }
 

@@ -289,8 +289,8 @@ object DataType {
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
     case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      messageParameters = Map("other" -> compact(render(other))))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def assertValidTypeForCollations(
@@ -402,6 +402,41 @@ object DataType {
             (ignoreName || fromField.name == toField.name) &&
               (toField.nullable || !fromField.nullable) &&
               equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Check if `from` is equal to `to` type except for collations, which are checked to be
+   * compatible so that data of type `from` can be interpreted as of type `to`.
+   */
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType): Boolean = {
+    (from, to) match {
+      // String types with possibly different collations are compatible.
+      case (_: StringType, _: StringType) => true
+
+      case (ArrayType(fromElement, fromContainsNull), ArrayType(toElement, toContainsNull)) =>
+        (fromContainsNull == toContainsNull) &&
+          equalsIgnoreCompatibleCollation(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fromContainsNull),
+          MapType(toKey, toValue, toContainsNull)) =>
+        fromContainsNull == toContainsNull &&
+          // Map keys cannot change collation.
+          fromKey == toKey &&
+          equalsIgnoreCompatibleCollation(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+            fromField.name == toField.name &&
+              fromField.nullable == toField.nullable &&
+              fromField.metadata == toField.metadata &&
+              equalsIgnoreCompatibleCollation(fromField.dataType, toField.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

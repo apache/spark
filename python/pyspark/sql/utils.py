@@ -27,7 +27,6 @@ from typing import (
     cast,
     TypeVar,
     Union,
-    Type,
 )
 
 # For backward compatibility.
@@ -57,7 +56,6 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -290,36 +288,6 @@ def try_remote_protobuf_functions(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def try_remote_window(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
-
-            return getattr(Window, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
-def try_remote_windowspec(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import WindowSpec
-
-            return getattr(WindowSpec, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
 def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
@@ -398,7 +366,32 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            message_parameters={"feature": f"Column.{f.__name__}"},
+        )
+
+    return cast(FuncT, wrapped)
+
+
+def dispatch_window_method(f: FuncT) -> FuncT:
+    """
+    For the usecases of direct Window.method(col, ...), it checks if self
+    is a Connect Window or Classic Window, and dispatches.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.window import Window as ConnectWindow
+
+            return getattr(ConnectWindow, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.window import Window as ClassicWindow
+
+            return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
+
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": f"Window.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -420,17 +413,6 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow  # type: ignore[return-value]
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

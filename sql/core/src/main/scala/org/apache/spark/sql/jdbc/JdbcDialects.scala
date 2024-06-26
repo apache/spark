@@ -842,6 +842,23 @@ abstract class JdbcDialect extends Serializable with Logging {
 }
 
 /**
+ * Make the `classifyException` method throw out the original exception
+ */
+trait NoLegacyJDBCError extends JdbcDialect {
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      cause = Some(e))
+  }
+}
+
+/**
  * :: DeveloperApi ::
  * Registry of dialects that apply to every new jdbc `org.apache.spark.sql.DataFrame`.
  *

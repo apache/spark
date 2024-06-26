@@ -23,6 +23,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
+import "spark/connect/common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -106,11 +107,14 @@ message Unknown {}
 
 // Common metadata of all relations.
 message RelationCommon {
-  // (Required) Shared relation metadata.
-  string source_info = 1;
+  // (Optional) Shared relation metadata.
+  reserved 1;
 
   // (Optional) A per-client globally unique id for a given connect plan.
   optional int64 plan_id = 2;
+
+  // (Optional) Keep the information of the origin for this expression such as stacktrace.
+  Origin origin = 3;
 }
 
 // Relation that uses a SQL query to generate the output.
