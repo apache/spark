@@ -231,6 +231,19 @@ public class CollationAwareUTF8String {
     return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
+  /*
+   * Performs string replacement for ICU collations by searching for instances of the search
+   * string in the src string, with respect to the specified collation, and then replacing
+   * them with the replace string. The method returns a new UTF8String with all instances of the
+   * search string replaced using the replace string. Similar to UTF8String.findInSet behaviour
+   * used for UTF8_BINARY collation, the method returns src string if the search string is empty.
+   *
+   * @param src the string to be searched in
+   * @param search the string to be searched for
+   * @param replace the string to be used as replacement
+   * @param collationId the collation ID to use for string search
+   * @return the position of the first occurrence of `match` in `set`
+   */
   public static UTF8String replace(final UTF8String src, final UTF8String search,
       final UTF8String replace, final int collationId) {
     // This collation aware implementation is based on existing implementation on UTF8String
@@ -286,12 +299,26 @@ public class CollationAwareUTF8String {
     return buf.build();
   }
 
+  /*
+   * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
+   * string in the src string, with respect to lowercased string versions, and then replacing
+   * them with the replace string. The method returns a new UTF8String with all instances of the
+   * search string replaced using the replace string. Similar to UTF8String.findInSet behaviour
+   * used for UTF8_BINARY collation, the method returns src string if the search string is empty.
+   *
+   * @param src the string to be searched in
+   * @param search the string to be searched for
+   * @param replace the string to be used as replacement
+   * @param collationId the collation ID to use for string search
+   * @return the position of the first occurrence of `match` in `set`
+   */
   public static UTF8String lowercaseReplace(final UTF8String src, final UTF8String search,
       final UTF8String replace) {
     if (src.numBytes() == 0 || search.numBytes() == 0) {
       return src;
     }
 
+    // TODO(SPARK-48725): Use lowerCaseCodePoints instead of UTF8String.toLowerCase.
     UTF8String lowercaseSearch = search.toLowerCase();
 
     int start = 0;
@@ -463,6 +490,17 @@ public class CollationAwareUTF8String {
       BreakIterator.getWordInstance(locale)));
   }
 
+  /*
+   * Returns the position of the first occurrence of the match string in the set string,
+   * counting ASCII commas as delimiters. The match string is compared in a collation-aware manner,
+   * with respect to the specified collation ID. Similar to UTF8String.findInSet behaviour used
+   * for UTF8_BINARY collation, the method returns 0 if the match string contains no commas.
+   *
+   * @param match the string to be searched for
+   * @param set the string to be searched in
+   * @param collationId the collation ID to use for string comparison
+   * @return the position of the first occurrence of `match` in `set`
+   */
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
     // If the "word" string contains a comma, FindInSet should return 0.
     if (match.contains(UTF8String.fromString(","))) {
@@ -482,7 +520,6 @@ public class CollationAwareUTF8String {
       byteIndex += UTF8String.numBytesForFirstByte(nextByte);
       ++charIndex;
     }
-    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     if (set.substring(lastComma + 1, set.numBytes()).semanticEquals(match, collationId)) {
       return wordCount;
     }
