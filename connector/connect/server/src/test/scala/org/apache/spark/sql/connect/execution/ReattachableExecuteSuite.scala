@@ -18,9 +18,9 @@ package org.apache.spark.sql.connect.execution
 
 import java.util.UUID
 
-import io.grpc.StatusRuntimeException
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
+import org.sparkproject.connect.grpc.StatusRuntimeException
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.connect.proto

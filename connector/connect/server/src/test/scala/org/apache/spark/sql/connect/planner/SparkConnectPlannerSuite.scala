@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto

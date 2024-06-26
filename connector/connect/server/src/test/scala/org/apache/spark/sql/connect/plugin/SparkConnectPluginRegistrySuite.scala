@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.plugin
 
 import java.util.Optional
 
-import com.google.protobuf
+import org.sparkproject.connect.protobuf
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.connect.proto

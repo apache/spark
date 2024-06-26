@@ -23,11 +23,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 
-import io.grpc.stub.StreamObserver
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse}

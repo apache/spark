@@ -21,8 +21,8 @@ import java.util.UUID
 
 import scala.collection.mutable
 
-import com.google.protobuf.Message
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.Message
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto

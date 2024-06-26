@@ -20,7 +20,7 @@ import java.nio.file.{Files, Paths}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto

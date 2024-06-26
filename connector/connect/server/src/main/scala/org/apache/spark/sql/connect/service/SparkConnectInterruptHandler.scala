@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import scala.jdk.CollectionConverters._
 
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging

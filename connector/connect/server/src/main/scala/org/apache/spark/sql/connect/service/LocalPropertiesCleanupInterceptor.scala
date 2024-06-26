@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
-import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
+import org.sparkproject.connect.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor}
+import org.sparkproject.connect.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
 
 import org.apache.spark.SparkContext
 

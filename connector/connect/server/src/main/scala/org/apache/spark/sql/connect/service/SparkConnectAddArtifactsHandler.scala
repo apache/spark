@@ -23,8 +23,8 @@ import java.util.zip.{CheckedOutputStream, CRC32}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.google.common.io.CountingOutputStream
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.guava.io.CountingOutputStream
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}

@@ -25,15 +25,15 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.protobuf.{Any => ProtoAny}
-import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
-import io.grpc.Status
-import io.grpc.protobuf.StatusProto
-import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
+import org.sparkproject.connect.google_protos.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
+import org.sparkproject.connect.grpc.Status
+import org.sparkproject.connect.grpc.protobuf.StatusProto
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.{Any => ProtoAny}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException

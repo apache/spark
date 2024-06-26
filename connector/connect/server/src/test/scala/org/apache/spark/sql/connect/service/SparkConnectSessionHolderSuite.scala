@@ -25,8 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 import scala.util.Random
 
-import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
+import org.sparkproject.connect.guava.collect.Lists
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction

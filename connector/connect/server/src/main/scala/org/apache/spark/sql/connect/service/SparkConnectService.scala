@@ -22,14 +22,14 @@ import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.MessageLite
-import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
-import io.grpc.MethodDescriptor.PrototypeMarshaller
-import io.grpc.netty.NettyServerBuilder
-import io.grpc.protobuf.lite.ProtoLiteUtils
-import io.grpc.protobuf.services.ProtoReflectionService
-import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
+import org.sparkproject.connect.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
+import org.sparkproject.connect.grpc.MethodDescriptor.PrototypeMarshaller
+import org.sparkproject.connect.grpc.netty.NettyServerBuilder
+import org.sparkproject.connect.grpc.protobuf.lite.ProtoLiteUtils
+import org.sparkproject.connect.grpc.protobuf.services.ProtoReflectionService
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.MessageLite
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
@@ -257,7 +257,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
 
     // Create a new ServerServiceDefinition builder
     // using the name of the original service definition.
-    val builder = io.grpc.ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
+    val builder = ServerServiceDefinition.builder(serviceDef.getServiceDescriptor.getName)
 
     // Iterate through all the methods of the original service definition.
     // For each method, add a customized method descriptor (with updated marshallers)

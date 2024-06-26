@@ -25,12 +25,12 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
-import com.google.rpc.ErrorInfo
-import io.grpc.Status.Code
-import io.grpc.StatusRuntimeException
-import io.grpc.protobuf.StatusProto
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.google_protos.rpc.ErrorInfo
+import org.sparkproject.connect.grpc.Status.Code
+import org.sparkproject.connect.grpc.StatusRuntimeException
+import org.sparkproject.connect.grpc.protobuf.StatusProto
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}

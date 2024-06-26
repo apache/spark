@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.service
 
 import java.lang.reflect.InvocationTargetException
 
-import io.grpc.ServerInterceptor
-import io.grpc.netty.NettyServerBuilder
+import org.sparkproject.connect.grpc.ServerInterceptor
+import org.sparkproject.connect.grpc.netty.NettyServerBuilder
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.sql.connect.config.Connect

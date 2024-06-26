@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto

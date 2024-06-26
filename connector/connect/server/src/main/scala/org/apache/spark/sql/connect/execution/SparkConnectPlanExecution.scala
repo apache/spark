@@ -21,8 +21,8 @@ import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
-import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
+import org.sparkproject.connect.grpc.stub.StreamObserver
+import org.sparkproject.connect.protobuf.ByteString
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
