@@ -228,7 +228,7 @@ public class CollationAwareUTF8String {
    * @return An integer representing the comparison result.
    */
   private static int compareLowerCaseSlow(final UTF8String left, final UTF8String right) {
-    return lowerCaseCodePoints(left.toString()).compareTo(lowerCaseCodePoints(right.toString()));
+    return lowerCaseCodePoints(left).binaryCompare(lowerCaseCodePoints(right));
   }
 
   public static UTF8String replace(final UTF8String src, final UTF8String search,
@@ -339,11 +339,15 @@ public class CollationAwareUTF8String {
    * @return the uppercase string
    */
   public static UTF8String toUpperCase(final UTF8String target) {
-    return UTF8String.fromString(toUpperCase(target.toString()));
+    if (target.isFullAscii()) return target.toUpperCaseAscii();
+    return toUpperCaseSlow(target);
   }
 
-  public static String toUpperCase(final String target) {
-    return UCharacter.toUpperCase(target);
+  private static UTF8String toUpperCaseSlow(final UTF8String target) {
+    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // convert the string to uppercase, which only accepts a Java strings as input.
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toUpperCase(target.toString()));
   }
 
   /**
@@ -353,13 +357,17 @@ public class CollationAwareUTF8String {
    * @return the uppercase string
    */
   public static UTF8String toUpperCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toUpperCase(target.toString(), collationId));
+    if (target.isFullAscii()) return target.toUpperCaseAscii();
+    return toUpperCaseSlow(target, collationId);
   }
 
-  public static String toUpperCase(final String target, final int collationId) {
+  private static UTF8String toUpperCaseSlow(final UTF8String target, final int collationId) {
+    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // convert the string to uppercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
-    return UCharacter.toUpperCase(locale, target);
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toUpperCase(locale, target.toString()));
   }
 
   /**
@@ -369,10 +377,15 @@ public class CollationAwareUTF8String {
    * @return the lowercase string
    */
   public static UTF8String toLowerCase(final UTF8String target) {
-    return UTF8String.fromString(toLowerCase(target.toString()));
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
+    return toLowerCaseSlow(target);
   }
-  public static String toLowerCase(final String target) {
-    return UCharacter.toLowerCase(target);
+
+  private static UTF8String toLowerCaseSlow(final UTF8String target) {
+    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // convert the string to lowercase, which only accepts a Java strings as input.
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toLowerCase(target.toString()));
   }
 
   /**
@@ -382,12 +395,17 @@ public class CollationAwareUTF8String {
    * @return the lowercase string
    */
   public static UTF8String toLowerCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toLowerCase(target.toString(), collationId));
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
+    return toLowerCaseSlow(target, collationId);
   }
-  public static String toLowerCase(final String target, final int collationId) {
+
+  private static UTF8String toLowerCaseSlow(final UTF8String target, final int collationId) {
+    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // convert the string to lowercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
-    return UCharacter.toLowerCase(locale, target);
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toLowerCase(locale, target.toString()));
   }
 
   /**
@@ -424,36 +442,41 @@ public class CollationAwareUTF8String {
    * @param target The target string to convert to lowercase.
    * @return The string converted to lowercase in a context-unaware manner.
    */
-  public static String lowerCaseCodePoints(final String target) {
+  public static UTF8String lowerCaseCodePoints(final UTF8String target) {
+    if (target.isFullAscii()) return target.toLowerCaseAscii();
+    return lowerCaseCodePointsSlow(target);
+  }
+
+  private static UTF8String lowerCaseCodePointsSlow(final UTF8String target) {
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    String targetString = target.toString();
     StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < target.length(); ++i) {
-      lowercaseCodePoint(target.codePointAt(i), sb);
+    for (int i = 0; i < targetString.length(); ++i) {
+      lowercaseCodePoint(targetString.codePointAt(i), sb);
     }
-    return sb.toString();
+    return UTF8String.fromString(sb.toString());
   }
 
   /**
    * Convert the input string to titlecase using the ICU root locale rules.
    */
   public static UTF8String toTitleCase(final UTF8String target) {
-    return UTF8String.fromString(toTitleCase(target.toString()));
-  }
-
-  public static String toTitleCase(final String target) {
-    return UCharacter.toTitleCase(target, BreakIterator.getWordInstance());
+    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // convert the string to titlecase, which only accepts a Java strings as input.
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toTitleCase(target.toString(),
+      BreakIterator.getWordInstance()));
   }
 
   /**
    * Convert the input string to titlecase using the specified ICU collation rules.
    */
   public static UTF8String toTitleCase(final UTF8String target, final int collationId) {
-    return UTF8String.fromString(toTitleCase(target.toString(), collationId));
-  }
-
-  public static String toTitleCase(final String target, final int collationId) {
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
-    return UCharacter.toTitleCase(locale, target, BreakIterator.getWordInstance(locale));
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
+    return UTF8String.fromString(UCharacter.toTitleCase(locale, target.toString(),
+      BreakIterator.getWordInstance(locale)));
   }
 
   public static int findInSet(final UTF8String match, final UTF8String set, int collationId) {
@@ -461,6 +484,7 @@ public class CollationAwareUTF8String {
       return 0;
     }
 
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     String setString = set.toString();
     StringSearch stringSearch = CollationFactory.getStringSearch(setString, match.toString(),
       collationId);
@@ -623,6 +647,7 @@ public class CollationAwareUTF8String {
 
   public static Map<String, String> getCollationAwareDict(UTF8String string,
       Map<String, String> dict, int collationId) {
+    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     String srcStr = string.toString();
 
     Map<String, String> collationAwareDict = new HashMap<>();

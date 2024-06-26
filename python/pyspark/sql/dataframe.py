@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -6278,6 +6279,31 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        """
+        Returns a QueryExecution object after the query was executed.
+
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution will return None.
+
+        If the same DataFrame is executed multiple times, the execution info will be
+        overwritten by the latest operation.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
         """
         ...
 

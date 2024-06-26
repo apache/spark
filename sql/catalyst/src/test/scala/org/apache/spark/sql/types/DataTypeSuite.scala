@@ -1000,4 +1000,13 @@ class DataTypeSuite extends SparkFunSuite {
       parameters = Map("provider" -> "badProvider", "supportedProviders" -> "spark, icu")
     )
   }
+
+  test("SPARK-48680: Add CharType and VarcharType to DataTypes JAVA API") {
+    assert(DataTypes.createCharType(1) === CharType(1))
+    assert(DataTypes.createVarcharType(100) === VarcharType(100))
+    val exception = intercept[IllegalArgumentException] {
+      DataTypes.createVarcharType(-1)
+    }
+    assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
+  }
 }

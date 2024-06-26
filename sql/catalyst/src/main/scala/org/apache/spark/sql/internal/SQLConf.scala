@@ -782,8 +782,17 @@ object SQLConf {
           }
         },
         "DEFAULT_COLLATION",
-        _ => Map())
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
+
+  val ICU_CASE_MAPPINGS_ENABLED =
+    buildConf("spark.sql.icu.caseMappings.enabled")
+      .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +
+        " for strings under UTF8_BINARY collation.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
@@ -5010,6 +5019,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CODING_ERROR_ACTION = buildConf("spark.sql.legacy.codingErrorAction")
+    .internal()
+    .doc("When set to true, encode/decode functions replace unmappable characters with mojibake " +
+      "instead of reporting coding errors.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_EVAL_CURRENT_TIME = buildConf("spark.sql.legacy.earlyEvalCurrentTime")
     .internal()
     .doc("When set to true, evaluation and constant folding will happen for now() and " +
@@ -5985,6 +6002,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
