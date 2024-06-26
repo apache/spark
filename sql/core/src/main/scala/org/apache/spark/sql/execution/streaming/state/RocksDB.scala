@@ -596,13 +596,17 @@ class RocksDB(
           // inside the uploadSnapshot() called below.
           // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
           // during state store maintenance.
-          oldSnapshots += latestSnapshot
-          latestSnapshot = Some(
-            RocksDBSnapshot(checkpointDir,
-              newVersion,
-              numKeysOnWritingVersion,
-              fileManager.captureFileMapReference()))
-          lastSnapshotVersion = newVersion
+          synchronized {
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot
+            }
+            latestSnapshot = Some(
+              RocksDBSnapshot(checkpointDir,
+                newVersion,
+                numKeysOnWritingVersion,
+                fileManager.captureFileMapReference()))
+            lastSnapshotVersion = newVersion
+          }
         }
       }
 
@@ -654,9 +658,16 @@ class RocksDB(
   }
 
   private def uploadSnapshot(): Unit = {
+    var oldSnapshotsImmutable: List[Option[RocksDBSnapshot]] = Nil
     val localCheckpoint = synchronized {
       val checkpoint = latestSnapshot
       latestSnapshot = None
+
+      // Convert mutable list buffer to immutable to prevent
+      // race condition with commit where old snapshot is added
+      oldSnapshotsImmutable = oldSnapshots.toList
+      oldSnapshots.clear()
+
       checkpoint
     }
     localCheckpoint match {
@@ -673,14 +684,6 @@ class RocksDB(
           localCheckpoint.foreach(_.close())
 
           // Clean up old latestSnapshots
-          // Convert mutable list buffer to immutable to prevent
-          // race condition with commit where old snapshot is added
-          var oldSnapshotsImmutable: List[Option[RocksDBSnapshot]] = Nil
-          synchronized {
-            oldSnapshotsImmutable = oldSnapshots.toList
-            oldSnapshots.clear()
-          }
-
           for (snapshot <- oldSnapshotsImmutable) {
             snapshot.foreach(_.close())
           }
