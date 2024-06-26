@@ -798,7 +798,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     schemaV3File.getLatest().get._2
   }
 
-  test("transformWithState - verify StateSchemaV3 file") {
+  test("transformWithState - verify StateSchemaV3 file is written correctly") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -817,7 +817,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1")),
           StopStream
         )
+
         val columnFamilySchemas = fetchColumnFamilySchemas(chkptDir.getCanonicalPath, 0)
+        assert(columnFamilySchemas.length == 1)
+
         val expected = ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
@@ -826,6 +829,52 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           false
         )
         val actual = columnFamilySchemas.head.asInstanceOf[ColumnFamilySchemaV1]
+        assert(expected == actual)
+      }
+    }
+  }
+
+  test("transformWithState - verify StateSchemaV3 file is written correctly," +
+    " multiple column families") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          StopStream
+        )
+
+        val columnFamilySchemas = fetchColumnFamilySchemas(chkptDir.getCanonicalPath, 0)
+        assert(columnFamilySchemas.length == 2)
+
+        val expected = List(
+          ColumnFamilySchemaV1(
+            "countState",
+            KEY_ROW_SCHEMA,
+            VALUE_ROW_SCHEMA,
+            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            false
+          ),
+          ColumnFamilySchemaV1(
+              "mostRecent",
+              KEY_ROW_SCHEMA,
+              VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+              false
+          )
+        )
+        val actual = columnFamilySchemas.map(_.asInstanceOf[ColumnFamilySchemaV1])
         assert(expected == actual)
       }
     }
