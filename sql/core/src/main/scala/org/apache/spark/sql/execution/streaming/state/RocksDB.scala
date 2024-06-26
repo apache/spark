@@ -84,7 +84,6 @@ class RocksDB(
     }
   }
 
-
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
   private val oldSnapshots = new ListBuffer[RocksDBSnapshot]
