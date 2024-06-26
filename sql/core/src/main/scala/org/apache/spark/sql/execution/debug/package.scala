@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Collections
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -347,14 +348,15 @@ package object debug {
     }
   }
 
-  class DebugAccumulator extends AccumulatorV2[String, java.util.Map[String, Long]]  {
-    val counts = new java.util.concurrent.ConcurrentSkipListMap[String, Long]()
+  class DebugAccumulator extends AccumulatorV2[String, Map[String, Long]]  {
+    val keyToCount = mutable.Map.empty[String, Long]
+    val countToKeys = mutable.TreeMap.empty[Long, mutable.Set[String]]
 
     /**
      * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
      * value; for a list accumulator, Nil is zero value.
      */
-    override def isZero: Boolean = counts.isEmpty
+    override def isZero: Boolean = keyToCount.isEmpty
 
     /**
      * Creates a new copy of this accumulator.
@@ -369,7 +371,7 @@ package object debug {
      * Resets this accumulator, which is zero value. i.e. call `isZero` must
      * return true.
      */
-    override def reset(): Unit = counts.clear()
+    override def reset(): Unit = keyToCount.clear()
 
     /**
      * Takes the inputs and accumulates.
@@ -377,19 +379,37 @@ package object debug {
     override def add(v: String): Unit = add(v, 1)
 
     private def add(v: String, add: Long): Unit = {
-      // TODO thread safe
-      val count = counts.getOrDefault(v, 0)
-      counts.put(v, count + add)
-      // TODO drop below top N
+      val count = keyToCount.getOrElse(v, 0) + add
+      keyToCount.put(v, count)
+
+      val keys = countToKeys.getOrElseUpdate(count, mutable.Set[String]())
+      keys.add(v)
+
+      // TODO make 10 configurable
+      if (keyToCount.size > 10) {
+        dropSmallest()
+      }
+    }
+
+    private def dropSmallest(): Unit = {
+      val keys = countToKeys.head._2
+      val keyToDrop = keys.head
+
+      keys.remove(keyToDrop)
+      keyToCount.remove(keyToDrop)
+
+      if (keys.isEmpty) {
+        countToKeys.remove(countToKeys.head._1)
+      }
     }
 
     /**
      * Merges another same-type accumulator into this one and update its state, i.e. this should be
      * merge-in-place.
      */
-    override def merge(other: AccumulatorV2[String, java.util.Map[String, Long]]): Unit =
+    override def merge(other: AccumulatorV2[String, Map[String, Long]]): Unit =
       other match {
-        case o: DebugAccumulator => o.counts.forEach { (k, v) => add(k, v) }
+        case o: DebugAccumulator => o.keyToCount.foreach { case (k, v) => add(k, v)}
         case _ =>
           throw new UnsupportedOperationException(s"Cannot merge with ${other.getClass.getName}")
       }
@@ -397,6 +417,6 @@ package object debug {
     /**
      * Defines the current value of this accumulator
      */
-    override def value: java.util.Map[String, Long] = counts
+    override def value: Map[String, Long] = keyToCount.toMap
   }
 }
