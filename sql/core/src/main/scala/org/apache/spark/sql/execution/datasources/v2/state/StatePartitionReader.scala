@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -97,9 +98,16 @@ class StatePartitionReader(
       case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
 
       case Some(snapshotStartBatchId) =>
-        provider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot].replayReadStateFromSnapshot(
-          snapshotStartBatchId + 1,
-          partition.sourceOptions.batchId + 1)
+        if (!provider.isInstanceOf[SupportsFineGrainedReplayFromSnapshot]) {
+          throw new SparkException(
+            errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
+            messageParameters = Map("inputClass" -> provider.getClass.toString),
+            cause = null)
+        }
+        provider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
+          .replayReadStateFromSnapshot(
+            snapshotStartBatchId + 1,
+            partition.sourceOptions.batchId + 1)
     }
   }
 
