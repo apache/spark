@@ -1334,7 +1334,7 @@ class StreamSuite extends StreamTest {
         |: java.util.concurrent.ExecutionException: java.lang.InterruptedException
         |""".stripMargin)
     val febError1 = ForeachBatchUserFuncException(e1)
-    assert(StreamExecution.isInterruptionException(feb_error1, spark.sparkContext))
+    assert(StreamExecution.isInterruptionException(febError1, spark.sparkContext))
 
     // scalastyle:off line.size.limit
     val e2 = new py4j.Py4JException(
@@ -1354,7 +1354,7 @@ class StreamSuite extends StreamTest {
         |""".stripMargin)
     // scalastyle:on line.size.limit
     val febError2 = ForeachBatchUserFuncException(e2)
-    assert(StreamExecution.isInterruptionException(feb_error2, spark.sparkContext))
+    assert(StreamExecution.isInterruptionException(febError2, spark.sparkContext))
   }
 }
 
