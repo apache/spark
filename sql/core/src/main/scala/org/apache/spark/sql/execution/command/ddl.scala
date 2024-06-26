@@ -388,9 +388,9 @@ case class AlterTableChangeColumnCommand(
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     val validType = canEvolveType(originColumn, newColumn)
-    val collationChanged = validType && originColumn.dataType != newColumn.dataType
+    val columnTypeChanged = validType && originColumn.dataType != newColumn.dataType
     // Throw an AnalysisException on attempt to change collation of bucket column.
-    if (collationChanged) {
+    if (columnTypeChanged) {
       val isBucketColumn = table.bucketSpec match {
         case Some(bucketSpec) => bucketSpec.bucketColumnNames.exists(resolver(columnName, _))
         case _ => false
@@ -434,7 +434,7 @@ case class AlterTableChangeColumnCommand(
     }
     catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
     // Update table stats after collation change.
-    if (collationChanged) {
+    if (columnTypeChanged) {
       CommandUtils.updateTableStats(sparkSession, table)
     }
 
