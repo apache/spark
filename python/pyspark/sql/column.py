@@ -1286,35 +1286,35 @@ class Column:
 
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, df.age.between(2, 4)).show()
-        +-----+---------------------------+
-        | name|((age >= 2) AND (age <= 4))|
-        +-----+---------------------------+
-        |Alice|                       true|
-        |  Bob|                      false|
-        +-----+---------------------------+
+        +-----+--------------------+
+        | name|((age >= 2) AND (...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|               false|
+        +-----+--------------------+
 
         Using between with string values.
 
         >>> df = spark.createDataFrame([("Alice", "A"), ("Bob", "B")], ["name", "initial"])
         >>> df.select(df.name, df.initial.between("A", "B")).show()
-        +-----+-----------------------------------+
-        | name|((initial >= A) AND (initial <= B))|
-        +-----+-----------------------------------+
-        |Alice|                               true|
-        |  Bob|                               true|
-        +-----+-----------------------------------+
+        +-----+--------------------+
+        | name|((initial >= A) A...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|                true|
+        +-----+--------------------+
 
         Using between with float values.
 
         >>> df = spark.createDataFrame(
         ...     [(2.5, "Alice"), (5.5, "Bob")], ["height", "name"])
         >>> df.select(df.name, df.height.between(2.0, 5.0)).show()
-        +-----+-------------------------------------+
-        | name|((height >= 2.0) AND (height <= 5.0))|
-        +-----+-------------------------------------+
-        |Alice|                                 true|
-        |  Bob|                                false|
-        +-----+-------------------------------------+
+        +-----+--------------------+
+        | name|((height >= 2.0) ...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|               false|
+        +-----+--------------------+
 
         Using between with date values.
 
@@ -1323,20 +1323,20 @@ class Column:
         ...     [("Alice", "2023-01-01"), ("Bob", "2023-02-01")], ["name", "date"])
         >>> df = df.withColumn("date", sf.to_date(df.date))
         >>> df.select(df.name, df.date.between("2023-01-01", "2023-01-15")).show()
-        +-----+-----------------------------------------------+
-        | name|((date >= 2023-01-01) AND (date <= 2023-01-15))|
-        +-----+-----------------------------------------------+
-        |Alice|                                           true|
-        |  Bob|                                          false|
-        +-----+-----------------------------------------------+
+        +-----+---------------------+
+        | name|((date >= 2023-01-...|
+        +-----+---------------------+
+        |Alice|                 true|
+        |  Bob|                false|
+        +-----+---------------------+
         >>> from datetime import date
         >>> df.select(df.name, df.date.between(date(2023, 1, 1), date(2023, 1, 15))).show()
-        +-----+-------------------------------------------------------------+
-        | name|((date >= DATE '2023-01-01') AND (date <= DATE '2023-01-15'))|
-        +-----+-------------------------------------------------------------+
-        |Alice|                                                         true|
-        |  Bob|                                                        false|
-        +-----+-------------------------------------------------------------+
+        +-----+--------------------+
+        | name|((date >= DATE '2...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|               false|
+        +-----+--------------------+
 
         Using between with timestamp values.
 
@@ -1346,19 +1346,19 @@ class Column:
         ...     schema=["name", "timestamp"])
         >>> df = df.withColumn("timestamp", sf.to_timestamp(df.timestamp))
         >>> df.select(df.name, df.timestamp.between("2023-01-01", "2023-02-01")).show()
-        +-----+---------------------------------------------------------+
-        | name|((timestamp >= 2023-01-01) AND (timestamp <= 2023-02-01))|
-        +-----+---------------------------------------------------------+
-        |Alice|                                                     true|
-        |  Bob|                                                    false|
-        +-----+---------------------------------------------------------+
+        +-----+--------------------+
+        | name|((timestamp >= 20...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|               false|
+        +-----+--------------------+
         >>> df.select(df.name, df.timestamp.between("2023-01-01", "2023-02-01 12:00:00")).show()
-        +-----+------------------------------------------------------------------+
-        | name|((timestamp >= 2023-01-01) AND (timestamp <= 2023-02-01 12:00:00))|
-        +-----+------------------------------------------------------------------+
-        |Alice|                                                              true|
-        |  Bob|                                                              true|
-        +-----+------------------------------------------------------------------+
+        +-----+--------------------+
+        | name|((timestamp >= 20...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|                true|
+        +-----+--------------------+
         """
         ...
 
@@ -1393,12 +1393,12 @@ class Column:
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> result = df.select(df.name, sf.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0))
         >>> result.show()
-        +-----+------------------------------------------------------------+
-        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
-        +-----+------------------------------------------------------------+
-        |Alice|                                                          -1|
-        |  Bob|                                                           1|
-        +-----+------------------------------------------------------------+
+        +-----+--------------------+
+        | name|CASE WHEN (age > ...|
+        +-----+--------------------+
+        |Alice|                  -1|
+        |  Bob|                   1|
+        +-----+--------------------+
 
         Example 2: Chaining multiple :func:`when` conditions
 
@@ -1409,13 +1409,13 @@ class Column:
         ...     sf.when(df.age < 3, "Young").when(df.age < 5, "Middle-aged").otherwise("Old")
         ... )
         >>> result.show()
-        +-------+---------------------------------------------------------------------------+
-        |   name|CASE WHEN (age < 3) THEN Young WHEN (age < 5) THEN Middle-aged ELSE Old END|
-        +-------+---------------------------------------------------------------------------+
-        |  Alice|                                                                      Young|
-        |    Bob|                                                                Middle-aged|
-        |Charlie|                                                                        Old|
-        +-------+---------------------------------------------------------------------------+
+        +-------+--------------------+
+        |   name|CASE WHEN (age < ...|
+        +-------+--------------------+
+        |  Alice|               Young|
+        |    Bob|         Middle-aged|
+        |Charlie|                 Old|
+        +-------+--------------------+
 
         Example 3: Using literal values as conditions
 
@@ -1465,12 +1465,12 @@ class Column:
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name, sf.when(df.age > 3, 1).otherwise(0)).show()
-        +-----+-------------------------------------+
-        | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
-        +-----+-------------------------------------+
-        |Alice|                                    0|
-        |  Bob|                                    1|
-        +-----+-------------------------------------+
+        +-----+--------------------+
+        | name|CASE WHEN (age > ...|
+        +-----+--------------------+
+        |Alice|                   0|
+        |  Bob|                   1|
+        +-----+--------------------+
 
         See Also
         --------
