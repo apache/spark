@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.StringWriter
 import java.util.Collections
 
 import scala.collection.mutable
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.plans.logical.{DebugInlineColumnsCount, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -39,6 +41,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStag
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
@@ -327,7 +330,19 @@ package object debug {
 
       child.execute().mapPartitions { iter =>
         iter.map { row =>
-          val sampleVals = exprs.map(_.eval(row))
+          val sampleVals = exprs.map { expr =>
+            val value = expr.eval(row)
+            expr.dataType match {
+              case s: StructType =>
+                val writer = new StringWriter()
+                val gen = new JacksonGenerator(s, writer,
+                  new JSONOptions(Map.empty[String, String], "UTC"))
+                gen.write(value.asInstanceOf[InternalRow])
+                gen.flush()
+                writer.toString
+              case _ => value
+            }
+          }
           accumulator.add(sampleVals.mkString(","))
 
           row
