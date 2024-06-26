@@ -97,4 +97,8 @@ class StateSchemaV3File(
       true
     }
   }
+
+  def getPathFromBatchId(batchId: Long): String = {
+    batchIdToPath(batchId).toString
+  }
 }
