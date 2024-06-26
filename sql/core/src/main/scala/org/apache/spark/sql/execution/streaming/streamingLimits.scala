@@ -47,9 +47,11 @@ case class StreamingGlobalLimitExec(
   private val keySchema = StructType(Array(StructField("key", NullType)))
   private val valueSchema = StructType(Array(StructField("value", LongType)))
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+    Option[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keySchema, valueSchema, session.sessionState)
+    None
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

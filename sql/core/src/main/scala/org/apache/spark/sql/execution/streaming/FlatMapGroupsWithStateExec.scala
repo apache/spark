@@ -189,9 +189,11 @@ trait FlatMapGroupsWithStateExecBase
     })
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+    Option[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
+    None
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

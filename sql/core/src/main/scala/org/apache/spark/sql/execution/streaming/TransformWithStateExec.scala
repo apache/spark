@@ -364,36 +364,24 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+    Option[String] = {
     val newColumnFamilySchemas = getNewSchema()
     val schemaFile = new StateSchemaV3File(
-      hadoopConf, stateSchemaFilePath().toString).getLatest()
-    schemaFile match {
+      hadoopConf, stateSchemaFilePath().toString)
+    schemaFile.getLatest() match {
       case Some((_, oldSchema)) =>
         compareSchemas(oldSchema, newColumnFamilySchemas)
       case None =>
     }
     // Write the new schema to the schema file
-    new StateSchemaV3File(hadoopConf, stateSchemaFilePath().toString).
+    val newSchemaFile = schemaFile.
       add(batchId, newColumnFamilySchemas)
+    Some(schemaFile.getPathFromBatchId(batchId))
   }
 
   def compareSchemas(oldSchema: JValue, newSchema: JValue): Unit = {
-    val oldColumnFamilies = ColumnFamilySchemaV1.fromJValue(oldSchema)
-    val newColumnFamilies = ColumnFamilySchemaV1.fromJValue(newSchema).map {
-      case c1: ColumnFamilySchemaV1 =>
-        c1.columnFamilyName -> c1
-    }.toMap
-    oldColumnFamilies.foreach {
-      case oldColumnFamily: ColumnFamilySchemaV1 =>
-        newColumnFamilies.get(oldColumnFamily.columnFamilyName) match {
-          case Some(newColumnFamily) if oldColumnFamily.json != newColumnFamily.json =>
-            throw new RuntimeException(
-              s"State variable with name ${newColumnFamily.columnFamilyName}" +
-                s" already exists with different schema.")
-          case _ => // do nothing
-        }
-    }
+    // TODO: Implement logic that allows for schema evolution
   }
 
   private def stateSchemaFilePath(storeName: Option[String] = None): Path = {

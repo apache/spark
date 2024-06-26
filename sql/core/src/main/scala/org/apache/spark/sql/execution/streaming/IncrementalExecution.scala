@@ -202,6 +202,17 @@ class IncrementalExecution(
   // changes across query runs.
   object StateSchemaValidationRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      // In the case of TransformWithStateExec, we want to collect this StateSchema
+      // filepath, and write this path out in the OperatorStateMetadata file
+      case tws: TransformWithStateExec if isFirstBatch =>
+        val stateSchemaPath =
+          tws.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
+        // At this point, stateInfo should always be defined
+        tws.stateInfo match {
+            case Some(stateInfo) =>
+                tws.copy(stateInfo = Some(stateInfo.copy(stateSchemaPath = stateSchemaPath)))
+            case _ => tws
+        }
       case statefulOp: StatefulOperator if isFirstBatch =>
         statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
         statefulOp
