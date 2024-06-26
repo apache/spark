@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.ibm.icu.lang.UCharacter;
 
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
@@ -556,24 +557,35 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns the title case of this string, that could be used as title.
+   * Returns the title case of this string, that could be used as title. There are essentially two
+   * different version of this method - one using the JVM case mapping rules, and the other using
+   * the ICU case mapping rules. ASCII implementation is the same for both, but please refer to the
+   * respective methods for the slow (non-ASCII) implementation for more details on the differences.
    */
   public UTF8String toTitleCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
-    byte prev = ' ', curr;
-    for (int i = 0; i < numBytes; i++) {
-      curr = getByte(i);
-      if (prev == ' ' && curr < 0) {
-        // non-ASCII
-        return toTitleCaseSlow();
-      }
-      prev = curr;
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlow();
+  }
+
+  public UTF8String toTitleCaseICU() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
     }
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlowICU();
+  }
+
+  /*
+   * Fast path to return the title case of this string, given that all characters are ASCII.
+   * This implementation essentially works for all collations currently supported in Spark.
+   * This method is more efficient, because it skips copying the data to and from StringBuilder.
+   */
+  private UTF8String toTitleCaseAscii() {
     byte[] bytes = new byte[numBytes];
-    prev = ' ';
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
       curr = getByte(i);
       if (prev == ' ') {
@@ -586,6 +598,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /*
+   * Slow path to return the title case of this string, according to JVM case mapping rules.
+   * This is considered the "old" behaviour for UTF8_BINARY collation, and is not recommended.
+   * To use this, set the spark.sql.ICU_CASE_MAPPINGS_ENABLED configuration to `false`.
+   */
   private UTF8String toTitleCaseSlow() {
     StringBuilder sb = new StringBuilder();
     String s = toString();
@@ -594,6 +611,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 1; i < s.length(); i++) {
       if (sb.charAt(i - 1) == ' ') {
         sb.setCharAt(i, Character.toTitleCase(sb.charAt(i)));
+      }
+    }
+    return fromString(sb.toString());
+  }
+
+  /*
+   * Slow path to return the title case of this string, according to ICU case mapping rules.
+   * This is considered the "new" behaviour for UTF8_BINARY collation, and is recommended.
+   * This is used by default, since spark.sql.ICU_CASE_MAPPINGS_ENABLED is set to `true`.
+   */
+  private UTF8String toTitleCaseSlowICU() {
+    StringBuilder sb = new StringBuilder();
+    String s = toString();
+    sb.append(s);
+    sb.setCharAt(0, (char) UCharacter.toTitleCase(sb.charAt(0)));
+    for (int i = 1; i < s.length(); i++) {
+      if (sb.charAt(i - 1) == ' ') {
+        sb.setCharAt(i, (char) UCharacter.toTitleCase(sb.charAt(i)));
       }
     }
     return fromString(sb.toString());
