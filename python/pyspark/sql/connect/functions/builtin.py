@@ -1024,8 +1024,12 @@ def avg(col: "ColumnOrName") -> Column:
 avg.__doc__ = pysparkfuncs.avg.__doc__
 
 
-def collect_list(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("collect_list", col)
+def collect_list(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("collect_list", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("collect_list", col, ignoreNulls)
 
 
 collect_list.__doc__ = pysparkfuncs.collect_list.__doc__
@@ -1038,8 +1042,12 @@ def array_agg(col: "ColumnOrName") -> Column:
 array_agg.__doc__ = pysparkfuncs.array_agg.__doc__
 
 
-def collect_set(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("collect_set", col)
+def collect_set(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = None) -> Column:
+    if ignoreNulls is None:
+        return _invoke_function_over_columns("collect_set", col)
+    else:
+        ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
+        return _invoke_function_over_columns("collect_set", col, ignoreNulls)
 
 
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__

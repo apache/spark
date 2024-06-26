@@ -41,9 +41,11 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   val child: Expression
 
+  val ignoreNulls: Boolean
+
   override def nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(child.dataType, false)
+  override def dataType: DataType = ArrayType(child.dataType, !ignoreNulls)
 
   override def defaultResult: Option[Literal] = Option(Literal.create(Array(), dataType))
 
@@ -54,7 +56,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
     // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
     // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
-    if (value != null) {
+    if (!ignoreNulls || value != null) {
       buffer += convertToBufferElement(value)
     }
     buffer
@@ -67,7 +69,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   protected val bufferElementType: DataType
 
   private lazy val projection = UnsafeProjection.create(
-    Array[DataType](ArrayType(elementType = bufferElementType, containsNull = false)))
+    Array[DataType](ArrayType(elementType = bufferElementType, containsNull = !ignoreNulls)))
   private lazy val row = new UnsafeRow(1)
 
   override def serialize(obj: T): Array[Byte] = {
@@ -102,9 +104,16 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]] {
+    inputAggBufferOffset: Int = 0,
+    ignoreNulls: Boolean = true)
+  extends Collect[mutable.ArrayBuffer[Any]] with SupportsIgnoreNulls {
 
   def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, ignoreNullsExpr: Expression) =
+    this(child, 0, 0, SupportsIgnoreNulls.validateIgnoreNullExpr(ignoreNullsExpr, "collect_list"))
+
+  override def withIgnoreNulls(ignoreNulls: Boolean): CollectList = copy(ignoreNulls = ignoreNulls)
 
   override lazy val bufferElementType = child.dataType
 
@@ -147,10 +156,16 @@ case class CollectList(
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends Collect[mutable.HashSet[Any]] with QueryErrorsBase {
+    inputAggBufferOffset: Int = 0,
+    ignoreNulls: Boolean = true)
+  extends Collect[mutable.HashSet[Any]] with SupportsIgnoreNulls with QueryErrorsBase {
 
   def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, ignoreNullsExpr: Expression) =
+    this(child, 0, 0, SupportsIgnoreNulls.validateIgnoreNullExpr(ignoreNullsExpr, "collect_set"))
+
+  override def withIgnoreNulls(ignoreNulls: Boolean): CollectSet = copy(ignoreNulls = ignoreNulls)
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
@@ -215,6 +230,8 @@ case class CollectTopK(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[BoundedPriorityQueue[Any]] {
   assert(num > 0)
+
+  val ignoreNulls: Boolean = true
 
   def this(child: Expression, num: Int) = this(child, num, false, 0, 0)
   def this(child: Expression, num: Int, reverse: Boolean) = this(child, num, reverse, 0, 0)
