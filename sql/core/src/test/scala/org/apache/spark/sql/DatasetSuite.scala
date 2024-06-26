@@ -953,7 +953,7 @@ class DatasetSuite extends QueryTest
     assert(result2.length == 3)
   }
 
-  test("correctly handle when deserializer in cogroup is resolved in dedup relation") {
+  test("SPARK-48718: cogroup deserializer expr is resolved before dedup relation") {
     val lhs = spark.createDataFrame(
       List(Row(123L)).asJava,
       StructType(Seq(StructField("GROUPING_KEY", LongType)))
