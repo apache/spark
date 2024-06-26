@@ -740,6 +740,21 @@ Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 
 
 -- !query
+select encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上', 'UTF-8')
+-- !query analysis
+Project [encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上, UTF-8) AS encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上, UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(scol, ecol) from values('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上', 'UTF-8') as t(scol, ecol)
+-- !query analysis
+Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
++- SubqueryAlias t
+   +- LocalRelation [scol#x, ecol#x]
+
+
+-- !query
 select decode()
 -- !query analysis
 org.apache.spark.sql.AnalysisException

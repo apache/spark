@@ -33,7 +33,7 @@ import org.apache.spark.benchmark.Benchmark
  */
 object EncodeBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
-  private val N = 20L * 1000 * 1000
+  private val N = 10L * 1000 * 1000
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     withTempPath { path =>
@@ -55,7 +55,7 @@ object EncodeBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("encode", N, output = output)
       def addBenchmarkCase(charset: String): Unit = {
-        benchmark.addCase(charset, 3) { _ =>
+        benchmark.addCase(charset) { _ =>
           spark.read.parquet(path.getCanonicalPath).selectExpr(
             s"encode(_1, '$charset')",
             s"encode(_2, '$charset')",
@@ -64,9 +64,9 @@ object EncodeBenchmark extends SqlBasedBenchmark {
             s"encode(_5, '$charset')").noop()
         }
       }
+      addBenchmarkCase("UTF-32")
       addBenchmarkCase("UTF-16")
       addBenchmarkCase("UTF-8")
-      addBenchmarkCase("UTF-32")
       benchmark.run()
     }
   }

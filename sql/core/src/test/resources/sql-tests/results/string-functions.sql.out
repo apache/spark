@@ -900,6 +900,22 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+select encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上', 'UTF-8')
+-- !query schema
+struct<encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上, UTF-8):binary>
+-- !query output
+南山經之首曰䧿山。其首曰招搖之山，臨於西海之上
+
+
+-- !query
+select encode(scol, ecol) from values('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上', 'UTF-8') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+南山經之首曰䧿山。其首曰招搖之山，臨於西海之上
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>
