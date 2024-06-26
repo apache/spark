@@ -241,7 +241,8 @@ abstract class OrcSuite
          => Seq[StructType]): Unit = {
       checkErrorMatchPVals(
         exception = intercept[SparkException] {
-          testMergeSchemasInParallel(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, schemaReader)
+          testMergeSchemasInParallel(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses,
+            schemaReader)
         }.getCause.getCause.asInstanceOf[SparkException],
         errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
         parameters = Map("path" -> "file:.*")
