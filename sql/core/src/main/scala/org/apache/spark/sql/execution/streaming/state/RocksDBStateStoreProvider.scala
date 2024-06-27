@@ -28,7 +28,6 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-// import org.apache.spark.sql.internal.SQLConf.STREAMING_ROCKSDB_VIRTUAL_COL_FAMILY_ENABLED
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
@@ -79,6 +78,7 @@ private[sql] class RocksDBStateStoreProvider
 
     // TODO verify and throw error if colFamilyToLongMap does not have id
     // TODO check rocksDB.get function verify works for VCF
+    // TODO verify with changelog checkpoint
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)

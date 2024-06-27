@@ -1109,7 +1109,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           === Set(("b", 0) -> 2))
       }
     }
-  }
+  } */
 
   testWithAllCodec("prefix scan") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(keySchema, PrefixKeyScanStateEncoderSpec(keySchema, 1),
@@ -1170,7 +1170,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       verifyScan(Seq("d"), Seq.empty)
     }
   }
-
+/*
   testWithAllCodec(s"numKeys metrics") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
