@@ -4130,26 +4130,27 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 }
 
 /**
- * This infers the columns to use for [[DebugInlineColumnsCount]] when its child is a Join.
- * In this case, it will use the join columns so the application code does not need to specify it.
+ * This infers the columns to use for [[DebugInlineColumnsCount]] when possible.
+ * For joins, it will use the join key columns so the application code does not need to specify it for both
+ * the inputs and output.
  */
 object DebugInlineColumnsCountInference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformUp {
       case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
       _, _, _), sampleColumns, maxKeys) if sampleColumns.isEmpty =>
-        val left = j.left match {
-          case d: DebugInlineColumnsCount => d
-          case _ => DebugInlineColumnsCount(j.left, leftKeys, maxKeys)
-        }
-
-        val right = j.right match {
-          case d: DebugInlineColumnsCount => d
-          case _ => DebugInlineColumnsCount(j.right, rightKeys, maxKeys)
-        }
+        val left = wrapJoinInput(j.left, leftKeys, maxKeys)
+        val right = wrapJoinInput(j.right, rightKeys, maxKeys)
 
         val joinWithInputDebug = j.withNewChildren(Seq(left, right))
         DebugInlineColumnsCount(joinWithInputDebug, leftKeys, maxKeys)
     }
+  }
+
+  private def wrapJoinInput(
+    plan: LogicalPlan,
+    sampleKeys: Seq[Expression], maxKeys: Int) = plan match {
+    case d: DebugInlineColumnsCount => d
+    case _ => DebugInlineColumnsCount(plan, sampleKeys, maxKeys)
   }
 }
