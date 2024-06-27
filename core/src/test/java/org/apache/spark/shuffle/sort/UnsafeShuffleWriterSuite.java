@@ -314,8 +314,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
-    IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Map.of());
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -345,8 +344,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
-    IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Map.of());
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
