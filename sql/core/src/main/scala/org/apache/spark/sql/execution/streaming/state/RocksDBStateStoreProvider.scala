@@ -65,8 +65,9 @@ private[sql] class RocksDBStateStoreProvider
       useVirtualColumnFamily = useVirtualColFamily
       if (useVirtualColumnFamily) {
         // if use virtual column family, then use default col family, no need to create new
-        // TODO avoid Id duplication
+        // TODO how to efficiently guarantee there isn't any value conflict for different key
         colFamilyToLongMap.putIfAbsent(colFamilyName, scala.util.Random.nextLong())
+
       } else {
         rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       }
@@ -76,12 +77,11 @@ private[sql] class RocksDBStateStoreProvider
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
-    // TODO verify and throw error if colFamilyToLongMap does not have id
-    // TODO check rocksDB.get function verify works for VCF
     // TODO verify with changelog checkpoint
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+
       val value = if (useVirtualColumnFamily) {
         kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key,
@@ -362,6 +362,9 @@ private[sql] class RocksDBStateStoreProvider
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
+    // TODO should we propagate useVirtualColFamily as a param
+    // TODO how to expose the virtual col family to the users
+    //  - cluster config? operator-wise? stateStore-wise?
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
