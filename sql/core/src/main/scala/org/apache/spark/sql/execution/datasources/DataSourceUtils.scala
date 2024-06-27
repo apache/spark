@@ -292,41 +292,4 @@ object DataSourceUtils extends PredicateHelper {
       case _ => false
     }
   }
-
-  def removeColl(filter: sources.Filter): sources.Filter = {
-    filter match {
-      case sources.And(left, right) =>
-        val newLeft = removeColl(left)
-        val newRight = removeColl(right)
-        if (newLeft == sources.AlwaysTrue()) {
-          newRight
-        } else if (newRight == sources.AlwaysTrue()) {
-          newLeft
-        } else {
-          sources.And(newLeft, newRight)
-        }
-
-      case sources.Or(left, right) =>
-        val newLeft = removeColl(left)
-        if (newLeft == sources.AlwaysTrue()) {
-          return sources.AlwaysTrue()
-        }
-        val newRight = removeColl(right)
-        if (newRight == sources.AlwaysTrue()) {
-          sources.AlwaysTrue()
-        } else {
-          sources.Or(newLeft, newRight)
-        }
-
-      case _: sources.IsNull | _: sources.IsNotNull =>
-        filter
-
-      case other =>
-        if (containsFiltersWithCollation(other)) {
-          sources.AlwaysTrue()
-        } else {
-          other
-        }
-    }
-  }
 }

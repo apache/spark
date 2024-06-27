@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{AlwaysTrue, BaseRelation, Filter}
+import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
@@ -414,8 +414,6 @@ trait FileSourceScanLike extends DataSourceScanExec {
       case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
-      .map(DataSourceUtils.removeColl)
-      .filterNot(filter => filter == AlwaysTrue())
   }
 
   // This field may execute subquery expressions and should not be accessed during planning.
