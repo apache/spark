@@ -341,27 +341,29 @@ package object debug {
     }
 
     private def valToString(dataType: DataType, value: Any): String = {
-      dataType match {
-        case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
-          Utils.tryWithResource(new StringWriter()) { writer =>
-            val gen = new JacksonGenerator(dataType, writer, jsonOptions)
+      Option(value).map { v =>
+        dataType match {
+          case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+            Utils.tryWithResource(new StringWriter()) { writer =>
+              val gen = new JacksonGenerator(dataType, writer, jsonOptions)
 
-            dataType match {
-              case _: StructType =>
-                gen.write(value.asInstanceOf[InternalRow])
-              case _: ArrayType =>
-                gen.write(value.asInstanceOf[ArrayData])
-              case _: MapType =>
-                gen.write(value.asInstanceOf[MapData])
-              case _: VariantType =>
-                gen.write(value.asInstanceOf[VariantVal])
+              dataType match {
+                case _: StructType =>
+                  gen.write(v.asInstanceOf[InternalRow])
+                case _: ArrayType =>
+                  gen.write(v.asInstanceOf[ArrayData])
+                case _: MapType =>
+                  gen.write(v.asInstanceOf[MapData])
+                case _: VariantType =>
+                  gen.write(v.asInstanceOf[VariantVal])
+              }
+
+              gen.flush()
+              writer.toString
             }
-
-            gen.flush()
-            writer.toString
-          }
-        case _ => value.toString
-      }
+          case _ => v.toString
+        }
+      }.orNull
     }
 
     override def output: Seq[Attribute] = child.output
