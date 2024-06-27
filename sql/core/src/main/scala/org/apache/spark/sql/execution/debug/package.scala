@@ -342,31 +342,21 @@ package object debug {
 
     private def valToString(dataType: DataType, value: Any): String = {
       dataType match {
-        case s: StructType =>
+        case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
           Utils.tryWithResource(new StringWriter()) { writer =>
-            val gen = new JacksonGenerator(s, writer, jsonOptions)
-            gen.write(value.asInstanceOf[InternalRow])
-            gen.flush()
-            writer.toString
-          }
-        case a: ArrayType =>
-          Utils.tryWithResource(new StringWriter()) { writer =>
-            val gen = new JacksonGenerator(a, writer, jsonOptions)
-            gen.write(value.asInstanceOf[ArrayData])
-            gen.flush()
-            writer.toString
-          }
-        case m: MapType =>
-          Utils.tryWithResource(new StringWriter()) { writer =>
-            val gen = new JacksonGenerator(m, writer, jsonOptions)
-            gen.write(value.asInstanceOf[MapData])
-            gen.flush()
-            writer.toString
-          }
-        case v: VariantType =>
-          Utils.tryWithResource(new StringWriter()) { writer =>
-            val gen = new JacksonGenerator(v, writer, jsonOptions)
-            gen.write(value.asInstanceOf[VariantVal])
+            val gen = new JacksonGenerator(dataType, writer, jsonOptions)
+
+            dataType match {
+              case _: StructType =>
+                gen.write(value.asInstanceOf[InternalRow])
+              case _: ArrayType =>
+                gen.write(value.asInstanceOf[ArrayData])
+              case _: MapType =>
+                gen.write(value.asInstanceOf[MapData])
+              case _: VariantType =>
+                gen.write(value.asInstanceOf[VariantVal])
+            }
+
             gen.flush()
             writer.toString
           }
