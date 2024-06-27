@@ -233,10 +233,10 @@ public class CollationAwareUTF8String {
 
   /*
    * Performs string replacement for ICU collations by searching for instances of the search
-   * string in the src string, with respect to the specified collation, and then replacing
+   * string in the `src` string, with respect to the specified collation, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
-   * search string replaced using the replace string. Similar to UTF8String.findInSet behaviour
-   * used for UTF8_BINARY collation, the method returns src string if the search string is empty.
+   * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
+   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
    *
    * @param src the string to be searched in
    * @param search the string to be searched for
@@ -303,8 +303,8 @@ public class CollationAwareUTF8String {
    * Performs string replacement for UTF8_LCASE collation by searching for instances of the search
    * string in the src string, with respect to lowercased string versions, and then replacing
    * them with the replace string. The method returns a new UTF8String with all instances of the
-   * search string replaced using the replace string. Similar to UTF8String.findInSet behaviour
-   * used for UTF8_BINARY collation, the method returns src string if the search string is empty.
+   * search string replaced using the replace string. Similar to UTF8String.findInSet behavior
+   * used for UTF8_BINARY, the method returns the `src` string if the `search` string is empty.
    *
    * @param src the string to be searched in
    * @param search the string to be searched for
@@ -355,7 +355,7 @@ public class CollationAwareUTF8String {
   }
 
   private static UTF8String toUpperCaseSlow(final UTF8String target) {
-    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to uppercase, which only accepts a Java strings as input.
     // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     return UTF8String.fromString(UCharacter.toUpperCase(target.toString()));
@@ -373,7 +373,7 @@ public class CollationAwareUTF8String {
   }
 
   private static UTF8String toUpperCaseSlow(final UTF8String target, final int collationId) {
-    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to uppercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
@@ -393,7 +393,7 @@ public class CollationAwareUTF8String {
   }
 
   private static UTF8String toLowerCaseSlow(final UTF8String target) {
-    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to lowercase, which only accepts a Java strings as input.
     // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     return UTF8String.fromString(UCharacter.toLowerCase(target.toString()));
@@ -411,7 +411,7 @@ public class CollationAwareUTF8String {
   }
 
   private static UTF8String toLowerCaseSlow(final UTF8String target, final int collationId) {
-    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to lowercase, which only accepts a Java strings as input.
     ULocale locale = CollationFactory.fetchCollation(collationId)
       .collator.getLocale(ULocale.ACTUAL_LOCALE);
@@ -472,7 +472,7 @@ public class CollationAwareUTF8String {
    * Convert the input string to titlecase using the ICU root locale rules.
    */
   public static UTF8String toTitleCase(final UTF8String target) {
-    // Note: In order to achieve the desired behaviour, we use the ICU UCharacter class to
+    // Note: In order to achieve the desired behavior, we use the ICU UCharacter class to
     // convert the string to titlecase, which only accepts a Java strings as input.
     // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
     return UTF8String.fromString(UCharacter.toTitleCase(target.toString(),
@@ -493,7 +493,7 @@ public class CollationAwareUTF8String {
   /*
    * Returns the position of the first occurrence of the match string in the set string,
    * counting ASCII commas as delimiters. The match string is compared in a collation-aware manner,
-   * with respect to the specified collation ID. Similar to UTF8String.findInSet behaviour used
+   * with respect to the specified collation ID. Similar to UTF8String.findInSet behavior used
    * for UTF8_BINARY collation, the method returns 0 if the match string contains no commas.
    *
    * @param match the string to be searched for
