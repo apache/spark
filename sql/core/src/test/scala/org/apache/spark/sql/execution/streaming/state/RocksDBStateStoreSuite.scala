@@ -912,72 +912,52 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  // TODO This is the same as test("prefix scan") in StateStoreSuite without codec
-  testWithColumnFamilies("rocksdb prefix key encoder",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
-    (colFamiliesEnabled, virtualColFamilyEnabled) =>
-      tryWithProviderResource(newStoreProvider(
-        keySchema, PrefixKeyScanStateEncoderSpec(keySchema, 1),
+  Seq(
+    NoPrefixKeyStateEncoderSpec(keySchema), PrefixKeyScanStateEncoderSpec(keySchema, 1)
+  ).foreach { keyEncoder =>
+    testWithColumnFamilies(s"validate rocksdb " +
+      s"${keyEncoder.getClass.toString.split('.').last} correctness",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
+        (colFamiliesEnabled, virtualColFamilyEnabled) =>
+      tryWithProviderResource(newStoreProvider(keySchema, keyEncoder,
         colFamiliesEnabled)) { provider =>
-        var store = provider.getStore(0)
+        val store = provider.getStore(0)
 
-        val testColFamily = "testState"
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
         if (colFamiliesEnabled) {
-          store.createColFamilyIfAbsent(testColFamily,
-            keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          store.createColFamilyIfAbsent(cfName,
+            keySchema, valueSchema, keyEncoder,
             useVirtualColFamily = virtualColFamilyEnabled)
         }
 
-        def putCompositeKeys(keys: Seq[(String, Int)]): Unit = {
-          val randomizedKeys = scala.util.Random.shuffle(keys.toList)
-          randomizedKeys.foreach { case (key1, key2) =>
-            put(store, key1, key2, key2)
-          }
+        var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+        // put & get, iterator
+        timerTimestamps.foreach { ts =>
+          val keyRow = if (ts < 0) {
+            dataToKeyRow("a", ts.toInt)
+          } else dataToKeyRow(ts.toString, ts.toInt)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // remove
+        store.remove(dataToKeyRow(1L.toString, 1.toInt), cfName)
+        timerTimestamps = timerTimestamps.filter(_ != 1L)
+        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+        // prefix scan
+        if (!keyEncoder.getClass.toString.contains("No")) {
+          val keyRow = dataToPrefixKeyRow("a")
+          assert(store.prefixScan(keyRow, cfName).toSeq.length
+            == timerTimestamps.filter(_ < 0).length)
         }
 
-        def verifyScan(key1: Seq[String], key2: Seq[Int]): Unit = {
-          key1.foreach { k1 =>
-            val keyValueSet = store.prefixScan(dataToPrefixKeyRow(k1)).map { pair =>
-              rowPairToDataPair(pair.withRows(pair.key.copy(), pair.value.copy()))
-            }.toSet
-
-            assert(keyValueSet === key2.map(k2 => ((k1, k2), k2)).toSet)
-          }
-        }
-
-        val key1AtVersion0 = Seq("a", "b", "c")
-        val key2AtVersion0 = Seq(1, 2, 3)
-        val keysAtVersion0 = for (k1 <- key1AtVersion0; k2 <- key2AtVersion0) yield (k1, k2)
-
-        putCompositeKeys(keysAtVersion0)
-        verifyScan(key1AtVersion0, key2AtVersion0)
-
-        assert(store.prefixScan(dataToPrefixKeyRow("non-exist")).isEmpty)
-
-        // committing and loading the version 1 (the version being committed)
         store.commit()
-        store = provider.getStore(1)
-
-        // before putting the new key-value pairs, verify prefix scan works for existing keys
-        verifyScan(key1AtVersion0, key2AtVersion0)
-
-        val key1AtVersion1 = Seq("c", "d")
-        val key2AtVersion1 = Seq(4, 5, 6)
-        val keysAtVersion1 = for (k1 <- key1AtVersion1; k2 <- key2AtVersion1) yield (k1, k2)
-
-        // put a new key-value pairs, and verify that prefix scan reflects the changes
-        putCompositeKeys(keysAtVersion1)
-        verifyScan(Seq("c"), Seq(1, 2, 3, 4, 5, 6))
-        verifyScan(Seq("d"), Seq(4, 5, 6))
-
-        // aborting and loading the version 1 again (keysAtVersion1 should be rolled back)
-        store.abort()
-        store = provider.getStore(1)
-
-        // prefix scan should not reflect the uncommitted changes
-        verifyScan(key1AtVersion0, key2AtVersion0)
-        verifyScan(Seq("d"), Seq.empty)
       }
+    }
   }
 
   Seq(true, false).foreach { virtualColFamilyEnabled =>
@@ -1023,9 +1003,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     test(s"validate rocksdb removeColFamilyIfExists correctness " +
       s"with virtualColFamilyEnabled=$virtualColFamilyEnabled") {
       Seq(
-        // NoPrefixKeyStateEncoderSpec(keySchema)
-        PrefixKeyScanStateEncoderSpec(keySchema, 1)
-        // RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        PrefixKeyScanStateEncoderSpec(keySchema, 1),
+        RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
       ).foreach { keyEncoder =>
       tryWithProviderResource(newStoreProvider(keySchema, keyEncoder, true)) { provider =>
         val store = provider.getStore(0)
@@ -1045,17 +1025,24 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
         assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
 
-        store.removeColFamilyIfExists(cfName)
+        // assert col family existence
+        assert(store.removeColFamilyIfExists(cfName))
 
-        val e = intercept[Exception] {
-          store.iterator(cfName)
+        // TODO eliminate behavior difference
+        if (virtualColFamilyEnabled) {
+          assert(!store.iterator(cfName).hasNext)
+        } else {
+          val e = intercept[Exception] {
+            store.iterator(cfName)
+          }
+
+          checkError(
+            exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+            sqlState = Some("42802"),
+            parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
+          )
         }
-        checkError(
-          exception = e.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-          sqlState = Some("42802"),
-          parameters = Map("groupingKey" -> "init_1")
-        )
       }}
     }
   }

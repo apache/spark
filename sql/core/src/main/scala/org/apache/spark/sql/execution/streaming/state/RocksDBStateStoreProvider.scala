@@ -343,7 +343,6 @@ private[sql] class RocksDBStateStoreProvider
         )
         var colFamilyExists = false
         rocksDB.prefixScan(idPrefix).foreach { kv =>
-          logInfo("I am here inside remove col family")
           colFamilyExists = true
           rocksDB.remove(kv.key)
         }

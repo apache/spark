@@ -708,11 +708,11 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
       STATE_ENCODING_NUM_VERSION_BYTES + 8)
 
     Platform.putLong(encodedBytes, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
-    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
+    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET + 8, STATE_ENCODING_VERSION)
     // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
     Platform.copyMemory(
       bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES + 8,
       bytesToEncode.length)
     encodedBytes
   }
