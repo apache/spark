@@ -182,6 +182,14 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     }
   }
 
+  test("test createTempShuffleBlockInDir with non-existent directory") {
+    val nonExistsDir = new File("__nonExistsDir__")
+    assert(!nonExistsDir.exists())
+    val (blockId, tmpFile) = diskBlockManager.createTempShuffleBlockInDir(nonExistsDir)
+    assert(tmpFile.getName == blockId.name)
+    assert(tmpFile.getParentFile == nonExistsDir)
+  }
+
   def writeToFile(file: File, numBytes: Int): Unit = {
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)

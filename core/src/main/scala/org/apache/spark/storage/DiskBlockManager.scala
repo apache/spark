@@ -227,6 +227,25 @@ private[spark] class DiskBlockManager(
     (blockId, getFile(blockId))
   }
 
+  /** Produces a unique block id and File suitable for storing shuffled intermediate results
+   * in the input directory.
+   */
+  def createTempShuffleBlockInDir(fileDir: File): (TempShuffleBlockId, File) = {
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
+    var tmpFile = new File(fileDir, blockId.name)
+    while (tmpFile.exists()) {
+      blockId = TempShuffleBlockId(UUID.randomUUID())
+      tmpFile = new File(fileDir, blockId.name)
+    }
+    if (permissionChangingRequired) {
+      // SPARK-37618: we need to make the file world readable because the parent will
+      // lose the setgid bit when making it group writable. Without this the shuffle
+      // service can't read the shuffle files in a secure setup.
+      createWorldReadableFile(tmpFile)
+    }
+    (blockId, tmpFile)
+  }
+
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
     var blockId = TempShuffleBlockId(UUID.randomUUID())

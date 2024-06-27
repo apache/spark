@@ -221,7 +221,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
-    final SpillInfo[] spills = sorter.closeAndGetSpills();
+    Optional<File> finalDataFileDir =
+      shuffleExecutorComponents.getFinalDataFile(shuffleId, mapId).map(File::getParentFile);
+    final SpillInfo[] spills = sorter.closeAndGetSpills(finalDataFileDir);
     try {
       partitionLengths = mergeSpills(spills);
     } finally {

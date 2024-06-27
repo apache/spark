@@ -21,6 +21,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.Optional;
 import java.util.zip.Checksum;
 
 import scala.Tuple2;
@@ -156,8 +157,10 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
    * @param isFinalFile if true, this indicates that we're writing the final output file and that
    *                    the bytes written should be counted towards shuffle write metrics rather
    *                    than shuffle spill metrics.
+   * @param finalDataFileDir if present, the directory to write the final output file to. If not
+   *                         present, the file will be written to a temporary directory.
    */
-  private void writeSortedFile(boolean isFinalFile) {
+  private void writeSortedFile(boolean isFinalFile, Optional<File> finalDataFileDir) {
     // Only emit the log if this is an actual spilling.
     if (!isFinalFile) {
       logger.info(
@@ -201,7 +204,10 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more details.
     final Tuple2<TempShuffleBlockId, File> spilledFileInfo =
-      blockManager.diskBlockManager().createTempShuffleBlock();
+      finalDataFileDir
+        .filter(v -> spills.isEmpty())
+        .map(blockManager.diskBlockManager()::createTempShuffleBlockInDir)
+        .orElseGet(blockManager.diskBlockManager()::createTempShuffleBlock);
     final File file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
@@ -295,7 +301,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       return 0L;
     }
 
-    writeSortedFile(false);
+    writeSortedFile(false, Optional.empty());
     final long spillSize = freeMemory();
     inMemSorter.reset();
     // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
@@ -444,14 +450,16 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   /**
    * Close the sorter, causing any buffered data to be sorted and written out to disk.
    *
+   * @param finalDataFileDir if present, the directory to write the final output file to. If not
+   *                         present, the file will be written to a temporary directory.
    * @return metadata for the spill files written by this sorter. If no records were ever inserted
    *         into this sorter, then this will return an empty array.
    */
-  public SpillInfo[] closeAndGetSpills() throws IOException {
+  public SpillInfo[] closeAndGetSpills(Optional<File> finalDataFileDir) throws IOException {
     if (inMemSorter != null) {
       // Here we are spilling the remaining data in the buffer. If there is no spill before, this
       // final spill file will be the final shuffle output file.
-      writeSortedFile(/* isFinalFile = */spills.isEmpty());
+      writeSortedFile(/* isFinalFile = */spills.isEmpty(), finalDataFileDir);
       freeMemory();
       inMemSorter.free();
       inMemSorter = null;

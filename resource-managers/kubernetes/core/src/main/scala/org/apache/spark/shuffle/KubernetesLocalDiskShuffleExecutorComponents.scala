@@ -68,6 +68,10 @@ class KubernetesLocalDiskShuffleExecutorComponents(sparkConf: SparkConf)
     : Optional[SingleSpillShuffleMapOutputWriter] = {
     delegate.createSingleFileMapOutputWriter(shuffleId, mapId)
   }
+
+  override def getFinalDataFile(shuffleId: Int, mapId: Long): Optional[File] = {
+    delegate.getFinalDataFile(shuffleId, mapId)
+  }
 }
 
 object KubernetesLocalDiskShuffleExecutorComponents extends Logging {
