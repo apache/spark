@@ -131,6 +131,7 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
+      useVirtualColFamily: Boolean = false,
       isInternal: Boolean = false): Unit
 
   /**

@@ -127,34 +127,48 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   def testWithColumnFamilies(
       testName: String,
       testMode: TestMode,
+      alsoTestWithVirtualColFamily: Boolean,
       testTags: Tag*)
-      (testBody: Boolean => Any): Unit = {
+      (testBody: (Boolean, Boolean) => Any): Unit = {
     Seq(true, false).foreach { colFamiliesEnabled =>
-      testMode match {
-        case TestWithChangelogCheckpointingEnabled =>
-          testWithChangelogCheckpointingEnabled(s"$testName - " +
-            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
-            testBody(colFamiliesEnabled)
-          }
+      val virtualColFamilySeq =
+        if (alsoTestWithVirtualColFamily) Seq(true, false) else Seq(false)
 
-        case TestWithChangelogCheckpointingDisabled =>
-          testWithChangelogCheckpointingDisabled(s"$testName - " +
-            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
-            testBody(colFamiliesEnabled)
-          }
+      virtualColFamilySeq.foreach { virtualColFamilyEnabled =>
+        val testNameSuffix =
+          if (alsoTestWithVirtualColFamily) {
+            s" & virtualColFamilyEnabled=$virtualColFamilyEnabled"
+          } else ""
+        testMode match {
+          case TestWithChangelogCheckpointingEnabled =>
+            testWithChangelogCheckpointingEnabled(s"$testName - " +
+              s"with colFamiliesEnabled=$colFamiliesEnabled" + testNameSuffix,
+              testTags: _*) {
+              testBody(colFamiliesEnabled, virtualColFamilyEnabled)
+            }
 
-        case TestWithBothChangelogCheckpointingEnabledAndDisabled =>
-          testWithChangelogCheckpointingEnabled(s"$testName - " +
-            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
-            testBody(colFamiliesEnabled)
-          }
-          testWithChangelogCheckpointingDisabled(s"$testName - " +
-            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
-            testBody(colFamiliesEnabled)
-          }
+          case TestWithChangelogCheckpointingDisabled =>
+            testWithChangelogCheckpointingDisabled(s"$testName - " +
+              s"with colFamiliesEnabled=$colFamiliesEnabled" + testNameSuffix,
+              testTags: _*) {
+              testBody(colFamiliesEnabled, virtualColFamilyEnabled)
+            }
 
-        case _ =>
-          throw new IllegalArgumentException(s"Unknown test mode: $testMode")
+          case TestWithBothChangelogCheckpointingEnabledAndDisabled =>
+            testWithChangelogCheckpointingEnabled(s"$testName - " +
+              s"with colFamiliesEnabled=$colFamiliesEnabled" + testNameSuffix,
+              testTags: _*) {
+              testBody(colFamiliesEnabled, virtualColFamilyEnabled)
+            }
+            testWithChangelogCheckpointingDisabled(s"$testName - " +
+              s"with colFamiliesEnabled=$colFamiliesEnabled" + testNameSuffix,
+              testTags: _*) {
+              testBody(colFamiliesEnabled, virtualColFamilyEnabled)
+            }
+
+          case _ =>
+            throw new IllegalArgumentException(s"Unknown test mode: $testMode")
+        }
       }
     }
   }
@@ -167,7 +181,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 1)
     new File(remoteDir).delete() // to make sure that the directory gets created
@@ -190,8 +204,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: load version that doesn't exist",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
-    colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val provider = new RocksDBStateStoreProvider()
     var ex = intercept[SparkException] {
       provider.getStore(-1)
@@ -228,7 +241,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies(
     "RocksDB: purge changelog and snapshots",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
@@ -270,7 +283,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies(
     "RocksDB: minDeltasForSnapshot",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true, minDeltasForSnapshot = 3)
@@ -312,7 +325,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies("SPARK-45419: Do not reuse SST files" +
     " in different RocksDB instances",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
@@ -344,7 +357,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   // an existing checkpoint without changelog.
   testWithColumnFamilies(
     "RocksDB: changelog checkpointing backward compatibility",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
@@ -407,7 +420,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   // an existing checkpoint with changelog.
   testWithColumnFamilies(
     "RocksDB: changelog checkpointing forward compatibility",
-    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    TestWithChangelogCheckpointingEnabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val enableChangelogCheckpointingConf =
@@ -459,7 +472,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: compression conf",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
 
@@ -475,7 +488,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     def testOps(compactOnCommit: Boolean): Unit = {
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete() // to make sure that the directory gets created
@@ -545,7 +558,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: column family creation with invalid names",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
 
@@ -582,7 +595,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: column family creation with reserved chars",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
 
@@ -651,7 +664,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: operations on absent column family",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
 
@@ -687,7 +700,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load " +
     s"with multiple column families",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val colFamily1: String = "abc"
@@ -803,7 +816,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(s"RocksDB: handle commit failures and aborts",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val hadoopConf = new Configuration()
     hadoopConf.set(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
@@ -990,7 +1003,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies("RocksDBFileManager: create init dfs directory with " +
     s"unknown number of keys",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     try {
       val verificationDir = Utils.createTempDir().getAbsolutePath
@@ -1080,7 +1093,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("RocksDBFileManager: delete orphan files",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       // Use 2 file managers here to emulate concurrent execution
@@ -1160,7 +1173,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies("RocksDBFileManager: don't delete orphan files " +
     s"when there is only 1 version",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileManager = new RocksDBFileManager(
@@ -1215,7 +1228,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("RocksDBFileManager: upload only new immutable files",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
@@ -1305,7 +1318,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithColumnFamilies("RocksDBFileManager: error writing [version].zip " +
     s"cancels the output stream",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     quietly {
       val hadoopConf = new Configuration()
       hadoopConf.set(
@@ -1323,7 +1336,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("disallow concurrent updates to the same RocksDB instance",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     quietly {
       withDB(
         Utils.createTempDir().toString,
@@ -1393,7 +1406,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("ensure concurrent access lock is released after Spark task completes",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     RocksDBSuite.withSingletonDB {
       // Load a RocksDB instance, that is, get a lock inside a task and then fail
       quietly {
@@ -1411,7 +1424,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("checkpoint metadata serde roundtrip",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
     // expect read metadata error when metadata uses unsupported version
     withTempDir { dir =>
       val file2 = new File(dir, "json")
@@ -1459,7 +1472,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("SPARK-36236: reset RocksDB metrics whenever a new version is loaded",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     def verifyMetrics(putCount: Long, getCount: Long, iterCountPositive: Boolean = false,
                       metrics: RocksDBMetrics): Unit = {
       assert(metrics.nativeOpsHistograms("put").count === putCount, "invalid put count")
@@ -1558,7 +1571,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   Seq("-1", "100", "1000").foreach { maxOpenFiles =>
     testWithColumnFamilies(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles " +
       "config property for RocksDB state store instance should succeed",
-      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
       withTempDir { dir =>
         val sqlConf = SQLConf.get.clone()
         sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
@@ -1581,7 +1594,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   Seq("test", "true").foreach { maxOpenFiles =>
     testWithColumnFamilies(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config " +
       "property for RocksDB state store instance should fail",
-      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
       withTempDir { dir =>
         val ex = intercept[IllegalArgumentException] {
           val sqlConf = SQLConf.get.clone()
@@ -1609,7 +1622,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     Seq("16", "32", "64").foreach {writeBufferSizeMB =>
       testWithColumnFamilies(s"SPARK-42819: configure memtable memory usage with " +
         s"maxWriteBufferNumber=$maxWriteBufferNumber and writeBufferSize=$writeBufferSizeMB",
-        TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+        TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
         withTempDir { dir =>
           val sqlConf = new SQLConf
           sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber",
@@ -1634,7 +1647,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("Verify that fallocate is allowed by default",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
      val sqlConf = new SQLConf
      val dbConf = RocksDBConf(StateStoreConf(sqlConf))
      assert(dbConf.allowFAllocate == true)
@@ -1642,7 +1655,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
  /** RocksDB memory management tests for bounded memory usage */
   testWithColumnFamilies("Memory mgmt - invalid config",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     withTempDir { dir =>
       try {
         RocksDBMemoryManager.resetWriteBufferManagerAndCache
@@ -1681,7 +1694,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   Seq("true", "false").foreach { boundedMemoryUsage =>
     testWithColumnFamilies(s"Memory mgmt - Cache reuse for RocksDB " +
       s"with boundedMemoryUsage=$boundedMemoryUsage",
-      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+      (colFamiliesEnabled, _) =>
       withTempDir { dir1 =>
         withTempDir { dir2 =>
           try {
@@ -1741,7 +1755,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   Seq("100", "1000", "100000").foreach { totalMemorySizeMB =>
     testWithColumnFamilies(s"Memory mgmt - valid config " +
       s"with totalMemorySizeMB=$totalMemorySizeMB",
-      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
       withTempDir { dir =>
         try {
           val sqlConf = new SQLConf
@@ -1778,7 +1792,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (colFamiliesEnabled, _) =>
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
 

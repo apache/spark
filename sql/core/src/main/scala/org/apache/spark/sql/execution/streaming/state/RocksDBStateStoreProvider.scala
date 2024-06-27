@@ -28,7 +28,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf.STREAMING_ROCKSDB_VIRTUAL_COL_FAMILY_ENABLED
+// import org.apache.spark.sql.internal.SQLConf.STREAMING_ROCKSDB_VIRTUAL_COL_FAMILY_ENABLED
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
@@ -57,18 +57,21 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
+        useVirtualColFamily: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
-      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
 
-      val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-      useVirtualColumnFamily = sparkConf.get(STREAMING_ROCKSDB_VIRTUAL_COL_FAMILY_ENABLED)
+      useVirtualColumnFamily = useVirtualColFamily
+      println("I am here inside using rocksdb state store provider: " + useVirtualColumnFamily)
       if (useVirtualColumnFamily) {
         // if use virtual column family, then use default col family, no need to create new
-        rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+        // TODO avoid Id duplication
+        println("I am here inside using virtual col family")
         colFamilyToLongMap.putIfAbsent(colFamilyName, scala.util.Random.nextLong())
+      } else {
+        rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       }
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
@@ -76,10 +79,13 @@ private[sql] class RocksDBStateStoreProvider
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
+    // TODO verify and throw error if colFamilyToLongMap does not have id
+    // TODO check rocksDB.get function verify works for VCF
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val value = if (useVirtualColumnFamily) {
+        println("I am here inside use virtual col family")
         kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key,
             colFamilyToLongMap.get(colFamilyName))))
@@ -115,8 +121,14 @@ private[sql] class RocksDBStateStoreProvider
 
       verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
       "that supports multiple values for a single key.")
-      val encodedKey = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
-      valueEncoder.decodeValues(encodedKey)
+
+      val encodedValues = if (useVirtualColumnFamily) {
+        println("I am here inside virtual col family valuesIterator")
+        rocksDB.get(keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)))
+      } else {
+        rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
+      }
+      valueEncoder.decodeValues(encodedValues)
     }
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
@@ -129,7 +141,14 @@ private[sql] class RocksDBStateStoreProvider
         " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
-      rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
+      val (encodedKey, physicalColFamilyName) = if (useVirtualColumnFamily) {
+        println("I am here inside virtual col family merge")
+        (keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)),
+          StateStore.DEFAULT_COL_FAMILY_NAME)
+      } else {
+        (keyEncoder.encodeKey(key), colFamilyName)
+      }
+      rocksDB.merge(encodedKey, valueEncoder.encodeValue(value), physicalColFamilyName)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
@@ -158,14 +177,6 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      // How to avoid memcpy here
-      def getIdBytes(id: Long): Array[Byte] = {
-        // Long is fixed to be 8 bytes
-        val encodedBytes = new Array[Byte](8)
-        Platform.putLong(encodedBytes, Platform.BYTE_ARRAY_OFFSET, id)
-        encodedBytes
-      }
-
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
       if (useVirtualColumnFamily) {
@@ -317,11 +328,33 @@ private[sql] class RocksDBStateStoreProvider
     /** Return the [[RocksDB]] instance in this store. This is exposed mainly for testing. */
     def dbInstance(): RocksDB = rocksDB
 
+    // TODO How to avoid memcpy here
+    private def getIdBytes(id: Long): Array[Byte] = {
+      // Long is fixed to be 8 bytes
+      val encodedBytes = new Array[Byte](8)
+      Platform.putLong(encodedBytes, Platform.BYTE_ARRAY_OFFSET, id)
+      encodedBytes
+    }
+
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
       verify(useColumnFamilies, "Column families are not supported in this store")
-      val result = rocksDB.removeColFamilyIfExists(colFamilyName)
-      keyValueEncoderMap.remove(colFamilyName)
+      val result = if (!useVirtualColumnFamily) {
+        rocksDB.removeColFamilyIfExists(colFamilyName)
+      } else {
+        // TODO more efficient way to do remove col family?
+        val idPrefix = getIdBytes(
+          colFamilyToLongMap.get(colFamilyName)
+        )
+        var colFamilyExists = false
+        rocksDB.prefixScan(idPrefix).foreach { kv =>
+          logInfo("I am here inside remove col family")
+          colFamilyExists = true
+          rocksDB.remove(kv.key)
+        }
+        colFamilyExists
+      }
+      colFamilyToLongMap.remove(colFamilyName)
       result
     }
   }

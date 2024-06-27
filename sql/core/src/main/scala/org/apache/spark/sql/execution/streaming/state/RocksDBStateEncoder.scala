@@ -33,6 +33,7 @@ sealed trait RocksDBKeyStateEncoder {
 
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
 
+  // TODO try change less of the API for key encoder
   def encodePrefixKey(prefixKey: UnsafeRow, colFamilyId: Long): Array[Byte] =
     throw new IllegalArgumentException(s"Unsupported encodePrefixKey with colFamilyId arg")
 
