@@ -1102,10 +1102,10 @@ class SparkSqlAstBuilder extends AstBuilder {
   /**
    * Create a [[UnsetNamespacePropertiesCommand]] command.
    *
-   * For example:
+   * Expected format:
    * {{{
    *   ALTER (DATABASE|SCHEMA|NAMESPACE) database
-   *   UNSET (DBPROPERTIES | PROPERTIES) ('comment', 'key');
+   *   UNSET (DBPROPERTIES | PROPERTIES) ('key1', 'key2');
    * }}}
    */
   override def visitUnsetNamespaceProperties(
