@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate, AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -382,9 +382,12 @@ case class AlwaysFalse() extends Filter {
 object AlwaysFalse extends AlwaysFalse {
 }
 
-// COLLATION AWARE FILTERS
-
+/**
+ * Base class for collation aware string filters.
+ */
 abstract class CollatedFilter() extends Filter {
+
+  /** The corresponding non-collation aware filter. */
   def correspondingFilter: Filter
   def dataType: DataType
 
@@ -392,51 +395,61 @@ abstract class CollatedFilter() extends Filter {
   override def toV2: Predicate = correspondingFilter.toV2
 }
 
+/** Collation aware equivalent of [[EqualTo]]. */
 case class CollatedEqualTo(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = EqualTo(attribute, value)
 }
 
+/** Collation aware equivalent of [[EqualNullSafe]]. */
 case class CollatedEqualNullSafe(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = EqualNullSafe(attribute, value)
 }
 
+/** Collation aware equivalent of [[GreaterThan]]. */
 case class CollatedGreaterThan(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThan(attribute, value)
 }
 
+/** Collation aware equivalent of [[GreaterThanOrEqual]]. */
 case class CollatedGreaterThanOrEqual(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThanOrEqual(attribute, value)
 }
 
+/** Collation aware equivalent of [[LessThan]]. */
 case class CollatedLessThan(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = LessThan(attribute, value)
 }
 
+/** Collation aware equivalent of [[LessThanOrEqual]]. */
 case class CollatedLessThanOrEqual(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = LessThanOrEqual(attribute, value)
 }
 
+/** Collation aware equivalent of [[In]]. */
 case class CollatedIn(attribute: String, values: Array[Any], dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = In(attribute, values)
 }
 
+/** Collation aware equivalent of [[StringStartsWith]]. */
 case class CollatedStringStartsWith(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringStartsWith(attribute, value)
 }
 
+/** Collation aware equivalent of [[StringEndsWith]]. */
 case class CollatedStringEndsWith(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringEndsWith(attribute, value)
 }
 
+/** Collation aware equivalent of [[StringContains]]. */
 case class CollatedStringContains(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringContains(attribute, value)
