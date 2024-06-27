@@ -100,6 +100,7 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
   private lazy val cachedMessageWithContext: MessageWithContext = messageWithContext
+
   def message: String = cachedMessageWithContext.message
 
   def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
