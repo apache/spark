@@ -76,7 +76,11 @@ class SingleStatementExec(
   /** @inheritdoc */
   override def reset(): Unit = consumed = false
 
-  /** Get the SQL query text corresponding to this statement. */
+  /**
+   * Get the SQL query text corresponding to this statement.
+   * @return
+   *   SQL query text.
+   */
   def getText: String = {
     assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
