@@ -106,7 +106,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         StopStream
       )
 
-      val expectedStateStoreInfo = Array(
+      val expectedStateStoreInfo: Array[StateStoreMetadata] = Array(
         StateStoreMetadataV1("left-keyToNumValues", 0, numShufflePartitions),
         StateStoreMetadataV1("left-keyWithIndexToValue", 0, numShufflePartitions),
         StateStoreMetadataV1("right-keyToNumValues", 0, numShufflePartitions),

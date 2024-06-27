@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, Metadata
 /**
  * Metadata for a state store instance.
  */
-trait StateStoreMetadata {
+trait StateStoreMetadata extends Serializable {
   def storeName: String
   def numColsPrefixKey: Int
   def numPartitions: Int
@@ -41,6 +41,21 @@ trait StateStoreMetadata {
 
 case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
   extends StateStoreMetadata
+
+case class StateStoreMetadataV2(
+    storeName: String,
+    numColsPrefixKey: Int,
+    numPartitions: Int,
+    stateSchemaFilePath: String)
+  extends StateStoreMetadata
+
+object StateStoreMetadataV2 {
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  @scala.annotation.nowarn
+  private implicit val manifest = Manifest
+    .classType[StateStoreMetadataV2](implicitly[ClassTag[StateStoreMetadataV2]].runtimeClass)
+}
 
 /**
  * Information about a stateful operator.
@@ -54,12 +69,23 @@ case class OperatorInfoV1(operatorId: Long, operatorName: String) extends Operat
 
 trait OperatorStateMetadata {
   def version: Int
+
+  def operatorInfo: OperatorInfo
+
+  def stateStoreInfo: Array[StateStoreMetadata]
 }
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
-    stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
+    stateStoreInfo: Array[StateStoreMetadata]) extends OperatorStateMetadata {
   override def version: Int = 1
+}
+
+case class OperatorStateMetadataV2(
+    operatorInfo: OperatorInfoV1,
+    stateStoreInfo: Array[StateStoreMetadata],
+    operatorPropertiesJson: String) extends OperatorStateMetadata {
+  override def version: Int = 2
 }
 
 object OperatorStateMetadataV1 {
@@ -81,6 +107,27 @@ object OperatorStateMetadataV1 {
       out: FSDataOutputStream,
       operatorStateMetadata: OperatorStateMetadata): Unit = {
     Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1], out)
+  }
+}
+
+object OperatorStateMetadataV2 {
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
+
+  @scala.annotation.nowarn
+  private implicit val manifest = Manifest
+    .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
+
+  def metadataFilePath(stateCheckpointPath: Path): Path =
+    new Path(new Path(new Path(stateCheckpointPath, "v2"), "_metadata"), "metadata")
+
+  def deserialize(in: BufferedReader): OperatorStateMetadata = {
+    Serialization.read[OperatorStateMetadataV2](in)
+  }
+
+  def serialize(
+      out: FSDataOutputStream,
+      operatorStateMetadata: OperatorStateMetadata): Unit = {
+    Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
   }
 }
 
@@ -114,7 +161,9 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
 }
 
 /**
- * Read OperatorStateMetadata from the state checkpoint directory.
+ * Read OperatorStateMetadata from the state checkpoint directory. This class will only be
+ * used to read OperatorStateMetadataV1.
+ * OperatorStateMetadataV2 will be read by the OperatorStateMetadataLog.
  */
 class OperatorStateMetadataReader(stateCheckpointPath: Path, hadoopConf: Configuration) {
 

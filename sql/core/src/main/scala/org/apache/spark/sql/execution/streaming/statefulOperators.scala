@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -71,6 +72,12 @@ trait StatefulOperator extends SparkPlan {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
+  }
+
+  def metadataFilePath(): Path = {
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation, getStateInfo.operatorId.toString)
+    new Path(new Path(stateCheckpointPath, "_metadata"), "metadata")
   }
 
   // Function used to record state schema for the first time and validate it against proposed
@@ -141,6 +148,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    */
   def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = Some(inputWatermarkMs)
 
+  def operatorStateMetadataVersion: Int = 1
+
   override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
@@ -192,7 +201,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   def operatorStateMetadata(): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo =
+    val stateStoreInfo: Array[StateStoreMetadata] =
       Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
@@ -913,7 +922,7 @@ case class SessionWindowStateStoreSaveExec(
   override def operatorStateMetadata(): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo = Array(StateStoreMetadataV1(
+    val stateStoreInfo: Array[StateStoreMetadata] = Array(StateStoreMetadataV1(
       StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
