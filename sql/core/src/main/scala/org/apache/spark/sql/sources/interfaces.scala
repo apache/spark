@@ -200,7 +200,7 @@ trait CreatableRelationProvider {
   /**
    * Returns whether the data source supports non-default collated data types.
    */
-  def supportCollations: Boolean = false
+  def supportCollations: Boolean = true
 }
 
 /**
