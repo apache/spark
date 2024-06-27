@@ -25,16 +25,16 @@ import org.apache.spark.sql.types.{DataType, LongType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object MathFunctionBenchmark extends SqlBasedBenchmark {
-  private val N = 100L * 1000 * 1000
+  private val N = 200L * 1000 * 1000
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val benchmark = new Benchmark("BIN", N, output = output)
     benchmark.addCase("BIN") { _ =>
-      spark.range(-N, N).select(Column(Bin(Column("id").expr))).noop()
+      spark.range(N).select(Column(Bin(Column("id").expr))).noop()
     }
 
     benchmark.addCase("BIN OLD") { _ =>
-      spark.range(-N, N).select(Column(BinOld(Column("id").expr))).noop()
+      spark.range(N).select(Column(BinOld(Column("id").expr))).noop()
     }
     benchmark.run()
   }
