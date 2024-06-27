@@ -861,6 +861,27 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     // The plan is expected to be unchanged.
     comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
   }
+
+  test("SPARK-48428: Do not pushdown when attr is used in expression with mutliple references") {
+    val query = contact
+      .limit(5)
+      .select(
+        GetStructField(GetStructField(CreateStruct(Seq($"id", $"employer")), 1), 0),
+        $"employer.id")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = contact
+      .select($"id", $"employer")
+      .limit(5)
+      .select(
+        GetStructField(GetStructField(CreateStruct(Seq($"id", $"employer")), 1), 0),
+        $"employer.id")
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
 }
 
 object NestedColumnAliasingSuite {
