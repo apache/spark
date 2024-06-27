@@ -3010,6 +3010,9 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
+    if (input.numBytes == 0 || "UTF-8".equalsIgnoreCase(toCharset)) {
+      return input.getBytes
+    }
     if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
       val encoder = try {
         val codingErrorAction = if (legacyErrorAction) {
