@@ -1105,17 +1105,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    * For example:
    * {{{
    *   ALTER (DATABASE|SCHEMA|NAMESPACE) database
-   *   UNSET (DBPROPERTIES | PROPERTIES) [IF EXISTS] ('comment', 'key');
+   *   UNSET (DBPROPERTIES | PROPERTIES) ('comment', 'key');
    * }}}
    */
   override def visitUnsetNamespaceProperties(
       ctx: UnsetNamespacePropertiesContext): LogicalPlan = withOrigin(ctx) {
     val properties = visitPropertyKeys(ctx.propertyList)
     val cleanedProperties = cleanNamespaceProperties(properties.map(_ -> "").toMap, ctx).keys.toSeq
-    val ifExists = ctx.EXISTS != null
     UnsetNamespacePropertiesCommand(
-      withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_, fetchMetadata = true)),
-      cleanedProperties,
-      ifExists)
+      withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
+      cleanedProperties)
   }
 }

@@ -2659,12 +2659,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsetNonExistentPropertiesError(
-      properties: Seq[String], nameParts: Seq[String]): Throwable = {
+      properties: Seq[String], table: TableIdentifier): Throwable = {
     new AnalysisException(
       errorClass = "UNSET_NONEXISTENT_PROPERTIES",
       messageParameters = Map(
         "properties" -> properties.map(toSQLId).mkString(", "),
-        "name" -> toSQLId(nameParts))
+        "table" -> toSQLId(table.nameParts))
     )
   }
 

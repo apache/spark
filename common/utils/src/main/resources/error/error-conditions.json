@@ -4237,7 +4237,7 @@
   },
   "UNSET_NONEXISTENT_PROPERTIES" : {
     "message" : [
-      "Attempted to unset non-existent properties [<properties>] in table or namespace <name>."
+      "Attempted to unset non-existent properties [<properties>] in table <table>."
     ],
     "sqlState" : "42K0J"
   },

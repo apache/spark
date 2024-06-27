@@ -106,7 +106,7 @@ statement
     | ALTER namespace identifierReference
         SET (DBPROPERTIES | PROPERTIES) propertyList                   #setNamespaceProperties
     | ALTER namespace identifierReference
-        UNSET (DBPROPERTIES | PROPERTIES) (IF EXISTS)? propertyList    #unsetNamespaceProperties
+        UNSET (DBPROPERTIES | PROPERTIES) propertyList                 #unsetNamespaceProperties
     | ALTER namespace identifierReference
         SET locationSpec                                               #setNamespaceLocation
     | DROP namespace (IF EXISTS)? identifierReference

@@ -41,20 +41,11 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a', 'b', 'c')"),
           UnsetNamespacePropertiesCommand(
-            UnresolvedNamespace(Seq("a", "b", "c"), fetchMetadata = true),
-            Seq("a", "b", "c"), ifExists = false))
-
-        comparePlans(
-          parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken IF EXISTS ('a', 'b', 'c')"),
-          UnsetNamespacePropertiesCommand(
-            UnresolvedNamespace(Seq("a", "b", "c"), fetchMetadata = true),
-            Seq("a", "b", "c"), ifExists = true))
+            UnresolvedNamespace(Seq("a", "b", "c")), Seq("a", "b", "c")))
 
         comparePlans(
           parsePlan(s"ALTER $nsToken a.b.c UNSET $propToken ('a')"),
-          UnsetNamespacePropertiesCommand(
-            UnresolvedNamespace(Seq("a", "b", "c"), fetchMetadata = true),
-            Seq("a"), ifExists = false))
+          UnsetNamespacePropertiesCommand(UnresolvedNamespace(Seq("a", "b", "c")), Seq("a")))
       }
     }
   }
@@ -69,5 +60,18 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         fragment = sql,
         start = 0,
         stop = 80))
+  }
+
+  test("not support clause - IF EXISTS") {
+    Seq("DATABASE", "SCHEMA", "NAMESPACE").foreach { nsToken =>
+      Seq("PROPERTIES", "DBPROPERTIES").foreach { propToken =>
+        val sql = s"ALTER $nsToken a.b.c UNSET $propToken IF EXISTS ('a', 'b', 'c')"
+        checkError(
+          exception = parseException(sql),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map("error" -> "'IF'", "hint" -> ": missing '('")
+        )
+      }
+    }
   }
 }

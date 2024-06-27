@@ -25,7 +25,7 @@ license: |
 `DATABASE`, `SCHEMA` and `NAMESPACE` are interchangeable and one can be used in place of the others. An error message
 is issued if the database is not found in the system.
 
-### ALTER PROPERTIES
+### ALTER SET PROPERTIES
 `ALTER DATABASE SET DBPROPERTIES` statement changes the properties associated with a database.
 The specified property values override any existing value with the same property name. 
 This command is mostly used to record the metadata for a database and may be used for auditing purposes.
@@ -42,6 +42,23 @@ ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
 * **database_name**
 
     Specifies the name of the database to be altered.
+
+### ALTER UNSET PROPERTIES
+`ALTER DATABASE UNSET DBPROPERTIES` statement unsets the properties associated with a database.
+If the specified property key does not exist, the command will ignore it and finally succeed.
+
+#### Syntax
+
+```sql
+ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
+    UNSET { DBPROPERTIES | PROPERTIES } ( property_name [ , ... ] )
+```
+
+#### Parameters
+
+* **database_name**
+
+  Specifies the name of the database to be altered.
 
 ### ALTER LOCATION
 `ALTER DATABASE SET LOCATION` statement changes the default parent-directory where new tables will be added 

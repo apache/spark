@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -72,13 +71,9 @@ trait AlterNamespaceUnsetPropertiesSuiteBase extends QueryTest with DDLCommandTe
       assert(getProperties(ns) === "((a,a), (c,c))")
 
       // unset non-existent properties
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES ('b')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map("properties" -> "`b`", "name" -> toSQLId(namespace)))
-      sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES IF EXISTS ('b')")
+      // it will be successful, ignoring non-existent properties
+      sql(s"ALTER NAMESPACE $ns UNSET PROPERTIES ('b')")
+      assert(getProperties(ns) === "((a,a), (c,c))")
     }
   }
 

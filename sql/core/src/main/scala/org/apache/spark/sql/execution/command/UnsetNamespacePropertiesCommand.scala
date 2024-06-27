@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.NamespaceChange
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A command that unsets database/schema/namespace properties.
@@ -30,26 +29,19 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * The syntax of this command is:
  * {{{
  *    ALTER (DATABASE|SCHEMA|NAMESPACE) ...
- *      UNSET (DBPROPERTIES|PROPERTIES) [IF EXISTS] ('key1', 'key2', ...);
+ *      UNSET (DBPROPERTIES|PROPERTIES) ('key1', 'key2', ...);
  * }}}
  */
 case class UnsetNamespacePropertiesCommand(
     ident: LogicalPlan,
-    propKeys: Seq[String],
-    ifExists: Boolean) extends UnaryRunnableCommand {
+    propKeys: Seq[String]) extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val ResolvedNamespace(catalog, ns, metadata) = child
-    if (!ifExists) {
-      val nonexistentKeys = propKeys.filter(key => !metadata.contains(key))
-      if (nonexistentKeys.nonEmpty) {
-        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, ns)
-      }
-    }
+    val ResolvedNamespace(catalog, ns, _) = child
     val changes = propKeys.map {
       NamespaceChange.removeProperty
     }
+    // If the property does not exist, the change should succeed.
     catalog.asNamespaceCatalog.alterNamespace(ns.toArray, changes: _*)
 
     Seq.empty
