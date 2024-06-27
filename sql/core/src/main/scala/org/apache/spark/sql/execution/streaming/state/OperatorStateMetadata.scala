@@ -116,7 +116,7 @@ object OperatorStateMetadataV2 {
     .classType[OperatorStateMetadataV2](implicitly[ClassTag[OperatorStateMetadataV2]].runtimeClass)
 
   def metadataFilePath(stateCheckpointPath: Path): Path =
-    new Path(new Path(new Path(stateCheckpointPath, "v2"), "_metadata"), "metadata")
+    new Path(new Path(new Path(stateCheckpointPath, "_metadata"), "metadata"), "v2")
 
   def deserialize(in: BufferedReader): OperatorStateMetadata = {
     Serialization.read[OperatorStateMetadataV2](in)
