@@ -100,13 +100,7 @@ abstract class DataSourceCollationSuite extends QueryTest
         .format(dataSource)
         .saveAsTable(tableName)
 
-      val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
-      val expectedRowCnt = if (useCollations) 2 else 1
-      checkAnswer(
-        sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(expectedCollation)))
-      assert(
-        spark.read.table(tableName).where("c1 = 'a'").count()
-          === expectedRowCnt)
+      verifyForTable(tableName, "c1", useCollations)
     }
   }
 
@@ -124,12 +118,26 @@ abstract class DataSourceCollationSuite extends QueryTest
 
       sql(s"INSERT INTO $tableName VALUES ('a'), ('b'), ('A')")
 
-      val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
-      val expectedRowCnt = if (useCollations) 2 else 1
-      checkAnswer(
-        sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(expectedCollation)))
-      assert(sql(s"SELECT * FROM $tableName WHERE c1 = 'a'").collect().length === expectedRowCnt)
+      verifyForTable(tableName, "c1", useCollations)
     }
+  }
+
+  private def verifyForTable(
+      tableName: String,
+      columnName: String,
+      useCollations: Boolean): Unit = {
+    val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
+    val expectedRowCnt = if (useCollations) 2 else 1
+    checkAnswer(
+      sql(s"SELECT DISTINCT COLLATION($columnName) FROM $tableName"), Seq(Row(expectedCollation)))
+    assert(
+      sql(s"SELECT * FROM $tableName WHERE $columnName = 'a'").collect().length === expectedRowCnt)
+
+    val newCollation = "UNICODE"
+    sql(s"ALTER TABLE $tableName ALTER COLUMN $columnName TYPE STRING COLLATE $newCollation")
+    checkAnswer(
+      sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(newCollation)))
+    assert(sql(s"SELECT * FROM $tableName WHERE $columnName = 'a'").collect().length === 1)
   }
 
   dataSourceMap.keys.foreach { source =>
@@ -148,7 +156,6 @@ abstract class DataSourceCollationSuite extends QueryTest
     }
   }
 }
-
 
 class V1DataSourceCollationSuite extends DataSourceCollationSuite {
   override protected def sparkConf: SparkConf =
