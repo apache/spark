@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter.{Predicate, AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
