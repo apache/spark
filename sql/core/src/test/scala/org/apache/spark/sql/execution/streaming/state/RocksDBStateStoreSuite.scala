@@ -295,7 +295,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan - fixed size non-ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
@@ -350,7 +350,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamilies("rocksdb range scan - variable size non-ordering columns with " +
     "double type values are supported",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     val testSchema: StructType = StructType(
@@ -407,7 +407,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan - variable size non-ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
@@ -463,7 +463,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
     s"non-ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     val testSchema: StructType = StructType(
@@ -508,7 +508,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan multiple non-contiguous ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
     val testSchema: StructType = StructType(
       Seq(
@@ -601,7 +601,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
     s"non-ordering columns with null values in first ordering column",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     val testSchema: StructType = StructType(
@@ -704,7 +704,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
     s"non-ordering columns with null values in second ordering column",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     val testSchema: StructType = StructType(
@@ -759,7 +759,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   testWithColumnFamilies("rocksdb range scan byte ordering column - variable size " +
     s"non-ordering columns",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     val testSchema: StructType = StructType(
@@ -804,7 +804,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan - ordering cols and key schema cols are same",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     // use the same schema as value schema for single col key schema
@@ -848,7 +848,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan - with prefix scan",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) {
+    TestWithBothChangelogCheckpointingEnabledAndDisabled, true) {
     (colFamiliesEnabled, virtualColFamilyEnabled) =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,

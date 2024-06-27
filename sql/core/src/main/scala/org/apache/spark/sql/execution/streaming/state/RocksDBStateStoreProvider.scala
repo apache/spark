@@ -64,11 +64,9 @@ private[sql] class RocksDBStateStoreProvider
       verify(useColumnFamilies, "Column families are not supported in this store")
 
       useVirtualColumnFamily = useVirtualColFamily
-      println("I am here inside using rocksdb state store provider: " + useVirtualColumnFamily)
       if (useVirtualColumnFamily) {
         // if use virtual column family, then use default col family, no need to create new
         // TODO avoid Id duplication
-        println("I am here inside using virtual col family")
         colFamilyToLongMap.putIfAbsent(colFamilyName, scala.util.Random.nextLong())
       } else {
         rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
@@ -85,7 +83,6 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val value = if (useVirtualColumnFamily) {
-        println("I am here inside use virtual col family")
         kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key,
             colFamilyToLongMap.get(colFamilyName))))
@@ -123,7 +120,6 @@ private[sql] class RocksDBStateStoreProvider
       "that supports multiple values for a single key.")
 
       val encodedValues = if (useVirtualColumnFamily) {
-        println("I am here inside virtual col family valuesIterator")
         rocksDB.get(keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)))
       } else {
         rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
@@ -142,7 +138,6 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
       val (encodedKey, physicalColFamilyName) = if (useVirtualColumnFamily) {
-        println("I am here inside virtual col family merge")
         (keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)),
           StateStore.DEFAULT_COL_FAMILY_NAME)
       } else {
