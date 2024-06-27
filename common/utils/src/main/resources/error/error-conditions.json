@@ -3102,7 +3102,8 @@
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification <windowName> is not defined in the WINDOW clause."
-    ]
+    ],
+    "sqlState" : "42P20"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
