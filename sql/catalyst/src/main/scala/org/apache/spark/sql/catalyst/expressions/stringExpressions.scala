@@ -768,8 +768,7 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
 case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = Invoke(
-    input, "makeValid", SQLConf.get.defaultStringType)
+  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
