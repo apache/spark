@@ -4432,7 +4432,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def collect_list(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]] = None) -> Column:
+def collect_list(col: "ColumnOrName", ignorenulls: Optional[bool] = None) -> Column:
     """
     Aggregate function: Collects the values from a column into a list,
     maintaining duplicates, and returns this list of objects.
@@ -4449,8 +4449,8 @@ def collect_list(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]]
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column on which the function is computed.
-    ignorenulls : :class:`~pyspark.sql.Column` or bool, optional
-        if ignorenulls is true, the null values are exluded. Default is to exclude null values.
+    ignorenulls : bool, optional
+        if ignorenulls is true, the null values are exluded. default is to exclude null values.
 
     Returns
     -------
@@ -4504,17 +4504,18 @@ def collect_list(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]]
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
     >>> df.agg(sf.sort_array(sf.collect_list('c', False))).show()
-    +----------------------------------------+
-    |sort_array(collect_list(c, false), true)|
-    +----------------------------------------+
-    |                            [NULL, 1, 2]|
-    +----------------------------------------+
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                     [NULL, 1, 2]|
+    +---------------------------------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if ignorenulls is None:
-        return _invoke_function_over_columns("collect_list", col)
+        return _invoke_function("collect_list", _to_java_column(col))
     else:
-        ignorenulls = lit(ignorenulls) if isinstance(ignorenulls, bool) else ignorenulls
-        return _invoke_function_over_columns("collect_list", col, ignorenulls)
+        return _invoke_function("collect_list", _to_java_column(col), ignorenulls)
 
 
 @_try_remote_functions
@@ -4584,7 +4585,7 @@ def array_agg(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def collect_set(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]] = None) -> Column:
+def collect_set(col: "ColumnOrName", ignorenulls: Optional[bool] = None) -> Column:
     """
     Aggregate function: Collects the values from a column into a set,
     eliminating duplicates, and returns this set of objects.
@@ -4601,8 +4602,8 @@ def collect_set(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]] 
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The target column on which the function is computed.
-    ignorenulls : :class:`~pyspark.sql.Column` or bool, optional
-        if ignorenulls is true, the null values are exluded. Default is to exclude null values.
+    ignorenulls : bool, optional
+        if ignorenulls is true, the null values are exluded. default is to exclude null values.
 
     Returns
     -------
@@ -4651,11 +4652,12 @@ def collect_set(col: "ColumnOrName", ignorenulls: Optional[Union[bool, Column]] 
     | Ana|       [3]|
     +----+----------+
     """
+    from pyspark.sql.classic.column import _to_java_column
+
     if ignorenulls is None:
-        return _invoke_function_over_columns("collect_set", col)
+        return _invoke_function("collect_set", _to_java_column(col))
     else:
-        ignorenulls = lit(ignorenulls) if isinstance(ignorenulls, bool) else ignorenulls
-        return _invoke_function_over_columns("collect_set", col, ignorenulls)
+        return _invoke_function("collect_set", _to_java_column(col), ignorenulls)
 
 
 @_try_remote_functions
