@@ -26,6 +26,13 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 class SeriesAsOfMixin:
     def test_asof(self):
+        try:
+            # Numpy 2.0+ changed its string format,
+            # adding type information to numeric scalars.
+            np.set_printoptions(legacy="1.25")
+        except TypeError:
+            pass
+
         pser = pd.Series([1, 2, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
         psser = ps.from_pandas(pser)
 

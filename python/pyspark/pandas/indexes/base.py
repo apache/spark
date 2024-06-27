@@ -2648,6 +2648,13 @@ def _test() -> None:
 
     os.chdir(os.environ["SPARK_HOME"])
 
+    try:
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        np.set_printoptions(legacy="1.25")
+    except TypeError:
+        pass
+
     globs = pyspark.pandas.indexes.base.__dict__.copy()
     globs["ps"] = pyspark.pandas
     spark = (
