@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.nio.charset.Charset
+import java.util.concurrent.Executors
 
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
@@ -872,6 +875,41 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       ),
       matchPVals = true
     )
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: " +
+    "background snapshot upload doesn't acquire RocksDB instance lock") {
+    // Create a custom ExecutionContext
+    implicit val ec: ExecutionContext = ExecutionContext
+      .fromExecutor(Executors.newSingleThreadExecutor())
+
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(lockAcquireTimeoutMs = 10000, minDeltasForSnapshot = 0)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(0)
+      db.put("0", "0")
+      db.commit()
+
+      // Acquire lock
+      db.load(1)
+      db.put("1", "1")
+
+      // Run doMaintenance in another thread
+      val maintenanceFuture = Future {
+        db.doMaintenance()
+      }
+
+      val timeout = 5.seconds
+
+      // Ensure that maintenance task runs without being blocked by task thread
+      ThreadUtils.awaitResult(maintenanceFuture, timeout)
+      assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+      // Release lock
+      db.commit()
+    }
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
@@ -1941,7 +1979,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithChangelogCheckpointingEnabled("time travel 4 -" +
-    " validate successful RocksDB load") {
+    " validate successful RocksDB load when metadata file is overwritten") {
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
     new File(remoteDir).delete() // to make sure that the directory gets created
@@ -1956,8 +1994,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.load(1)
       db.put("3", "3")
 
-      // do maintenance - upload any latest snapshots so far
-      // would fail to acquire lock and no snapshots would be uploaded
+      // upload any latest snapshots so far
       db.doMaintenance()
       db.commit()
       // upload newly created snapshot 2.zip
@@ -1966,6 +2003,47 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     // reload version 2 - should succeed
     withDB(remoteDir, version = 2, conf = conf) { db =>
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("time travel 5 -" +
+    "validate successful RocksDB load when metadata file is not overwritten") {
+    // Ensure commit doesn't modify the latestSnapshot that doMaintenance will upload
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val conf = dbConf.copy(minDeltasForSnapshot = 0) // create snapshot every commit
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+        db.load(0)
+        db.put("a", "1")
+        db.commit()
+
+        // load previous version, and recreate the snapshot
+        db.load(0)
+        db.put("a", "1")
+
+        // upload version 1 snapshot created above
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        db.commit() // create snapshot again
+
+        // load version 1 - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+
+        // upload recently created snapshot
+        db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+
+        // load version 1 again - should succeed
+        withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+        }
+      }
     }
   }
 
@@ -2268,7 +2346,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       numKeys: Int): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
+    fileManager.saveCheckpointToDfs(
+      checkpointDir,
+      version,
+      numKeys,
+      fileManager.captureFileMapReference())
   }
 
   def loadAndVerifyCheckpointFiles(
