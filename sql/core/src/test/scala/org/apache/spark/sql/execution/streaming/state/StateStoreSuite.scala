@@ -90,7 +90,7 @@ private object FakeStateStoreProviderWithMaintenanceError {
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   with BeforeAndAfter {
   import StateStoreTestsHelper._
-  // import StateStoreCoordinatorSuite._
+  import StateStoreCoordinatorSuite._
 
   before {
     StateStore.stop()

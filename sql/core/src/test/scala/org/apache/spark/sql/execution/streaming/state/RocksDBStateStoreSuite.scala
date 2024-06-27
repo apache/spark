@@ -24,8 +24,8 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
