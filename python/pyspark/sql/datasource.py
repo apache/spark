@@ -25,7 +25,6 @@ from pyspark.errors import PySparkNotImplementedError
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
 
-
 __all__ = [
     "DataSource",
     "DataSourceReader",
@@ -332,8 +331,17 @@ class DataSourceReader(ABC):
             messageParameters={"feature": "partitions"},
         )
 
+    if TYPE_CHECKING:
+        import pyarrow as pa
+
+        RecordBatchType = pa.RecordBatch
+    else:
+        RecordBatchType = None
+
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[Tuple]:
+    def read(
+        self, partition: InputPartition
+    ) -> Union[Iterator[Tuple], Iterator["RecordBatchType"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 

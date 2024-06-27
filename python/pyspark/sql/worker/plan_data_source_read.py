@@ -19,7 +19,7 @@ import os
 import sys
 import functools
 import pyarrow as pa
-from itertools import islice
+from itertools import islice, tee
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -59,20 +59,16 @@ from pyspark.worker_util import (
 
 
 def records_to_arrow_batches(
-    output_iter: Iterator[Tuple],
+    output_iter: Union[Iterator[Tuple], Iterator[pa.RecordBatch]],
     max_arrow_batch_size: int,
     return_type: StructType,
     data_source: DataSource,
 ) -> Iterable[pa.RecordBatch]:
     """
-    Convert an iterator of Python tuples to an iterator of pyarrow record batches.
-
-    For each python tuple, check the types of each field and append it to the records batch.
-
+    First check if the iterator yields pyarrow record batched, if so, yield them directly.
+    Otherwise, convert an iterator of Python tuples to an iterator of pyarrow record batches.
+    For each Python tuple, check the types of each field and append it to the records batch.
     """
-
-    def batched(iterator: Iterator, n: int) -> Iterator:
-        return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
 
     pa_schema = to_arrow_schema(return_type)
     column_names = return_type.fieldNames()
@@ -83,6 +79,46 @@ def records_to_arrow_batches(
     num_cols = len(column_names)
     col_mapping = {name: i for i, name in enumerate(column_names)}
     col_name_set = set(column_names)
+
+    # Create a copy of the iterator using itertools.tee
+    output_iter, output_iter_copy = tee(output_iter)
+    try:
+        # Check if the first element is of type pa.RecordBatch
+        # In that case, yield all elements and return
+        first_element = next(output_iter_copy)
+        if isinstance(first_element, pa.RecordBatch):
+            print(pa_schema)
+            print(first_element.schema)
+            # Validate the schema, check the RecordBatch column count
+            num_columns = first_element.num_columns
+            if num_columns != num_cols:
+                raise PySparkRuntimeError(
+                    error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                    message_parameters={
+                        "expected": str(num_cols),
+                        "actual": str(num_columns),
+                    },
+                )
+            for name in column_names:
+                if name not in first_element.schema.names:
+                    raise PySparkRuntimeError(
+                        error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                        message_parameters={
+                            "expected": str(column_names),
+                            "actual": str(first_element.schema.names),
+                        },
+                    )
+
+            yield first_element
+            for element in output_iter_copy:
+                yield element
+            return
+    except StopIteration:
+        pass
+
+    def batched(iterator: Iterator, n: int) -> Iterator:
+        return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
+
     for batch in batched(output_iter, max_arrow_batch_size):
         pylist: List[List] = [[] for _ in range(num_cols)]
         for result in batch:
@@ -103,7 +139,7 @@ def records_to_arrow_batches(
                     messageParameters={
                         "type": type(result).__name__,
                         "name": data_source.name(),
-                        "supported_types": "tuple, list, `pyspark.sql.types.Row`",
+                        "supported_types": "tuple, list, `pyspark.sql.types.Row`, pyarrow RecordBatch",
                     },
                 )
 
@@ -145,9 +181,10 @@ def main(infile: IO, outfile: IO) -> None:
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. Then it calls the `partitions()` method of the reader and
-    constructs a Python UDTF using the `read()` method of the reader.
+    constructs a Python Arrow Batch with the data using the `read()` method of the reader.
 
-    The partition values and the UDTF are then serialized and sent back to the JVM via the socket.
+    The partition values and the Arrow Batch are then serialized and sent back to the JVM
+    via the socket.
     """
     try:
         check_python_version(infile)
