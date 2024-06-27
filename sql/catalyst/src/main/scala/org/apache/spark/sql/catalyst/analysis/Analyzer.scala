@@ -4131,8 +4131,8 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 
 /**
  * This infers the columns to use for [[DebugInlineColumnsCount]] when possible.
- * For joins, it will use the join key columns so the application code does not need to specify it for both
- * the inputs and output.
+ * For joins, it will use the join key columns so the application code does not need
+ * to specify it for both the inputs and output.
  */
 object DebugInlineColumnsCountInference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
