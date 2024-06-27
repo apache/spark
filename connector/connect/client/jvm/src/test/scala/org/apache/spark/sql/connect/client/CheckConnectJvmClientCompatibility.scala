@@ -301,7 +301,16 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.PartitionTransform$"),
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.PartitionTransform$ExtractTransform")) ++
+        "org.apache.spark.sql.PartitionTransform$ExtractTransform"),
+
+      // Update Writer
+      ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SparkSession.update"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWriter"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWriter$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWithAssignment"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWithAssignment$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWithCondition"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UpdateWithCondition$")) ++
       mergeIntoWriterExcludeRules
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
