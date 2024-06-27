@@ -262,8 +262,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             }
 
           case hof: HigherOrderFunction
-            if hof.resolved && hof.functions
-              .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
+              if hof.resolved && hof.functions
+                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
             val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
             hof.failAnalysis(
               errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
