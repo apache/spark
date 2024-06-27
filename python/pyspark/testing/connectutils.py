@@ -170,6 +170,8 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         conf = SparkConf(loadDefaults=False)
         # Make the server terminate reattachable streams every 1 second and 123 bytes,
         # to make the tests exercise reattach.
+        if conf._jconf is not None:
+            conf._jconf.remove("spark.master")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamDuration", "1s")
         conf.set("spark.connect.execute.reattachable.senderMaxStreamSize", "123")
         return conf
