@@ -1323,12 +1323,12 @@ class Column:
         ...     [("Alice", "2023-01-01"), ("Bob", "2023-02-01")], ["name", "date"])
         >>> df = df.withColumn("date", sf.to_date(df.date))
         >>> df.select(df.name, df.date.between("2023-01-01", "2023-01-15")).show()
-        +-----+---------------------+
-        | name|((date >= 2023-01-...|
-        +-----+---------------------+
-        |Alice|                 true|
-        |  Bob|                false|
-        +-----+---------------------+
+        +-----+--------------------+
+        | name|((date >= 2023-01...|
+        +-----+--------------------+
+        |Alice|                true|
+        |  Bob|               false|
+        +-----+--------------------+
         >>> from datetime import date
         >>> df.select(df.name, df.date.between(date(2023, 1, 1), date(2023, 1, 15))).show()
         +-----+--------------------+
