@@ -71,19 +71,17 @@ trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
-
-  def stateStoreInfo: Array[StateStoreMetadata]
 }
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
-    stateStoreInfo: Array[StateStoreMetadata]) extends OperatorStateMetadata {
+    stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
 }
 
 case class OperatorStateMetadataV2(
     operatorInfo: OperatorInfoV1,
-    stateStoreInfo: Array[StateStoreMetadata],
+    stateStoreInfo: Array[StateStoreMetadataV2],
     operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
 }

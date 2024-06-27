@@ -428,7 +428,7 @@ case class TransformWithStateExec(
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
     assert(info.stateSchemaPath.isDefined)
-    val stateStoreInfo: Array[StateStoreMetadata] =
+    val stateStoreInfo =
       Array(StateStoreMetadataV2(
         StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, info.stateSchemaPath.get))
 
