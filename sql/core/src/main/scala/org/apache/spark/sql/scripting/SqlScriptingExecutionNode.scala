@@ -73,7 +73,9 @@ class SingleStatementExec(
    */
   var consumed = false
 
-  /** @inheritdoc */
+  /**
+   * Reset execution of the current node.
+   */
   override def reset(): Unit = consumed = false
 
   /**
