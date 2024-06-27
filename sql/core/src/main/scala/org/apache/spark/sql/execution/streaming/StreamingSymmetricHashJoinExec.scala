@@ -230,7 +230,7 @@ case class StreamingSymmetricHashJoinExec(
   override def operatorStateMetadata(): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo: Array[StateStoreMetadata] =
+    val stateStoreInfo =
       stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
