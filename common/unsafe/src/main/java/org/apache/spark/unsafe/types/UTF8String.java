@@ -102,6 +102,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
+  public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
+
 
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
@@ -1867,4 +1869,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     in.read((byte[]) base);
   }
 
+  public static UTF8String toBinaryString(long val) {
+    int zeros = Long.numberOfLeadingZeros(val);
+    if (zeros == Long.SIZE) {
+      return UTF8String.ZERO_UTF8;
+    } else {
+      int length = Math.max(Long.SIZE - Long.numberOfLeadingZeros(val), 1);
+      byte[] buf = new byte[length];
+      do {
+        buf[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
+        val >>>= 1;
+      } while(length > 0);
+      return fromBytes(buf);
+    }
+  }
 }
