@@ -419,7 +419,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1004",
+      errorClass = "MISSING_WINDOW_SPECIFICATION",
       messageParameters = Map("windowName" -> windowName))
   }
 
