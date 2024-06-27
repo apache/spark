@@ -46,8 +46,8 @@ case class StateMetadataTableEntry(
     numPartitions: Int,
     minBatchId: Long,
     maxBatchId: Long,
-    operatorPropertiesJson: String,
-    numColsPrefixKey: Int) {
+    numColsPrefixKey: Int,
+    operatorPropertiesJson: String) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -56,8 +56,8 @@ case class StateMetadataTableEntry(
         numPartitions,
         minBatchId,
         maxBatchId,
-        UTF8String.fromString(operatorPropertiesJson),
-        numColsPrefixKey))
+        numColsPrefixKey,
+        UTF8String.fromString(operatorPropertiesJson)))
   }
 }
 
@@ -70,7 +70,6 @@ object StateMetadataTableEntry {
       .add("numPartitions", IntegerType)
       .add("minBatchId", LongType)
       .add("maxBatchId", LongType)
-      .add("operatorProperties", StringType)
   }
 }
 
@@ -113,7 +112,14 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
     override def comment: String = "Number of columns in prefix key of the state store instance"
   }
 
-  override val metadataColumns: Array[MetadataColumn] = Array(NumColsPrefixKeyColumn)
+  private object OperatorPropertiesColumn extends MetadataColumn {
+    override def name: String = "_operatorProperties"
+    override def dataType: DataType = StringType
+    override def comment: String = "Json string storing operator properties"
+  }
+
+  override val metadataColumns: Array[MetadataColumn] =
+    Array(NumColsPrefixKeyColumn, OperatorPropertiesColumn)
 }
 
 case class StateMetadataInputPartition(checkpointLocation: String) extends InputPartition
@@ -221,8 +227,8 @@ class StateMetadataPartitionReader(
                 stateStoreMetadata.numPartitions,
                 if (batchIds.nonEmpty) batchIds.head else -1,
                 if (batchIds.nonEmpty) batchIds.last else -1,
-                "",
-                stateStoreMetadata.numColsPrefixKey
+                stateStoreMetadata.numColsPrefixKey,
+                ""
                 )
             }
         case v2: OperatorStateMetadataV2 =>
@@ -233,8 +239,8 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              v2.operatorPropertiesJson,
-              stateStoreMetadata.numColsPrefixKey
+              stateStoreMetadata.numColsPrefixKey,
+              v2.operatorPropertiesJson
             )
           }
       }
