@@ -189,6 +189,11 @@ trait FileFormat {
   def supportFieldName(name: String): Boolean = true
 
   /**
+   * Returns whether the file format supports non-default collated data types.
+   */
+  def supportCollations: Boolean = false
+
+  /**
    * All fields the file format's _metadata struct defines.
    *
    * Each metadata struct field is either "constant" or "generated" (respectively defined/matched by

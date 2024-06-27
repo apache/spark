@@ -1752,6 +1752,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "format" -> format))
   }
 
+  def collationsUnsupportedByDataSourceError(format: String, column: StructField): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_COLLATIONS_FOR_DATASOURCE",
+      messageParameters = Map(
+        "columnName" -> toSQLId(column.name),
+        "format" -> format))
+  }
+
   def failToResolveDataSourceForTableError(table: CatalogTable, key: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1151",

@@ -284,6 +284,7 @@ object OrcUtils extends Logging {
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
+    case _: StringType => StringType.catalogString
     case _ => dt.catalogString
   }
 

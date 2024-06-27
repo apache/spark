@@ -4303,6 +4303,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_COLLATIONS_FOR_DATASOURCE" : {
+    "message" : [
+      "The <format> datasource doesn't support collations on the column <columnName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
       "Unsupported data source type for direct query on files: <dataSourceType>"
