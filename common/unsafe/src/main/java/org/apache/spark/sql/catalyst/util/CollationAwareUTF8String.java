@@ -44,9 +44,8 @@ public class CollationAwareUTF8String {
   /**
    * Returns whether the target string starts with the specified prefix, starting from the
    * specified position (0-based index referring to character position in UTF8String), with respect
-   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased
-   * prior to method call to avoid the overhead of calling .toLowerCase() multiple times on the
-   * same prefix string.
+   * to the UTF8_LCASE collation. The method assumes that the prefix is already lowercased prior
+   * to method call to avoid the overhead of lowercasing the same prefix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
@@ -80,7 +79,8 @@ public class CollationAwareUTF8String {
       int startPos) {
     assert startPos >= 0;
     for (int len = 0; len <= target.numChars() - startPos; ++len) {
-      if (target.substring(startPos, startPos + len).toLowerCase().equals(lowercasePattern)) {
+      if (lowerCaseCodePoints(target.substring(startPos, startPos + len)).
+          equals(lowercasePattern)) {
         return len;
       }
     }
@@ -116,8 +116,7 @@ public class CollationAwareUTF8String {
    * Returns whether the target string ends with the specified suffix, ending at the specified
    * position (0-based index referring to character position in UTF8String), with respect to the
    * UTF8_LCASE collation. The method assumes that the suffix is already lowercased prior
-   * to method call to avoid the overhead of calling .toLowerCase() multiple times on the same
-   * suffix string.
+   * to method call to avoid the overhead of lowercasing the same suffix string multiple times.
    *
    * @param target the string to be searched in
    * @param lowercasePattern the string to be searched for
@@ -151,7 +150,7 @@ public class CollationAwareUTF8String {
       int endPos) {
     assert endPos <= target.numChars();
     for (int len = 0; len <= endPos; ++len) {
-      if (target.substring(endPos - len, endPos).toLowerCase().equals(lowercasePattern)) {
+      if (lowerCaseCodePoints(target.substring(endPos - len, endPos)).equals(lowercasePattern)) {
         return len;
       }
     }
@@ -291,8 +290,8 @@ public class CollationAwareUTF8String {
     if (src.numBytes() == 0 || search.numBytes() == 0) {
       return src;
     }
-    UTF8String lowercaseString = src.toLowerCase();
-    UTF8String lowercaseSearch = search.toLowerCase();
+    UTF8String lowercaseString = src.toLowerCase(); // TODO(SPARK-48725)
+    UTF8String lowercaseSearch = search.toLowerCase(); // TODO(SPARK-48725)
 
     int start = 0;
     int end = lowercaseString.indexOf(lowercaseSearch, 0);
@@ -524,7 +523,7 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start) {
     if (pattern.numChars() == 0) return target.indexOfEmpty(start);
-    return lowercaseFind(target, pattern.toLowerCase(), start);
+    return lowercaseFind(target, lowerCaseCodePoints(pattern), start);
   }
 
   public static int indexOf(final UTF8String target, final UTF8String pattern,
@@ -621,7 +620,7 @@ public class CollationAwareUTF8String {
       return UTF8String.EMPTY_UTF8;
     }
 
-    UTF8String lowercaseDelimiter = delimiter.toLowerCase();
+    UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
 
     if (count > 0) {
       // Search left to right (note: the start code point is inclusive).
@@ -706,7 +705,7 @@ public class CollationAwareUTF8String {
     // Number of bytes in srcString.
     int numBytes = srcString.numBytes();
     // Convert trimString to lowercase, so it can be searched properly.
-    UTF8String lowercaseTrimString = trimString.toLowerCase();
+    UTF8String lowercaseTrimString = trimString.toLowerCase(); // TODO(SPARK-48441)
 
     while (searchIdx < numBytes) {
       UTF8String searchChar = srcString.copyUTF8String(
@@ -715,7 +714,7 @@ public class CollationAwareUTF8String {
       int searchCharBytes = searchChar.numBytes();
 
       // Try to find the matching for the searchChar in the trimString.
-      if (lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
+      if (lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) { // TODO(SPARK-48441)
         trimByteIdx += searchCharBytes;
         searchIdx += searchCharBytes;
       } else {
@@ -754,7 +753,7 @@ public class CollationAwareUTF8String {
     // Array of the first byte position for each character in the srcString.
     int[] stringCharPos = new int[numBytes];
     // Convert trimString to lowercase, so it can be searched properly.
-    UTF8String lowercaseTrimString = trimString.toLowerCase();
+    UTF8String lowercaseTrimString = trimString.toLowerCase(); // TODO(SPARK-48441)
 
     // Build the position and length array.
     while (byteIdx < numBytes) {
@@ -773,7 +772,7 @@ public class CollationAwareUTF8String {
         stringCharPos[numChars - 1],
         stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
 
-      if(lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) {
+      if(lowercaseTrimString.find(searchChar.toLowerCase(), 0) >= 0) { // TODO(SPARK-48441)
         trimByteIdx -= stringCharLen[numChars - 1];
         numChars--;
       } else {
