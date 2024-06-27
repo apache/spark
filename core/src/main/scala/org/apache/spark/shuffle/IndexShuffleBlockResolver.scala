@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.{Map => JMap}
+import java.util.{Collections, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -55,7 +55,7 @@ private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
     var _blockManager: BlockManager = null,
-    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]] = JMap.of())
+    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]] = Collections.emptyMap())
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
 
