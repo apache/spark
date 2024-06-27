@@ -464,7 +464,6 @@ class RocksDB(
           for (snapshot <- oldSnapshotsImmutable) {
             snapshot.close()
           }
-
         }
       case _ =>
     }
