@@ -18,7 +18,7 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -43,7 +43,7 @@ abstract class DataSourceCollationSuite extends QueryTest
   )
 
   def testDataSourceWrite(dataSource: String, useCollations: Boolean): Unit = {
-    withTempDir { dir =>
+    withTempPath { path =>
       val stringType = if (useCollations) s"COLLATE(c, '$lcaseCollation')" else "c"
       val fileFormat = dataSourceMap(dataSource)
 
@@ -57,11 +57,18 @@ abstract class DataSourceCollationSuite extends QueryTest
 
       val action = () => df.write
         .format(dataSource)
-        .mode("overwrite")
-        .save(dir.getAbsolutePath)
+        .save(path.getAbsolutePath)
 
       if (!useCollations || fileFormat.supportCollations) {
         action()
+
+        val expectedRowCnt = if (useCollations) 2 else 1
+        val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
+        val readBack = spark.read.format(dataSource).load(path.getAbsolutePath)
+        val columnName = readBack.schema.fields.head.name
+        checkAnswer(
+          readBack.selectExpr(s"collation($columnName)").distinct(), Seq(Row(expectedCollation)))
+        assert(readBack.where(s"$columnName = 'a'").count() === expectedRowCnt)
       } else {
         checkError(
           exception = intercept[AnalysisException] {
@@ -76,8 +83,8 @@ abstract class DataSourceCollationSuite extends QueryTest
   }
 
   def testDataSourceSaveAsTable(dataSource: String, useCollations: Boolean): Unit = {
-    val tableName = s"t2$dataSource$useCollations"
-    withTable("tbl") {
+    val tableName = "tbl"
+    withTable(tableName) {
       val stringType = if (useCollations) s"COLLATE(c, '$lcaseCollation')" else "c"
 
       val df = sql(
@@ -91,10 +98,12 @@ abstract class DataSourceCollationSuite extends QueryTest
       // should always work
       df.write
         .format(dataSource)
-        .mode("overwrite")
         .saveAsTable(tableName)
 
+      val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
       val expectedRowCnt = if (useCollations) 2 else 1
+      checkAnswer(
+        sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(expectedCollation)))
       assert(
         spark.read.table(tableName).where("c1 = 'a'").count()
           === expectedRowCnt)
@@ -102,21 +111,24 @@ abstract class DataSourceCollationSuite extends QueryTest
   }
 
   def testManagedTableInsert(dataSource: String, useCollations: Boolean): Unit = {
-    val tableName = s"tbl$dataSource$useCollations"
+    val tableName = "tbl"
     withTable(tableName) {
       val stringType = if (useCollations) s"STRING COLLATE $lcaseCollation" else "STRING"
 
       // should always work
       sql(
         s"""
-           |CREATE TABLE $tableName (c $stringType)
+           |CREATE TABLE $tableName (c1 $stringType)
            |USING $dataSource
            |""".stripMargin)
 
       sql(s"INSERT INTO $tableName VALUES ('a'), ('b'), ('A')")
 
+      val expectedCollation = if (useCollations) lcaseCollation else "UTF8_BINARY"
       val expectedRowCnt = if (useCollations) 2 else 1
-      assert(sql(s"SELECT * FROM $tableName WHERE c = 'a'").collect().length === expectedRowCnt)
+      checkAnswer(
+        sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(expectedCollation)))
+      assert(sql(s"SELECT * FROM $tableName WHERE c1 = 'a'").collect().length === expectedRowCnt)
     }
   }
 
