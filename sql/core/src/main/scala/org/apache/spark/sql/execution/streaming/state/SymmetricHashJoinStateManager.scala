@@ -494,7 +494,7 @@ class SymmetricHashJoinStateManager(
           useMultipleValuesPerKey = false)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
-            StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+            throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
               stateStoreProvider.getClass.toString)
           }
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]

@@ -98,7 +98,7 @@ class StatePartitionReader(
 
       case Some(snapshotStartBatchId) =>
         if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
-          StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+          throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             provider.getClass.toString)
         }
         provider.asInstanceOf[SupportsFineGrainedReplay]
