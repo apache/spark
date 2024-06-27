@@ -4135,11 +4135,19 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
  */
 object DebugInlineColumnsCountInference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transform {
+    plan.transformUp {
       case DebugInlineColumnsCount(j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _,
       _, _, _), sampleColumns, maxKeys) if sampleColumns.isEmpty =>
-        val left = DebugInlineColumnsCount(j.left, leftKeys, maxKeys)
-        val right = DebugInlineColumnsCount(j.right, rightKeys, maxKeys)
+        val left = j.left match {
+          case d: DebugInlineColumnsCount => d
+          case _ => DebugInlineColumnsCount(j.left, leftKeys, maxKeys)
+        }
+
+        val right = j.right match {
+          case d: DebugInlineColumnsCount => d
+          case _ => DebugInlineColumnsCount(j.right, rightKeys, maxKeys)
+        }
+
         val joinWithInputDebug = j.withNewChildren(Seq(left, right))
         DebugInlineColumnsCount(joinWithInputDebug, leftKeys, maxKeys)
     }
