@@ -1877,7 +1877,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (zeros == Long.SIZE) {
       return UTF8String.ZERO_UTF8;
     } else {
-      int length = Long.SIZE - Long.numberOfLeadingZeros(val);
+      int length = Long.SIZE - zeros;
       byte[] bytes = new byte[length];
       do {
         bytes[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
