@@ -47,6 +47,7 @@ message Command {
     CreateResourceProfileCommand create_resource_profile_command = 13;
     CheckpointCommand checkpoint_command = 14;
     RemoveCachedRemoteRelationCommand remove_cached_remote_relation_command = 15;
+    MergeIntoTableCommand merge_into_table_command = 16;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -503,4 +504,27 @@ message CheckpointCommand {
 
   // (Required) Whether to checkpoint this dataframe immediately.
   bool eager = 3;
+}
+
+message MergeIntoTableCommand {
+  // (Required) The name of the target table.
+  string target_table_name = 1;
+
+  // (Required) The relation of the source table.
+  Relation source_table_plan = 2;
+
+  // (Required) The condition to match the source and target.
+  Expression merge_condition = 3;
+
+  // (Optional) The actions to be taken when the condition is matched.
+  repeated Expression match_actions = 4;
+
+  // (Optional) The actions to be taken when the condition is not matched.
+  repeated Expression not_matched_actions = 5;
+
+  // (Optional) The actions to be taken when the condition is not matched by source.
+  repeated Expression not_matched_by_source_actions = 6;
+
+  // (Required) Whether to enable schema evolution.
+  bool with_schema_evolution = 7;
 }
