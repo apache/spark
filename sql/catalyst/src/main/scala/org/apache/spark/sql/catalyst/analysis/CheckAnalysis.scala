@@ -238,6 +238,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
           messageParameters = Map.empty)
 
+      case agg@Aggregate(_, aggregateExpressions, _) =>
+        aggregateExpressions.foreach(_.transformDownWithPruning(
+          _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
+          case UnresolvedWindowExpression(_, windowSpec) =>
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
+        })
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           // Check argument data types of higher-order functions downwards first.
@@ -253,14 +260,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 hof.setTagValue(INVALID_FORMAT_ERROR, ())
                 hof.invalidFormat(checkRes)
             }
-
-          case hof: HigherOrderFunction
-              if hof.resolved && hof.functions
-                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
-            val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
-            hof.failAnalysis(
-              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
-              messageParameters = Map("funcName" -> toSQLExpr(u)))
 
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
