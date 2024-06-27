@@ -214,7 +214,8 @@ package object debug {
      * @param columns The combination of columns to count the value occurrences for
      */
     def inlineColumnsCount(columns: Column *): Dataset[_] = {
-      val plan = DebugInlineColumnsCount(query.logicalPlan, columns.map(_.expr))
+      val maxKeys = SQLConf.get.maxInlineColumnCountKeys
+      val plan = DebugInlineColumnsCount(query.logicalPlan, columns.map(_.expr), maxKeys)
       Dataset.ofRows(query.sparkSession, plan)
     }
   }
@@ -316,11 +317,13 @@ package object debug {
 
   case class DebugInlineColumnsCountExec(
     child: SparkPlan,
-    sampleColumns: Seq[Expression]) extends UnaryExecNode {
+    sampleColumns: Seq[Expression],
+    maxKeys: Int
+  ) extends UnaryExecNode {
 
     private val jsonOptions = new JSONOptions(Map.empty[String, String], "UTC")
 
-    private val accumulator = new DebugAccumulator
+    private val accumulator = new DebugAccumulator(maxKeys)
     accumulator.register(
       session.sparkContext,
       Some(s"${child.nodeName} top values for ${sampleColumns.mkString(",")}"))
@@ -372,14 +375,14 @@ package object debug {
   object DebugPlanner extends SparkStrategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case DebugInlineColumnsCount(child, sampleColumns) =>
-          DebugInlineColumnsCountExec(planLater(child), sampleColumns) :: Nil
+        case DebugInlineColumnsCount(child, sampleColumns, maxKeys) =>
+          DebugInlineColumnsCountExec(planLater(child), sampleColumns, maxKeys) :: Nil
         case _ => Nil
       }
     }
   }
 
-  class DebugAccumulator extends AccumulatorV2[String, Map[String, Long]]  {
+  class DebugAccumulator(maxKeys: Int) extends AccumulatorV2[String, Map[String, Long]]  {
     private val keyToCount = mutable.Map.empty[String, Long]
     private val countToKeys = mutable.TreeMap.empty[Long, mutable.Set[String]]
 
@@ -393,7 +396,7 @@ package object debug {
      * Creates a new copy of this accumulator.
      */
     override def copy(): DebugAccumulator = {
-      val newAcc = new DebugAccumulator()
+      val newAcc = new DebugAccumulator(maxKeys)
       newAcc.merge(this)
       newAcc
     }
@@ -416,8 +419,7 @@ package object debug {
       val keys = countToKeys.getOrElseUpdate(count, mutable.Set[String]())
       keys.add(v)
 
-      // TODO make 10 configurable
-      if (keyToCount.size > 10) {
+      if (keyToCount.size > maxKeys) {
         dropSmallest()
       }
     }

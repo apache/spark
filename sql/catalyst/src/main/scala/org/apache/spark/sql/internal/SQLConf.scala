@@ -3969,6 +3969,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MAX_INLINE_COLUMN_COUNT_KEYS = buildConf("spark.sql.debug.maxInlineColumnCountKeys")
+    .doc("Maximum number of keys to maintain when counting the frequency of each key.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(3)
+
   val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
     .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
       "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
@@ -5720,6 +5726,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def nameNonStructGroupingKeyAsValue: Boolean =
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
+
+  def maxInlineColumnCountKeys: Int = getConf(SQLConf.MAX_INLINE_COLUMN_COUNT_KEYS)
 
   override def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
