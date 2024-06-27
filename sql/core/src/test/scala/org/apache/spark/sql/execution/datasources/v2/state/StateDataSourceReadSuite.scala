@@ -985,7 +985,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       }
 
       val exc = intercept[SparkException] {
-        provider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
+        provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(1, 2)
       }
       checkError(exc, "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED")
@@ -1003,7 +1003,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       }
 
       val result =
-        provider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
+        provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(2, 3)
 
       assert(get(result, "a", 1).get == 1)

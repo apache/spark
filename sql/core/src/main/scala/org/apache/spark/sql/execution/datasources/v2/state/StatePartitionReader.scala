@@ -97,11 +97,11 @@ class StatePartitionReader(
       case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
 
       case Some(snapshotStartBatchId) =>
-        if (!provider.isInstanceOf[SupportsFineGrainedReplayFromSnapshot]) {
+        if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
           StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             provider.getClass.toString)
         }
-        provider.asInstanceOf[SupportsFineGrainedReplayFromSnapshot]
+        provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(
             snapshotStartBatchId + 1,
             partition.sourceOptions.batchId + 1)

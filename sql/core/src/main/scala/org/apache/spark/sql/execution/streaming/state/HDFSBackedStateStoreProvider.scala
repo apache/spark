@@ -72,7 +72,7 @@ import org.apache.spark.util.ArrayImplicits._
  * store.
  */
 private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging
-  with SupportsFineGrainedReplayFromSnapshot {
+  with SupportsFineGrainedReplay {
 
   private val providerName = "HDFSBackedStateStoreProvider"
 

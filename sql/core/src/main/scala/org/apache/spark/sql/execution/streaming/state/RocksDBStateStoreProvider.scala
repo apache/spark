@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
-    with SupportsFineGrainedReplayFromSnapshot {
+    with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
