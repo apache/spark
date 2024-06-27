@@ -51,6 +51,18 @@
     <system>JIRA</system>
     <url>https://issues.apache.org/jira/browse/SPARK</url>
   </issueManagement>
+  <distributionManagement>
+    <repository>
+      <id>nexus-releases</id>
+      <name>Releases</name>
+      <url>https://repo1.acceldata.dev/repository/odp-release/</url>
+    </repository>
+    <snapshotRepository>
+      <id>nexus-snapshots</id>
+      <name>Snapshot</name>
+      <url>https://repo1.acceldata.dev/repository/odp-snapshot/</url>
+    </snapshotRepository>
+  </distributionManagement>
 
   <mailingLists>
     <mailingList>
@@ -122,18 +134,18 @@
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.4</hadoop.version>
+    <hadoop.version>3.3.6</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>3.23.4</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.6.3</zookeeper.version>
+    <zookeeper.version>3.8.4</zookeeper.version>
     <curator.version>2.13.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.9</hive.version>
-    <hive23.version>2.3.9</hive23.version>
+    <hive.version>2.3.101</hive.version>
+    <hive23.version>2.3.101</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -152,6 +164,9 @@
     -->
     <ivy.version>2.5.1</ivy.version>
     <oro.version>2.0.8</oro.version>
+    <deltalake.version>2.3.0</deltalake.version>
+    <hudi.version>0.14.2</hudi.version>
+    <iceberg.version>1.5.0</iceberg.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
@@ -330,6 +345,17 @@
       </releases>
       <snapshots>
         <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>acceldata-repo</id>
+      <name>acceldata repo</name>
+      <url>https://repo1.acceldata.dev/repository/odp-central/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
       </snapshots>
     </repository>
     <repository>
