@@ -134,6 +134,34 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
       expectedRowCount = 2)
   }
 
+  test("push down null check for STARTSWITH") {
+    testPushDown(
+      filterString = s"STARTSWITH($collatedCol, 'a')",
+      expectedPushedFilters = Seq(IsNotNull(collatedCol)),
+      expectedRowCount = 2)
+  }
+
+  test("push down null check for ENDSWITH") {
+    testPushDown(
+      filterString = s"ENDSWITH($collatedCol, 'a')",
+      expectedPushedFilters = Seq(IsNotNull(collatedCol)),
+      expectedRowCount = 2)
+  }
+
+  test("push down null check for CONTAINS") {
+    testPushDown(
+      filterString = s"CONTAINS($collatedCol, 'a')",
+      expectedPushedFilters = Seq(IsNotNull(collatedCol)),
+      expectedRowCount = 2)
+  }
+
+  test("no push down for IN") {
+    testPushDown(
+      filterString = s"$collatedCol IN ('aaa', 'bbb')",
+      expectedPushedFilters = Seq.empty,
+      expectedRowCount = 3)
+  }
+
   test("push down null check for equality for non-collated column in AND") {
     testPushDown(
       filterString = s"$collatedCol = 'aaa' AND $nonCollatedCol = 'aaa'",
