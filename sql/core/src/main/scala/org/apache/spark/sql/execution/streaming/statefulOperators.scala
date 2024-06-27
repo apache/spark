@@ -216,7 +216,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
       stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo =
+    val stateStoreInfo: Array[StateStoreMetadata] =
       Array(StateStoreMetadataV1(StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions))
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
@@ -938,7 +938,7 @@ case class SessionWindowStateStoreSaveExec(
       stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo = Array(StateStoreMetadataV1(
+    val stateStoreInfo: Array[StateStoreMetadata] = Array(StateStoreMetadataV1(
       StateStoreId.DEFAULT_STORE_NAME, stateManager.getNumColsForPrefixKey, info.numPartitions))
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
