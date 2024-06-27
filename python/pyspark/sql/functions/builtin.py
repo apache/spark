@@ -2118,7 +2118,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2171,7 +2171,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2432,7 +2432,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
 
     Returns
@@ -6216,8 +6216,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -6271,8 +6271,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
