@@ -1326,6 +1326,36 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("isInterruptionException should correctly unwrap classic py4j InterruptedException") {
+    val e1 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o1073599.sql.
+        |: java.util.concurrent.ExecutionException: java.lang.InterruptedException
+        |""".stripMargin)
+    val febError1 = ForeachBatchUserFuncException(e1)
+    assert(StreamExecution.isInterruptionException(febError1, spark.sparkContext))
+
+    // scalastyle:off line.size.limit
+    val e2 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o2141502.saveAsTable.
+        |: org.apache.spark.SparkException: Job aborted.
+        |at org.apache.spark.sql.errors.QueryExecutionErrors$.jobAbortedError(QueryExecutionErrors.scala:882)
+        |at org.apache.spark.sql.execution.datasources.FileFormatWriter$.$anonfun$write$1(FileFormatWriter.scala:334)
+        |<REDACTED STACK TRACE>
+        |org.apache.spark.sql.execution.streaming.StreamExecution.withAttributionTags(StreamExecution.scala:82)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution.org$apache$spark$sql$execution$streaming$StreamExecution$$runStream(StreamExecution.scala:339)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.$anonfun$run$2(StreamExecution.scala:262)
+        |at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.java:23)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.run(StreamExecution.scala:262)
+        |*Caused by: java.lang.InterruptedException
+        |at java.util.concurrent.locks.AbstractQueuedSynchronizer.doAcquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1000)*
+        |""".stripMargin)
+    // scalastyle:on line.size.limit
+    val febError2 = ForeachBatchUserFuncException(e2)
+    assert(StreamExecution.isInterruptionException(febError2, spark.sparkContext))
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
