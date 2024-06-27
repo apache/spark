@@ -392,7 +392,7 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
     testSnapshotNotFound()
   }
 
-  test("provider.getReadStore(startVersion, endVersion)") {
+  test("provider.replayReadStoreFromSnapshot(snapshotVersion, endVersion)") {
     testGetReadStoreWithStartVersion()
   }
 
@@ -451,7 +451,7 @@ StateDataSourceReadSuite {
     testSnapshotNotFound()
   }
 
-  test("provider.getReadStore(startVersion, endVersion)") {
+  test("provider.getReadStore(snapshotVersion, endVersion)") {
     testGetReadStoreWithStartVersion()
   }
 

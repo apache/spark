@@ -369,15 +369,15 @@ private[sql] class RocksDBStateStoreProvider
     if (!condition) { throw new IllegalStateException(msg) }
   }
 
-  override def replayStateFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
     try {
-      if (startVersion < 1) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      if (snapshotVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
       }
-      if (endVersion < startVersion) {
+      if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
-      rocksDB.loadFromSnapshot(startVersion, endVersion)
+      rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
       new RocksDBStateStore(endVersion)
     }
     catch {
@@ -385,15 +385,15 @@ private[sql] class RocksDBStateStoreProvider
     }
   }
 
-  override def replayReadStateFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
+  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
     try {
-      if (startVersion < 1) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      if (snapshotVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
       }
-      if (endVersion < startVersion) {
+      if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
-      rocksDB.loadFromSnapshot(startVersion, endVersion)
+      rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
       new RocksDBStateStore(endVersion)
     }
     catch {

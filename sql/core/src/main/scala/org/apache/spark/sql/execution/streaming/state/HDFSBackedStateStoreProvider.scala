@@ -892,15 +892,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /**
    * Get the state store of endVersion for reading by applying delta files on the snapshot of
-   * startVersion. If snapshot for startVersion does not exist, an error will be thrown.
+   * snapshotVersion. If snapshot for snapshotVersion does not exist, an error will be thrown.
    *
-   * @param startVersion checkpoint version of the snapshot to start with
+   * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedStateStore]]
    */
-  override def replayStateFromSnapshot(startVersion: Long, endVersion: Long): StateStore = {
-    val newMap = replayLoadedMapForStoreFromSnapshot(startVersion, endVersion)
-    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, startVersion)} to " +
+  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+    val newMap = replayLoadedMapForStoreFromSnapshot(snapshotVersion, endVersion)
+    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} to " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
     new HDFSBackedStateStore(endVersion, newMap)
@@ -908,39 +908,40 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /**
    * Get the state store of endVersion for reading by applying delta files on the snapshot of
-   * startVersion. If snapshot for startVersion does not exist, an error will be thrown.
+   * snapshotVersion. If snapshot for snapshotVersion does not exist, an error will be thrown.
    *
-   * @param startVersion checkpoint version of the snapshot to start with
+   * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedReadStateStore]]
    */
-  override def replayReadStateFromSnapshot(startVersion: Long, endVersion: Long): ReadStateStore = {
-    val newMap = replayLoadedMapForStoreFromSnapshot(startVersion, endVersion)
-    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, startVersion)} to " +
+  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long):
+    ReadStateStore = {
+    val newMap = replayLoadedMapForStoreFromSnapshot(snapshotVersion, endVersion)
+    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} to " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")
     new HDFSBackedReadStateStore(endVersion, newMap)
   }
 
   /**
-   * Consturct the state at endVersion from snapshot from startVersion.
+   * Consturct the state at endVersion from snapshot from snapshotVersion.
    * Returns a new [[HDFSBackedStateStoreMap]]
-   * @param startVersion checkpoint version of the snapshot to start with
+   * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
    */
-  private def replayLoadedMapForStoreFromSnapshot(startVersion: Long, endVersion: Long):
+  private def replayLoadedMapForStoreFromSnapshot(snapshotVersion: Long, endVersion: Long):
   HDFSBackedStateStoreMap = synchronized {
     try {
-      if (startVersion < 1) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(startVersion)
+      if (snapshotVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
       }
-      if (endVersion < startVersion || endVersion < 0) {
+      if (endVersion < snapshotVersion || endVersion < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
 
       val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       if (endVersion != 0) {
-        newMap.putAll(constructMapFromSnapshot(startVersion, endVersion))
+        newMap.putAll(constructMapFromSnapshot(snapshotVersion, endVersion))
       }
       newMap
     }
@@ -949,29 +950,29 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
-  private def constructMapFromSnapshot(startVersion: Long, endVersion: Long):
+  private def constructMapFromSnapshot(snapshotVersion: Long, endVersion: Long):
   HDFSBackedStateStoreMap = {
     val (result, elapsedMs) = Utils.timeTakenMs {
-      val startVersionMap = synchronized { Option(loadedMaps.get(startVersion)) } match {
+      val startVersionMap = synchronized { Option(loadedMaps.get(snapshotVersion)) } match {
         case Some(value) => Option(value)
-        case None => readSnapshotFile(startVersion)
+        case None => readSnapshotFile(snapshotVersion)
       }
       if (startVersionMap.isEmpty) {
         throw StateStoreErrors.stateStoreSnapshotFileNotFound(
-          snapshotFile(startVersion).toString, toString())
+          snapshotFile(snapshotVersion).toString, toString())
       }
 
       // Load all the deltas from the version after the start version up to the end version.
       val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       resultMap.putAll(startVersionMap.get)
-      for (deltaVersion <- startVersion + 1 to endVersion) {
+      for (deltaVersion <- snapshotVersion + 1 to endVersion) {
         updateFromDeltaFile(deltaVersion, resultMap)
       }
 
       resultMap
     }
 
-    logDebug(s"Loading state from $startVersion to $endVersion takes $elapsedMs ms.")
+    logDebug(s"Loading state from $snapshotVersion to $endVersion takes $elapsedMs ms.")
 
     result
   }

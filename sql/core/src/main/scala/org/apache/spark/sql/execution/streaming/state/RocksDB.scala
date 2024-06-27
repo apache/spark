@@ -231,25 +231,25 @@ class RocksDB(
    * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    *
-   * @param startVersion version of the snapshot to start with
+   * @param snapshotVersion version of the snapshot to start with
    * @param endVersion end version
-   * @return A RocksDB instance loaded with the state endVersion replayed from startVersion.
+   * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
    *         Note that the instance will be read-only since this method is only used in State Data
    *         Source.
    */
-  def loadFromSnapshot(startVersion: Long, endVersion: Long): RocksDB = {
-    assert(startVersion >= 0 && endVersion >= startVersion)
+  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(
       log"Loading ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
-      log"${MDC(LogKeys.VERSION_NUM, startVersion)}")
+      log"${MDC(LogKeys.VERSION_NUM, snapshotVersion)}")
     try {
-      replayFromCheckpoint(startVersion, endVersion)
+      replayFromCheckpoint(snapshotVersion, endVersion)
 
       logInfo(
         log"Loaded ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
-        log"${MDC(LogKeys.VERSION_NUM, startVersion)}")
+        log"${MDC(LogKeys.VERSION_NUM, snapshotVersion)}")
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -263,17 +263,17 @@ class RocksDB(
    * end version.
    * If the start version does not exist, it will throw an exception.
    *
-   * @param startVersion start checkpoint version
+   * @param snapshotVersion start checkpoint version
    * @param endVersion end version
    */
-  private def replayFromCheckpoint(startVersion: Long, endVersion: Long): Any = {
-    if (loadedVersion != startVersion) {
+  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+    if (loadedVersion != snapshotVersion) {
       closeDB()
-      val metadata = fileManager.loadCheckpointFromDfs(startVersion, workingDir)
-      loadedVersion = startVersion
+      val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion, workingDir)
+      loadedVersion = snapshotVersion
 
       // reset last snapshot version
-      if (lastSnapshotVersion > startVersion) {
+      if (lastSnapshotVersion > snapshotVersion) {
         // discard any newer snapshots
         lastSnapshotVersion = 0L
         latestSnapshot = None
