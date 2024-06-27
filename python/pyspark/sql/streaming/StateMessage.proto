@@ -7,6 +7,7 @@ message StateRequest {
   oneof method {
     StatefulProcessorCall statefulProcessorCall = 2;
     StateVariableRequest stateVariableRequest = 3;
+    ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
   }
 }
 
@@ -31,6 +32,13 @@ message StateVariableRequest {
   }
 }
 
+message ImplicitGroupingKeyRequest {
+  oneof method {
+    SetImplicitKey setImplicitKey = 1;
+    RemoveImplicitKey removeImplicitKey = 2;
+  }
+}
+
 message StateCallCommand {
   string stateName = 1;
   string schema = 2;
@@ -51,6 +59,13 @@ message ListStateCall {
     Get get = 2;
     Clear clear = 3;
   }
+}
+
+message SetImplicitKey {
+  string key = 1;
+}
+
+message RemoveImplicitKey {
 }
 
 message Exists {

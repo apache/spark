@@ -182,6 +182,21 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequestOrBuilder getStateVariableRequestOrBuilder();
 
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     * @return Whether the implicitGroupingKeyRequest field is set.
+     */
+    boolean hasImplicitGroupingKeyRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     * @return The implicitGroupingKeyRequest.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getImplicitGroupingKeyRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder getImplicitGroupingKeyRequestOrBuilder();
+
     org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest.MethodCase getMethodCase();
   }
   /**
@@ -220,6 +235,7 @@ public final class StateMessage {
             com.google.protobuf.AbstractMessage.InternalOneOfEnum {
       STATEFULPROCESSORCALL(2),
       STATEVARIABLEREQUEST(3),
+      IMPLICITGROUPINGKEYREQUEST(4),
       METHOD_NOT_SET(0);
       private final int value;
       private MethodCase(int value) {
@@ -239,6 +255,7 @@ public final class StateMessage {
         switch (value) {
           case 2: return STATEFULPROCESSORCALL;
           case 3: return STATEVARIABLEREQUEST;
+          case 4: return IMPLICITGROUPINGKEYREQUEST;
           case 0: return METHOD_NOT_SET;
           default: return null;
         }
@@ -327,6 +344,37 @@ public final class StateMessage {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest.getDefaultInstance();
     }
 
+    public static final int IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER = 4;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     * @return Whether the implicitGroupingKeyRequest field is set.
+     */
+    @java.lang.Override
+    public boolean hasImplicitGroupingKeyRequest() {
+      return methodCase_ == 4;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     * @return The implicitGroupingKeyRequest.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getImplicitGroupingKeyRequest() {
+      if (methodCase_ == 4) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder getImplicitGroupingKeyRequestOrBuilder() {
+      if (methodCase_ == 4) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -350,6 +398,9 @@ public final class StateMessage {
       if (methodCase_ == 3) {
         output.writeMessage(3, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest) method_);
       }
+      if (methodCase_ == 4) {
+        output.writeMessage(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -370,6 +421,10 @@ public final class StateMessage {
       if (methodCase_ == 3) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(3, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest) method_);
+      }
+      if (methodCase_ == 4) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -398,6 +453,10 @@ public final class StateMessage {
           if (!getStateVariableRequest()
               .equals(other.getStateVariableRequest())) return false;
           break;
+        case 4:
+          if (!getImplicitGroupingKeyRequest()
+              .equals(other.getImplicitGroupingKeyRequest())) return false;
+          break;
         case 0:
         default:
       }
@@ -422,6 +481,10 @@ public final class StateMessage {
         case 3:
           hash = (37 * hash) + STATEVARIABLEREQUEST_FIELD_NUMBER;
           hash = (53 * hash) + getStateVariableRequest().hashCode();
+          break;
+        case 4:
+          hash = (37 * hash) + IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER;
+          hash = (53 * hash) + getImplicitGroupingKeyRequest().hashCode();
           break;
         case 0:
         default:
@@ -564,6 +627,9 @@ public final class StateMessage {
         if (stateVariableRequestBuilder_ != null) {
           stateVariableRequestBuilder_.clear();
         }
+        if (implicitGroupingKeyRequestBuilder_ != null) {
+          implicitGroupingKeyRequestBuilder_.clear();
+        }
         methodCase_ = 0;
         method_ = null;
         return this;
@@ -616,6 +682,10 @@ public final class StateMessage {
             stateVariableRequestBuilder_ != null) {
           result.method_ = stateVariableRequestBuilder_.build();
         }
+        if (methodCase_ == 4 &&
+            implicitGroupingKeyRequestBuilder_ != null) {
+          result.method_ = implicitGroupingKeyRequestBuilder_.build();
+        }
       }
 
       @java.lang.Override
@@ -640,6 +710,10 @@ public final class StateMessage {
           }
           case STATEVARIABLEREQUEST: {
             mergeStateVariableRequest(other.getStateVariableRequest());
+            break;
+          }
+          case IMPLICITGROUPINGKEYREQUEST: {
+            mergeImplicitGroupingKeyRequest(other.getImplicitGroupingKeyRequest());
             break;
           }
           case METHOD_NOT_SET: {
@@ -691,6 +765,13 @@ public final class StateMessage {
                 methodCase_ = 3;
                 break;
               } // case 26
+              case 34: {
+                input.readMessage(
+                    getImplicitGroupingKeyRequestFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 4;
+                break;
+              } // case 34
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -1037,6 +1118,148 @@ public final class StateMessage {
         methodCase_ = 3;
         onChanged();
         return stateVariableRequestBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder> implicitGroupingKeyRequestBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       * @return Whether the implicitGroupingKeyRequest field is set.
+       */
+      @java.lang.Override
+      public boolean hasImplicitGroupingKeyRequest() {
+        return methodCase_ == 4;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       * @return The implicitGroupingKeyRequest.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getImplicitGroupingKeyRequest() {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          if (methodCase_ == 4) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+        } else {
+          if (methodCase_ == 4) {
+            return implicitGroupingKeyRequestBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      public Builder setImplicitGroupingKeyRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest value) {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          implicitGroupingKeyRequestBuilder_.setMessage(value);
+        }
+        methodCase_ = 4;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      public Builder setImplicitGroupingKeyRequest(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder builderForValue) {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          implicitGroupingKeyRequestBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 4;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      public Builder mergeImplicitGroupingKeyRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest value) {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          if (methodCase_ == 4 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 4) {
+            implicitGroupingKeyRequestBuilder_.mergeFrom(value);
+          } else {
+            implicitGroupingKeyRequestBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 4;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      public Builder clearImplicitGroupingKeyRequest() {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          if (methodCase_ == 4) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 4) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          implicitGroupingKeyRequestBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder getImplicitGroupingKeyRequestBuilder() {
+        return getImplicitGroupingKeyRequestFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder getImplicitGroupingKeyRequestOrBuilder() {
+        if ((methodCase_ == 4) && (implicitGroupingKeyRequestBuilder_ != null)) {
+          return implicitGroupingKeyRequestBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 4) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder> 
+          getImplicitGroupingKeyRequestFieldBuilder() {
+        if (implicitGroupingKeyRequestBuilder_ == null) {
+          if (!(methodCase_ == 4)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+          }
+          implicitGroupingKeyRequestBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 4;
+        onChanged();
+        return implicitGroupingKeyRequestBuilder_;
       }
 
       // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateRequest)
@@ -3856,6 +4079,882 @@ public final class StateMessage {
 
     @java.lang.Override
     public org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface ImplicitGroupingKeyRequestOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     * @return Whether the setImplicitKey field is set.
+     */
+    boolean hasSetImplicitKey();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     * @return The setImplicitKey.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getSetImplicitKey();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder getSetImplicitKeyOrBuilder();
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     * @return Whether the removeImplicitKey field is set.
+     */
+    boolean hasRemoveImplicitKey();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     * @return The removeImplicitKey.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getRemoveImplicitKey();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder getRemoveImplicitKeyOrBuilder();
+
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.MethodCase getMethodCase();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest}
+   */
+  public static final class ImplicitGroupingKeyRequest extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
+      ImplicitGroupingKeyRequestOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use ImplicitGroupingKeyRequest.newBuilder() to construct.
+    private ImplicitGroupingKeyRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private ImplicitGroupingKeyRequest() {
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder.class);
+    }
+
+    private int methodCase_ = 0;
+    @SuppressWarnings("serial")
+    private java.lang.Object method_;
+    public enum MethodCase
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
+      SETIMPLICITKEY(1),
+      REMOVEIMPLICITKEY(2),
+      METHOD_NOT_SET(0);
+      private final int value;
+      private MethodCase(int value) {
+        this.value = value;
+      }
+      /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
+       * @deprecated Use {@link #forNumber(int)} instead.
+       */
+      @java.lang.Deprecated
+      public static MethodCase valueOf(int value) {
+        return forNumber(value);
+      }
+
+      public static MethodCase forNumber(int value) {
+        switch (value) {
+          case 1: return SETIMPLICITKEY;
+          case 2: return REMOVEIMPLICITKEY;
+          case 0: return METHOD_NOT_SET;
+          default: return null;
+        }
+      }
+      public int getNumber() {
+        return this.value;
+      }
+    };
+
+    public MethodCase
+    getMethodCase() {
+      return MethodCase.forNumber(
+          methodCase_);
+    }
+
+    public static final int SETIMPLICITKEY_FIELD_NUMBER = 1;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     * @return Whether the setImplicitKey field is set.
+     */
+    @java.lang.Override
+    public boolean hasSetImplicitKey() {
+      return methodCase_ == 1;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     * @return The setImplicitKey.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getSetImplicitKey() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder getSetImplicitKeyOrBuilder() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+    }
+
+    public static final int REMOVEIMPLICITKEY_FIELD_NUMBER = 2;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     * @return Whether the removeImplicitKey field is set.
+     */
+    @java.lang.Override
+    public boolean hasRemoveImplicitKey() {
+      return methodCase_ == 2;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     * @return The removeImplicitKey.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getRemoveImplicitKey() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder getRemoveImplicitKeyOrBuilder() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (methodCase_ == 1) {
+        output.writeMessage(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_);
+      }
+      if (methodCase_ == 2) {
+        output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (methodCase_ == 1) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_);
+      }
+      if (methodCase_ == 2) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest other = (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) obj;
+
+      if (!getMethodCase().equals(other.getMethodCase())) return false;
+      switch (methodCase_) {
+        case 1:
+          if (!getSetImplicitKey()
+              .equals(other.getSetImplicitKey())) return false;
+          break;
+        case 2:
+          if (!getRemoveImplicitKey()
+              .equals(other.getRemoveImplicitKey())) return false;
+          break;
+        case 0:
+        default:
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      switch (methodCase_) {
+        case 1:
+          hash = (37 * hash) + SETIMPLICITKEY_FIELD_NUMBER;
+          hash = (53 * hash) + getSetImplicitKey().hashCode();
+          break;
+        case 2:
+          hash = (37 * hash) + REMOVEIMPLICITKEY_FIELD_NUMBER;
+          hash = (53 * hash) + getRemoveImplicitKey().hashCode();
+          break;
+        case 0:
+        default:
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        if (setImplicitKeyBuilder_ != null) {
+          setImplicitKeyBuilder_.clear();
+        }
+        if (removeImplicitKeyBuilder_ != null) {
+          removeImplicitKeyBuilder_.clear();
+        }
+        methodCase_ = 0;
+        method_ = null;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        buildPartialOneofs(result);
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result) {
+        int from_bitField0_ = bitField0_;
+      }
+
+      private void buildPartialOneofs(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest result) {
+        result.methodCase_ = methodCase_;
+        result.method_ = this.method_;
+        if (methodCase_ == 1 &&
+            setImplicitKeyBuilder_ != null) {
+          result.method_ = setImplicitKeyBuilder_.build();
+        }
+        if (methodCase_ == 2 &&
+            removeImplicitKeyBuilder_ != null) {
+          result.method_ = removeImplicitKeyBuilder_.build();
+        }
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance()) return this;
+        switch (other.getMethodCase()) {
+          case SETIMPLICITKEY: {
+            mergeSetImplicitKey(other.getSetImplicitKey());
+            break;
+          }
+          case REMOVEIMPLICITKEY: {
+            mergeRemoveImplicitKey(other.getRemoveImplicitKey());
+            break;
+          }
+          case METHOD_NOT_SET: {
+            break;
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    getSetImplicitKeyFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 1;
+                break;
+              } // case 10
+              case 18: {
+                input.readMessage(
+                    getRemoveImplicitKeyFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 2;
+                break;
+              } // case 18
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int methodCase_ = 0;
+      private java.lang.Object method_;
+      public MethodCase
+          getMethodCase() {
+        return MethodCase.forNumber(
+            methodCase_);
+      }
+
+      public Builder clearMethod() {
+        methodCase_ = 0;
+        method_ = null;
+        onChanged();
+        return this;
+      }
+
+      private int bitField0_;
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder> setImplicitKeyBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       * @return Whether the setImplicitKey field is set.
+       */
+      @java.lang.Override
+      public boolean hasSetImplicitKey() {
+        return methodCase_ == 1;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       * @return The setImplicitKey.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getSetImplicitKey() {
+        if (setImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+        } else {
+          if (methodCase_ == 1) {
+            return setImplicitKeyBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      public Builder setSetImplicitKey(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey value) {
+        if (setImplicitKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          setImplicitKeyBuilder_.setMessage(value);
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      public Builder setSetImplicitKey(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder builderForValue) {
+        if (setImplicitKeyBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          setImplicitKeyBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      public Builder mergeSetImplicitKey(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey value) {
+        if (setImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 1 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 1) {
+            setImplicitKeyBuilder_.mergeFrom(value);
+          } else {
+            setImplicitKeyBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      public Builder clearSetImplicitKey() {
+        if (setImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          setImplicitKeyBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder getSetImplicitKeyBuilder() {
+        return getSetImplicitKeyFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder getSetImplicitKeyOrBuilder() {
+        if ((methodCase_ == 1) && (setImplicitKeyBuilder_ != null)) {
+          return setImplicitKeyBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.SetImplicitKey setImplicitKey = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder> 
+          getSetImplicitKeyFieldBuilder() {
+        if (setImplicitKeyBuilder_ == null) {
+          if (!(methodCase_ == 1)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+          }
+          setImplicitKeyBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 1;
+        onChanged();
+        return setImplicitKeyBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder> removeImplicitKeyBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       * @return Whether the removeImplicitKey field is set.
+       */
+      @java.lang.Override
+      public boolean hasRemoveImplicitKey() {
+        return methodCase_ == 2;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       * @return The removeImplicitKey.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getRemoveImplicitKey() {
+        if (removeImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+        } else {
+          if (methodCase_ == 2) {
+            return removeImplicitKeyBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      public Builder setRemoveImplicitKey(org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey value) {
+        if (removeImplicitKeyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          removeImplicitKeyBuilder_.setMessage(value);
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      public Builder setRemoveImplicitKey(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder builderForValue) {
+        if (removeImplicitKeyBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          removeImplicitKeyBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      public Builder mergeRemoveImplicitKey(org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey value) {
+        if (removeImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 2 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 2) {
+            removeImplicitKeyBuilder_.mergeFrom(value);
+          } else {
+            removeImplicitKeyBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      public Builder clearRemoveImplicitKey() {
+        if (removeImplicitKeyBuilder_ == null) {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          removeImplicitKeyBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder getRemoveImplicitKeyBuilder() {
+        return getRemoveImplicitKeyFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder getRemoveImplicitKeyOrBuilder() {
+        if ((methodCase_ == 2) && (removeImplicitKeyBuilder_ != null)) {
+          return removeImplicitKeyBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey removeImplicitKey = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder> 
+          getRemoveImplicitKeyFieldBuilder() {
+        if (removeImplicitKeyBuilder_ == null) {
+          if (!(methodCase_ == 2)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+          }
+          removeImplicitKeyBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 2;
+        onChanged();
+        return removeImplicitKeyBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ImplicitGroupingKeyRequest>
+        PARSER = new com.google.protobuf.AbstractParser<ImplicitGroupingKeyRequest>() {
+      @java.lang.Override
+      public ImplicitGroupingKeyRequest parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ImplicitGroupingKeyRequest> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ImplicitGroupingKeyRequest> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -6931,6 +8030,853 @@ public final class StateMessage {
 
   }
 
+  public interface SetImplicitKeyOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string key = 1;</code>
+     * @return The key.
+     */
+    java.lang.String getKey();
+    /**
+     * <code>string key = 1;</code>
+     * @return The bytes for key.
+     */
+    com.google.protobuf.ByteString
+        getKeyBytes();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetImplicitKey}
+   */
+  public static final class SetImplicitKey extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
+      SetImplicitKeyOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use SetImplicitKey.newBuilder() to construct.
+    private SetImplicitKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private SetImplicitKey() {
+      key_ = "";
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder.class);
+    }
+
+    public static final int KEY_FIELD_NUMBER = 1;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object key_ = "";
+    /**
+     * <code>string key = 1;</code>
+     * @return The key.
+     */
+    @java.lang.Override
+    public java.lang.String getKey() {
+      java.lang.Object ref = key_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        key_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string key = 1;</code>
+     * @return The bytes for key.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getKeyBytes() {
+      java.lang.Object ref = key_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        key_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(key_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, key_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(key_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, key_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey other = (org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) obj;
+
+      if (!getKey()
+          .equals(other.getKey())) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + KEY_FIELD_NUMBER;
+      hash = (53 * hash) + getKey().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetImplicitKey}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        key_ = "";
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey result = new org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.key_ = key_;
+        }
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey.getDefaultInstance()) return this;
+        if (!other.getKey().isEmpty()) {
+          key_ = other.key_;
+          bitField0_ |= 0x00000001;
+          onChanged();
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                key_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 10
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private java.lang.Object key_ = "";
+      /**
+       * <code>string key = 1;</code>
+       * @return The key.
+       */
+      public java.lang.String getKey() {
+        java.lang.Object ref = key_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          key_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string key = 1;</code>
+       * @return The bytes for key.
+       */
+      public com.google.protobuf.ByteString
+          getKeyBytes() {
+        java.lang.Object ref = key_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          key_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string key = 1;</code>
+       * @param value The key to set.
+       * @return This builder for chaining.
+       */
+      public Builder setKey(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        key_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string key = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearKey() {
+        key_ = getDefaultInstance().getKey();
+        bitField0_ = (bitField0_ & ~0x00000001);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string key = 1;</code>
+       * @param value The bytes for key to set.
+       * @return This builder for chaining.
+       */
+      public Builder setKeyBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        key_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<SetImplicitKey>
+        PARSER = new com.google.protobuf.AbstractParser<SetImplicitKey>() {
+      @java.lang.Override
+      public SetImplicitKey parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<SetImplicitKey> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<SetImplicitKey> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface RemoveImplicitKeyOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
+      com.google.protobuf.MessageOrBuilder {
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey}
+   */
+  public static final class RemoveImplicitKey extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
+      RemoveImplicitKeyOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use RemoveImplicitKey.newBuilder() to construct.
+    private RemoveImplicitKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private RemoveImplicitKey() {
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder.class);
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey other = (org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) obj;
+
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.class, org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey result = new org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey(this);
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey.getDefaultInstance()) return this;
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<RemoveImplicitKey>
+        PARSER = new com.google.protobuf.AbstractParser<RemoveImplicitKey>() {
+      @java.lang.Override
+      public RemoveImplicitKey parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<RemoveImplicitKey> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<RemoveImplicitKey> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface ExistsOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.Exists)
       com.google.protobuf.MessageOrBuilder {
@@ -9635,6 +11581,11 @@ public final class StateMessage {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
@@ -9649,6 +11600,16 @@ public final class StateMessage {
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor;
   private static final 
@@ -9684,54 +11645,63 @@ public final class StateMessage {
   static {
     java.lang.String[] descriptorData = {
       "\n\022StateMessage.proto\022.org.apache.spark.s" +
-      "ql.execution.streaming.state\"\367\001\n\014StateRe" +
+      "ql.execution.streaming.state\"\351\002\n\014StateRe" +
       "quest\022\017\n\007version\030\001 \001(\005\022f\n\025statefulProces" +
       "sorCall\030\002 \001(\0132E.org.apache.spark.sql.exe" +
       "cution.streaming.state.StatefulProcessor" +
       "CallH\000\022d\n\024stateVariableRequest\030\003 \001(\0132D.o" +
       "rg.apache.spark.sql.execution.streaming." +
-      "state.StateVariableRequestH\000B\010\n\006method\"9" +
-      "\n\rStateResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014e" +
-      "rrorMessage\030\002 \001(\t\"\211\003\n\025StatefulProcessorC" +
-      "all\022X\n\016setHandleState\030\001 \001(\0132>.org.apache" +
-      ".spark.sql.execution.streaming.state.Set" +
-      "HandleStateH\000\022Y\n\rgetValueState\030\002 \001(\0132@.o" +
-      "rg.apache.spark.sql.execution.streaming." +
-      "state.StateCallCommandH\000\022X\n\014getListState" +
-      "\030\003 \001(\0132@.org.apache.spark.sql.execution." +
-      "streaming.state.StateCallCommandH\000\022W\n\013ge" +
-      "tMapState\030\004 \001(\0132@.org.apache.spark.sql.e" +
-      "xecution.streaming.state.StateCallComman" +
-      "dH\000B\010\n\006method\"\322\001\n\024StateVariableRequest\022X" +
-      "\n\016valueStateCall\030\001 \001(\0132>.org.apache.spar" +
-      "k.sql.execution.streaming.state.ValueSta" +
-      "teCallH\000\022V\n\rlistStateCall\030\002 \001(\0132=.org.ap" +
-      "ache.spark.sql.execution.streaming.state" +
-      ".ListStateCallH\000B\010\n\006method\"5\n\020StateCallC" +
-      "ommand\022\021\n\tstateName\030\001 \001(\t\022\016\n\006schema\030\002 \001(" +
-      "\t\"\272\002\n\016ValueStateCall\022H\n\006exists\030\001 \001(\01326.o" +
-      "rg.apache.spark.sql.execution.streaming." +
-      "state.ExistsH\000\022B\n\003get\030\002 \001(\01323.org.apache" +
-      ".spark.sql.execution.streaming.state.Get" +
-      "H\000\022H\n\006update\030\003 \001(\01326.org.apache.spark.sq" +
-      "l.execution.streaming.state.UpdateH\000\022F\n\005" +
-      "clear\030\004 \001(\01325.org.apache.spark.sql.execu" +
-      "tion.streaming.state.ClearH\000B\010\n\006method\"\357" +
-      "\001\n\rListStateCall\022H\n\006exists\030\001 \001(\01326.org.a" +
+      "state.StateVariableRequestH\000\022p\n\032implicit" +
+      "GroupingKeyRequest\030\004 \001(\0132J.org.apache.sp" +
+      "ark.sql.execution.streaming.state.Implic" +
+      "itGroupingKeyRequestH\000B\010\n\006method\"9\n\rStat" +
+      "eResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014errorMe" +
+      "ssage\030\002 \001(\t\"\211\003\n\025StatefulProcessorCall\022X\n" +
+      "\016setHandleState\030\001 \001(\0132>.org.apache.spark" +
+      ".sql.execution.streaming.state.SetHandle" +
+      "StateH\000\022Y\n\rgetValueState\030\002 \001(\0132@.org.apa" +
+      "che.spark.sql.execution.streaming.state." +
+      "StateCallCommandH\000\022X\n\014getListState\030\003 \001(\013" +
+      "2@.org.apache.spark.sql.execution.stream" +
+      "ing.state.StateCallCommandH\000\022W\n\013getMapSt" +
+      "ate\030\004 \001(\0132@.org.apache.spark.sql.executi" +
+      "on.streaming.state.StateCallCommandH\000B\010\n" +
+      "\006method\"\322\001\n\024StateVariableRequest\022X\n\016valu" +
+      "eStateCall\030\001 \001(\0132>.org.apache.spark.sql." +
+      "execution.streaming.state.ValueStateCall" +
+      "H\000\022V\n\rlistStateCall\030\002 \001(\0132=.org.apache.s" +
+      "park.sql.execution.streaming.state.ListS" +
+      "tateCallH\000B\010\n\006method\"\340\001\n\032ImplicitGroupin" +
+      "gKeyRequest\022X\n\016setImplicitKey\030\001 \001(\0132>.or" +
+      "g.apache.spark.sql.execution.streaming.s" +
+      "tate.SetImplicitKeyH\000\022^\n\021removeImplicitK" +
+      "ey\030\002 \001(\0132A.org.apache.spark.sql.executio" +
+      "n.streaming.state.RemoveImplicitKeyH\000B\010\n" +
+      "\006method\"5\n\020StateCallCommand\022\021\n\tstateName" +
+      "\030\001 \001(\t\022\016\n\006schema\030\002 \001(\t\"\272\002\n\016ValueStateCal" +
+      "l\022H\n\006exists\030\001 \001(\01326.org.apache.spark.sql" +
+      ".execution.streaming.state.ExistsH\000\022B\n\003g" +
+      "et\030\002 \001(\01323.org.apache.spark.sql.executio" +
+      "n.streaming.state.GetH\000\022H\n\006update\030\003 \001(\0132" +
+      "6.org.apache.spark.sql.execution.streami" +
+      "ng.state.UpdateH\000\022F\n\005clear\030\004 \001(\01325.org.a" +
       "pache.spark.sql.execution.streaming.stat" +
-      "e.ExistsH\000\022B\n\003get\030\002 \001(\01323.org.apache.spa" +
-      "rk.sql.execution.streaming.state.GetH\000\022F" +
-      "\n\005clear\030\003 \001(\01325.org.apache.spark.sql.exe" +
-      "cution.streaming.state.ClearH\000B\010\n\006method" +
-      "\"\033\n\006Exists\022\021\n\tstateName\030\001 \001(\t\"\030\n\003Get\022\021\n\t" +
-      "stateName\030\001 \001(\t\":\n\006Update\022\021\n\tstateName\030\001" +
-      " \001(\t\022\016\n\006schema\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\032\n\005C" +
-      "lear\022\021\n\tstateName\030\001 \001(\t\"\\\n\016SetHandleStat" +
-      "e\022J\n\005state\030\001 \001(\0162;.org.apache.spark.sql." +
-      "execution.streaming.state.HandleState*K\n" +
-      "\013HandleState\022\013\n\007CREATED\020\000\022\017\n\013INITIALIZED" +
-      "\020\001\022\022\n\016DATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006prot" +
-      "o3"
+      "e.ClearH\000B\010\n\006method\"\357\001\n\rListStateCall\022H\n" +
+      "\006exists\030\001 \001(\01326.org.apache.spark.sql.exe" +
+      "cution.streaming.state.ExistsH\000\022B\n\003get\030\002" +
+      " \001(\01323.org.apache.spark.sql.execution.st" +
+      "reaming.state.GetH\000\022F\n\005clear\030\003 \001(\01325.org" +
+      ".apache.spark.sql.execution.streaming.st" +
+      "ate.ClearH\000B\010\n\006method\"\035\n\016SetImplicitKey\022" +
+      "\013\n\003key\030\001 \001(\t\"\023\n\021RemoveImplicitKey\"\033\n\006Exi" +
+      "sts\022\021\n\tstateName\030\001 \001(\t\"\030\n\003Get\022\021\n\tstateNa" +
+      "me\030\001 \001(\t\":\n\006Update\022\021\n\tstateName\030\001 \001(\t\022\016\n" +
+      "\006schema\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\032\n\005Clear\022\021\n" +
+      "\tstateName\030\001 \001(\t\"\\\n\016SetHandleState\022J\n\005st" +
+      "ate\030\001 \001(\0162;.org.apache.spark.sql.executi" +
+      "on.streaming.state.HandleState*K\n\013Handle" +
+      "State\022\013\n\007CREATED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016D" +
+      "ATA_PROCESSED\020\002\022\n\n\006CLOSED\020\003b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -9742,7 +11712,7 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor,
-        new java.lang.String[] { "Version", "StatefulProcessorCall", "StateVariableRequest", "Method", });
+        new java.lang.String[] { "Version", "StatefulProcessorCall", "StateVariableRequest", "ImplicitGroupingKeyRequest", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor =
       getDescriptor().getMessageTypes().get(1);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable = new
@@ -9761,50 +11731,68 @@ public final class StateMessage {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor,
         new java.lang.String[] { "ValueStateCall", "ListStateCall", "Method", });
-    internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor =
+    internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor =
       getDescriptor().getMessageTypes().get(4);
+    internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor,
+        new java.lang.String[] { "SetImplicitKey", "RemoveImplicitKey", "Method", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor =
+      getDescriptor().getMessageTypes().get(5);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor,
         new java.lang.String[] { "StateName", "Schema", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor =
-      getDescriptor().getMessageTypes().get(5);
+      getDescriptor().getMessageTypes().get(6);
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor,
         new java.lang.String[] { "Exists", "Get", "Update", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor =
-      getDescriptor().getMessageTypes().get(6);
+      getDescriptor().getMessageTypes().get(7);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor,
         new java.lang.String[] { "Exists", "Get", "Clear", "Method", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor =
+      getDescriptor().getMessageTypes().get(8);
+    internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor,
+        new java.lang.String[] { "Key", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor =
+      getDescriptor().getMessageTypes().get(9);
+    internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor,
+        new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor =
-      getDescriptor().getMessageTypes().get(7);
+      getDescriptor().getMessageTypes().get(10);
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor,
         new java.lang.String[] { "StateName", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor =
-      getDescriptor().getMessageTypes().get(8);
+      getDescriptor().getMessageTypes().get(11);
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor,
         new java.lang.String[] { "StateName", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Update_descriptor =
-      getDescriptor().getMessageTypes().get(9);
+      getDescriptor().getMessageTypes().get(12);
     internal_static_org_apache_spark_sql_execution_streaming_state_Update_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Update_descriptor,
         new java.lang.String[] { "StateName", "Schema", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor =
-      getDescriptor().getMessageTypes().get(10);
+      getDescriptor().getMessageTypes().get(13);
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor,
         new java.lang.String[] { "StateName", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor =
-      getDescriptor().getMessageTypes().get(11);
+      getDescriptor().getMessageTypes().get(14);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor,

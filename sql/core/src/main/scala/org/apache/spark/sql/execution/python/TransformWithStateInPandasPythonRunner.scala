@@ -40,6 +40,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * Python runner implementation for TransformWithStateInPandas.
+ */
 class TransformWithStateInPandasPythonRunner(
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
@@ -49,7 +52,8 @@ class TransformWithStateInPandasPythonRunner(
     _timeZoneId: String,
     initialWorkerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    groupingKeySchema: StructType)
   extends BasePythonRunner[InType, OutType](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
     with PythonArrowInput[InType]
     with BasicPythonArrowOutput
@@ -104,7 +108,8 @@ class TransformWithStateInPandasPythonRunner(
     val executionContext = ExecutionContext.fromExecutor(executor)
 
     executionContext.execute(
-      new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle))
+      new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
+        groupingKeySchema))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logWarning(s"completion listener called")

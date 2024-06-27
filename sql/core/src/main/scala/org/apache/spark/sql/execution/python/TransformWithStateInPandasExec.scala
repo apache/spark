@@ -34,6 +34,20 @@ import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.CompletionIterator
 
+/**
+ * Physical operator for executing
+ * [[org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPandas]]
+ * @param functionExpr function called on each group
+ * @param groupingAttributes used to group the data
+ * @param output used to define the output rows
+ * @param outputMode defines the output mode for the statefulProcessor
+ * @param timeMode The time mode semantics of the stateful processor for timers and TTL.
+ * @param stateInfo Used to identify the state store for a given operator.
+ * @param batchTimestampMs processing timestamp of the current batch.
+ * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
+ * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param child the physical plan for the underlying data
+ */
 case class TransformWithStateInPandasExec(
     functionExpr: Expression,
     groupingAttributes: Seq[Attribute],
@@ -116,7 +130,8 @@ case class TransformWithStateInPandasExec(
           sessionLocalTimeZone,
           pythonRunnerConf,
           pythonMetrics,
-          jobArtifactUUID
+          jobArtifactUUID,
+          groupingKeySchema
         )
 
         val outputIterator = executePython(data, output, runner)

@@ -21,34 +21,36 @@ from typing import Any, TYPE_CHECKING, Iterator, Union
 from pyspark.sql.streaming.state_api_client import StateApiClient
 from pyspark.sql.types import StructType
 
-
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
+
 class ValueState:
     def __init__(self,
-        state_api_client: StateApiClient,
-        state_name: str) -> None:
+                 state_api_client: StateApiClient,
+                 state_name: str,
+                 schema: Union[StructType, str]) -> None:
         self._state_api_client = state_api_client
         self._state_name = state_name
+        self.schema = schema
 
     def exists(self) -> bool:
-        pass
+        return self._state_api_client.valueStateExists(self._state_name)
 
     def get(self) -> Any:
-        pass
+        return self._state_api_client.valueStateGet(self._state_name)
 
     def update(self, new_value: Any) -> None:
-        pass
+        self._state_api_client.valueStateUpdate(self._state_name, self.schema, new_value)
 
-    def remove(self) -> None:
-        pass
+    def clear(self) -> None:
+        self._state_api_client.valueStateClear(self._state_name)
 
 
 class ListState:
     def __init__(self,
-        state_api_client: StateApiClient,
-        state_name: str) -> None:
+                 state_api_client: StateApiClient,
+                 state_name: str) -> None:
         self._state_api_client = state_api_client
         self._state_name = state_name
 
@@ -67,12 +69,13 @@ class ListState:
 
 class StatefulProcessorHandle:
     def __init__(
-        self,
-        state_api_client: StateApiClient) -> None:
+            self,
+            state_api_client: StateApiClient) -> None:
         self.state_api_client = state_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
-        pass
+        self.state_api_client.getValueState(state_name, schema)
+        return ValueState(self.state_api_client, state_name, schema)
 
     def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:
         pass
@@ -85,9 +88,9 @@ class StatefulProcessor(ABC):
 
     @abstractmethod
     def handleInputRows(
-        self,
-        key: Any,
-        rows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
+            self,
+            key: Any,
+            rows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
         pass
 
     @abstractmethod

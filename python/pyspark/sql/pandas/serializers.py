@@ -1160,9 +1160,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                 batch_key = tuple(s[0] for s in key_series)
                 yield (batch_key, data_pandas)
 
+        print("Generating data batches...")
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
+        print("Returning data batches...")
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             yield (k, g)
 

@@ -17,14 +17,16 @@ DATA_PROCESSED: HandleState
 CLOSED: HandleState
 
 class StateRequest(_message.Message):
-    __slots__ = ("version", "statefulProcessorCall", "stateVariableRequest")
+    __slots__ = ("version", "statefulProcessorCall", "stateVariableRequest", "implicitGroupingKeyRequest")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     STATEFULPROCESSORCALL_FIELD_NUMBER: _ClassVar[int]
     STATEVARIABLEREQUEST_FIELD_NUMBER: _ClassVar[int]
+    IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER: _ClassVar[int]
     version: int
     statefulProcessorCall: StatefulProcessorCall
     stateVariableRequest: StateVariableRequest
-    def __init__(self, version: _Optional[int] = ..., statefulProcessorCall: _Optional[_Union[StatefulProcessorCall, _Mapping]] = ..., stateVariableRequest: _Optional[_Union[StateVariableRequest, _Mapping]] = ...) -> None: ...
+    implicitGroupingKeyRequest: ImplicitGroupingKeyRequest
+    def __init__(self, version: _Optional[int] = ..., statefulProcessorCall: _Optional[_Union[StatefulProcessorCall, _Mapping]] = ..., stateVariableRequest: _Optional[_Union[StateVariableRequest, _Mapping]] = ..., implicitGroupingKeyRequest: _Optional[_Union[ImplicitGroupingKeyRequest, _Mapping]] = ...) -> None: ...
 
 class StateResponse(_message.Message):
     __slots__ = ("statusCode", "errorMessage")
@@ -53,6 +55,14 @@ class StateVariableRequest(_message.Message):
     valueStateCall: ValueStateCall
     listStateCall: ListStateCall
     def __init__(self, valueStateCall: _Optional[_Union[ValueStateCall, _Mapping]] = ..., listStateCall: _Optional[_Union[ListStateCall, _Mapping]] = ...) -> None: ...
+
+class ImplicitGroupingKeyRequest(_message.Message):
+    __slots__ = ("setImplicitKey", "removeImplicitKey")
+    SETIMPLICITKEY_FIELD_NUMBER: _ClassVar[int]
+    REMOVEIMPLICITKEY_FIELD_NUMBER: _ClassVar[int]
+    setImplicitKey: SetImplicitKey
+    removeImplicitKey: RemoveImplicitKey
+    def __init__(self, setImplicitKey: _Optional[_Union[SetImplicitKey, _Mapping]] = ..., removeImplicitKey: _Optional[_Union[RemoveImplicitKey, _Mapping]] = ...) -> None: ...
 
 class StateCallCommand(_message.Message):
     __slots__ = ("stateName", "schema")
@@ -83,6 +93,16 @@ class ListStateCall(_message.Message):
     get: Get
     clear: Clear
     def __init__(self, exists: _Optional[_Union[Exists, _Mapping]] = ..., get: _Optional[_Union[Get, _Mapping]] = ..., clear: _Optional[_Union[Clear, _Mapping]] = ...) -> None: ...
+
+class SetImplicitKey(_message.Message):
+    __slots__ = ("key",)
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    def __init__(self, key: _Optional[str] = ...) -> None: ...
+
+class RemoveImplicitKey(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class Exists(_message.Message):
     __slots__ = ("stateName",)
