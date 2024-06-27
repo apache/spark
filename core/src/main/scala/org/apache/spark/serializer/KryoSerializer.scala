@@ -227,10 +227,7 @@ class KryoSerializer(conf: SparkConf)
 
     // scalastyle:on
 
-    kryo.register(None.getClass)
-    kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
-    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
     kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))
