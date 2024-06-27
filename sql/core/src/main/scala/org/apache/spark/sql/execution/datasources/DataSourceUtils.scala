@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
@@ -107,7 +107,21 @@ object DataSourceUtils extends PredicateHelper {
     }
   }
 
-    // SPARK-24626: Metadata files and temporary files should not be
+  /**
+   * Verify that if the schema has collated types the relation supports them.
+   */
+  def verifyCollations(relation: CreatableRelationProvider, schema: StructType): Unit = {
+    schema.foreach { field =>
+      if (SchemaUtils.hasNonUTF8BinaryCollation(schema)
+        && !relation.supportCollations) {
+        throw QueryCompilationErrors.collationsUnsupportedByDataSourceError(
+          relation.toString, field)
+      }
+    }
+  }
+
+
+  // SPARK-24626: Metadata files and temporary files should not be
   // counted as data files, so that they shouldn't participate in tasks like
   // location size calculation.
   private[sql] def isDataPath(path: Path): Boolean = isDataFile(path.getName)

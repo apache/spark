@@ -536,6 +536,7 @@ case class DataSource(
               dataSource.toString, field)
           }
         }
+        DataSourceUtils.verifyCollations(dataSource, data.schema)
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)

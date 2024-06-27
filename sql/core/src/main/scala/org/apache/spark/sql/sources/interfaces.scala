@@ -196,6 +196,11 @@ trait CreatableRelationProvider {
       case _ => false
     }
   }
+
+  /**
+   * Returns whether the data source supports non-default collated data types.
+   */
+  def supportCollations: Boolean = false
 }
 
 /**
