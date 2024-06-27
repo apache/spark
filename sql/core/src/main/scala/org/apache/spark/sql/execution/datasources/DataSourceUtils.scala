@@ -99,8 +99,7 @@ object DataSourceUtils extends PredicateHelper {
    */
   def verifyCollations(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
-      if (SchemaUtils.hasNonUTF8BinaryCollation(schema)
-        && !format.supportCollations) {
+      if (SchemaUtils.hasNonUTF8BinaryCollation(schema) && !format.supportCollations) {
         throw QueryCompilationErrors.collationsUnsupportedByDataSourceError(
           format.toString, field)
       }
@@ -112,8 +111,7 @@ object DataSourceUtils extends PredicateHelper {
    */
   def verifyCollations(relation: CreatableRelationProvider, schema: StructType): Unit = {
     schema.foreach { field =>
-      if (SchemaUtils.hasNonUTF8BinaryCollation(schema)
-        && !relation.supportCollations) {
+      if (SchemaUtils.hasNonUTF8BinaryCollation(schema) && !relation.supportCollations) {
         throw QueryCompilationErrors.collationsUnsupportedByDataSourceError(
           relation.toString, field)
       }
