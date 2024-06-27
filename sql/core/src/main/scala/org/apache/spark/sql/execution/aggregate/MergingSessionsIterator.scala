@@ -118,7 +118,9 @@ class MergingSessionsIterator(
       val inputRow = inputIterator.next()
       nextGroupingKey = groupingWithoutSessionProjection(inputRow).copy()
       val session = sessionProjection(inputRow)
-      nextGroupingSession = session.getStruct(0, 2).copy()
+      val groupingSession = session.getStruct(0, 2)
+      assert(groupingSession != null, "Grouping Session should not be null.")
+      nextGroupingSession = groupingSession.copy()
       firstRowInNextGroup = inputRow.copy()
       sortedInputHasNewGroup = true
     } else {
@@ -127,7 +129,13 @@ class MergingSessionsIterator(
     }
   }
 
-  initialize()
+  try {
+    initialize()
+  } catch {
+    case e: Exception =>
+      errorOnIterator = true
+      throw e
+  }
 
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
