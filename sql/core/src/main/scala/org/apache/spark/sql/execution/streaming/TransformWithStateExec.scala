@@ -23,6 +23,10 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.JString
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -94,6 +98,8 @@ case class TransformWithStateExec(
       false
     }
   }
+
+  override def operatorStateMetadataVersion: Int = 2
 
   /**
    * We initialize this processor handle in the driver to run the init function
@@ -389,7 +395,25 @@ case class TransformWithStateExec(
   private def validateSchemas(
       oldSchema: List[ColumnFamilySchema],
       newSchema: List[ColumnFamilySchema]): Unit = {
-    // TODO: Implement logic that allows for schema evolution
+    // TODO: Implement logic that allows for schema validation and evolution
+  }
+
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    assert(info.stateSchemaPath.isDefined)
+    val stateStoreInfo: Array[StateStoreMetadata] =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, info.stateSchemaPath.get))
+
+    val operatorPropertiesJson: JValue =
+      ("timeMode" -> JString(timeMode.toString)) ~
+      ("outputMode" -> JString(outputMode.toString))
+
+    val json = compact(render(operatorPropertiesJson))
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
   }
 
   private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
