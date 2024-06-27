@@ -242,14 +242,14 @@ class RocksDB(
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(
-      log"Loading ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
-      log"${MDC(LogKeys.VERSION_NUM, snapshotVersion)}")
+      log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+      log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
     try {
       replayFromCheckpoint(snapshotVersion, endVersion)
 
       logInfo(
-        log"Loaded ${MDC(LogKeys.VERSION_NUM, endVersion)} from " +
-        log"${MDC(LogKeys.VERSION_NUM, snapshotVersion)}")
+        log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+        log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -267,29 +267,27 @@ class RocksDB(
    * @param endVersion end version
    */
   private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
-    if (loadedVersion != snapshotVersion) {
-      closeDB()
-      val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion, workingDir)
-      loadedVersion = snapshotVersion
+    closeDB()
+    val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion, workingDir)
+    loadedVersion = snapshotVersion
 
-      // reset last snapshot version
-      if (lastSnapshotVersion > snapshotVersion) {
-        // discard any newer snapshots
-        lastSnapshotVersion = 0L
-        latestSnapshot = None
-      }
-      openDB()
+    // reset last snapshot version
+    if (lastSnapshotVersion > snapshotVersion) {
+      // discard any newer snapshots
+      lastSnapshotVersion = 0L
+      latestSnapshot = None
+    }
+    openDB()
 
-      numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
-        // we don't track the total number of rows - discard the number being track
-        -1L
-      } else if (metadata.numKeys < 0) {
-        // we track the total number of rows, but the snapshot doesn't have tracking number
-        // need to count keys now
-        countKeys()
-      } else {
-        metadata.numKeys
-      }
+    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+      // we don't track the total number of rows - discard the number being track
+      -1L
+    } else if (metadata.numKeys < 0) {
+      // we track the total number of rows, but the snapshot doesn't have tracking number
+      // need to count keys now
+      countKeys()
+    } else {
+      metadata.numKeys
     }
     if (loadedVersion != endVersion) replayChangelog(endVersion)
     // After changelog replay the numKeysOnWritingVersion will be updated to
