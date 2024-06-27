@@ -16,7 +16,7 @@
  */
 
 package org.apache.spark.sql.execution.streaming.state
-// scalastyle:off
+
 import java.util.UUID
 
 import scala.collection.immutable
@@ -39,7 +39,6 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-// scalastyle:on
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
