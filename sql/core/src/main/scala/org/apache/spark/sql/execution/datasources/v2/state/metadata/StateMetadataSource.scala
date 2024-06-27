@@ -212,20 +212,31 @@ class StateMetadataPartitionReader(
   private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
-      val operatorProperties = operatorStateMetadata match {
-        case _: OperatorStateMetadataV1 => ""
-        case v2: OperatorStateMetadataV2 => v2.operatorPropertiesJson
-      }
-      operatorStateMetadata.stateStoreInfo.map { stateStoreMetadata =>
-        StateMetadataTableEntry(operatorStateMetadata.operatorInfo.operatorId,
-          operatorStateMetadata.operatorInfo.operatorName,
-          stateStoreMetadata.storeName,
-          stateStoreMetadata.numPartitions,
-          if (batchIds.nonEmpty) batchIds.head else -1,
-          if (batchIds.nonEmpty) batchIds.last else -1,
-          operatorProperties,
-          stateStoreMetadata.numColsPrefixKey
-        )
+      operatorStateMetadata match {
+        case v1: OperatorStateMetadataV1 =>
+            v1.stateStoreInfo.map { stateStoreMetadata =>
+                StateMetadataTableEntry(v1.operatorInfo.operatorId,
+                v1.operatorInfo.operatorName,
+                stateStoreMetadata.storeName,
+                stateStoreMetadata.numPartitions,
+                if (batchIds.nonEmpty) batchIds.head else -1,
+                if (batchIds.nonEmpty) batchIds.last else -1,
+                "",
+                stateStoreMetadata.numColsPrefixKey
+                )
+            }
+        case v2: OperatorStateMetadataV2 =>
+          v2.stateStoreInfo.map { stateStoreMetadata =>
+            StateMetadataTableEntry(v2.operatorInfo.operatorId,
+              v2.operatorInfo.operatorName,
+              stateStoreMetadata.storeName,
+              stateStoreMetadata.numPartitions,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
+              v2.operatorPropertiesJson,
+              stateStoreMetadata.numColsPrefixKey
+            )
+          }
       }
     }
   }.iterator
