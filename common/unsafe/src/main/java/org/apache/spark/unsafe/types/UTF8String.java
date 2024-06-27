@@ -1869,18 +1869,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     in.read((byte[]) base);
   }
 
+  /**
+   * Convert a long value to its binary format stripping leading zeros.
+   */
   public static UTF8String toBinaryString(long val) {
     int zeros = Long.numberOfLeadingZeros(val);
     if (zeros == Long.SIZE) {
       return UTF8String.ZERO_UTF8;
     } else {
-      int length = Math.max(Long.SIZE - Long.numberOfLeadingZeros(val), 1);
-      byte[] buf = new byte[length];
+      int length = Long.SIZE - Long.numberOfLeadingZeros(val);
+      byte[] bytes = new byte[length];
       do {
-        buf[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
+        bytes[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
         val >>>= 1;
-      } while(length > 0);
-      return fromBytes(buf);
+      } while (length > 0);
+      return fromBytes(bytes);
     }
   }
 }
