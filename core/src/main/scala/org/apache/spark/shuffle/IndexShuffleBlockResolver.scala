@@ -21,7 +21,6 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.{Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -38,7 +37,6 @@ import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -54,8 +52,7 @@ import org.apache.spark.util.collection.OpenHashSet
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
-    var _blockManager: BlockManager = null,
-    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]] = JMap.of())
+    var _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
 
@@ -272,21 +269,6 @@ private[spark] class IndexShuffleBlockResolver(
           if (!fileTmp.renameTo(file)) {
             throw SparkCoreErrors.failedRenameTempFileError(fileTmp, file)
           }
-        }
-        blockId match {
-          case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-            val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
-              shuffleId, _ => new OpenHashSet[Long](8)
-            )
-            mapTaskIds.add(mapId)
-
-          case ShuffleDataBlockId(shuffleId, mapId, _) =>
-            val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
-              shuffleId, _ => new OpenHashSet[Long](8)
-            )
-            mapTaskIds.add(mapId)
-
-          case _ => // Unreachable
         }
         blockManager.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0, diskSize))
       }
