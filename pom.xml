@@ -2817,7 +2817,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.3.0</version>
+          <version>3.3.0-M3</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2835,7 +2835,6 @@
                   <bannedDependencies>
                     <excludes>
                       <exclude>org.apache.iceberg</exclude>
-                      <exclude>org.apache.hadoop</exclude>
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>*:*_2.11</exclude>
