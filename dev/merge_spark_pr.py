@@ -300,7 +300,7 @@ def get_jira_issue(prompt, default_jira_id=""):
         return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
+def resolve_jira_issue(merge_branches, pr_num, default_jira_id=""):
     issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
@@ -383,6 +383,9 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         0
     ]
     resolution = list(filter(lambda r: r.raw["name"] == "Fixed", asf_jira.resolutions()))[0]
+
+    comment = "Issue resolved in %s by pull request %s\n[%s/%s]" % (
+        jira_fix_versions, pr_num, GITHUB_BASE, pr_num)
     asf_jira.transition_issue(
         issue.key,
         resolve["id"],
@@ -473,13 +476,13 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment):
+def resolve_jira_issues(title, merge_branches, pr_num):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment)
+        resolve_jira_issue(merge_branches, pr_num)
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id)
+        resolve_jira_issue(merge_branches, pr_num, jira_id)
 
 
 def standardize_jira_ref(text):
@@ -717,12 +720,7 @@ def main():
 
     if asf_jira is not None:
         continue_maybe("Would you like to update an associated JIRA?")
-        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-            pr_num,
-            GITHUB_BASE,
-            pr_num,
-        )
-        resolve_jira_issues(title, merged_refs, jira_comment)
+        resolve_jira_issues(title, merged_refs, pr_num)
     else:
         print("Exiting without trying to close the associated JIRA.")
 
