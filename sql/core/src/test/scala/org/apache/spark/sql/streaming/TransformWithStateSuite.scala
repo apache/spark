@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
@@ -928,6 +928,46 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         assert(batchesWithSchemaV3File.length == 1)
         // Make sure that only the latest batch has the schema file
         assert(batchesWithSchemaV3File.head == 2)
+      }
+    }
+  }
+
+  test("transformWithState - verify that OperatorStateMetadataV2" +
+    " file is being written correctly") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream
+        )
+
+        val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+        checkAnswer(df, Seq(
+          Row(0, "transformWithStateExec", "default", 5, 0L, 0L),
+          Row(0, "transformWithStateExec", "default", 5, 1L, 1L)
+        ))
+        checkAnswer(df.select(df.metadataColumn("_operatorProperties")),
+          Seq(
+            Row("""{"timeMode":"NoTime","outputMode":"Update"}"""),
+            Row("""{"timeMode":"NoTime","outputMode":"Update"}""")
+          )
+        )
       }
     }
   }
