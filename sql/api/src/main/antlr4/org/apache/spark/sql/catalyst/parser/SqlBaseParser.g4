@@ -52,7 +52,7 @@ singleCompoundStatement
     ;
 
 beginEndCompoundBlock
-    : BEGIN compoundBody END
+    : beginLabel? BEGIN compoundBody END endLabel?
     ;
 
 compoundBody
@@ -66,6 +66,18 @@ compoundStatement
 
 singleStatement
     : statement SEMICOLON* EOF
+    ;
+
+label
+    : multipartIdentifier
+    ;
+
+beginLabel
+    : label COLON
+    ;
+
+endLabel
+    : label
     ;
 
 singleExpression

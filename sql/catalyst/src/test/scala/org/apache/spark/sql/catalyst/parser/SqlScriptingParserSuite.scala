@@ -161,6 +161,53 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       == "SELECT 3")
   }
 
+  test("compound: beginLabel") {
+    val batch =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(batch)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    assert(tree.label.equals("lbl"))
+  }
+
+  test("compound: beginLabel + endlLabel") {
+    val batch =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(batch)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    assert(tree.label.equals("lbl"))
+  }
+
+  test("compound: beginLabel + endlLabel with different values") {
+    val batch =
+      """
+        |lbl_begin: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl_end""".stripMargin
+    val tree = parseScript(batch)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+  }
+
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
     statementStr

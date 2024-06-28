@@ -121,7 +121,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), java.util.UUID.randomUUID.toString)
     }
   }
 
@@ -129,20 +129,34 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
   }
 
-  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
-    CompoundBody(buff.toSeq)
+    CompoundBody(buff.toSeq, label)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx.compoundBody())
+    val beginLabelCtx = Option(ctx.beginLabel())
+    val endLabelCtx = Option(ctx.endLabel())
+
+    (beginLabelCtx, endLabelCtx) match {
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
+        if bl.label().getText.nonEmpty && bl.label().getText != el.label().getText =>
+        throw SparkException.internalError("Both labels should be same.")
+      case (None, Some(_)) =>
+        throw SparkException.internalError("End label can't exist without begin label.")
+      case _ =>
+    }
+
+    val labelText = beginLabelCtx.
+      map(_.label().getText).getOrElse(java.util.UUID.randomUUID.toString)
+    visitCompoundBodyImpl(ctx.compoundBody(), labelText)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx)
+    visitCompoundBodyImpl(ctx, "")
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
