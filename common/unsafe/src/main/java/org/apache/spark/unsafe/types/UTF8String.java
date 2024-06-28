@@ -59,7 +59,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private Object base;
   private long offset;
   private int numBytes;
-  private AtomicInteger numChars = new AtomicInteger(0);
+  private AtomicInteger numChars = new AtomicInteger(-1);
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -255,7 +255,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of code points in it.
    */
   public int numChars() {
-    numChars.compareAndSet(0, getNumChars());
+    numChars.compareAndSet(-1, getNumChars());
     return numChars.get();
   }
 
