@@ -75,10 +75,10 @@ class RocksDB(
     useColumnFamilies: Boolean = false) extends Logging {
 
   case class RocksDBSnapshot(
-    checkpointDir: File,
-    version: Long,
-    numKeys: Long,
-    capturedFileMappings: RocksDBFileMappings) {
+      checkpointDir: File,
+      version: Long,
+      numKeys: Long,
+      capturedFileMappings: RocksDBFileMappings) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
