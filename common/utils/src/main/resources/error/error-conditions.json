@@ -3101,7 +3101,7 @@
   },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
-      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to the Apache Spark documentation."
+      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
   },
