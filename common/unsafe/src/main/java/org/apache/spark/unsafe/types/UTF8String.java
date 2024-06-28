@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -58,6 +59,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private Object base;
   private long offset;
   private int numBytes;
+  private AtomicInteger numChars = new AtomicInteger(0);
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -253,6 +255,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of code points in it.
    */
   public int numChars() {
+    numChars.compareAndSet(0, getNumChars());
+    return numChars.get();
+  }
+
+  /**
+   * Private helper method to calculate the number of code points in the UTF-8 string. Counting
+   * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
+   * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   */
+  private int getNumChars() {
     int len = 0;
     for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
       len += 1;
