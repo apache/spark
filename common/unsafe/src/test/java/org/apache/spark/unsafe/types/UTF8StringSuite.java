@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.spark.unsafe.types.UTF8String.fromString;
 import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
@@ -1271,38 +1272,72 @@ public class UTF8StringSuite {
     assertThrows(IndexOutOfBoundsException.class, () -> s3.getChar(99));
   }
 
-  private void testCodePointIterator(String str) {
-    UTF8String s = fromString(str);
-    Iterator<Integer> it = s.codePointIterator();
-    for (int i = 0; i < str.length(); ++i) {
-      assertTrue(it.hasNext());
-      assertEquals(str.charAt(i), (int) it.next());
+  private void testCodePointIterator(UTF8String utf8String) {
+    CodePointIteratorType iteratorMode = utf8String.isValid() ?
+      CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID :
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID;
+    Iterator<Integer> iterator = utf8String.codePointIterator(iteratorMode);
+    for (int i = 0; i < utf8String.numChars(); ++i) {
+      assertTrue(iterator.hasNext());
+      int codePoint = (utf8String.isValid() ? utf8String : utf8String.makeValid()).getChar(i);
+      assertEquals(codePoint, (int) iterator.next());
     }
-    assertFalse(it.hasNext());
+    assertFalse(iterator.hasNext());
   }
   @Test
   public void codePointIterator() {
-    testCodePointIterator("");
-    testCodePointIterator("abc");
-    testCodePointIterator("a!2&^R");
-    testCodePointIterator("aéह 日å!");
+    // Valid UTF8 strings.
+    testCodePointIterator(fromString(""));
+    testCodePointIterator(fromString("abc"));
+    testCodePointIterator(fromString("a!2&^R"));
+    testCodePointIterator(fromString("aéह 日å!"));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x41}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0xA3}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0xAC}));
+    // Invalid UTF8 strings.
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xFF}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0x80}));
+    testCodePointIterator(fromBytes(new byte[] {(byte) 0x41, (byte) 0x80, (byte) 0x42}));
+    testCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xC2, (byte) 0x80, (byte) 0x42}));
+    testCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xE2, (byte) 0x82, (byte) 0x80, (byte) 0x42}));
   }
 
-  private void testReverseCodePointIterator(String str) {
-    UTF8String s = fromString(str);
-    Iterator<Integer> it = s.reverseCodePointIterator();
-    for (int i = str.length() - 1; i >= 0 ; --i) {
-      assertTrue(it.hasNext());
-      assertEquals(str.charAt(i), (int) it.next());
+  private void testReverseCodePointIterator(UTF8String utf8String) {
+    CodePointIteratorType iteratorMode = utf8String.isValid() ?
+      CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID :
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID;
+    Iterator<Integer> iterator = utf8String.codePointIterator(iteratorMode);
+    for (int i = 0; i < utf8String.numChars(); ++i) {
+      assertTrue(iterator.hasNext());
+      int codePoint = (utf8String.isValid() ? utf8String : utf8String.makeValid()).getChar(i);
+      assertEquals(codePoint, (int) iterator.next());
     }
-    assertFalse(it.hasNext());
+    assertFalse(iterator.hasNext());
   }
   @Test
   public void reverseCodePointIterator() {
-    testReverseCodePointIterator("");
-    testReverseCodePointIterator("abc");
-    testReverseCodePointIterator("a!2&^R");
-    testReverseCodePointIterator("aéह 日å!");
+    // Valid UTF8 strings
+    testReverseCodePointIterator(fromString(""));
+    testReverseCodePointIterator(fromString("abc"));
+    testReverseCodePointIterator(fromString("a!2&^R"));
+    testReverseCodePointIterator(fromString("aéह 日å!"));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x41}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0xA3}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0xAC}));
+    // Invalid UTF8 strings
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xFF}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0xE2, (byte) 0x82, (byte) 0x80}));
+    testReverseCodePointIterator(fromBytes(new byte[] {(byte) 0x41, (byte) 0x80, (byte) 0x42}));
+    testReverseCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xC2, (byte) 0x80, (byte) 0x42}));
+    testReverseCodePointIterator(fromBytes(new byte[] {
+      (byte) 0x41, (byte) 0xE2, (byte) 0x82, (byte) 0x80, (byte) 0x42}));
   }
 
   @Test

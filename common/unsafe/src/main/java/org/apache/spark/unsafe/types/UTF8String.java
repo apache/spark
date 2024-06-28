@@ -421,7 +421,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * The default mode is CODE_POINT_ITERATOR_ASSUME_VALID.
    */
   public enum CodePointIteratorType {
-    CODE_POINT_ITERATOR_ASSUME_VALID,
+    CODE_POINT_ITERATOR_ASSUME_VALID, // USE ONLY WITH VALID STRINGS
     CODE_POINT_ITERATOR_MAKE_VALID
   }
 
