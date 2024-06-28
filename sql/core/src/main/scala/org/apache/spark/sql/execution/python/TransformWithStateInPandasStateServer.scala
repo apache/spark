@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
 import java.net.ServerSocket
 
 import scala.collection.mutable
-import scala.util.control.Breaks.break
 
 import com.google.protobuf.ByteString
 
@@ -30,7 +29,7 @@ import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, StatefulProcessorCall, StateRequest, StateVariableRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.ValueState
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StructType}
 
 /**
  * This class is used to handle the state requests from the Python side.
@@ -45,7 +44,7 @@ class TransformWithStateInPandasStateServer(
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = _
 
-  private val valueStates = mutable.HashMap[String, ValueState[String]]()
+  private val valueStates = mutable.HashMap[String, ValueState[Any]]()
 
   def run(): Unit = {
     logWarning(s"Waiting for connection from Python worker")
@@ -61,29 +60,35 @@ class TransformWithStateInPandasStateServer(
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
 
-      logWarning(s"reading the version")
-      val version = inputStream.readInt()
+      try {
+        logWarning(s"reading the version")
+        val version = inputStream.readInt()
 
-      if (version != -1) {
-        logWarning(s"version = ${version}")
-        assert(version == 0)
-        val messageLen = inputStream.readInt()
-        logWarning(s"parsing a message of ${messageLen} bytes")
+        if (version != -1) {
+          logWarning(s"version = ${version}")
+          assert(version == 0)
+          val messageLen = inputStream.readInt()
+          logWarning(s"parsing a message of ${messageLen} bytes")
 
-        val messageBytes = new Array[Byte](messageLen)
-        inputStream.read(messageBytes)
-        logWarning(s"read bytes = ${messageBytes.mkString("Array(", ", ", ")")}")
+          val messageBytes = new Array[Byte](messageLen)
+          inputStream.read(messageBytes)
+          logWarning(s"read bytes = ${messageBytes.mkString("Array(", ", ", ")")}")
 
-        val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
+          val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
 
-        logWarning(s"read message = $message")
-        handleRequest(message)
-        logWarning(s"flush output stream")
+          logWarning(s"read message = $message")
+          handleRequest(message)
+          logWarning(s"flush output stream")
 
-        outputStream.flush()
+          outputStream.flush()
+        }
+      } catch {
+        case _: EOFException =>
+          logWarning(s"No more data to read from the socket")
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
+          return
       }
     }
-
     logWarning(s"done from the state server thread")
   }
 
@@ -121,7 +126,7 @@ class TransformWithStateInPandasStateServer(
         if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
           ValueStateCall.MethodCase.EXISTS) {
           val stateName = message.getStateVariableRequest.getValueStateCall.getExists.getStateName
-          if (valueStates.contains(stateName)) {
+          if (valueStates.contains(stateName) && valueStates(stateName).exists()) {
             logWarning(s"state $stateName exists")
             outputStream.writeInt(0)
           } else {
@@ -131,40 +136,53 @@ class TransformWithStateInPandasStateServer(
         } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
           ValueStateCall.MethodCase.GET) {
           val stateName = message.getStateVariableRequest.getValueStateCall.getGet.getStateName
-          val valueState = valueStates.get(stateName).get
-          val valueOption = valueState.getOption()
-          if (valueOption.isDefined) {
-            outputStream.writeInt(0)
-            val value = valueOption.get
-            logWarning("got state value " + value)
-            val valueBytes = value.getBytes("UTF-8")
-            val byteLength = valueBytes.length
-            logWarning(s"writing value bytes of length $byteLength")
-            outputStream.writeInt(byteLength)
-            logWarning(s"writing value bytes: ${valueBytes.mkString("Array(", ", ", ")")}")
-            outputStream.write(valueBytes)
+          if (valueStates.contains(stateName)) {
+            val valueState = valueStates(stateName)
+            val valueOption = valueState.getOption()
+            if (valueOption.isDefined) {
+              outputStream.writeInt(0)
+              val value = valueOption.get.toString
+              logWarning("got state value " + value)
+              val valueBytes = value.getBytes("UTF-8")
+              val byteLength = valueBytes.length
+              logWarning(s"writing value bytes of length $byteLength")
+              outputStream.writeInt(byteLength)
+              logWarning(s"writing value bytes: ${valueBytes.mkString("Array(", ", ", ")")}")
+              outputStream.write(valueBytes)
+            } else {
+              logWarning(s"state $stateName doesn't exist")
+              outputStream.writeInt(1)
+            }
           } else {
-            logWarning("didn't get state value")
+            logWarning(s"state $stateName doesn't exist")
             outputStream.writeInt(1)
           }
         } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
           ValueStateCall.MethodCase.UPDATE) {
-          val stateName = message.getStateVariableRequest.getValueStateCall.getUpdate.getStateName
-          val schema = message.getStateVariableRequest.getValueStateCall.getUpdate.getSchema
-          val value = message.getStateVariableRequest.getValueStateCall.getUpdate.getValue
-          val updateValueString = value.toStringUtf8
-          val structType = StructType.fromString(schema)
-          val field = structType.fields(0)
-          val updatedValue = castToType(updateValueString, field.dataType)
+          val updateRequest = message.getStateVariableRequest.getValueStateCall.getUpdate
+          val stateName = updateRequest.getStateName
+          val updateValueString = updateRequest.getValue.toStringUtf8
+          val dataType = StructType.fromString(updateRequest.getSchema).fields(0).dataType
+          val updatedValue = castToType(updateValueString, dataType)
           logWarning(s"updating state $stateName with value $updatedValue and" +
             s" type ${updatedValue.getClass}")
-          valueStates(stateName).update(updateValueString)
-          outputStream.writeInt(0)
+          if (valueStates.contains(stateName)) {
+            valueStates(stateName).update(updatedValue)
+            outputStream.writeInt(0)
+          } else {
+            logWarning(s"state $stateName doesn't exist")
+            outputStream.writeInt(1)
+          }
         } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
           ValueStateCall.MethodCase.CLEAR) {
           val stateName = message.getStateVariableRequest.getValueStateCall.getClear.getStateName
-          valueStates(stateName).clear()
-          outputStream.writeInt(0)
+          if (valueStates.contains(stateName)) {
+            valueStates(stateName).clear()
+            outputStream.writeInt(0)
+          } else {
+            logWarning(s"state $stateName doesn't exist")
+            outputStream.writeInt(1)
+          }
         } else {
           throw new IllegalArgumentException("Invalid method call")
         }
@@ -199,8 +217,8 @@ class TransformWithStateInPandasStateServer(
         val structType = StructType.fromString(schema)
         val field = structType.fields(0)
         val encoder = getEncoder(field.dataType)
-        val state = statefulProcessorHandle.getValueState[String](stateName, Encoders.STRING)
-//        val state = statefulProcessorHandle.getValueState(stateName, encoder)
+        val state = statefulProcessorHandle.getValueState(stateName, encoder)
+          .asInstanceOf[ValueState[Any]]
         valueStates.put(stateName, state)
         outputStream.writeInt(0)
       } else {
@@ -229,7 +247,6 @@ class TransformWithStateInPandasStateServer(
       case DoubleType => Encoders.DOUBLE
       case FloatType => Encoders.FLOAT
       case BooleanType => Encoders.BOOLEAN
-      case StringType => Encoders.STRING
       case _ => Encoders.STRING
     }
   }

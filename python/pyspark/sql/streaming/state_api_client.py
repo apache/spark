@@ -46,7 +46,7 @@ class StateApiClient:
         # place holder, will remove when actual implementation is done
         # self.setHandleState(StatefulProcessorHandleState.CLOSED)
 
-    def setHandleState(self, state: StatefulProcessorHandleState) -> None:
+    def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         print(f"setting handle state to: {state}")
         proto_state = self._get_proto_state(state)
         set_handle_state = stateMessage.SetHandleState(state=proto_state)
@@ -60,7 +60,7 @@ class StateApiClient:
             self.handle_state = state
         print(f"setHandleState status= {status}")
 
-    def getValueState(self, state_name: str, schema: Union[StructType, str]) -> None:
+    def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
 
@@ -77,7 +77,7 @@ class StateApiClient:
         status = read_int(self.sockfile)
         print(f"getValueState status= {status}")
 
-    def valueStateExists(self, state_name: str) -> bool:
+    def value_state_exists(self, state_name: str) -> bool:
         print(f"checking value state exists: {state_name}")
         exists_call = stateMessage.Exists(stateName=state_name)
         value_state_call = stateMessage.ValueStateCall(exists=exists_call)
@@ -92,7 +92,7 @@ class StateApiClient:
         else:
             return False
 
-    def valueStateGet(self, state_name: str) -> Any:
+    def value_state_get(self, state_name: str) -> Any:
         print(f"getting value state: {state_name}")
         get_call = stateMessage.Get(stateName=state_name)
         value_state_call = stateMessage.ValueStateCall(get=get_call)
@@ -107,7 +107,7 @@ class StateApiClient:
         else:
             return None
 
-    def valueStateUpdate(self, state_name: str, schema: Union[StructType, str], value: str) -> None:
+    def value_state_update(self, state_name: str, schema: Union[StructType, str], value: str) -> None:
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
         print(f"updating value state: {state_name}")
@@ -121,7 +121,7 @@ class StateApiClient:
         status = read_int(self.sockfile)
         print(f"valueStateUpdate status= {status}")
 
-    def valueStateClear(self, state_name: str) -> None:
+    def value_state_clear(self, state_name: str) -> None:
         print(f"clearing value state: {state_name}")
         clear_call = stateMessage.Clear(stateName=state_name)
         value_state_call = stateMessage.ValueStateCall(clear=clear_call)
@@ -132,22 +132,7 @@ class StateApiClient:
         status = read_int(self.sockfile)
         print(f"valueStateClear status= {status}")
 
-    def getListState(self, state_name: str, schema: Union[StructType, str]) -> None:
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-
-        state_call_command = stateMessage.StateCallCommand()
-        state_call_command.stateName = state_name
-        state_call_command.schema = schema.json()
-        call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
-
-        message = stateMessage.StateRequest(statefulProcessorCall=call)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"status= {status}")
-
-    def setImplicitKey(self, key: str) -> None:
+    def set_implicit_key(self, key: str) -> None:
         print(f"setting implicit key: {key}")
         set_implicit_key = stateMessage.SetImplicitKey(key=key)
         request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
@@ -157,7 +142,7 @@ class StateApiClient:
         status = read_int(self.sockfile)
         print(f"setImplicitKey status= {status}")
 
-    def removeImplicitKey(self) -> None:
+    def remove_implicit_key(self) -> None:
         print(f"removing implicit key")
         remove_implicit_key = stateMessage.RemoveImplicitKey()
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)

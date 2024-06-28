@@ -35,16 +35,16 @@ class ValueState:
         self.schema = schema
 
     def exists(self) -> bool:
-        return self._state_api_client.valueStateExists(self._state_name)
+        return self._state_api_client.value_state_exists(self._state_name)
 
     def get(self) -> Any:
-        return self._state_api_client.valueStateGet(self._state_name)
+        return self._state_api_client.value_state_get(self._state_name)
 
     def update(self, new_value: Any) -> None:
-        self._state_api_client.valueStateUpdate(self._state_name, self.schema, new_value)
+        self._state_api_client.value_state_update(self._state_name, self.schema, new_value)
 
     def clear(self) -> None:
-        self._state_api_client.valueStateClear(self._state_name)
+        self._state_api_client.value_state_clear(self._state_name)
 
 
 class ListState:
@@ -74,7 +74,7 @@ class StatefulProcessorHandle:
         self.state_api_client = state_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
-        self.state_api_client.getValueState(state_name, schema)
+        self.state_api_client.get_value_state(state_name, schema)
         return ValueState(self.state_api_client, state_name, schema)
 
     def getListState(self, state_name: str, schema: Union[StructType, str]) -> ListState:

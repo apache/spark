@@ -382,12 +382,12 @@ class PandasGroupedOpsMixin:
                 print("initializing stateful processor")
                 stateful_processor.init(handle)
                 print("setting handle state to initialized")
-                state_api_client.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+                state_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
             print(f"handling input rows for key: {key[0]}")
-            state_api_client.setImplicitKey(str(key[0]))
+            state_api_client.set_implicit_key(str(key[0]))
             result = stateful_processor.handleInputRows(key, inputRows)
-            state_api_client.removeImplicitKey()
+            state_api_client.remove_implicit_key()
             
             return result
         
