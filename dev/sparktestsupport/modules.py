@@ -1370,7 +1370,7 @@ pyspark_pandas_connect_part3 = Module(
         "pyspark.pandas.tests.connect.io.test_parity_stata",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_conversion",
         "pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io",
-        "pyspark.pandas.tests.connect.io.test_parity_series_conversion"
+        "pyspark.pandas.tests.connect.io.test_parity_series_conversion",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext_float",
