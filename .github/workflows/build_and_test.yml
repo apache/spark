@@ -385,8 +385,6 @@ jobs:
             pyspark-pandas-connect-part2
           - >-
             pyspark-pandas-connect-part3
-          - >-
-            pyspark-pandas-connect-part4
         exclude:
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
@@ -397,7 +395,6 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part1' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part2' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part3' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part4' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: 'python3.11'
