@@ -84,7 +84,7 @@ class CompoundNestedStatementIteratorExec(collection: List[CompoundStatementExec
   }
 }
 
-class CompoundBodyExec(statements: List[CompoundStatementExec])
+class CompoundBodyExec(statements: List[CompoundStatementExec], label: String = "")
   extends CompoundNestedStatementIteratorExec(statements)
 
 // Evaluators
