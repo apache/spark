@@ -16,28 +16,30 @@
     under the License.
 
 
-=============
-API Reference
-=============
+=======
+Logging
+=======
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+Classes
+-------
 
-.. note::
-   Spark SQL, Pandas API on Spark, Structured Streaming, and MLlib (DataFrame-based) support
-   Spark Connect.
+.. currentmodule:: pyspark.logging
 
-.. toctree::
-   :maxdepth: 2
+.. autosummary::
+    :toctree: api/
 
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.ml.connect
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.resource
-   pyspark.errors
-   pyspark.logging
-   pyspark.testing
+    PySparkLogger
+
+
+Methods
+-------
+
+.. currentmodule:: pyspark.errors
+
+.. autosummary::
+    :toctree: api/
+
+    PySparkLogger.get_logger
+    PySparkLogger.log_info
+    PySparkLogger.log_warn
+    PySparkLogger.log_error

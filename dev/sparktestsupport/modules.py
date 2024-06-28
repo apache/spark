@@ -1422,6 +1422,17 @@ pyspark_errors = Module(
     ],
 )
 
+pyspark_logging = Module(
+    name="pyspark-logging",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/logging"],
+    python_test_goals=[
+        # unittests
+        "pyspark.logging.tests.test_logging",
+    ],
+)
+
+
 sparkr = Module(
     name="sparkr",
     dependencies=[hive, mllib],

@@ -43,6 +43,9 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
 
+from pyspark.logging import PySparkLogger
+
+
 class CapturedException(PySparkException):
     def __init__(
         self,
@@ -73,6 +76,7 @@ class CapturedException(PySparkException):
         if self._cause is None and origin is not None and origin.getCause() is not None:
             self._cause = convert_exception(origin.getCause())
         self._origin = origin
+        self._log_exception()
 
     def __str__(self) -> str:
         from pyspark import SparkContext
@@ -176,6 +180,31 @@ class CapturedException(PySparkException):
             return contexts
         else:
             return []
+
+    def _log_exception(self) -> None:
+        query_contexts = self.getQueryContext()
+        query_context = query_contexts[0] if len(query_contexts) != 0 else None
+        if query_context:
+            if isinstance(query_context, DataFrameQueryContext):
+                logger = PySparkLogger.get_logger("DataFrameQueryContextLogger")
+                call_site = query_context.callSite().split(":")
+                context = {
+                    "file": call_site[0],
+                    "line_no": call_site[1],
+                    "fragment": query_context.fragment(),
+                }
+                logger.log_error(
+                    self._desc,
+                    context=context,
+                    error_class=self.getErrorClass(),
+                )
+            else:
+                logger = PySparkLogger.get_logger("SQLQueryContextLogger")
+                logger.error(
+                    self._desc,
+                    context="SQLQueryContext",
+                    error_class=self.getErrorClass(),
+                )
 
 
 def convert_exception(e: "Py4JJavaError") -> CapturedException:
