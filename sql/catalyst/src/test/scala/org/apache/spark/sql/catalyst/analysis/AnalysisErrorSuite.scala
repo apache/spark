@@ -256,7 +256,17 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("window specification error") {
     assertAnalysisErrorClass(
-      CatalystSqlParser.parsePlan("SELECT avg(a) over (b) FROM TaBlE GROUP BY a, b"),
+      inputPlan = CatalystSqlParser.parsePlan(
+        """
+          |WITH sample_data AS (
+          |    SELECT 1 AS a, 10 AS b UNION ALL
+          |    SELECT 2 AS a, 20 AS b
+          |)
+          |SELECT
+          |    AVG(a) OVER (b) AS avg_a
+          |FROM sample_data
+          |GROUP BY a, b;
+          |""".stripMargin),
       expectedErrorClass = "MISSING_WINDOW_SPECIFICATION",
       expectedMessageParameters = Map(
         "windowName" -> "b"))

@@ -3101,7 +3101,7 @@
   },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
-      "Window specification <windowName> is not defined in the WINDOW clause."
+      "Window specification is not defined in the WINDOW clause for <windowName>. Please ensure the WINDOW clause contains PARTITION BY and/or ORDER BY."
     ],
     "sqlState" : "42P20"
   },
