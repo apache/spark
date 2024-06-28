@@ -165,10 +165,6 @@ object ResolveDefaultColumns extends QueryErrorsBase
    *
    * The column "DEFAULT" will be resolved to the default value expression defined for the column of
    * the assignment key.
-   *
-   * IMPORTANT: The 'invalidColumnDefaultException' argument must be lazy until the exception
-   * is actually thrown, because the instantiation of SparkThrowable exception results in
-   * reading the file error-classes to format exception message.
    */
   def resolveColumnDefaultInAssignmentValue(
       key: Expression,
