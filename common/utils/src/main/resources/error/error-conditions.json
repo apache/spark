@@ -3101,7 +3101,7 @@
   },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
-      "Window specification is not defined in the WINDOW clause for <windowName>. Please ensure the WINDOW clause contains PARTITION BY and/or ORDER BY."
+      "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to the Apache Spark documentation."
     ],
     "sqlState" : "42P20"
   },
