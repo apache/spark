@@ -905,8 +905,7 @@ class BaseUDFTestsMixin(object):
         # Input
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
         self.assertIn(
-            row[0],
-            ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]"]
+            row[0], ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]"]
         )
         # Output
 

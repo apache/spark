@@ -137,7 +137,10 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             df.select(
                 udf(lambda x: str(x), returnType="string", useArrow=True)("nested_array")
             ).first()[0],
-            ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]",],
+            [
+                "[[1, 2], [3, 4]]",
+                "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]",
+            ],
         )
 
     def test_type_coercion_string_to_numeric(self):

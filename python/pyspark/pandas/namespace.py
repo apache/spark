@@ -3731,15 +3731,14 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
+    from pandas.util.version import Version
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    try:
+    if Version(np.__version__) >= Version("2"):
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
         np.set_printoptions(legacy="1.25")
-    except TypeError:
-        pass
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas

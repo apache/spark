@@ -5373,8 +5373,11 @@ def _test() -> None:
     try:
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
-        import numpy
-        numpy.set_printoptions(legacy="1.25")
+        import numpy as np
+        from pandas.util.version import Version
+
+        if Version(np.__version__) >= Version("2"):
+            np.set_printoptions(legacy="1.25")
     except TypeError:
         pass
 
