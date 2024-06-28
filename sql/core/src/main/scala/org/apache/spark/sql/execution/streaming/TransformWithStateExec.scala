@@ -385,8 +385,7 @@ case class TransformWithStateExec(
       case None =>
     }
     // Write the new schema to the schema file
-    schemaFile.
-      add(batchId, newColumnFamilySchemas)
+    schemaFile.add(batchId, newColumnFamilySchemas)
     // purge oldest files
     schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
     Array(schemaFile.getPathFromBatchId(batchId))
