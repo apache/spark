@@ -120,11 +120,11 @@ case class UnaryPositive(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
-  override lazy val replacement: Expression = child
-
   override def dataType: DataType = child.dataType
 
   override def sql: String = s"(+ ${child.sql})"
+
+  override lazy val replacement: Expression = child
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): UnaryPositive =
