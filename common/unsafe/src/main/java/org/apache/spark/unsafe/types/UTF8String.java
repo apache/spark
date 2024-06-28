@@ -577,21 +577,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns the byte at position `i`.
+   * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
-  public byte getByte(int i) {
-    return Platform.getByte(base, offset + i);
+  public byte getByte(int byteIndex) {
+    return Platform.getByte(base, offset + byteIndex);
   }
 
   /**
-   * Returns the code point at position `i`.
+   * Returns the code point at (char) position `charIndex`. If char index is invalid, throws
+   * exception. Note that this method is not efficient as it needs to traverse the UTF-8 string.
+   * If `byteIndex` of the first byte in the code point is known, use `codePointFrom` instead.
    */
-  public int getChar(int i) {
-    if (i < 0 || i >= numChars()) {
+  public int getChar(int charIndex) {
+    if (charIndex < 0 || charIndex >= numChars()) {
       throw new IndexOutOfBoundsException();
     }
     int charCount = 0, byteCount = 0;
-    while (charCount < i) {
+    while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
       charCount += 1;
     }
@@ -599,27 +601,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns the code point starting from the byte at position `index`.
+   * Returns the code point starting from the byte at position `byteIndex`.
+   * If byte index is invalid, throws exception.
    */
-  public int codePointFrom(int index) {
-    if (index < 0 || index >= numBytes) {
+  public int codePointFrom(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
       throw new IndexOutOfBoundsException();
     }
-    byte b = getByte(index);
+    byte b = getByte(byteIndex);
     int numBytes = numBytesForFirstByte(b);
     return switch (numBytes) {
       case 1 ->
         b & 0x7F;
       case 2 ->
-        ((b & 0x1F) << 6) | (getByte(index + 1) & 0x3F);
+        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
       case 3 ->
-        ((b & 0x0F) << 12) | ((getByte(index + 1) & 0x3F) << 6) |
-        (getByte(index + 2) & 0x3F);
+        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
+        (getByte(byteIndex + 2) & 0x3F);
       case 4 ->
-        ((b & 0x07) << 18) | ((getByte(index + 1) & 0x3F) << 12) |
-        ((getByte(index + 2) & 0x3F) << 6) | (getByte(index + 3) & 0x3F);
+        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
+        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
       default ->
-        throw new IllegalArgumentException("Invalid UTF-8 sequence");
+        throw new IllegalStateException("Error in UTF-8 code point");
     };
   }
 

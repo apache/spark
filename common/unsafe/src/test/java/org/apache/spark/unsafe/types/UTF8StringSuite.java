@@ -1111,6 +1111,95 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void testGetByte() {
+    // Valid UTF-8 string
+    String validString = "abcde";
+    UTF8String validUTF8String = fromString(validString);
+    // Valid byte index handling
+    for (int i = 0; i < validString.length(); ++i) {
+      assertEquals(validString.charAt(i), validUTF8String.getByte(i));
+    }
+    // Invalid byte index handling
+    assertEquals(0, validUTF8String.getByte(-1));
+    assertEquals(0, validUTF8String.getByte(validString.length()));
+    assertEquals(0, validUTF8String.getByte(validString.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      assertEquals(invalidString[i], invalidUTF8String.getByte(i));
+    }
+    // Invalid byte index handling
+    assertEquals(0, invalidUTF8String.getByte(-1));
+    assertEquals(0, invalidUTF8String.getByte(invalidString.length));
+    assertEquals(0, invalidUTF8String.getByte(invalidString.length + 1));
+  }
+
+  @Test
+  public void testGetChar() {
+    // Valid UTF-8 string
+    String str = "abcde";
+    UTF8String s = fromString(str);
+    // Valid character index handling
+    for (int i = 0; i < str.length(); ++i) {
+      assertEquals(str.charAt(i), s.getChar(i));
+    }
+    // Invalid character index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      if (Character.isValidCodePoint(invalidString[i])) {
+        assertEquals(invalidString[i], invalidUTF8String.getChar(i));
+      } else {
+        assertEquals(0, invalidUTF8String.getChar(i));
+      }
+    }
+    // Invalid byte index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.getChar(str.length() + 1));
+  }
+
+  @Test
+  public void testCodePointFrom() {
+    // Valid UTF-8 string
+    String str = "abcde";
+    UTF8String s = fromString(str);
+    // Valid character index handling
+    for (int i = 0; i < str.length(); ++i) {
+      assertEquals(str.charAt(i), s.codePointFrom(i));
+    }
+    // Invalid character index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+
+    // Invalid UTF-8 string
+    byte[] invalidString = new byte[] {(byte) 0x41, (byte) 0x42, (byte) 0x80};
+    UTF8String invalidUTF8String = fromBytes(invalidString);
+    // Valid byte index handling
+    for (int i = 0; i < invalidString.length; ++i) {
+      if (Character.isValidCodePoint(invalidString[i])) {
+        assertEquals(invalidString[i], invalidUTF8String.codePointFrom(i));
+      } else {
+        assertEquals(0, invalidUTF8String.codePointFrom(i));
+      }
+    }
+    // Invalid byte index handling
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
+    assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+  }
+
+  @Test
   public void utf8StringCodePoints() {
     String s = "aéह 日å!";
     UTF8String s0 = fromString(s);
