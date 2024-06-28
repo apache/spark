@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern}
 import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -113,23 +113,21 @@ case class UnaryMinus(
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class UnaryPositive(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class UnaryPositive(child: Expression) extends UnaryExpression
+  with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
 
   override def prettyName: String = "positive"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
-  override def dataType: DataType = child.dataType
+  override lazy val replacement: Expression = child match {
+    case ste @ StringTypeExpression() => Cast(ste, DoubleType)
+    case _ => child
+  }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNARY_POSITIVE)
+  override def dataType: DataType = replacement.dataType
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    defineCodeGen(ctx, ev, c => c)
-
-  protected override def nullSafeEval(input: Any): Any = input
-
-  override def sql: String = s"(+ ${child.sql})"
+  override def sql: String = s"(+ ${replacement.sql})"
 
   override protected def withNewChildInternal(newChild: Expression): UnaryPositive =
     copy(child = newChild)
