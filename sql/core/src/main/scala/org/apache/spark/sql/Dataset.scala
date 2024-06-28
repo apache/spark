@@ -2177,32 +2177,36 @@ class Dataset[T] private[sql](
 
   /**
    * Transpose a DataFrame, switching rows to columns.
-   * This function transforms the DataFrame such that the distinct values in the first column become
-   * the new columns of the DataFrame. Note that values transposed must share the least common type.
+   * This function transforms the DataFrame such that the distinct values in the specified index
+   * column become the new columns of the DataFrame. If no index column is provided, the first
+   * column is used as the default. Note that values transposed must share the least common type.
    *
+   * @param indexColumn The column to use as the index for transposing. If not provided, the first
+   * column is used.
    * @group untypedrel
    * @since 4.0.0
    */
-  def transpose(): DataFrame = withPlan {
-    val firstColumnValues = collectFirstColumnValues()
+  def transpose(indexColumn: Option[Column] = None): DataFrame = withPlan {
+    val actualIndexColumn = indexColumn.getOrElse(col(this.columns.head))
+    val indexColumnValues = collectIndexColumnValues(actualIndexColumn)
     if (this.isEmpty) {
       this.logicalPlan
     } else {
       Transpose(
-        firstColumnValues.map(v => Literal(v.toString)),
+        actualIndexColumn.named,
+        indexColumnValues.map(v => Literal(v.toString)),
         logicalPlan
       )
     }
   }
 
-  private[sql] def collectFirstColumnValues(): Seq[Any] = {
+  private[sql] def collectIndexColumnValues(indexColumn: Column): Seq[Any] = {
     // TODO: configurable maxValues
     val maxValues = 5000
-    val firstColumn = col(this.columns.head)
-    val values = this.select(firstColumn)
+    val values = this.select(indexColumn)
       .distinct()
       .limit(maxValues + 1)
-      .sort(firstColumn)
+      .sort(indexColumn)
       .collect()
       .map(_.get(0))
       .toImmutableArraySeq

@@ -57,4 +57,11 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("transpose frame with index column specified") {
+    checkAnswer(
+      salary.transpose(Some($"salary")),
+      Row("personId", 1, 0) :: Nil
+    )
+  }
 }
