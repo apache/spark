@@ -26,15 +26,17 @@ import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantExpressionEvalUtils, VariantGet}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
-class VariantSuite extends QueryTest with SharedSparkSession {
+class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
   import testImplicits._
 
   test("basic tests") {
@@ -56,6 +58,15 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       query.write.parquet(tempDir)
       verifyResult(spark.read.parquet(tempDir))
     }
+  }
+
+  test("basic try_parse_json alias") {
+    val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }"""), Row("""{ a : 1 }""")).asJava,
+      new StructType().add("json", StringType))
+    val actual = df.select(to_json(try_parse_json(col("json")))).collect()
+
+    assert(actual(0)(0) == """{"a":1}""")
+    assert(actual(1)(0) == null)
   }
 
   test("basic parse_json alias") {
@@ -435,5 +446,185 @@ class VariantSuite extends QueryTest with SharedSparkSession {
           Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
       }
     }
+  }
+
+  test("SPARK-48067: default variant columns works") {
+    withTable("t") {
+      sql("""create table t(
+        v1 variant default null,
+        v2 variant default parse_json(null),
+        v3 variant default cast(null as variant),
+        v4 variant default parse_json('1'),
+        v5 variant default parse_json('1'),
+        v6 variant default parse_json('{\"k\": \"v\"}'),
+        v7 variant default cast(5 as int),
+        v8 variant default cast('hello' as string),
+        v9 variant default parse_json(to_json(parse_json('{\"k\": \"v\"}')))
+      ) using parquet""")
+      sql("""insert into t values(DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT,
+        DEFAULT, DEFAULT)""")
+
+      val expected = sql("""select
+        cast(null as variant) as v1,
+        parse_json(null) as v2,
+        cast(null as variant) as v3,
+        parse_json('1') as v4,
+        parse_json('1') as v5,
+        parse_json('{\"k\": \"v\"}') as v6,
+        cast(cast(5 as int) as variant) as v7,
+        cast('hello' as variant) as v8,
+        parse_json(to_json(parse_json('{\"k\": \"v\"}'))) as v9
+      """)
+      val actual = sql("select * from t")
+      checkAnswer(actual, expected.collect())
+    }
+  }
+
+  Seq(
+    (
+      "basic int parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("1")),
+      VariantType
+    ),
+    (
+      "basic json parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("{\"k\": \"v\"}")),
+      VariantType
+    ),
+    (
+      "basic null parse json",
+      VariantExpressionEvalUtils.parseJson(UTF8String.fromString("null")),
+      VariantType
+    ),
+    (
+      "basic null",
+      null,
+      VariantType
+    ),
+    (
+      "basic array",
+      new GenericArrayData(Array[Int](1, 2, 3, 4, 5)),
+      new ArrayType(IntegerType, false)
+    ),
+    (
+      "basic string",
+      UTF8String.fromString("literal string"),
+      StringType
+    ),
+    (
+      "basic timestamp",
+      0L,
+      TimestampType
+    ),
+    (
+      "basic int",
+      0,
+      IntegerType
+    ),
+    (
+      "basic struct",
+      Literal.default(new StructType().add("col0", StringType)).eval(),
+      new StructType().add("col0", StringType)
+    ),
+    (
+      "complex struct with child variant",
+      Literal.default(new StructType()
+        .add("col0", StringType)
+        .add("col1", new StructType().add("col0", VariantType))
+        .add("col2", VariantType)
+        .add("col3", new ArrayType(VariantType, false))
+      ).eval(),
+      new StructType()
+        .add("col0", StringType)
+        .add("col1", new StructType().add("col0", VariantType))
+        .add("col2", VariantType)
+        .add("col3", new ArrayType(VariantType, false))
+    ),
+    (
+      "basic array with null",
+      new GenericArrayData(Array[Any](1, 2, null)),
+      new ArrayType(IntegerType, true)
+    ),
+    (
+      "basic map with null",
+      new ArrayBasedMapData(
+        new GenericArrayData(Array[Any](UTF8String.fromString("k1"), UTF8String.fromString("k2"))),
+        new GenericArrayData(Array[Any](1, null))
+      ),
+      new MapType(StringType, IntegerType, true)
+    )
+  ).foreach { case (testName, value, dt) =>
+    test(s"SPARK-48067: Variant literal `sql` correctly recreates the variant - $testName") {
+      val l = Literal.create(
+        VariantExpressionEvalUtils.castToVariant(value, dt.asInstanceOf[DataType]), VariantType)
+      val jsonString = l.eval().asInstanceOf[VariantVal]
+        .toJson(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      val expectedSql = s"PARSE_JSON('$jsonString')"
+      assert(l.sql == expectedSql)
+      val valueFromLiteralSql =
+        spark.sql(s"select ${l.sql}").collect()(0).getAs[VariantVal](0)
+
+      // Cast the variants to their specified type to compare for logical equality.
+      // Currently, variant equality naively compares its value and metadata binaries. However,
+      // variant equality is more complex than this.
+      val castVariantExpr = VariantGet(
+        l,
+        Literal.create(UTF8String.fromString("$"), StringType),
+        dt,
+        true,
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
+      val sqlVariantExpr = VariantGet(
+        Literal.create(valueFromLiteralSql, VariantType),
+        Literal.create(UTF8String.fromString("$"), StringType),
+        dt,
+        true,
+        Some(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone).toString())
+      )
+      checkEvaluation(castVariantExpr, sqlVariantExpr.eval())
+    }
+  }
+
+  test("variant_get size") {
+    val largeKey = "x" * 1000
+    val df = Seq(s"""{ "$largeKey": {"a" : 1 },
+                       "b" : 2,
+                       "c": [1,2,3,{"$largeKey": 4}] }""").toDF("json")
+            .selectExpr("parse_json(json) as v")
+
+    // Check Variant with approximate bounds to avoid flakiness if we make minor format changes.
+    def checkSize(v: VariantVal, minMetadata: Long, maxMetadata: Long,
+                  minValue: Long, maxValue: Long): Unit = {
+      val mSize = v.getMetadata.length
+      assert(mSize >= minMetadata)
+      assert(mSize <= maxMetadata)
+      val vSize = v.getValue.length
+      assert(vSize >= minValue)
+      assert(vSize <= maxValue)
+    }
+
+    // The full Variant has large metadata (but only one copy of `largeKey`).
+    checkSize(df.selectExpr("variant_get(v, '$', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 1000, 1050, 20, 40)
+    // Extracting Variant or a nested type containing Variant should strip out the large metadata.
+    checkSize(df.selectExpr("variant_get(v, '$.b', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 2, 4, 2, 4)
+    // Behavior is the same without an explicit cast to Variant.
+    checkSize(df.selectExpr("variant_get(v, '$.b', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 2, 4, 2, 4)
+    checkSize(df.selectExpr(s"variant_get(v, '$$.$largeKey', 'variant')").collect()(0)
+        .getAs[VariantVal](0), 5, 10, 5, 10)
+    checkSize(df.selectExpr(s"variant_get(v, '$$.$largeKey', 'struct<a:variant>')")
+        .collect()(0).getStruct(0).getAs[VariantVal](0), 2, 4, 2, 4)
+    // Only the array element that contains `largeKey` should be large.
+    checkSize(df.selectExpr("variant_get(v, '$.c', 'array<variant>')").collect()(0)
+        .getSeq[VariantVal](0)(0), 2, 4, 2, 4)
+    checkSize(df.selectExpr("variant_get(v, '$.c', 'array<variant>')").collect()(0)
+        .getSeq[VariantVal](0)(3), 1000, 1020, 5, 10)
+    // Cast to a nested type containing Variant should also remove metadata.
+    val structResult = df.selectExpr(s"cast(v as struct<$largeKey:variant,b:variant>)").collect()(0)
+        .getStruct(0)
+    checkSize(structResult.getAs[VariantVal](0), 5, 10, 5, 10)
+    checkSize(structResult.getAs[VariantVal](1), 2, 4, 2, 4)
   }
 }

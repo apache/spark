@@ -34,7 +34,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CLASS_NAME, CONFIG}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -434,10 +434,11 @@ object ParquetUtils extends Logging {
         classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
-      logInfo("Using default output committer for Parquet: " +
-        classOf[ParquetOutputCommitter].getCanonicalName)
+      logInfo(log"Using default output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
     } else {
-      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+      logInfo(log"Using user defined output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
     }
 
     conf.setClass(

@@ -21,7 +21,9 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.Function;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -29,6 +31,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.ibm.icu.lang.UCharacter;
 
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
@@ -100,6 +103,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
+  public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
+
 
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
@@ -112,6 +117,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return null;
     }
+  }
+
+  private static UTF8String fromBytes(ArrayList<Byte> bytes) {
+    byte[] byteArray = new byte[bytes.size()];
+    for (int i = 0; i < bytes.size(); i++) {
+      byteArray[i] = bytes.get(i);
+    }
+    return fromBytes(byteArray);
   }
 
   /**
@@ -224,7 +237,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes for a code point with the first byte as `b`
    * @param b The first byte of a code point
    */
-  private static int numBytesForFirstByte(final byte b) {
+  public static int numBytesForFirstByte(final byte b) {
     final int offset = b & 0xFF;
     byte numBytes = bytesOfCodePointInUTF8[offset];
     return (numBytes == 0) ? 1: numBytes; // Skip the first byte disallowed in UTF-8
@@ -268,6 +281,129 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
       return bytes;
     }
+  }
+
+  /**
+   * Utility methods and constants for UTF-8 string validation.
+   */
+
+  private static boolean isValidContinuationByte(byte b) {
+     return b >= (byte) 0x80 && b <= (byte) 0xBF;
+  }
+
+  private static boolean isValidSecondByte(byte b, byte firstByte) {
+    return switch (firstByte) {
+      case (byte) 0xE0 -> b >= (byte) 0xA0 && b <= (byte) 0xBF;
+      case (byte) 0xED -> b >= (byte) 0x80 && b <= (byte) 0x9F;
+      case (byte) 0xF0 -> b >= (byte) 0x90 && b <= (byte) 0xBF;
+      case (byte) 0xF4 -> b >= (byte) 0x80 && b <= (byte) 0x8F;
+      default -> isValidContinuationByte(b);
+    };
+  }
+
+  private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
+    new byte[] { (byte) 0xEF, (byte) 0xBF, (byte) 0xBD };
+
+  private static void appendReplacementCharacter(ArrayList<Byte> bytes) {
+    for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) bytes.add(b);
+  }
+
+  /**
+   * Returns a validated version of the current UTF-8 string by replacing invalid UTF-8 sequences
+   * with the Unicode replacement character (U+FFFD), as per the rules defined in the Unicode
+   * standard 15, Section 3.9, Paragraph D86, Table 3-7. This behaviour is consistent with the
+   * behaviour of `UnicodeString` in ICU4C.
+   *
+   * @return A new UTF8String that is a valid UTF8 string.
+   */
+  public UTF8String makeValid() {
+    ArrayList<Byte> bytes = new ArrayList<>();
+    int byteIndex = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) {
+        appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // 1B UTF-8 sequence (ASCII or truncated).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) bytes.add(firstByte);
+        else appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) {
+        appendReplacementCharacter(bytes);
+        ++byteIndex;
+        continue;
+      }
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) {
+          break;
+        }
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) {
+        appendReplacementCharacter(bytes);
+        byteIndex += continuationBytes;
+        continue;
+      }
+      // Valid UTF-8 sequence.
+      for (int i = 0; i < codePointLen; ++i) {
+        bytes.add(getByte(byteIndex + i));
+      }
+      byteIndex += codePointLen;
+    }
+    return UTF8String.fromBytes(bytes);
+  }
+
+  /**
+   * Checks if the current UTF8String is valid.
+   *
+   * @return If string represents a valid UTF8 string.
+   */
+  public boolean isValid() {
+    int byteIndex = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) return false;
+      // 1B UTF-8 sequence (ASCII or truncated).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) {
+          ++byteIndex;
+          continue;
+        }
+        else return false;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) return false;
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) return false;
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) return false;
+      // Valid UTF-8 sequence.
+      byteIndex += codePointLen;
+    }
+    return true;
   }
 
   /**
@@ -342,47 +478,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns whether `this` contains `substring` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
-   */
-  public boolean containsInLowerCase(final UTF8String substring) {
-    if (substring.numBytes == 0) {
-      return true;
-    }
-
-    // Both `this` and the `substring` are checked for non-ASCII characters, otherwise we would
-    // have to use `startsWithLowerCase(...)` in a loop, and it would frequently allocate
-    // (e.g. in case of `containsInLowerCase("1大1大1大...", "11")`)
-    if (!substring.isFullAscii()) {
-      return toLowerCase().contains(substring.toLowerCaseSlow());
-    }
-    if (!isFullAscii()) {
-      return toLowerCaseSlow().contains(substring.toLowerCaseAscii());
-    }
-
-    if (numBytes < substring.numBytes) {
-      return false;
-    }
-
-    final var firstLower = Character.toLowerCase(substring.getByte(0));
-    for (var i = 0; i <= (numBytes - substring.numBytes); i++) {
-      if (Character.toLowerCase(getByte(i)) == firstLower) {
-        final var rest = UTF8String.fromAddress(base, offset + i, numBytes - i);
-        if (rest.matchAtInLowerCaseAscii(substring, 0)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Returns the byte at position `i`.
    */
-  private byte getByte(int i) {
+  public byte getByte(int i) {
     return Platform.getByte(base, offset + i);
   }
 
@@ -393,55 +491,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAtInLowerCaseAscii(final UTF8String s, int pos) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
-      return false;
-    }
-
-    for (var i = 0; i < s.numBytes; i++) {
-      if (Character.toLowerCase(getByte(pos + i)) != Character.toLowerCase(s.getByte(i))) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
-  }
-
-  /**
-   * Checks whether `prefix` is a prefix of `this` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
-   */
-  public boolean startsWithInLowerCase(final UTF8String prefix) {
-    // No way to match sizes of strings for early return, since single grapheme can be expanded
-    // into several independent ones in lowercase
-    if (prefix.numBytes == 0) {
-      return true;
-    }
-    if (numBytes == 0) {
-      return false;
-    }
-
-    if (!prefix.isFullAscii()) {
-      return toLowerCase().startsWith(prefix.toLowerCaseSlow());
-    }
-
-    final var part = prefix.numBytes >= numBytes ? this : UTF8String.fromAddress(
-      base, offset, prefix.numBytes);
-    if (!part.isFullAscii()) {
-      return toLowerCaseSlow().startsWith(prefix.toLowerCaseAscii());
-    }
-
-    if (numBytes < prefix.numBytes) {
-      return false;
-    }
-
-    return matchAtInLowerCaseAscii(prefix, 0);
   }
 
   public boolean endsWith(final UTF8String suffix) {
@@ -449,36 +500,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Checks whether `suffix` is a suffix of `this` in a lowercase unicode-aware manner
-   *
-   * This function is written in a way which avoids excessive allocations in case if we work with
-   * bare ASCII-character strings.
+   * Method for ASCII character conversion using a functional interface for chars.
    */
-  public boolean endsWithInLowerCase(final UTF8String suffix) {
-    // No way to match sizes of strings for early return, since single grapheme can be expanded
-    // into several independent ones in lowercase
-    if (suffix.numBytes == 0) {
-      return true;
-    }
-    if (numBytes == 0) {
-      return false;
-    }
 
-    if (!suffix.isFullAscii()) {
-      return toLowerCase().endsWith(suffix.toLowerCaseSlow());
+  private UTF8String convertAscii(Function<Character, Character> charConverter) {
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+        bytes[i] = (byte) charConverter.apply((char) getByte(i)).charValue();
     }
-
-    final var part = suffix.numBytes >= numBytes ? this : UTF8String.fromAddress(
-      base, offset + numBytes - suffix.numBytes, suffix.numBytes);
-    if (!part.isFullAscii()) {
-      return toLowerCaseSlow().endsWith(suffix.toLowerCaseAscii());
-    }
-
-    if (numBytes < suffix.numBytes) {
-      return false;
-    }
-
-    return matchAtInLowerCaseAscii(suffix, numBytes - suffix.numBytes);
+    return fromBytes(bytes);
   }
 
   /**
@@ -488,50 +518,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - do char level uppercase conversion in case of chars in ASCII range
-    for (int i = 0; i < numBytes; i++) {
-      if (getByte(i) < 0) {
-        // non-ASCII
-        return toUpperCaseSlow();
-      }
-    }
-    byte[] bytes = new byte[numBytes];
-    for (int i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toUpperCase(getByte(i));
-    }
-    return fromBytes(bytes);
+
+    return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlow();
+  }
+
+  public UTF8String toUpperCaseAscii() {
+    return convertAscii(Character::toUpperCase);
   }
 
   private UTF8String toUpperCaseSlow() {
     return fromString(toString().toUpperCase());
-  }
-
-  /**
-   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
-   * a.compareLowerCase(b) is equivalent to a.toLowerCase().binaryCompare(b.toLowerCase())
-   */
-  public int compareLowerCase(UTF8String other) {
-    int curr;
-    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
-      byte left, right;
-      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
-        return compareLowerCaseSuffixSlow(other, curr);
-      }
-      int lowerLeft = Character.toLowerCase(left);
-      int lowerRight = Character.toLowerCase(right);
-      if (lowerLeft != lowerRight) {
-        return lowerLeft - lowerRight;
-      }
-    }
-    return numBytes - other.numBytes;
-  }
-
-  private int compareLowerCaseSuffixSlow(UTF8String other, int pref) {
-    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
-      numBytes - pref);
-    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
-      other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
   }
 
   /**
@@ -545,7 +541,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return isFullAscii() ? toLowerCaseAscii() : toLowerCaseSlow();
   }
 
-  private boolean isFullAscii() {
+  public boolean isFullAscii() {
     for (var i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         return false;
@@ -558,33 +554,40 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(toString().toLowerCase());
   }
 
-  private UTF8String toLowerCaseAscii() {
-    final var bytes = new byte[numBytes];
-    for (var i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toLowerCase(getByte(i));
-    }
-    return fromBytes(bytes);
+  public UTF8String toLowerCaseAscii() {
+    return convertAscii(Character::toLowerCase);
   }
 
   /**
-   * Returns the title case of this string, that could be used as title.
+   * Returns the title case of this string, that could be used as title. There are essentially two
+   * different version of this method - one using the JVM case mapping rules, and the other using
+   * the ICU case mapping rules. ASCII implementation is the same for both, but please refer to the
+   * respective methods for the slow (non-ASCII) implementation for more details on the differences.
    */
   public UTF8String toTitleCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
-    byte prev = ' ', curr;
-    for (int i = 0; i < numBytes; i++) {
-      curr = getByte(i);
-      if (prev == ' ' && curr < 0) {
-        // non-ASCII
-        return toTitleCaseSlow();
-      }
-      prev = curr;
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlow();
+  }
+
+  public UTF8String toTitleCaseICU() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
     }
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlowICU();
+  }
+
+  /*
+   * Fast path to return the title case of this string, given that all characters are ASCII.
+   * This implementation essentially works for all collations currently supported in Spark.
+   * This method is more efficient, because it skips copying the data to and from StringBuilder.
+   */
+  private UTF8String toTitleCaseAscii() {
     byte[] bytes = new byte[numBytes];
-    prev = ' ';
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
       curr = getByte(i);
       if (prev == ' ') {
@@ -597,6 +600,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /*
+   * Slow path to return the title case of this string, according to JVM case mapping rules.
+   * This is considered the "old" behaviour for UTF8_BINARY collation, and is not recommended.
+   * To use this, set the spark.sql.ICU_CASE_MAPPINGS_ENABLED configuration to `false`.
+   */
   private UTF8String toTitleCaseSlow() {
     StringBuilder sb = new StringBuilder();
     String s = toString();
@@ -605,6 +613,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 1; i < s.length(); i++) {
       if (sb.charAt(i - 1) == ' ') {
         sb.setCharAt(i, Character.toTitleCase(sb.charAt(i)));
+      }
+    }
+    return fromString(sb.toString());
+  }
+
+  /*
+   * Slow path to return the title case of this string, according to ICU case mapping rules.
+   * This is considered the "new" behaviour for UTF8_BINARY collation, and is recommended.
+   * This is used by default, since spark.sql.ICU_CASE_MAPPINGS_ENABLED is set to `true`.
+   */
+  private UTF8String toTitleCaseSlowICU() {
+    StringBuilder sb = new StringBuilder();
+    String s = toString();
+    sb.append(s);
+    sb.setCharAt(0, (char) UCharacter.toTitleCase(sb.charAt(0)));
+    for (int i = 1; i < s.length(); i++) {
+      if (sb.charAt(i - 1) == ' ') {
+        sb.setCharAt(i, (char) UCharacter.toTitleCase(sb.charAt(i)));
       }
     }
     return fromString(sb.toString());
@@ -646,7 +672,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param end the end position of the current UTF8String in bytes.
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
-  private UTF8String copyUTF8String(int start, int end) {
+  public UTF8String copyUTF8String(int start, int end) {
     int len = end - start + 1;
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
@@ -892,6 +918,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Returns the (default) position of the first occurrence of an empty substr in the current
+   * string from the specified position (0-based index).
+   *
+   * @param start the start position of the current string for searching
+   * @return the position of the first occurrence of the empty substr (now, always 0)
+   */
+  public int indexOfEmpty(int start) {
+    return 0; // TODO: Fix this behaviour (SPARK-48284)
+  }
+
+  /**
    * Returns the position of the first occurrence of substr in
    * current string from the specified position (0-based index).
    *
@@ -901,7 +938,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public int indexOf(UTF8String v, int start) {
     if (v.numBytes() == 0) {
-      return 0;
+      return indexOfEmpty(start);
     }
 
     // locate to the start position.
@@ -926,10 +963,34 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  public int charPosToByte(int charPos) {
+    if (charPos < 0) {
+      return -1;
+    }
+
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < charPos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return i;
+  }
+
+  public int bytePosToChar(int bytePos) {
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && i < bytePos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return c;
+  }
+
   /**
    * Find the `str` from left to right.
    */
-  private int find(UTF8String str, int start) {
+  public int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start <= numBytes - str.numBytes) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -943,7 +1004,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Find the `str` from right to left.
    */
-  private int rfind(UTF8String str, int start) {
+  public int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start >= 0) {
       if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
@@ -1843,4 +1904,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     in.read((byte[]) base);
   }
 
+  /**
+   * Convert a long value to its binary format stripping leading zeros.
+   */
+  public static UTF8String toBinaryString(long val) {
+    int zeros = Long.numberOfLeadingZeros(val);
+    if (zeros == Long.SIZE) {
+      return UTF8String.ZERO_UTF8;
+    } else {
+      int length = Long.SIZE - zeros;
+      byte[] bytes = new byte[length];
+      do {
+        bytes[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
+        val >>>= 1;
+      } while (length > 0);
+      return fromBytes(bytes);
+    }
+  }
 }

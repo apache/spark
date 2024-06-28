@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{FAILURES, HOST, NODES}
+import org.apache.spark.internal.LogKeys.{FAILURES, HOST, NODES}
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.HealthTracker
 

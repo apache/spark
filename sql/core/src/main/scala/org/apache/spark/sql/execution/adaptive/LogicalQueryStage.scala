@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, RepartitionOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionOperation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, REPARTITION_OPERATION, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -35,8 +36,8 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 // TODO we can potentially include only [[QueryStageExec]] in this class if we make the aggregation
 // planning aware of partitioning.
 case class LogicalQueryStage(
-    logicalPlan: LogicalPlan,
-    physicalPlan: SparkPlan) extends LeafNode {
+    override val logicalPlan: LogicalPlan,
+    override val physicalPlan: SparkPlan) extends logical.LogicalQueryStage {
 
   override def output: Seq[Attribute] = logicalPlan.output
   override val isStreaming: Boolean = logicalPlan.isStreaming
@@ -71,4 +72,14 @@ case class LogicalQueryStage(
   }
 
   override def maxRows: Option[Long] = stats.rowCount.map(_.min(Long.MaxValue).toLong)
+
+  override def isMaterialized: Boolean = physicalPlan.exists {
+    case s: QueryStageExec => s.isMaterialized
+    case _ => false
+  }
+
+  override def isDirectStage: Boolean = physicalPlan match {
+    case _: QueryStageExec => true
+    case _ => false
+  }
 }

@@ -18,8 +18,9 @@
 import os
 import sys
 import functools
+import pyarrow as pa
 from itertools import islice
-from typing import IO, List, Iterator, Iterable
+from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -31,7 +32,13 @@ from pyspark.serializers import (
 )
 from pyspark.sql import Row
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
-from pyspark.sql.datasource import DataSource, InputPartition
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceReader,
+    DataSourceStreamReader,
+    InputPartition,
+)
+from pyspark.sql.datasource_internal import _streamReader
 from pyspark.sql.pandas.types import to_arrow_schema
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -49,6 +56,78 @@ from pyspark.worker_util import (
     setup_spark_files,
     utf8_deserializer,
 )
+
+
+def records_to_arrow_batches(
+    output_iter: Iterator[Tuple],
+    max_arrow_batch_size: int,
+    return_type: StructType,
+    data_source: DataSource,
+) -> Iterable[pa.RecordBatch]:
+    """
+    Convert an iterator of Python tuples to an iterator of pyarrow record batches.
+
+    For each python tuple, check the types of each field and append it to the records batch.
+
+    """
+
+    def batched(iterator: Iterator, n: int) -> Iterator:
+        return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
+
+    pa_schema = to_arrow_schema(return_type)
+    column_names = return_type.fieldNames()
+    column_converters = [
+        LocalDataToArrowConversion._create_converter(field.dataType) for field in return_type.fields
+    ]
+    # Convert the results from the `reader.read` method to an iterator of arrow batches.
+    num_cols = len(column_names)
+    col_mapping = {name: i for i, name in enumerate(column_names)}
+    col_name_set = set(column_names)
+    for batch in batched(output_iter, max_arrow_batch_size):
+        pylist: List[List] = [[] for _ in range(num_cols)]
+        for result in batch:
+            # Validate the output row schema.
+            if hasattr(result, "__len__") and len(result) != num_cols:
+                raise PySparkRuntimeError(
+                    error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                    message_parameters={
+                        "expected": str(num_cols),
+                        "actual": str(len(result)),
+                    },
+                )
+
+            # Validate the output row type.
+            if not isinstance(result, (list, tuple)):
+                raise PySparkRuntimeError(
+                    error_class="DATA_SOURCE_INVALID_RETURN_TYPE",
+                    message_parameters={
+                        "type": type(result).__name__,
+                        "name": data_source.name(),
+                        "supported_types": "tuple, list, `pyspark.sql.types.Row`",
+                    },
+                )
+
+            # Assign output values by name of the field, not position, if the result is a
+            # named `Row` object.
+            if isinstance(result, Row) and hasattr(result, "__fields__"):
+                # Check if the names are the same as the schema.
+                if set(result.__fields__) != col_name_set:
+                    raise PySparkRuntimeError(
+                        error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                        message_parameters={
+                            "expected": str(column_names),
+                            "actual": str(result.__fields__),
+                        },
+                    )
+                # Assign the values by name.
+                for name in column_names:
+                    idx = col_mapping[name]
+                    pylist[idx].append(column_converters[idx](result[name]))
+            else:
+                for col in range(num_cols):
+                    pylist[col].append(column_converters[col](result[col]))
+        batch = pa.RecordBatch.from_arrays(pylist, schema=pa_schema)
+        yield batch
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -113,7 +192,7 @@ def main(infile: IO, outfile: IO) -> None:
         schema = _parse_datatype_json_string(schema_json)
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "an output schema of type 'StructType'",
                     "actual": f"'{type(schema).__name__}'",
@@ -130,26 +209,27 @@ def main(infile: IO, outfile: IO) -> None:
         is_streaming = read_bool(infile)
 
         # Instantiate data source reader.
-        reader = (
-            data_source.streamReader(schema=schema)
-            if is_streaming
-            else data_source.reader(schema=schema)
-        )
-
-        # Wrap the data source read logic in an mapInArrow UDF.
-        import pyarrow as pa
+        if is_streaming:
+            reader: Union[DataSourceReader, DataSourceStreamReader] = _streamReader(
+                data_source, schema
+            )
+        else:
+            reader = data_source.reader(schema=schema)
+            # Validate the reader.
+            if not isinstance(reader, DataSourceReader):
+                raise PySparkAssertionError(
+                    error_class="DATA_SOURCE_TYPE_MISMATCH",
+                    message_parameters={
+                        "expected": "an instance of DataSourceReader",
+                        "actual": f"'{type(reader).__name__}'",
+                    },
+                )
 
         # Create input converter.
         converter = ArrowTableToRowsConversion._create_converter(BinaryType())
 
         # Create output converter.
         return_type = schema
-        pa_schema = to_arrow_schema(return_type)
-        column_names = return_type.fieldNames()
-        column_converters = [
-            LocalDataToArrowConversion._create_converter(field.dataType)
-            for field in return_type.fields
-        ]
 
         def data_source_read_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
             partition_bytes = None
@@ -176,7 +256,7 @@ def main(infile: IO, outfile: IO) -> None:
                 f"but found '{type(partition).__name__}'."
             )
 
-            output_iter = reader.read(partition)  # type: ignore[attr-defined]
+            output_iter = reader.read(partition)  # type: ignore[arg-type]
 
             # Validate the output iterator.
             if not isinstance(output_iter, Iterator):
@@ -189,58 +269,9 @@ def main(infile: IO, outfile: IO) -> None:
                     },
                 )
 
-            def batched(iterator: Iterator, n: int) -> Iterator:
-                return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
-
-            # Convert the results from the `reader.read` method to an iterator of arrow batches.
-            num_cols = len(column_names)
-            col_mapping = {name: i for i, name in enumerate(column_names)}
-            col_name_set = set(column_names)
-            for batch in batched(output_iter, max_arrow_batch_size):
-                pylist: List[List] = [[] for _ in range(num_cols)]
-                for result in batch:
-                    # Validate the output row schema.
-                    if hasattr(result, "__len__") and len(result) != num_cols:
-                        raise PySparkRuntimeError(
-                            error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                            message_parameters={
-                                "expected": str(num_cols),
-                                "actual": str(len(result)),
-                            },
-                        )
-
-                    # Validate the output row type.
-                    if not isinstance(result, (list, tuple)):
-                        raise PySparkRuntimeError(
-                            error_class="DATA_SOURCE_INVALID_RETURN_TYPE",
-                            message_parameters={
-                                "type": type(result).__name__,
-                                "name": data_source.name(),
-                                "supported_types": "tuple, list, `pyspark.sql.types.Row`",
-                            },
-                        )
-
-                    # Assign output values by name of the field, not position, if the result is a
-                    # named `Row` object.
-                    if isinstance(result, Row) and hasattr(result, "__fields__"):
-                        # Check if the names are the same as the schema.
-                        if set(result.__fields__) != col_name_set:
-                            raise PySparkRuntimeError(
-                                error_class="PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH",
-                                message_parameters={
-                                    "expected": str(column_names),
-                                    "actual": str(result.__fields__),
-                                },
-                            )
-                        # Assign the values by name.
-                        for name in column_names:
-                            idx = col_mapping[name]
-                            pylist[idx].append(column_converters[idx](result[name]))
-                    else:
-                        for col in range(num_cols):
-                            pylist[col].append(column_converters[col](result[col]))
-
-                yield pa.RecordBatch.from_arrays(pylist, schema=pa_schema)
+            return records_to_arrow_batches(
+                output_iter, max_arrow_batch_size, return_type, data_source
+            )
 
         command = (data_source_read_func, return_type)
         pickleSer._write_with_length(command, outfile)
@@ -248,7 +279,7 @@ def main(infile: IO, outfile: IO) -> None:
         if not is_streaming:
             # The partitioning of python batch source read is determined before query execution.
             try:
-                partitions = reader.partitions()  # type: ignore[attr-defined]
+                partitions = reader.partitions()  # type: ignore[call-arg]
                 if not isinstance(partitions, list):
                     raise PySparkRuntimeError(
                         error_class="DATA_SOURCE_TYPE_MISMATCH",
@@ -267,9 +298,9 @@ def main(infile: IO, outfile: IO) -> None:
                         },
                     )
                 if len(partitions) == 0:
-                    partitions = [None]
+                    partitions = [None]  # type: ignore[list-item]
             except NotImplementedError:
-                partitions = [None]
+                partitions = [None]  # type: ignore[list-item]
 
             # Return the serialized partition values.
             write_int(len(partitions), outfile)

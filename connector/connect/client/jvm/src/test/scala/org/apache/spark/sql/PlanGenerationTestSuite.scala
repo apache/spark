@@ -36,6 +36,7 @@ import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -699,7 +700,8 @@ class PlanGenerationTestSuite
   }
 
   test("select collated string") {
-    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    val schema =
+      StructType(StructField("s", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID)) :: Nil)
     createLocalRelation(schema.catalogString).select("s")
   }
 
@@ -1778,6 +1780,10 @@ class PlanGenerationTestSuite
     fn.substring(fn.col("g"), 4, 5)
   }
 
+  functionTest("substring using columns") {
+    fn.substring(fn.col("g"), fn.col("a"), fn.col("b"))
+  }
+
   functionTest("substring_index") {
     fn.substring_index(fn.col("g"), ";", 5)
   }
@@ -2305,6 +2311,14 @@ class PlanGenerationTestSuite
     fn.timestamp_micros(fn.col("x"))
   }
 
+  temporalFunctionTest("timestamp_diff") {
+    fn.timestamp_diff("year", fn.col("t"), fn.col("t"))
+  }
+
+  temporalFunctionTest("timestamp_add") {
+    fn.timestamp_add("week", fn.col("x"), fn.col("t"))
+  }
+
   // Array of Long
   // Array of Long
   // Array of Array of Long
@@ -2487,6 +2501,10 @@ class PlanGenerationTestSuite
     fn.schema_of_json(
       lit("""[{"col":01}]"""),
       Collections.singletonMap("allowNumericLeadingZeros", "true"))
+  }
+
+  functionTest("try_parse_json") {
+    fn.try_parse_json(fn.col("g"))
   }
 
   functionTest("to_json") {
@@ -3223,34 +3241,12 @@ class PlanGenerationTestSuite
   }
 
   /* Extensions */
-  test("relation extension deprecated") {
-    val input = proto.ExamplePluginRelation
-      .newBuilder()
-      .setInput(simple.plan.getRoot)
-      .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input))
-  }
-
-  test("expression extension deprecated") {
-    val extension = proto.ExamplePluginExpression
-      .newBuilder()
-      .setChild(
-        proto.Expression
-          .newBuilder()
-          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
-            .newBuilder()
-            .setUnparsedIdentifier("id")))
-      .setCustomField("abc")
-      .build()
-    simple.select(Column(com.google.protobuf.Any.pack(extension)))
-  }
-
   test("relation extension") {
     val input = proto.ExamplePluginRelation
       .newBuilder()
       .setInput(simple.plan.getRoot)
       .build()
-    session.newDataFrame(com.google.protobuf.Any.pack(input).toByteArray)
+    session.newDataFrame(_.setExtension(com.google.protobuf.Any.pack(input)))
   }
 
   test("expression extension") {
@@ -3264,7 +3260,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column.forExtension(com.google.protobuf.Any.pack(extension).toByteArray))
+    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {

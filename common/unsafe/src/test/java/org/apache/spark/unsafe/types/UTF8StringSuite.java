@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.unsafe.types;
 
@@ -107,29 +107,6 @@ public class UTF8StringSuite {
     assertTrue(fromString("你好123").binaryCompare(fromString("你好122")) > 0);
   }
 
-  @Test
-  public void lowercaseComparison() {
-    // SPARK-47693: Test optimized lowercase comparison of UTF8String instances
-    // ASCII
-    assertEquals(fromString("aaa").compareLowerCase(fromString("AAA")), 0);
-    assertTrue(fromString("aaa").compareLowerCase(fromString("AAAA")) < 0);
-    assertTrue(fromString("AAA").compareLowerCase(fromString("aaaa")) < 0);
-    assertTrue(fromString("a").compareLowerCase(fromString("B")) < 0);
-    assertTrue(fromString("b").compareLowerCase(fromString("A")) > 0);
-    assertEquals(fromString("aAa").compareLowerCase(fromString("AaA")), 0);
-    assertTrue(fromString("abcd").compareLowerCase(fromString("abC")) > 0);
-    assertTrue(fromString("ABC").compareLowerCase(fromString("abcd")) < 0);
-    assertEquals(fromString("abcd").compareLowerCase(fromString("abcd")), 0);
-    // non-ASCII
-    assertEquals(fromString("ü").compareLowerCase(fromString("Ü")), 0);
-    assertEquals(fromString("Äü").compareLowerCase(fromString("äÜ")), 0);
-    assertTrue(fromString("a").compareLowerCase(fromString("ä")) < 0);
-    assertTrue(fromString("a").compareLowerCase(fromString("Ä")) < 0);
-    assertTrue(fromString("A").compareLowerCase(fromString("ä")) < 0);
-    assertTrue(fromString("bä").compareLowerCase(fromString("aü")) > 0);
-    assertTrue(fromString("bxxxxxxxxxx").compareLowerCase(fromString("bü")) < 0);
-  }
-
   protected static void testUpperandLower(String upper, String lower) {
     UTF8String us = fromString(upper);
     UTF8String ls = fromString(lower);
@@ -216,43 +193,6 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void containsInLowerCase() {
-    // Corner cases
-    assertTrue(EMPTY_UTF8.containsInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("a").containsInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("A").containsInLowerCase(fromString("a")));
-    assertTrue(fromString("a").containsInLowerCase(fromString("A")));
-    assertFalse(EMPTY_UTF8.containsInLowerCase(fromString("a")));
-    // ASCII
-    assertTrue(fromString("hello").containsInLowerCase(fromString("ello")));
-    assertFalse(fromString("hello").containsInLowerCase(fromString("vello")));
-    assertFalse(fromString("hello").containsInLowerCase(fromString("hellooo")));
-    // Unicode
-    assertTrue(fromString("大千世界").containsInLowerCase(fromString("千世界")));
-    assertFalse(fromString("大千世界").containsInLowerCase(fromString("世千")));
-    assertFalse(fromString("大千世界").containsInLowerCase(fromString("大千世界好")));
-    // ASCII lowercase
-    assertTrue(fromString("HeLlO").containsInLowerCase(fromString("ElL")));
-    assertFalse(fromString("HeLlO").containsInLowerCase(fromString("ElLoO")));
-    // Unicode lowercase
-    assertTrue(fromString("ЯбЛоКо").containsInLowerCase(fromString("БлОк")));
-    assertFalse(fromString("ЯбЛоКо").containsInLowerCase(fromString("лОкБ")));
-    // Characters with the same binary lowercase representation
-    assertTrue(fromString("The Kelvin.").containsInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("The Kelvin.").containsInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("The KKelvin.").containsInLowerCase(fromString("KKelvin")));
-    assertTrue(fromString("2 Kelvin.").containsInLowerCase(fromString("2 Kelvin")));
-    assertTrue(fromString("2 Kelvin.").containsInLowerCase(fromString("2 Kelvin")));
-    assertFalse(fromString("The KKelvin.").containsInLowerCase(fromString("KKelvin,")));
-    // Characters with longer binary lowercase representation
-    assertTrue(fromString("the İodine").containsInLowerCase(fromString("the i̇odine")));
-    assertTrue(fromString("the i̇odine").containsInLowerCase(fromString("the İodine")));
-    assertTrue(fromString("The İodiNe").containsInLowerCase(fromString(" i̇oDin")));
-    assertTrue(fromString("İodiNe").containsInLowerCase(fromString("i̇oDin")));
-    assertFalse(fromString("İodiNe").containsInLowerCase(fromString(" i̇oDin")));
-  }
-
-  @Test
   public void startsWith() {
     assertTrue(EMPTY_UTF8.startsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").startsWith(fromString("hell")));
@@ -264,40 +204,6 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void startsWithInLowerCase() {
-    // Corner cases
-    assertTrue(EMPTY_UTF8.startsWithInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("a").startsWithInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("A").startsWithInLowerCase(fromString("a")));
-    assertTrue(fromString("a").startsWithInLowerCase(fromString("A")));
-    assertFalse(EMPTY_UTF8.startsWithInLowerCase(fromString("a")));
-    // ASCII
-    assertTrue(fromString("hello").startsWithInLowerCase(fromString("hell")));
-    assertFalse(fromString("hello").startsWithInLowerCase(fromString("ell")));
-    // Unicode
-    assertTrue(fromString("大千世界").startsWithInLowerCase(fromString("大千")));
-    assertFalse(fromString("大千世界").startsWithInLowerCase(fromString("世千")));
-    // ASCII lowercase
-    assertTrue(fromString("HeLlO").startsWithInLowerCase(fromString("hElL")));
-    assertFalse(fromString("HeLlO").startsWithInLowerCase(fromString("ElL")));
-    // Unicode lowercase
-    assertTrue(fromString("ЯбЛоКо").startsWithInLowerCase(fromString("яБлОк")));
-    assertFalse(fromString("ЯбЛоКо").startsWithInLowerCase(fromString("БлОк")));
-    // Characters with the same binary lowercase representation
-    assertTrue(fromString("Kelvin.").startsWithInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("Kelvin.").startsWithInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("KKelvin.").startsWithInLowerCase(fromString("KKelvin")));
-    assertTrue(fromString("2 Kelvin.").startsWithInLowerCase(fromString("2 Kelvin")));
-    assertTrue(fromString("2 Kelvin.").startsWithInLowerCase(fromString("2 Kelvin")));
-    assertFalse(fromString("KKelvin.").startsWithInLowerCase(fromString("KKelvin,")));
-    // Characters with longer binary lowercase representation
-    assertTrue(fromString("the İodine").startsWithInLowerCase(fromString("the i̇odine")));
-    assertTrue(fromString("the i̇odine").startsWithInLowerCase(fromString("the İodine")));
-    assertTrue(fromString("İodiNe").startsWithInLowerCase(fromString("i̇oDin")));
-    assertFalse(fromString("The İodiNe").startsWithInLowerCase(fromString("i̇oDin")));
-  }
-
-  @Test
   public void endsWith() {
     assertTrue(EMPTY_UTF8.endsWith(EMPTY_UTF8));
     assertTrue(fromString("hello").endsWith(fromString("ello")));
@@ -306,40 +212,6 @@ public class UTF8StringSuite {
     assertTrue(fromString("大千世界").endsWith(fromString("世界")));
     assertFalse(fromString("大千世界").endsWith(fromString("世")));
     assertFalse(fromString("数据砖头").endsWith(fromString("我的数据砖头")));
-  }
-
-  @Test
-  public void endsWithInLowerCase() {
-    // Corner cases
-    assertTrue(EMPTY_UTF8.endsWithInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("a").endsWithInLowerCase(EMPTY_UTF8));
-    assertTrue(fromString("A").endsWithInLowerCase(fromString("a")));
-    assertTrue(fromString("a").endsWithInLowerCase(fromString("A")));
-    assertFalse(EMPTY_UTF8.endsWithInLowerCase(fromString("a")));
-    // ASCII
-    assertTrue(fromString("hello").endsWithInLowerCase(fromString("ello")));
-    assertFalse(fromString("hello").endsWithInLowerCase(fromString("hell")));
-    // Unicode
-    assertTrue(fromString("大千世界").endsWithInLowerCase(fromString("世界")));
-    assertFalse(fromString("大千世界").endsWithInLowerCase(fromString("大千")));
-    // ASCII lowercase
-    assertTrue(fromString("HeLlO").endsWithInLowerCase(fromString("ElLo")));
-    assertFalse(fromString("HeLlO").endsWithInLowerCase(fromString("hElL")));
-    // Unicode lowercase
-    assertTrue(fromString("ЯбЛоКо").endsWithInLowerCase(fromString("БлОкО")));
-    assertFalse(fromString("ЯбЛоКо").endsWithInLowerCase(fromString("яБлОк")));
-    // Characters with the same binary lowercase representation
-    assertTrue(fromString("The Kelvin").endsWithInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("The Kelvin").endsWithInLowerCase(fromString("Kelvin")));
-    assertTrue(fromString("The KKelvin").endsWithInLowerCase(fromString("KKelvin")));
-    assertTrue(fromString("The 2 Kelvin").endsWithInLowerCase(fromString("2 Kelvin")));
-    assertTrue(fromString("The 2 Kelvin").endsWithInLowerCase(fromString("2 Kelvin")));
-    assertFalse(fromString("The KKelvin").endsWithInLowerCase(fromString("KKelvin,")));
-    // Characters with longer binary lowercase representation
-    assertTrue(fromString("the İodine").endsWithInLowerCase(fromString("the i̇odine")));
-    assertTrue(fromString("the i̇odine").endsWithInLowerCase(fromString("the İodine")));
-    assertTrue(fromString("The İodiNe").endsWithInLowerCase(fromString("i̇oDine")));
-    assertFalse(fromString("The İodiNe").endsWithInLowerCase(fromString("i̇oDin")));
   }
 
   @Test
@@ -1006,5 +878,253 @@ public class UTF8StringSuite {
       c[0] = (byte) wrongFirstByte;
       assertEquals(1, fromBytes(c).numChars());
     }
+  }
+
+  private void testMakeValid(String input, String expected) {
+    ByteArrayOutputStream exp = new ByteArrayOutputStream();
+    for (String hex : expected.split(" ")) exp.write(Integer.parseInt(hex.substring(2), 16));
+    ByteArrayOutputStream inp = new ByteArrayOutputStream();
+    for (String hex : input.split(" ")) inp.write(Integer.parseInt(hex.substring(2), 16));
+    assertEquals(fromBytes(exp.toByteArray()), fromBytes(inp.toByteArray()).makeValid());
+  }
+  @Test
+  public void makeValid() {
+    // Basic tests
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.makeValid());
+    assertEquals(fromString(""), fromString("").makeValid());
+    assertEquals(fromString("abc"), fromString("abc").makeValid());
+    assertEquals(fromString("hello"), fromString("hello").makeValid());
+    assertEquals(fromString("大千世界"), fromString("大千世界").makeValid());
+    assertEquals(fromBytes(new byte[] {}), fromBytes(new byte[] {}).makeValid());
+    assertEquals(fromBytes(new byte[] {0x61}), fromBytes(new byte[] {0x61}).makeValid());
+    assertEquals(fromBytes(new byte[] {0x7F}), fromBytes(new byte[] {0x7F}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBD}),
+      fromBytes(new byte[] {(byte) 0xFF}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xC0, (byte) 0x80}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xC1, (byte) 0xBF}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xC0}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xDF, (byte) 0xFF}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).makeValid());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0x9F, (byte) 0x80}).makeValid());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0xE0, (byte) 0xC0, (byte) 0x80}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xC0}).makeValid());
+    assertEquals(fromString("���"),
+      fromBytes(new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}).makeValid());
+    assertEquals(fromString("����"),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x8F, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBD, (byte) 0x7F}),
+      fromBytes(new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x7F}).makeValid());
+    assertEquals(fromString("����"),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromString("��"),
+      fromBytes(new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xC0}).makeValid());
+    assertEquals(fromString("�����"), fromBytes(new byte[]
+      {(byte) 0xF8, (byte) 0x8F, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromString("�����"), fromBytes(new byte[]
+      {(byte) 0xF8, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValid());
+    assertEquals(fromString("�����"), fromBytes(new byte[]
+      {(byte) 0xFB, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF, (byte) 0xBF}).makeValid());
+    assertEquals(fromString("�����"), fromBytes(new byte[]
+      {(byte) 0xFB, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).makeValid());
+    // More tests
+    testMakeValid("0x42", "0x42");
+    testMakeValid("0x80", "0xEF 0xBF 0xBD");
+    testMakeValid("0xF4 0x92 0x12", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x12");
+    testMakeValid("0x84 0xA5 0x63 0x64", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x63 0x64");
+    testMakeValid("0xF4 0x9B", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0xE2 0x0C", "0xEF 0xBF 0xBD 0x0C");
+    testMakeValid("0xE8 0x3E", "0xEF 0xBF 0xBD 0x3E");
+    testMakeValid("0x17 0x1B 0xC2", "0x17 0x1B 0xEF 0xBF 0xBD");
+    testMakeValid("0x29 0xB2 0x7C 0xA0", "0x29 0xEF 0xBF 0xBD 0x7C 0xEF 0xBF 0xBD");
+    testMakeValid("0x13 0x68 0x28 0x2A 0x83", "0x13 0x68 0x28 0x2A 0xEF 0xBF 0xBD");
+    testMakeValid("0x3B 0xFE 0xC2 0xB7 0x9E", "0x3B 0xEF 0xBF 0xBD 0xC2 0xB7 0xEF 0xBF 0xBD");
+    testMakeValid("0xFC", "0xEF 0xBF 0xBD");
+    testMakeValid("0x8E 0xBD", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0x6A 0x8B 0x5C 0x5A", "0x6A 0xEF 0xBF 0xBD 0x5C 0x5A");
+    testMakeValid("0xB4 0xC0", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0xB0 0xD3", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0xAA", "0xEF 0xBF 0xBD");
+    testMakeValid("0x1A 0x66", "0x1A 0x66");
+    testMakeValid("0x32 0xB5 0x5F", "0x32 0xEF 0xBF 0xBD 0x5F");
+    testMakeValid("0x70 0xB6 0x69 0xBC", "0x70 0xEF 0xBF 0xBD 0x69 0xEF 0xBF 0xBD");
+    testMakeValid("0xDC 0x15 0x82", "0xEF 0xBF 0xBD 0x15 0xEF 0xBF 0xBD");
+    testMakeValid("0x7F 0x3F 0x72 0xBB", "0x7F 0x3F 0x72 0xEF 0xBF 0xBD");
+    testMakeValid("0x3C 0x3D 0x1F 0x6C 0x75", "0x3C 0x3D 0x1F 0x6C 0x75");
+    testMakeValid("0xBF 0x10 0xF4", "0xEF 0xBF 0xBD 0x10 0xEF 0xBF 0xBD");
+    testMakeValid("0xBF 0xDD 0x89", "0xEF 0xBF 0xBD 0xDD 0x89");
+    testMakeValid("0x85 0xD4 0x90 0x5E 0x6C", "0xEF 0xBF 0xBD 0xD4 0x90 0x5E 0x6C");
+    testMakeValid("0x0A 0x92 0x3C 0x17 0x7D", "0x0A 0xEF 0xBF 0xBD 0x3C 0x17 0x7D");
+    testMakeValid("0x49 0x4E 0x2C 0x7B 0x1C", "0x49 0x4E 0x2C 0x7B 0x1C");
+    testMakeValid("0x2E 0x0C 0x3E 0x02 0x9D", "0x2E 0x0C 0x3E 0x02 0xEF 0xBF 0xBD");
+    testMakeValid("0xF9 0xF2 0x11", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x11");
+    testMakeValid("0xD1", "0xEF 0xBF 0xBD");
+    testMakeValid("0x74 0x35 0x56 0xC4", "0x74 0x35 0x56 0xEF 0xBF 0xBD");
+    testMakeValid("0xBE 0x45 0x7F", "0xEF 0xBF 0xBD 0x45 0x7F");
+    testMakeValid("0x2E", "0x2E");
+    testMakeValid("0x3B 0xC3", "0x3B 0xEF 0xBF 0xBD");
+    testMakeValid("0xF9 0x58 0xE0 0x84", "0xEF 0xBF 0xBD 0x58 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0x72 0xF9 0x4F", "0x72 0xEF 0xBF 0xBD 0x4F");
+    testMakeValid("0xF2 0x2A 0x38", "0xEF 0xBF 0xBD 0x2A 0x38");
+    testMakeValid("0x66 0xFC 0x8D 0x5F", "0x66 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x5F");
+    testMakeValid("0x6D", "0x6D");
+    testMakeValid("0x6E 0xDF 0xDD", "0x6E 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0x50 0xE8 0x45 0xDB", "0x50 0xEF 0xBF 0xBD 0x45 0xEF 0xBF 0xBD");
+    testMakeValid("0x71 0x06 0x1F 0x87", "0x71 0x06 0x1F 0xEF 0xBF 0xBD");
+    testMakeValid("0x02", "0x02");
+    testMakeValid("0x20 0x2B 0x38 0xCB 0xDF", "0x20 0x2B 0x38 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0x10", "0x10");
+    testMakeValid("0x15", "0x15");
+    testMakeValid("0xC5 0xEA 0x2A", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x2A");
+    testMakeValid("0x72 0x2D 0xBB 0x06", "0x72 0x2D 0xEF 0xBF 0xBD 0x06");
+    testMakeValid("0xB7", "0xEF 0xBF 0xBD");
+    testMakeValid("0xB8 0xB5", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testMakeValid("0x9C 0x76 0x17", "0xEF 0xBF 0xBD 0x76 0x17");
+  }
+
+  private void testIsValid(String input, String expected) {
+    ByteArrayOutputStream inp = new ByteArrayOutputStream();
+    for (String hex : input.split(" ")) inp.write(Integer.parseInt(hex.substring(2), 16));
+    assertEquals(input.equals(expected), fromBytes(inp.toByteArray()).isValid());
+  }
+  @Test
+  public void isValid() {
+    // Basic tests
+    assertTrue(EMPTY_UTF8.isValid());
+    assertTrue(fromString("").isValid());
+    assertTrue(fromString("abc").isValid());
+    assertTrue(fromString("hello").isValid());
+    assertTrue(fromString("大千世界").isValid());
+    assertTrue(fromString("数据砖头").isValid());
+    assertTrue(fromBytes(new byte[] {}).isValid());
+    assertTrue(fromBytes(new byte[] {0x61}).isValid());
+    assertTrue(fromBytes(new byte[] {0x7F}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xFF}).isValid());
+    assertTrue(fromBytes(new byte[] {(byte) 0xC2, (byte) 0x80}).isValid());
+    assertTrue(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xBF}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xC0, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xC1, (byte) 0xBF}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xC0}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xDF, (byte) 0xFF}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0x80, (byte) 0x80}).isValid());
+    assertTrue(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xA0, (byte) 0x80}).isValid());
+    assertTrue(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).isValid());
+    assertTrue(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xBF}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xE0, (byte) 0x9F, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xE0, (byte) 0xC0, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0xEF, (byte) 0xBF, (byte) 0xC0}).isValid());
+    assertFalse(fromBytes(new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80}).isValid());
+    assertTrue(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x80}).isValid());
+    assertTrue(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x8F, (byte) 0x80, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF0, (byte) 0x90, (byte) 0x80, (byte) 0x7F}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF4, (byte) 0x8F, (byte) 0xBF, (byte) 0xC0}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF8, (byte) 0x8F, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xF8, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xFB, (byte) 0x8F, (byte) 0xBF, (byte) 0xBF, (byte) 0xBF}).isValid());
+    assertFalse(fromBytes(
+      new byte[] {(byte) 0xFB, (byte) 0x90, (byte) 0x80, (byte) 0x80, (byte) 0x80}).isValid());
+    // More tests
+    testIsValid("0x42", "0x42");
+    testIsValid("0x80", "0xEF 0xBF 0xBD");
+    testIsValid("0xF4 0x92 0x12", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x12");
+    testIsValid("0x84 0xA5 0x63 0x64", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x63 0x64");
+    testIsValid("0xF4 0x9B", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0xE2 0x0C", "0xEF 0xBF 0xBD 0x0C");
+    testIsValid("0xE8 0x3E", "0xEF 0xBF 0xBD 0x3E");
+    testIsValid("0x17 0x1B 0xC2", "0x17 0x1B 0xEF 0xBF 0xBD");
+    testIsValid("0x29 0xB2 0x7C 0xA0", "0x29 0xEF 0xBF 0xBD 0x7C 0xEF 0xBF 0xBD");
+    testIsValid("0x13 0x68 0x28 0x2A 0x83", "0x13 0x68 0x28 0x2A 0xEF 0xBF 0xBD");
+    testIsValid("0x3B 0xFE 0xC2 0xB7 0x9E", "0x3B 0xEF 0xBF 0xBD 0xC2 0xB7 0xEF 0xBF 0xBD");
+    testIsValid("0xFC", "0xEF 0xBF 0xBD");
+    testIsValid("0x8E 0xBD", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0x6A 0x8B 0x5C 0x5A", "0x6A 0xEF 0xBF 0xBD 0x5C 0x5A");
+    testIsValid("0xB4 0xC0", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0xB0 0xD3", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0xAA", "0xEF 0xBF 0xBD");
+    testIsValid("0x1A 0x66", "0x1A 0x66");
+    testIsValid("0x32 0xB5 0x5F", "0x32 0xEF 0xBF 0xBD 0x5F");
+    testIsValid("0x70 0xB6 0x69 0xBC", "0x70 0xEF 0xBF 0xBD 0x69 0xEF 0xBF 0xBD");
+    testIsValid("0xDC 0x15 0x82", "0xEF 0xBF 0xBD 0x15 0xEF 0xBF 0xBD");
+    testIsValid("0x7F 0x3F 0x72 0xBB", "0x7F 0x3F 0x72 0xEF 0xBF 0xBD");
+    testIsValid("0x3C 0x3D 0x1F 0x6C 0x75", "0x3C 0x3D 0x1F 0x6C 0x75");
+    testIsValid("0xBF 0x10 0xF4", "0xEF 0xBF 0xBD 0x10 0xEF 0xBF 0xBD");
+    testIsValid("0xBF 0xDD 0x89", "0xEF 0xBF 0xBD 0xDD 0x89");
+    testIsValid("0x85 0xD4 0x90 0x5E 0x6C", "0xEF 0xBF 0xBD 0xD4 0x90 0x5E 0x6C");
+    testIsValid("0x0A 0x92 0x3C 0x17 0x7D", "0x0A 0xEF 0xBF 0xBD 0x3C 0x17 0x7D");
+    testIsValid("0x49 0x4E 0x2C 0x7B 0x1C", "0x49 0x4E 0x2C 0x7B 0x1C");
+    testIsValid("0x2E 0x0C 0x3E 0x02 0x9D", "0x2E 0x0C 0x3E 0x02 0xEF 0xBF 0xBD");
+    testIsValid("0xF9 0xF2 0x11", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x11");
+    testIsValid("0xD1", "0xEF 0xBF 0xBD");
+    testIsValid("0x74 0x35 0x56 0xC4", "0x74 0x35 0x56 0xEF 0xBF 0xBD");
+    testIsValid("0xBE 0x45 0x7F", "0xEF 0xBF 0xBD 0x45 0x7F");
+    testIsValid("0x2E", "0x2E");
+    testIsValid("0x3B 0xC3", "0x3B 0xEF 0xBF 0xBD");
+    testIsValid("0xF9 0x58 0xE0 0x84", "0xEF 0xBF 0xBD 0x58 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0x72 0xF9 0x4F", "0x72 0xEF 0xBF 0xBD 0x4F");
+    testIsValid("0xF2 0x2A 0x38", "0xEF 0xBF 0xBD 0x2A 0x38");
+    testIsValid("0x66 0xFC 0x8D 0x5F", "0x66 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x5F");
+    testIsValid("0x6D", "0x6D");
+    testIsValid("0x6E 0xDF 0xDD", "0x6E 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0x50 0xE8 0x45 0xDB", "0x50 0xEF 0xBF 0xBD 0x45 0xEF 0xBF 0xBD");
+    testIsValid("0x71 0x06 0x1F 0x87", "0x71 0x06 0x1F 0xEF 0xBF 0xBD");
+    testIsValid("0x02", "0x02");
+    testIsValid("0x20 0x2B 0x38 0xCB 0xDF", "0x20 0x2B 0x38 0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0x10", "0x10");
+    testIsValid("0x15", "0x15");
+    testIsValid("0xC5 0xEA 0x2A", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD 0x2A");
+    testIsValid("0x72 0x2D 0xBB 0x06", "0x72 0x2D 0xEF 0xBF 0xBD 0x06");
+    testIsValid("0xB7", "0xEF 0xBF 0xBD");
+    testIsValid("0xB8 0xB5", "0xEF 0xBF 0xBD 0xEF 0xBF 0xBD");
+    testIsValid("0x9C 0x76 0x17", "0xEF 0xBF 0xBD 0x76 0x17");
+  }
+
+  @Test
+  public void toBinaryString() {
+    assertEquals(ZERO_UTF8, UTF8String.toBinaryString(0));
+    assertEquals(UTF8String.fromString("1"), UTF8String.toBinaryString(1));
+    assertEquals(UTF8String.fromString("10"), UTF8String.toBinaryString(2));
+    assertEquals(UTF8String.fromString("100"), UTF8String.toBinaryString(4));
+    assertEquals(UTF8String.fromString("111"), UTF8String.toBinaryString(7));
+    assertEquals(
+      UTF8String.fromString("1111111111111111111111111111111111111111111111111111111111110011"),
+      UTF8String.toBinaryString(-13));
+    assertEquals(
+      UTF8String.fromString("1000000000000000000000000000000000000000000000000000000000000000"),
+      UTF8String.toBinaryString(Long.MIN_VALUE));
+    assertEquals(
+      UTF8String.fromString("111111111111111111111111111111111111111111111111111111111111111"),
+      UTF8String.toBinaryString(Long.MAX_VALUE));
   }
 }

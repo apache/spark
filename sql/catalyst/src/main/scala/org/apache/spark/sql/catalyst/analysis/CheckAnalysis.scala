@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -41,7 +42,7 @@ import org.apache.spark.util.Utils
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsBase {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsBase with Logging {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -142,54 +143,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
-  private def checkUnreferencedCTERelations(
-      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
-      visited: mutable.Map[Long, Boolean],
-      cteId: Long): Unit = {
-    if (visited(cteId)) {
-      return
-    }
-    val (cteDef, _, refMap) = cteMap(cteId)
-    refMap.foreach { case (id, _) =>
-      checkUnreferencedCTERelations(cteMap, visited, id)
-    }
-    checkAnalysis0(cteDef.child)
-    visited(cteId) = true
-  }
-
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    val inlineCTE = InlineCTE(alwaysInline = true)
-    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
-    inlineCTE.buildCTEMap(plan, cteMap)
-    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
-    cteMap.foreach { case (cteId, (relation, refCount, _)) =>
-      // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
-      // analysis for it, to make sure the entire query plan is valid.
-      try {
-        // If a CTE relation ref count is 0, the other CTE relations that reference it
-        // should also be checked by checkAnalysis0. This code will also guarantee the leaf
-        // relations that do not reference any others are checked first.
-        if (refCount == 0) {
-          checkUnreferencedCTERelations(cteMap, visited, cteId)
-        }
-      } catch {
-        case e: AnalysisException =>
-          throw new ExtendedAnalysisException(e, relation.child)
-      }
-    }
-    // Inline all CTEs in the plan to help check query plan structures in subqueries.
-    var inlinedPlan: Option[LogicalPlan] = None
-    try {
-      inlinedPlan = Some(inlineCTE(plan))
+    // We should inline all CTE relations to restore the original plan shape, as the analysis check
+    // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
+    // in the original `WithCTE` node, as we need to perform analysis check for them as well.
+    val inlineCTE = InlineCTE(alwaysInline = true, keepDanglingRelations = true)
+    val inlinedPlan: LogicalPlan = try {
+      inlineCTE(plan)
     } catch {
       case e: AnalysisException =>
         throw new ExtendedAnalysisException(e, plan)
     }
     try {
-      checkAnalysis0(inlinedPlan.get)
+      checkAnalysis0(inlinedPlan)
     } catch {
       case e: AnalysisException =>
-        throw new ExtendedAnalysisException(e, inlinedPlan.get)
+        throw new ExtendedAnalysisException(e, inlinedPlan)
     }
     plan.setAnalyzed()
   }
@@ -285,6 +254,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 hof.invalidFormat(checkRes)
             }
 
+          case hof: HigherOrderFunction
+              if hof.resolved && hof.functions
+                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
+            val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(u)))
+
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
@@ -298,6 +275,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Early checks for column definitions, to produce better error messages
         ColumnDefinition.checkColumnDefinitions(operator)
 
+        var stagedError: Option[() => Unit] = None
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
@@ -336,12 +314,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // `Grouping` and `GroupingID` are considered as of having lower priority than the other
+          // nodes which cause errors.
           case g: Grouping =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
           case g: GroupingID =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
               !e.isInstanceOf[WindowExpression] && e.resolved =>
@@ -400,6 +380,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+        if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
@@ -911,13 +892,36 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
       // are not part of the correlated columns.
+
+      // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
       val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
-      // Collect the local references from the correlated predicate in the subquery.
-      val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
-        .filterNot(conditions.flatMap(_.references).contains)
-      val correlatedCols = AttributeSet(subqueryColumns)
-      val invalidCols = groupByCols -- correlatedCols
-      // GROUP BY columns must be a subset of columns in the predicates
+      // Collect the inner query attributes that are guaranteed to have a single value for each
+      // outer row. See comment on getCorrelatedEquivalentInnerColumns.
+      val correlatedEquivalentCols = getCorrelatedEquivalentInnerColumns(query)
+      val nonEquivalentGroupByCols = groupByCols -- correlatedEquivalentCols
+
+      val invalidCols = if (!SQLConf.get.getConf(
+        SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
+        nonEquivalentGroupByCols
+      } else {
+        // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
+        // Allows any inner attribute that appears in a correlated predicate, even if it is a
+        // non-equality predicate or under an operator that can change the values of the attribute
+        // (see comments on getCorrelatedEquivalentInnerColumns for examples).
+        val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+          .filterNot(conditions.flatMap(_.references).contains)
+        val correlatedCols = AttributeSet(subqueryColumns)
+        val invalidColsLegacy = groupByCols -- correlatedCols
+        if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
+          logWarning("Using legacy behavior for " +
+            s"${SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE
+              .key}. Query would be rejected with non-legacy behavior but is allowed by " +
+            s"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            s"subquery's group-by outputs multiple rows.")
+        }
+        invalidColsLegacy
+      }
+
       if (invalidCols.nonEmpty) {
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
@@ -1379,6 +1383,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             aggregated,
             canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
+        // We always inline CTE relations before analysis check, and only un-referenced CTE
+        // relations will be kept in the plan. Here we should simply skip them and check the
+        // children, as un-referenced CTE relations won't be executed anyway and doesn't need to
+        // be restricted by the current subquery correlation limitations.
+        case _: WithCTE | _: CTERelationDef =>
+          plan.children.foreach(p => checkPlan(p, aggregated, canContainOuter))
+
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
         // under a correlation point but they and their descendant operators
@@ -1402,7 +1413,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       if (struct.findNestedField(
           fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(
-          errorClass = "FIELDS_ALREADY_EXISTS",
+          errorClass = "FIELD_ALREADY_EXISTS",
           messageParameters = Map(
             "op" -> op,
             "fieldNames" -> toSQLId(fieldNames),

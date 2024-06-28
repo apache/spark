@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MetadataVersionUtil}
 
 /**
@@ -105,7 +105,8 @@ class OperatorStateMetadataWriter(stateCheckpointPath: Path, hadoopConf: Configu
       outputStream.close()
     } catch {
       case e: Throwable =>
-        logError(s"Fail to write state metadata file to $metadataFilePath", e)
+        logError(
+          log"Fail to write state metadata file to ${MDC(LogKeys.META_FILE, metadataFilePath)}", e)
         outputStream.cancel()
         throw e
     }

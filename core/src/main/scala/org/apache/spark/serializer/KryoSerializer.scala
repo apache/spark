@@ -40,7 +40,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
@@ -227,10 +227,7 @@ class KryoSerializer(conf: SparkConf)
 
     // scalastyle:on
 
-    kryo.register(None.getClass)
-    kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
-    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
     kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))

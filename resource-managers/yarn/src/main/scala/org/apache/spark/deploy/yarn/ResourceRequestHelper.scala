@@ -26,7 +26,7 @@ import org.apache.hadoop.yarn.exceptions.ResourceNotFoundException
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{ERROR, RESOURCE_NAME}
+import org.apache.spark.internal.LogKeys.{ERROR, RESOURCE_NAME}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceID
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, FPGA, GPU}

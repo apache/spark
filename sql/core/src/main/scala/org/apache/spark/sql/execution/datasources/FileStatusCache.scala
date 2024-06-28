@@ -26,7 +26,7 @@ import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{CACHED_TABLE_PARTITION_METADATA_SIZE, MAX_TABLE_PARTITION_METADATA_SIZE}
+import org.apache.spark.internal.LogKeys.{CACHED_TABLE_PARTITION_METADATA_SIZE, MAX_TABLE_PARTITION_METADATA_SIZE}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SizeEstimator
 

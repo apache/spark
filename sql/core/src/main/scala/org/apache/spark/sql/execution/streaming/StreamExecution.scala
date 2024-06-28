@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{PATH, SPARK_DATA_STREAM}
+import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, SPARK_DATA_STREAM}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -261,7 +261,8 @@ abstract class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
-    logInfo(s"Starting $prettyIdString. Use $resolvedCheckpointRoot to store the query checkpoint.")
+    logInfo(log"Starting ${MDC(PRETTY_ID_STRING, prettyIdString)}. " +
+      log"Use ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)} to store the query checkpoint.")
     queryExecutionThread.setDaemon(true)
     queryExecutionThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -319,6 +320,10 @@ abstract class StreamExecution(
           batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
         if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+          // Log logical plan at the start of the query to help debug issues related to
+          // plan changes.
+          logInfo(log"Finish initializing with logical plan:\n${MDC(LOGICAL_PLAN, logicalPlan)}")
+
           // Unblock `awaitInitialization`
           initializationLatch.countDown()
           runActivatedStream(sparkSessionForStream)
@@ -367,7 +372,7 @@ abstract class StreamExecution(
           case _ => None
         }
 
-        logError(s"Query $prettyIdString terminated with error", e)
+        logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} terminated with error", e)
         getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
@@ -406,7 +411,7 @@ abstract class StreamExecution(
               .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
-            logInfo(s"Deleting checkpoint $checkpointPath.")
+            logInfo(log"Deleting checkpoint ${MDC(CHECKPOINT_PATH, checkpointPath)}.")
             fileManager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
@@ -684,7 +689,7 @@ object StreamExecution {
     classOf[ClosedByInterruptException].getName)
   val PROXY_ERROR = (
     "py4j.protocol.Py4JJavaError: An error occurred while calling" +
-    s".+(\\r\\n|\\r|\\n): (${IO_EXCEPTION_NAMES.mkString("|")})").r
+      s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
 
   @scala.annotation.tailrec
   def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {

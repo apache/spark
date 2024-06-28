@@ -30,12 +30,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TPrimitiveTypeEntry, TRowSet, TTableSchema, TTypeDesc, TTypeEntry, TTypeId, TTypeQualifiers, TTypeQualifierValue}
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
-import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -84,7 +83,7 @@ private[hive] class SparkExecuteStatementOperation(
       val sparkType = new StructType().add("Result", "string")
       SparkExecuteStatementOperation.toTTableSchema(sparkType)
     } else {
-      logInfo(s"Result Schema: ${result.schema.sql}")
+      logInfo(log"Result Schema: ${MDC(LogKeys.SCHEMA, result.schema.sql)}")
       SparkExecuteStatementOperation.toTTableSchema(result.schema)
     }
   }
@@ -119,7 +118,7 @@ private[hive] class SparkExecuteStatementOperation(
     val rows = iter.take(maxRows).toList
     log.debug(s"Returning result set with ${rows.length} rows from offsets " +
       s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
-    RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
+    RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion)
   }
 
   def getResultSetSchema: TTableSchema = resultSchema
@@ -127,8 +126,8 @@ private[hive] class SparkExecuteStatementOperation(
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     logInfo(
-      log"Submitting query '${MDC(REDACTED_STATEMENT, redactedStatement)}' with " +
-        log"${MDC(STATEMENT_ID, statementId)}")
+      log"Submitting query '${MDC(LogKeys.REDACTED_STATEMENT, redactedStatement)}' with " +
+      log"${MDC(LogKeys.STATEMENT_ID, statementId)}")
     HiveThriftServer2.eventManager.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
@@ -216,8 +215,8 @@ private[hive] class SparkExecuteStatementOperation(
       synchronized {
         if (getStatus.getState.isTerminal) {
           logInfo(
-            log"Query with ${MDC(STATEMENT_ID, statementId)} in terminal state " +
-              log"before it started running")
+            log"Query with ${MDC(LogKeys.STATEMENT_ID, statementId)} in terminal state " +
+            log"before it started running")
           return
         } else {
           logInfo(log"Running query with ${MDC(STATEMENT_ID, statementId)}")
@@ -290,8 +289,8 @@ private[hive] class SparkExecuteStatementOperation(
     synchronized {
       if (!getStatus.getState.isTerminal) {
         logInfo(
-          log"Query with ${MDC(STATEMENT_ID, statementId)} timed out after " +
-            log"${MDC(TIMEOUT, timeout)} seconds")
+          log"Query with ${MDC(LogKeys.STATEMENT_ID, statementId)} timed out " +
+          log"after ${MDC(LogKeys.TIMEOUT, timeout)} seconds")
         setState(OperationState.TIMEDOUT)
         cleanup()
         HiveThriftServer2.eventManager.onStatementTimeout(statementId)

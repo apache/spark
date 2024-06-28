@@ -86,7 +86,7 @@ def _get_jvm_function(name: str, sc: "SparkContext") -> Callable:
     Java gateway associated with sc.
     """
     assert sc._jvm is not None
-    return getattr(sc._jvm.functions, name)
+    return getattr(getattr(sc._jvm, "org.apache.spark.sql.functions"), name)
 
 
 def _invoke_function(name: str, *args: Any) -> Column:
@@ -638,7 +638,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     |                                          4 months|
     +--------------------------------------------------+
 
-    Example 3: Exception druing division, resulting in NULL when ANSI mode is on
+    Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
@@ -655,6 +655,56 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     +-----------------+
     """
     return _invoke_function_over_columns("try_divide", left, right)
+
+
+@_try_remote_functions
+def try_remainder(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Returns the remainder after `dividend`/`divisor`.  Its result is
+    always null if `divisor` is 0.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or str
+        dividend
+    right : :class:`~pyspark.sql.Column` or str
+        divisor
+
+    Examples
+    --------
+    Example 1: Integer divided by Integer.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.createDataFrame(
+    ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
+    ... ).select(sf.try_remainder("a", "b")).show()
+    +-------------------+
+    |try_remainder(a, b)|
+    +-------------------+
+    |                  0|
+    |                  1|
+    |               NULL|
+    +-------------------+
+
+    Example 2: Exception during division, resulting in NULL when ANSI mode is on
+
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.range(1)
+    ...     df.select(sf.try_remainder(df.id, sf.lit(0))).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +--------------------+
+    |try_remainder(id, 0)|
+    +--------------------+
+    |                NULL|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("try_remainder", left, right)
 
 
 @_try_remote_functions
@@ -2068,7 +2118,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2121,7 +2171,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2382,7 +2432,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
 
     Returns
@@ -6166,8 +6216,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -6221,8 +6271,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -9352,6 +9402,129 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Gets the difference between the timestamps in the specified units by truncating
+    the fraction part.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    unit : str
+        This indicates the units of the difference between the given timestamps.
+        Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+    start : :class:`~pyspark.sql.Column` or str
+        A timestamp which the expression subtracts from `endTimestamp`.
+    end : :class:`~pyspark.sql.Column` or str
+        A timestamp from which the expression subtracts `startTimestamp`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the difference between the timestamps.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), datetime.datetime(2024, 4, 2, 9, 0, 7))],
+    ... ).toDF("start", "end")
+    >>> df.select(sf.timestamp_diff("year", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(year, start, end)|
+    +-------------------------------+
+    |                              8|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("WEEK", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(WEEK, start, end)|
+    +-------------------------------+
+    |                            420|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("day", "end", "start")).show()
+    +------------------------------+
+    |timestampdiff(day, end, start)|
+    +------------------------------+
+    |                         -2944|
+    +------------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "timestamp_diff",
+        unit,
+        _to_java_column(start),
+        _to_java_column(end),
+    )
+
+
+@_try_remote_functions
+def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
+    """
+    Gets the difference between the timestamps in the specified units by truncating
+    the fraction part.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    unit : str
+        This indicates the units of the difference between the given timestamps.
+        Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+    quantity : :class:`~pyspark.sql.Column` or str
+        The number of units of time that you want to add.
+    ts : :class:`~pyspark.sql.Column` or str
+        A timestamp to which you want to add.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the difference between the timestamps.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 2),
+    ...      (datetime.datetime(2024, 4, 2, 9, 0, 7), 3)], ["ts", "quantity"])
+    >>> df.select(sf.timestamp_add("year", "quantity", "ts")).show()
+    +--------------------------------+
+    |timestampadd(year, quantity, ts)|
+    +--------------------------------+
+    |             2018-03-11 09:00:07|
+    |             2027-04-02 09:00:07|
+    +--------------------------------+
+    >>> df.select(sf.timestamp_add("WEEK", sf.lit(5), "ts")).show()
+    +-------------------------+
+    |timestampadd(WEEK, 5, ts)|
+    +-------------------------+
+    |      2016-04-15 09:00:07|
+    |      2024-05-07 09:00:07|
+    +-------------------------+
+    >>> df.select(sf.timestamp_add("day", sf.lit(-5), "ts")).show()
+    +-------------------------+
+    |timestampadd(day, -5, ts)|
+    +-------------------------+
+    |      2016-03-06 09:00:07|
+    |      2024-03-28 09:00:07|
+    +-------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "timestamp_add",
+        unit,
+        _to_java_column(quantity),
+        _to_java_column(ts),
+    )
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -10742,7 +10915,9 @@ def sentences(
 
 
 @_try_remote_functions
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
+def substring(
+    str: "ColumnOrName", pos: Union["ColumnOrName", int], len: Union["ColumnOrName", int]
+) -> Column:
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
@@ -10761,10 +10936,17 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    pos : int
+    pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
-    len : int
+
+        .. versionchanged:: 4.0.0
+            `pos` now accepts column and column name.
+
+    len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
+
+        .. versionchanged:: 4.0.0
+            `len` now accepts column and column name.
 
     Returns
     -------
@@ -10776,10 +10958,17 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
     [Row(s='ab')]
+    >>> df = spark.createDataFrame([('Spark', 2, 3)], ['s', 'p', 'l'])
+    >>> df.select(substring(df.s, 2, df.l).alias('s')).collect()
+    [Row(s='par')]
+    >>> df.select(substring(df.s, df.p, 3).alias('s')).collect()
+    [Row(s='par')]
+    >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
+    [Row(s='par')]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    return _invoke_function("substring", _to_java_column(str), pos, len)
+    pos = lit(pos) if isinstance(pos, int) else pos
+    len = lit(len) if isinstance(len, int) else len
+    return _invoke_function_over_columns("substring", str, pos, len)
 
 
 @_try_remote_functions
@@ -13431,10 +13620,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |      true|
     +----------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = value._jc if isinstance(value, Column) else value
-    return _invoke_function("array_contains", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_contains", col, lit(value))
 
 
 @_try_remote_functions
@@ -13796,7 +13982,10 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
     value : Any
-        value to look for.
+        value or a :class:`~pyspark.sql.Column` expression to look for.
+
+        .. versionchanged:: 4.0.0
+            `value` now also accepts a Column type.
 
     Returns
     -------
@@ -13861,10 +14050,20 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-----------------------+
     |                      3|
     +-----------------------+
-    """
-    from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("array_position", _to_java_column(col), value)
+    Example 6: Finding the position of a column's value in an array of integers
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([10, 20, 30], 20)], ['data', 'col'])
+    >>> df.select(sf.array_position(df.data, df.col)).show()
+    +-------------------------+
+    |array_position(data, col)|
+    +-------------------------+
+    |                        2|
+    +-------------------------+
+
+    """
+    return _invoke_function_over_columns("array_position", col, lit(value))
 
 
 @_try_remote_functions
@@ -14229,7 +14428,10 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         name of column containing array
     element :
-        element to be removed from the array
+        element or a :class:`~pyspark.sql.Column` expression to be removed from the array
+
+        .. versionchanged:: 4.0.0
+            `element` now also accepts a Column type.
 
     Returns
     -------
@@ -14297,10 +14499,19 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     +---------------------+
     |                   []|
     +---------------------+
-    """
-    from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("array_remove", _to_java_column(col), element)
+    Example 6: Removing a column's value from a simple array
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([1, 2, 3, 1, 1], 1)], ['data', 'col'])
+    >>> df.select(sf.array_remove(df.data, df.col)).show()
+    +-----------------------+
+    |array_remove(data, col)|
+    +-----------------------+
+    |                 [2, 3]|
+    +-----------------------+
+    """
+    return _invoke_function_over_columns("array_remove", col, lit(element))
 
 
 @_try_remote_functions
@@ -15595,11 +15806,43 @@ def from_json(
 
 
 @_try_remote_functions
+def try_parse_json(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`VariantType`. Returns None if a string
+    contains an invalid JSON value.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name JSON formatted strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''}, {'json': '''{a : 1}'''} ])
+    >>> df.select(to_json(try_parse_json(df.json))).collect()
+    [Row(to_json(try_parse_json(json))='{"a":1}'), Row(to_json(try_parse_json(json))=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("try_parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`VariantType`.
+    Parses a column containing a JSON string into a :class:`VariantType`. Throws exception if a
+    string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
 
@@ -17032,7 +17275,10 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     col : :class:`~pyspark.sql.Column` or str
         The name of the column or an expression that represents the map.
     value :
-        A literal value.
+        A literal value, or a :class:`~pyspark.sql.Column` expression.
+
+        .. versionchanged:: 4.0.0
+            `value` now also accepts a Column type.
 
     Returns
     -------
@@ -17062,10 +17308,19 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     +--------------------------+
     |                     false|
     +--------------------------+
-    """
-    from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("map_contains_key", _to_java_column(col), value)
+    Example 3: Check for key using a column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data, 1 as key")
+    >>> df.select(sf.map_contains_key("data", sf.col("key"))).show()
+    +---------------------------+
+    |map_contains_key(data, key)|
+    +---------------------------+
+    |                       true|
+    +---------------------------+
+    """
+    return _invoke_function_over_columns("map_contains_key", col, lit(value))
 
 
 @_try_remote_functions
@@ -18184,7 +18439,7 @@ def aggregate(
         initial value. Name of column or expression
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
-        of the same type as ``zero``
+        of the same type as ``initialValue``
     finish : function, optional
         an optional unary function ``(x: Column) -> Column: ...``
         used to convert accumulated value.

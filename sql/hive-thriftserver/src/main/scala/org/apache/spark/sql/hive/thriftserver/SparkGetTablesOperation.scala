@@ -28,7 +28,7 @@ import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 
@@ -103,7 +103,7 @@ private[hive] class SparkGetTablesOperation(
 
       // Temporary views and global temporary views
       if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
-        val globalTempViewDb = catalog.globalTempViewManager.database
+        val globalTempViewDb = catalog.globalTempDatabase
         val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
         val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
           catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)

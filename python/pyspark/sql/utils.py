@@ -17,7 +17,17 @@
 import inspect
 import functools
 import os
-from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast, TypeVar, Union, Type
+from typing import (
+    Any,
+    Callable,
+    Optional,
+    List,
+    Sequence,
+    TYPE_CHECKING,
+    cast,
+    TypeVar,
+    Union,
+)
 
 # For backward compatibility.
 from pyspark.errors import (  # noqa: F401
@@ -32,7 +42,7 @@ from pyspark.errors import (  # noqa: F401
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
@@ -46,8 +56,6 @@ if TYPE_CHECKING:
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.column import Column
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -122,6 +130,44 @@ class ForeachBatchFunction:
 
     class Java:
         implements = ["org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction"]
+
+
+# Python implementation of 'org.apache.spark.sql.catalyst.util.StringConcat'
+class StringConcat:
+    def __init__(self, maxLength: int = JVM_INT_MAX - 15):
+        self.maxLength: int = maxLength
+        self.strings: List[str] = []
+        self.length: int = 0
+
+    def atLimit(self) -> bool:
+        return self.length >= self.maxLength
+
+    def append(self, s: str) -> None:
+        if s is not None:
+            sLen = len(s)
+            if not self.atLimit():
+                available = self.maxLength - self.length
+                stringToAppend = s if available >= sLen else s[0:available]
+                self.strings.append(stringToAppend)
+
+            self.length = min(self.length + sLen, JVM_INT_MAX - 15)
+
+    def toString(self) -> str:
+        # finalLength = self.maxLength if self.atLimit()  else self.length
+        return "".join(self.strings)
+
+
+# Python implementation of 'org.apache.spark.util.SparkSchemaUtils.escapeMetaCharacters'
+def escape_meta_characters(s: str) -> str:
+    return (
+        s.replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+        .replace("\f", "\\f")
+        .replace("\b", "\\b")
+        .replace("\u000B", "\\v")
+        .replace("\u0007", "\\a")
+    )
 
 
 def to_str(value: Any) -> Optional[str]:
@@ -242,36 +288,6 @@ def try_remote_protobuf_functions(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def try_remote_window(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import Window
-
-            return getattr(Window, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
-def try_remote_windowspec(f: FuncT) -> FuncT:
-    """Mark API supported from Spark Connect."""
-
-    @functools.wraps(f)
-    def wrapped(*args: Any, **kwargs: Any) -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            from pyspark.sql.connect.window import WindowSpec
-
-            return getattr(WindowSpec, f.__name__)(*args, **kwargs)
-        else:
-            return f(*args, **kwargs)
-
-    return cast(FuncT, wrapped)
-
-
 def get_active_spark_context() -> "SparkContext":
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
@@ -350,7 +366,32 @@ def dispatch_col_method(f: FuncT) -> FuncT:
 
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": f"DataFrame.{f.__name__}"},
+            message_parameters={"feature": f"Column.{f.__name__}"},
+        )
+
+    return cast(FuncT, wrapped)
+
+
+def dispatch_window_method(f: FuncT) -> FuncT:
+    """
+    For the usecases of direct Window.method(col, ...), it checks if self
+    is a Connect Window or Classic Window, and dispatches.
+    """
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.window import Window as ConnectWindow
+
+            return getattr(ConnectWindow, f.__name__)(*args, **kwargs)
+        else:
+            from pyspark.sql.classic.window import Window as ClassicWindow
+
+            return getattr(ClassicWindow, f.__name__)(*args, **kwargs)
+
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": f"Window.{f.__name__}"},
         )
 
     return cast(FuncT, wrapped)
@@ -363,54 +404,15 @@ def pyspark_column_op(
     Wrapper function for column_op to get proper Column class.
     """
     from pyspark.pandas.base import column_op
-    from pyspark.sql.column import Column as PySparkColumn
+    from pyspark.sql.column import Column
     from pyspark.pandas.data_type_ops.base import _is_extension_dtypes
 
-    if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
-        Column = ConnectColumn
-    else:
-        Column = PySparkColumn  # type: ignore[assignment]
     result = column_op(getattr(Column, func_name))(left, right)
     # It works as expected on extension dtype, so we don't need to call `fillna` for this case.
     if (fillna is not None) and (_is_extension_dtypes(left) or _is_extension_dtypes(right)):
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_column_class() -> Type["Column"]:
-    from pyspark.sql.column import Column as PySparkColumn
-
-    if is_remote():
-        from pyspark.sql.connect.column import Column as ConnectColumn
-
-        return ConnectColumn
-    else:
-        return PySparkColumn
-
-
-def get_dataframe_class() -> Type["DataFrame"]:
-    from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
-
-    if is_remote():
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-
-        return ConnectDataFrame
-    else:
-        return PySparkDataFrame
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow  # type: ignore[return-value]
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

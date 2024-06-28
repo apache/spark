@@ -797,3 +797,35 @@ org.apache.spark.SparkArithmeticException
     "fragment" : "conv('-9223372036854775807', 36, 10)"
   } ]
 }
+
+
+-- !query
+SELECT BIN(0)
+-- !query schema
+struct<bin(0):string>
+-- !query output
+0
+
+
+-- !query
+SELECT BIN(25)
+-- !query schema
+struct<bin(25):string>
+-- !query output
+11001
+
+
+-- !query
+SELECT BIN(25L)
+-- !query schema
+struct<bin(25):string>
+-- !query output
+11001
+
+
+-- !query
+SELECT BIN(25.5)
+-- !query schema
+struct<bin(25.5):string>
+-- !query output
+11001

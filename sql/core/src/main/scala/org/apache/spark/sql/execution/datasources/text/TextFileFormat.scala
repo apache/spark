@@ -49,6 +49,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
+  private def verifyReadSchema(schema: StructType): Unit = {
+    if (schema.size > 1) {
+      throw QueryCompilationErrors.textDataSourceWithMultiColumnsError(schema)
+    }
+  }
+
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
@@ -98,9 +104,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    assert(
-      requiredSchema.length <= 1,
-      "Text data source only produces a single data column named \"value\".")
+    verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

@@ -37,6 +37,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -252,24 +253,22 @@ class DataFrameTestsMixin:
         self.assertEqual(df2.columns, ["a"])
 
     def test_drop_duplicates(self):
-        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 
         # shouldn't drop a non-null row
         self.assertEqual(df.dropDuplicates().count(), 2)
 
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
-
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicates("name")
+        self.assertEqual(df.drop_duplicates(["name"]).count(), 1)
+        self.assertEqual(df.drop_duplicates(["name", "age"]).count(), 2)
 
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "str"},
-        )
+        # SPARK-48482 dropDuplicates should take varargs
+        self.assertEqual(df.dropDuplicates("name").count(), 1)
+        self.assertEqual(df.dropDuplicates("name", "age").count(), 2)
+        self.assertEqual(df.drop_duplicates("name").count(), 1)
+        self.assertEqual(df.drop_duplicates("name", "age").count(), 2)
 
     def test_drop_duplicates_with_ambiguous_reference(self):
         df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
@@ -430,6 +429,11 @@ class DataFrameTestsMixin:
             IllegalArgumentException, lambda: self.spark.range(1).sample(-1.0).count()
         )
 
+    def test_sample_with_random_seed(self):
+        df = self.spark.range(10000).sample(0.1)
+        cnts = [df.count() for i in range(10)]
+        self.assertEqual(1, len(set(cnts)))
+
     def test_toDF_with_string(self):
         df = self.spark.createDataFrame([("John", 30), ("Alice", 25), ("Bob", 28)])
         data = [("John", 30), ("Alice", 25), ("Bob", 28)]
@@ -526,7 +530,7 @@ class DataFrameTestsMixin:
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
@@ -839,9 +843,22 @@ class DataFrameTestsMixin:
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1), DataFrame)
 
+    def test_checkpoint_dataframe(self):
+        with io.StringIO() as buf, redirect_stdout(buf):
+            self.spark.range(1).localCheckpoint().explain()
+            self.assertIn("ExistingRDD", buf.getvalue())
+
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_query_execution_unsupported_in_classic(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.range(1).executionInfo
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            message_parameters={"member": "queryExecution"},
+        )
 
 
 if __name__ == "__main__":

@@ -23,15 +23,13 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{LOAD_TIME, QUERY_RUN_ID, STATE_STORE_PROVIDER, STORE_ID}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -280,16 +278,6 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-/**
- * An exception thrown when an invalid UnsafeRow is detected in state store.
- */
-class InvalidUnsafeRowException(error: String)
-  extends RuntimeException("The streaming query failed by state format invalidation. " +
-    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
-    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
-    "among restart. For the first case, you can try to restart the application without " +
-    s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
-
 sealed trait KeyStateEncoderSpec
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
@@ -397,6 +385,12 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
+    if (!classOf[StateStoreProvider].isAssignableFrom(providerClass)) {
+      throw new SparkException(
+        errorClass = "STATE_STORE_INVALID_PROVIDER",
+        messageParameters = Map("inputClass" -> providerClassName),
+        cause = null)
+    }
     providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
@@ -429,12 +423,16 @@ object StateStoreProvider {
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
-      validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+      validationError.foreach { error =>
+        throw StateStoreErrors.keyRowFormatValidationFailure(error)
+      }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
-        validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+        validationError.foreach { error =>
+          throw StateStoreErrors.valueRowFormatValidationFailure(error)
+        }
       }
     }
   }
@@ -525,9 +523,6 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
-  @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
-
   private val maintenanceThreadPoolLock = new Object
 
   // Shared exception between threads in thread pool that the scheduling thread
@@ -585,7 +580,21 @@ object StateStore extends Logging {
     }
 
     def stop(): Unit = {
-      threadPool.shutdown()
+      logInfo("Shutting down MaintenanceThreadPool")
+      threadPool.shutdown() // Disable new tasks from being submitted
+
+      // Wait a while for existing tasks to terminate
+      if (!threadPool.awaitTermination(5 * 60, TimeUnit.SECONDS)) {
+        logWarning(
+          s"MaintenanceThreadPool is not able to be terminated within 300 seconds," +
+            " forcefully shutting down now.")
+        threadPool.shutdownNow() // Cancel currently executing tasks
+
+        // Wait a while for tasks to respond to being cancelled
+        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+          logError("MaintenanceThreadPool did not terminate")
+        }
+      }
     }
   }
 
@@ -636,15 +645,6 @@ object StateStore extends Logging {
     storeProvider.getStore(version)
   }
 
-  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
-    if (!UnsafeRowUtils.isBinaryStable(schema)) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        messageParameters = Map("schema" -> schema.json)
-      )
-    }
-  }
-
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -656,40 +656,6 @@ object StateStore extends Logging {
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
-
-      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
-        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
-          // SPARK-47776: collation introduces the concept of binary (in)equality, which means
-          // in some collation we no longer be able to just compare the binary format of two
-          // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
-          // same in case insensitive collation.
-          // State store is basically key-value storage, and the most provider implementations
-          // rely on the fact that all the columns in the key schema support binary equality.
-          // We need to disallow using binary inequality column in the key schema, before we
-          // could support this in majority of state store providers (or high-level of state
-          // store.)
-          disallowBinaryInequalityColumn(keySchema)
-
-          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
-          // regardless of configuration, we check compatibility to at least write schema file
-          // if necessary
-          // if the format validation for value schema is disabled, we also disable the schema
-          // compatibility checker for value schema as well.
-          val ret = Try(
-            checker.check(keySchema, valueSchema,
-              ignoreValueSchema = !storeConf.formatValidationCheckValue)
-          ).toEither.fold(Some(_), _ => None)
-          if (storeConf.stateSchemaCheckEnabled) {
-            ret
-          } else {
-            None
-          }
-        })
-
-        if (result.isDefined) {
-          throw result.get
-        }
-      }
 
       // SPARK-42567 - Track load time for state store provider and log warning if takes longer
       // than 2s.
@@ -703,9 +669,10 @@ object StateStore extends Logging {
       }
 
       if (loadTimeMs > 2000L) {
-        logWarning(log"Loaded state store provider in loadTimeMs=${MDC(LOAD_TIME, loadTimeMs)} " +
-          log"for storeId=${MDC(STORE_ID, storeProviderId.storeId.toString)} and " +
-          log"queryRunId=${MDC(QUERY_RUN_ID, storeProviderId.queryRunId)}")
+        logWarning(log"Loaded state store provider in loadTimeMs=" +
+          log"${MDC(LogKeys.LOAD_TIME, loadTimeMs)} " +
+          log"for storeId=${MDC(LogKeys.STORE_ID, storeProviderId.storeId.toString)} and " +
+          log"queryRunId=${MDC(LogKeys.QUERY_RUN_ID, storeProviderId.queryRunId)}")
       }
 
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
@@ -821,17 +788,18 @@ object StateStore extends Logging {
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
-              logInfo(s"Unloaded $provider")
+              logInfo(log"Unloaded ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}")
             }
           } catch {
             case NonFatal(e) =>
-              logWarning(log"Error managing ${MDC(STATE_STORE_PROVIDER, provider)}, " +
+              logWarning(log"Error managing ${MDC(LogKeys.STATE_STORE_PROVIDER, provider)}, " +
                 log"stopping management thread", e)
               threadPoolException.set(e)
           } finally {
             val duration = System.currentTimeMillis() - startTime
-            val logMsg = s"Finished maintenance task for provider=$id" +
-              s" in elapsed_time=$duration\n"
+            val logMsg =
+              log"Finished maintenance task for provider=${MDC(LogKeys.STATE_STORE_PROVIDER, id)}" +
+                log" in elapsed_time=${MDC(LogKeys.TIME_UNITS, duration)}\n"
             if (duration > 5000) {
               logInfo(logMsg)
             } else {
@@ -843,8 +811,9 @@ object StateStore extends Logging {
           }
         })
       } else {
-        logInfo(s"Not processing partition ${id} for maintenance because it is currently " +
-          s"being processed")
+        logInfo(log"Not processing partition ${MDC(LogKeys.PARTITION_ID, id)} " +
+          log"for maintenance because it is currently " +
+          log"being processed")
       }
     }
   }
@@ -858,8 +827,10 @@ object StateStore extends Logging {
       val providerIdsToUnload = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
         .getOrElse(Seq.empty[StateStoreProviderId])
-      logInfo(s"Reported that the loaded instance $storeProviderId is active")
-      logDebug(s"The loaded instances are going to unload: ${providerIdsToUnload.mkString(", ")}")
+      logInfo(log"Reported that the loaded instance " +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, storeProviderId)} is active")
+      logDebug(log"The loaded instances are going to unload: " +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, providerIdsToUnload.mkString(", "))}")
       providerIdsToUnload
     } else {
       Seq.empty[StateStoreProviderId]
@@ -890,7 +861,8 @@ object StateStore extends Logging {
         logDebug("Getting StateStoreCoordinatorRef")
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)
       }
-      logInfo(s"Retrieved reference to StateStoreCoordinator: ${_coordRef}")
+      logInfo(log"Retrieved reference to StateStoreCoordinator: " +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, _coordRef)}")
       Some(_coordRef)
     } else {
       _coordRef = null

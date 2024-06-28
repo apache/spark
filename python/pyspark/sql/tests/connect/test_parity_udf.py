@@ -44,10 +44,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_same_accumulator_in_udfs(self):
         super().test_same_accumulator_in_udfs()
 
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_udf_timestamp_ntz(self):
-        super().test_udf_timestamp_ntz()
-
     @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()

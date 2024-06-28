@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -233,7 +233,7 @@ case class CreateDataSourceTableAsSelectCommand(
     } catch {
       case ex: AnalysisException =>
         logError(log"Failed to write to table " +
-          log"${MDC(IDENTIFIER, table.identifier.unquotedString)}", ex)
+          log"${MDC(TABLE_NAME, table.identifier.unquotedString)}", ex)
         throw ex
     }
   }

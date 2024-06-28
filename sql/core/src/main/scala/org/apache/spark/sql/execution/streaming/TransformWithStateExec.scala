@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -78,15 +80,33 @@ case class TransformWithStateExec(
   override def shortName: String = "transformWithStateExec"
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    if (timeMode == ProcessingTime) {
+      // TODO: check if we can return true only if actual timers are registered, or there is
+      // expired state
+      true
+    } else if (outputMode == OutputMode.Append || outputMode == OutputMode.Update) {
+      eventTimeWatermarkForEviction.isDefined &&
+      newInputWatermark > eventTimeWatermarkForEviction.get
+    } else {
+      false
+    }
+  }
+
+  /**
+   * Controls watermark propagation to downstream modes. If timeMode is
+   * ProcessingTime, the output rows cannot be interpreted in eventTime, hence
+   * this node will not propagate watermark in this timeMode.
+   *
+   * For timeMode EventTime, output watermark is same as input Watermark because
+   * transformWithState does not allow users to set the event time column to be
+   * earlier than the watermark.
+   */
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = {
     timeMode match {
       case ProcessingTime =>
-        // TODO: check if we can return true only if actual timers are registered, or there is
-        // expired state
-        true
-      case EventTime =>
-        eventTimeWatermarkForEviction.isDefined &&
-          newInputWatermark > eventTimeWatermarkForEviction.get
-      case _ => false
+        None
+      case _ =>
+        Some(inputWatermarkMs)
     }
   }
 
@@ -318,6 +338,13 @@ case class TransformWithStateExec(
       StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
         "Number of values removed due to TTL expiry")
     )
+  }
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    // TODO: transformWithState is special because we don't have the schema of the state directly
+    // within the passed args. We need to gather this after running the init function
+    // within the stateful processor on the driver. This also requires a schema format change
+    // when recording this information persistently.
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

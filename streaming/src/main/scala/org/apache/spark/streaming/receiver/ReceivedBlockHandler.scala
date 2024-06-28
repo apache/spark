@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{EFFECTIVE_STORAGE_LEVEL, STORAGE_LEVEL, STORAGE_LEVEL_DESERIALIZED, STORAGE_LEVEL_REPLICATION}
+import org.apache.spark.internal.LogKeys.{EFFECTIVE_STORAGE_LEVEL, STORAGE_LEVEL, STORAGE_LEVEL_DESERIALIZED, STORAGE_LEVEL_REPLICATION}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._

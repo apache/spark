@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.internal.LogKey.{ELAPSED_TIME, PATH}
+import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._

@@ -63,3 +63,14 @@ trait AnalysisOnlyCommand extends Command {
   // on the `AnalysisContext`
   def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan
 }
+
+/**
+ * A logical node that does not expose its sub-nodes as children, but rather supervises them
+ * in an implementation-defined manner.
+ */
+trait SupervisingCommand extends LeafCommand {
+  /**
+   * Transforms its supervised plan using `transformer` and returns a copy of `SupervisingCommand`
+   */
+  def withTransformedSupervisedPlan(transformer: LogicalPlan => LogicalPlan): LogicalPlan
+}

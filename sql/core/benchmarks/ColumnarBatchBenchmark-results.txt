@@ -2,58 +2,58 @@
 Int Read/Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Int Read/Write:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Java Array                                          174            174           1       1883.6           0.5       1.0X
-ByteBuffer Unsafe                                   283            284           1       1156.3           0.9       0.6X
-ByteBuffer API                                      496            496           1        660.8           1.5       0.4X
-DirectByteBuffer                                    485            486           1        675.4           1.5       0.4X
-Unsafe Buffer                                       161            163           0       2032.4           0.5       1.1X
-Column(on heap)                                     177            177           0       1855.5           0.5       1.0X
-Column(off heap)                                    162            162           0       2022.7           0.5       1.1X
-Column(off heap direct)                             156            156           1       2105.3           0.5       1.1X
-UnsafeRow (on heap)                                 447            448           1        732.6           1.4       0.4X
-UnsafeRow (off heap)                                313            316           2       1045.3           1.0       0.6X
-Column On Heap Append                               361            362           0        906.5           1.1       0.5X
+Java Array                                          174            174           1       1884.2           0.5       1.0X
+ByteBuffer Unsafe                                   283            284           0       1157.5           0.9       0.6X
+ByteBuffer API                                      499            500           1        656.1           1.5       0.3X
+DirectByteBuffer                                    404            405           1        812.1           1.2       0.4X
+Unsafe Buffer                                       161            163           1       2039.7           0.5       1.1X
+Column(on heap)                                     177            177           0       1855.7           0.5       1.0X
+Column(off heap)                                    162            162           0       2025.9           0.5       1.1X
+Column(off heap direct)                             155            156           1       2108.0           0.5       1.1X
+UnsafeRow (on heap)                                 447            448           0        732.3           1.4       0.4X
+UnsafeRow (off heap)                                312            316           2       1049.5           1.0       0.6X
+Column On Heap Append                               361            388          65        907.1           1.1       0.5X
 
 
 ================================================================================================
 Boolean Read/Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Boolean Read/Write:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Bitset                                              512            513           2        655.1           1.5       1.0X
-Byte Array                                          320            321           1       1049.6           1.0       1.6X
+Bitset                                              516            518           2        650.3           1.5       1.0X
+Byte Array                                          314            315           2       1067.8           0.9       1.6X
 
 
 ================================================================================================
 String Read/Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 String Read/Write:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-On Heap                                             137            137           0        119.6           8.4       1.0X
-Off Heap                                            365            398          21         44.9          22.3       0.4X
+On Heap                                             193            242          21         84.7          11.8       1.0X
+Off Heap                                            340            375          21         48.2          20.7       0.6X
 
 
 ================================================================================================
 Array Vector Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
+OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Array Vector Read:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-On Heap Read Size Only                               89             90           1       1835.7           0.5       1.0X
-Off Heap Read Size Only                              84             85           0       1941.2           0.5       1.1X
-On Heap Read Elements                              2295           2297           2         71.4          14.0       0.0X
-Off Heap Read Elements                             2681           2683           2         61.1          16.4       0.0X
+On Heap Read Size Only                               89             90           1       1831.4           0.5       1.0X
+Off Heap Read Size Only                              85             85           1       1937.9           0.5       1.1X
+On Heap Read Elements                              2298           2302           6         71.3          14.0       0.0X
+Off Heap Read Elements                             2615           2617           3         62.7          16.0       0.0X
 
 

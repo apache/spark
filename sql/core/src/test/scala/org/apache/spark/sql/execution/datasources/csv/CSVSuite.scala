@@ -80,6 +80,7 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val charFile = "test-data/char.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -1246,14 +1247,13 @@ abstract class CSVSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val ex = intercept[SparkException] {
           exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
         checkErrorMatchPVals(
           exception = ex,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = ex.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -1488,16 +1488,21 @@ abstract class CSVSuite
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = e,
           errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> inputFile.toPath.toUri.toString)
+          parameters = Map("path" -> s".*${inputFile.getName}.*")
         )
         assert(e.getCause.isInstanceOf[EOFException])
         assert(e.getCause.getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
           spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
         }
+        checkErrorMatchPVals(
+          exception = e2,
+          errorClass = "FAILED_READ_FILE.NO_HINT",
+          parameters = Map("path" -> s".*${inputFile.getName}.*")
+        )
         assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
         assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
       }
@@ -3339,6 +3344,29 @@ abstract class CSVSuite
           .load(testFile(carsFile))
           .select("comment")
           .where("year < 2014"),
+        expected)
+    }
+  }
+
+  test("SPARK-48241: CSV parsing failure with char/varchar type columns") {
+    withTable("charVarcharTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE charVarcharTable(
+           |  color char(4),
+           |  name varchar(10))
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  path "${testFile(charFile)}"
+           |)
+       """.stripMargin)
+      val expected = Seq(
+        Row("pink", "Bob"),
+        Row("blue", "Mike"),
+        Row("grey", "Tom"))
+      checkAnswer(
+        sql("SELECT * FROM charVarcharTable"),
         expected)
     }
   }

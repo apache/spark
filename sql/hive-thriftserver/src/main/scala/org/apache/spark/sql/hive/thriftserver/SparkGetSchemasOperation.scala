@@ -26,7 +26,7 @@ import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATA
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -79,7 +79,7 @@ private[hive] class SparkGetSchemasOperation(
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
 
-      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
+      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempDatabase
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (schemaName == null || schemaName.isEmpty ||
           databasePattern.matcher(globalTempViewDb).matches()) {

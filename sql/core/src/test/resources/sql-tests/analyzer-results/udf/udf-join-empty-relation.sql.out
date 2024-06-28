@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -11,7 +11,7 @@ CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, L
 -- !query
 CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -20,7 +20,7 @@ CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, L
 -- !query
 CREATE TEMPORARY VIEW empty_table as SELECT a FROM t2 WHERE false
 -- !query analysis
-CreateViewCommand `empty_table`, SELECT a FROM t2 WHERE false, false, false, LocalTempView, true
+CreateViewCommand `empty_table`, SELECT a FROM t2 WHERE false, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- Filter false
          +- SubqueryAlias t2

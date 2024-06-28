@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -103,7 +104,20 @@ abstract class LogicalPlan
    */
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
-  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
+  override protected def statePrefix = {
+    if (!resolved) {
+      "'"
+    } else {
+      val prefixFromSuper = super.statePrefix
+      // Ancestor class could mark something on the prefix, including 'invalid'. Add a marker for
+      // `streaming` only when there is no marker from ancestor class.
+      if (prefixFromSuper.isEmpty && isStreaming) {
+        "~"
+      } else {
+        prefixFromSuper
+      }
+    }
+  }
 
   /**
    * Returns true if all its children of this query plan have been resolved.
@@ -118,7 +132,9 @@ abstract class LogicalPlan
   def resolve(schema: StructType, resolver: Resolver): Seq[Attribute] = {
     schema.map { field =>
       resolve(field.name :: Nil, resolver).map {
-        case a: AttributeReference => a
+        case a: AttributeReference =>
+          // Keep the metadata in given schema.
+          a.withMetadata(field.metadata)
         case _ => throw QueryExecutionErrors.resolveCannotHandleNestedSchema(this)
       }.getOrElse {
         throw QueryCompilationErrors.cannotResolveAttributeError(
@@ -210,6 +226,33 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   /** Leaf nodes that can survive analysis must define their own statistics. */
   def computeStats(): Statistics =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
+}
+
+/**
+ * A abstract class for LogicalQueryStage that is visible in logical rewrites.
+ */
+abstract class LogicalQueryStage extends LeafNode {
+  override protected val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_QUERY_STAGE)
+
+  /**
+   * Returns the logical plan that is included in this query stage
+   */
+  def logicalPlan: LogicalPlan
+
+  /**
+   * Returns the physical plan.
+   */
+  def physicalPlan: QueryPlan[_]
+
+  /**
+   * Return true if the physical stage is materialized
+   */
+  def isMaterialized: Boolean
+
+  /**
+   * Return true if the physical plan corresponds directly to a stage
+   */
+  def isDirectStage: Boolean
 }
 
 /**

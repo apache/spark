@@ -175,6 +175,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(funcName)))
   }
 
+  def nullDataSourceOption(option: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      messageParameters = Map("option" -> option)
+    )
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
@@ -2687,6 +2694,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
     )
   }
+
+  def cannotAlterCollationBucketColumn(tableName: String, columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ALTER_COLLATION_BUCKET_COLUMN",
+      messageParameters =
+        Map("tableName" -> toSQLId(tableName), "columnName" -> toSQLId(columnName))
+    )
+  }
+
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1246",
@@ -2968,6 +2984,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "viewName" -> toSQLId(viewIdent.nameParts),
         "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
+  }
+
+  def cannotAlterTempViewWithSchemaBindingError() : Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",
+      messageParameters = Map.empty)
   }
 
   def unsupportedCreateOrReplaceViewOnTableError(
@@ -3301,7 +3323,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1319",
+      errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
       messageParameters = Map("joinType" -> joinType.sql))
   }
 
@@ -4060,5 +4082,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def createTableDeprecatedError(): Throwable = {
     callDeprecatedMethodError("createTable(..., StructType, ...)",
       "createTable(..., Array[Column], ...)")
+  }
+
+  def cannotAssignEventTimeColumn(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
+      messageParameters = Map()
+    )
+  }
+
+  def avroNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
+    )
   }
 }

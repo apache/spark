@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.OPTIMIZER_CLASS_NAME
+import org.apache.spark.internal.LogKeys.OPTIMIZER_CLASS_NAME
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg._

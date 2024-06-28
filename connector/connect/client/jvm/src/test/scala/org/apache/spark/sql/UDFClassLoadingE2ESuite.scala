@@ -22,10 +22,10 @@ import java.nio.file.{Files, Paths}
 import scala.util.Properties
 
 import org.apache.spark.sql.connect.common.ProtoDataTypes
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class UDFClassLoadingE2ESuite extends RemoteSparkSession {
+class UDFClassLoadingE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   private val scalaVersion = Properties.versionNumberString
     .split("\\.")
@@ -39,13 +39,14 @@ class UDFClassLoadingE2ESuite extends RemoteSparkSession {
     new File(s"src/test/resources/udf$scalaVersion.jar").toURI.toURL
 
   private def registerUdf(session: SparkSession): Unit = {
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       serializedUdfPacket = udfByteArray,
       inputTypes = Seq(ProtoDataTypes.IntegerType),
       outputType = ProtoDataTypes.IntegerType,
       name = Some("dummyUdf"),
       nullable = true,
-      deterministic = true)
+      deterministic = true,
+      aggregate = false)
     session.registerUdf(udf.toProto)
   }
 

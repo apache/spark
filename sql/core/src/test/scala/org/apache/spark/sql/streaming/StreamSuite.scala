@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ForeachBatchUserFuncException, MemorySink}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -1185,6 +1185,17 @@ class StreamSuite extends StreamTest {
     checkAnswer(spark.sql("select * from output"), Row("true"))
   }
 
+  private val py4JInterruptedExceptions = Seq(
+    classOf[InterruptedException].getName,
+    classOf[InterruptedIOException].getName,
+    classOf[ClosedByInterruptException].getName).map { s =>
+    new py4j.Py4JException(
+      s"""
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
+        |: $s
+        |""".stripMargin)
+  }
+
   for (e <- Seq(
     new InterruptedException,
     new InterruptedIOException,
@@ -1192,16 +1203,8 @@ class StreamSuite extends StreamTest {
     new UncheckedIOException("test", new ClosedByInterruptException),
     new ExecutionException("test", new InterruptedException),
     new UncheckedExecutionException("test", new InterruptedException)) ++
-    Seq(
-      classOf[InterruptedException].getName,
-      classOf[InterruptedIOException].getName,
-      classOf[ClosedByInterruptException].getName).map { s =>
-    new py4j.Py4JException(
-      s"""
-        |py4j.protocol.Py4JJavaError: An error occurred while calling o44.count.
-        |: $s
-        |""".stripMargin)
-    }) {
+    py4JInterruptedExceptions ++
+    py4JInterruptedExceptions.map { e => ForeachBatchUserFuncException(e) }) {
     test(s"view ${e.getClass.getSimpleName} [${e.getMessage}] as a normal query stop") {
       ThrowingExceptionInCreateSource.createSourceLatch = new CountDownLatch(1)
       ThrowingExceptionInCreateSource.exception = e
@@ -1322,6 +1325,36 @@ class StreamSuite extends StreamTest {
         }
       }
     }
+  }
+
+  test("isInterruptionException should correctly unwrap classic py4j InterruptedException") {
+    val e1 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o1073599.sql.
+        |: java.util.concurrent.ExecutionException: java.lang.InterruptedException
+        |""".stripMargin)
+    val febError1 = ForeachBatchUserFuncException(e1)
+    assert(StreamExecution.isInterruptionException(febError1, spark.sparkContext))
+
+    // scalastyle:off line.size.limit
+    val e2 = new py4j.Py4JException(
+      """
+        |py4j.protocol.Py4JJavaError: An error occurred while calling o2141502.saveAsTable.
+        |: org.apache.spark.SparkException: Job aborted.
+        |at org.apache.spark.sql.errors.QueryExecutionErrors$.jobAbortedError(QueryExecutionErrors.scala:882)
+        |at org.apache.spark.sql.execution.datasources.FileFormatWriter$.$anonfun$write$1(FileFormatWriter.scala:334)
+        |<REDACTED STACK TRACE>
+        |org.apache.spark.sql.execution.streaming.StreamExecution.withAttributionTags(StreamExecution.scala:82)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution.org$apache$spark$sql$execution$streaming$StreamExecution$$runStream(StreamExecution.scala:339)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.$anonfun$run$2(StreamExecution.scala:262)
+        |at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.java:23)
+        |at org.apache.spark.sql.execution.streaming.StreamExecution$$anon$1.run(StreamExecution.scala:262)
+        |*Caused by: java.lang.InterruptedException
+        |at java.util.concurrent.locks.AbstractQueuedSynchronizer.doAcquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1000)*
+        |""".stripMargin)
+    // scalastyle:on line.size.limit
+    val febError2 = ForeachBatchUserFuncException(e2)
+    assert(StreamExecution.isInterruptionException(febError2, spark.sparkContext))
   }
 }
 
