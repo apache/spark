@@ -894,3 +894,11 @@ org.apache.spark.SparkNumberFormatException
     "fragment" : "POSITIVE(\"invalid\")"
   } ]
 }
+
+
+-- !query
+SELECT POSITIVE(null)
+-- !query schema
+struct<(+ NULL):double>
+-- !query output
+NULL

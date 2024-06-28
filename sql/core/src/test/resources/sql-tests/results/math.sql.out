@@ -573,3 +573,11 @@ SELECT POSITIVE("invalid")
 struct<(+ invalid):double>
 -- !query output
 NULL
+
+
+-- !query
+SELECT POSITIVE(null)
+-- !query schema
+struct<(+ NULL):double>
+-- !query output
+NULL

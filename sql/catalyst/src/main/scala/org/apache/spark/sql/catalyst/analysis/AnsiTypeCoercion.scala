@@ -242,6 +242,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case Abs(e @ StringTypeExpression(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
       case m @ UnaryMinus(e @ StringTypeExpression(), _) =>
         m.withNewChildren(Seq(Cast(e, DoubleType)))
+      case UnaryPositive(e @ StringTypeExpression()) => UnaryPositive(Cast(e, DoubleType))
 
       case d @ DateAdd(left @ StringTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))

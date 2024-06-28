@@ -501,3 +501,10 @@ SELECT POSITIVE("invalid")
 -- !query analysis
 Project [positive(cast(invalid as double)) AS (+ invalid)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(null)
+-- !query analysis
+Project [positive(cast(null as double)) AS (+ NULL)#x]
++- OneRowRelation
