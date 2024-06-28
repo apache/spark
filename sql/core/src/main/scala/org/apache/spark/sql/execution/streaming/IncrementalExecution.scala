@@ -454,9 +454,9 @@ class IncrementalExecution(
               new SerializableConfiguration(hadoopConf))
             val opMetadataList = reader.allOperatorStateMetadata
             ret = opMetadataList.map {
-              case OperatorStateMetadataV1(operatorInfo, _) =>
+              case (OperatorStateMetadataV1(operatorInfo, _), _) =>
                 operatorInfo.operatorId -> operatorInfo.operatorName
-              case OperatorStateMetadataV2(operatorInfo, _, _) =>
+              case (OperatorStateMetadataV2(operatorInfo, _, _), _) =>
                 operatorInfo.operatorId -> operatorInfo.operatorName
             }.toMap
           } catch {

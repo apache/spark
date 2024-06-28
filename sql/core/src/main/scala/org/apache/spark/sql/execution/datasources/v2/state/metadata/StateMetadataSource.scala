@@ -197,26 +197,29 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
-  private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
+  private[sql] def allOperatorStateMetadata: Array[(OperatorStateMetadata, Long)] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
       .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
     opIds.flatMap { opId =>
       val operatorIdPath = new Path(stateDir, opId.toString)
-      // check all OperatorStateMetadataV2
+      // check if OperatorStateMetadataV2 path exists, if it does, read it
+      // otherwise, fall back to OperatorStateMetadataV1
       val operatorStateMetadataV2Path = OperatorStateMetadataV2.metadataFilePath(operatorIdPath)
       if (fileManager.exists(operatorStateMetadataV2Path)) {
         val operatorStateMetadataLog = new OperatorStateMetadataLog(
           hadoopConf, operatorStateMetadataV2Path.toString)
-        operatorStateMetadataLog.listBatchesOnDisk.flatMap(operatorStateMetadataLog.get)
+        operatorStateMetadataLog.listBatchesOnDisk.flatMap { batchId =>
+          operatorStateMetadataLog.get(batchId).map((_, batchId))
+        }
       } else {
-        Array(new OperatorStateMetadataReader(operatorIdPath, hadoopConf).read())
+        Array((new OperatorStateMetadataReader(operatorIdPath, hadoopConf).read(), -1L))
       }
     }
   }
 
   private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
-    allOperatorStateMetadata.flatMap { operatorStateMetadata =>
+    allOperatorStateMetadata.flatMap { case (operatorStateMetadata, batchId) =>
       require(operatorStateMetadata.version == 1 || operatorStateMetadata.version == 2)
       operatorStateMetadata match {
         case v1: OperatorStateMetadataV1 =>
@@ -237,8 +240,8 @@ class StateMetadataPartitionReader(
               v2.operatorInfo.operatorName,
               stateStoreMetadata.storeName,
               stateStoreMetadata.numPartitions,
-              if (batchIds.nonEmpty) batchIds.head else -1,
-              if (batchIds.nonEmpty) batchIds.last else -1,
+              batchId,
+              batchId,
               stateStoreMetadata.numColsPrefixKey,
               v2.operatorPropertiesJson
             )
