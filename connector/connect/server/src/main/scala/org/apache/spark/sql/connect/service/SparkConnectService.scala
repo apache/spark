@@ -200,20 +200,6 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
-  override def fetchErrorDetails(
-      request: proto.FetchErrorDetailsRequest,
-      responseObserver: StreamObserver[proto.FetchErrorDetailsResponse]): Unit = {
-    try {
-      new SparkConnectFetchErrorDetailsHandler(responseObserver).handle(request)
-    } catch {
-      ErrorUtils.handleError(
-        "getErrorInfo",
-        observer = responseObserver,
-        userId = request.getUserContext.getUserId,
-        sessionId = request.getSessionId)
-    }
-  }
-
   private def methodWithCustomMarshallers(methodDesc: MethodDescriptor[MessageLite, MessageLite])
       : MethodDescriptor[MessageLite, MessageLite] = {
     val recursionLimit =
