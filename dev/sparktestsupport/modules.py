@@ -1393,30 +1393,30 @@ pyspark_pandas_connect_part4 = Module(
     name="pyspark-pandas-connect-part4",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
-        "python/pyspark/pandas",
+      "python/pyspark/pandas",
     ],
     python_test_goals=[
-        # pandas-on-Spark unittests
-        "pyspark.pandas.tests.connect.groupby.test_parity_index",
-        "pyspark.pandas.tests.connect.groupby.test_parity_describe",
-        "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
-        "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
-        "pyspark.pandas.tests.connect.groupby.test_parity_grouping",
-        "pyspark.pandas.tests.connect.groupby.test_parity_missing",
-        "pyspark.pandas.tests.connect.groupby.test_parity_nlargest_nsmallest",
-        "pyspark.pandas.tests.connect.groupby.test_parity_raises",
-        "pyspark.pandas.tests.connect.groupby.test_parity_rank",
-        "pyspark.pandas.tests.connect.groupby.test_parity_size",
-        "pyspark.pandas.tests.connect.groupby.test_parity_value_counts",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_adv",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_ddof",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_func",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_prod",
+      # pandas-on-Spark unittests
+      "pyspark.pandas.tests.connect.groupby.test_parity_index",
+      "pyspark.pandas.tests.connect.groupby.test_parity_describe",
+      "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
+      "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
+      "pyspark.pandas.tests.connect.groupby.test_parity_grouping",
+      "pyspark.pandas.tests.connect.groupby.test_parity_missing",
+      "pyspark.pandas.tests.connect.groupby.test_parity_nlargest_nsmallest",
+      "pyspark.pandas.tests.connect.groupby.test_parity_raises",
+      "pyspark.pandas.tests.connect.groupby.test_parity_rank",
+      "pyspark.pandas.tests.connect.groupby.test_parity_size",
+      "pyspark.pandas.tests.connect.groupby.test_parity_value_counts",
+      "pyspark.pandas.tests.connect.groupby.test_parity_stat",
+      "pyspark.pandas.tests.connect.groupby.test_parity_stat_adv",
+      "pyspark.pandas.tests.connect.groupby.test_parity_stat_ddof",
+      "pyspark.pandas.tests.connect.groupby.test_parity_stat_func",
+      "pyspark.pandas.tests.connect.groupby.test_parity_stat_prod",
     ],
     excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
+      "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+      # they aren't available there
     ],
 )
 
