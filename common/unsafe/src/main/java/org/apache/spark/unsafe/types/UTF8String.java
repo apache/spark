@@ -23,7 +23,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -59,7 +58,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private Object base;
   private long offset;
   private int numBytes;
-  private AtomicInteger numChars = new AtomicInteger(-1);
+  private volatile int numChars = -1;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -255,8 +254,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of code points in it.
    */
   public int numChars() {
-    numChars.compareAndSet(-1, getNumChars());
-    return numChars.get();
+    if (numChars == -1) numChars = getNumChars();
+    return numChars;
   }
 
   /**
