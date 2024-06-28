@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -202,9 +202,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
-    val tree = parseScript(batch)
-    assert(tree.collection.length == 5)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    val e = intercept[SparkException] {
+      parseScript(batch)
+    }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessage.contains("Both labels should be same."))
+  }
+
+  test("compound: endlLabel") {
+    val batch =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val e = intercept[SparkException] {
+      parseScript(batch)
+    }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessage.contains("End label can't exist without begin label."))
   }
 
   // Helper methods
