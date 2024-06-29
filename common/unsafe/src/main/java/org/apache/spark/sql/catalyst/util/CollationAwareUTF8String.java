@@ -79,8 +79,8 @@ public class CollationAwareUTF8String {
       int startPos) {
     assert startPos >= 0;
     for (int len = 0; len <= target.numChars() - startPos; ++len) {
-      if (lowerCaseCodePoints(target.substring(startPos, startPos + len)).
-          equals(lowercasePattern)) {
+      if (lowerCaseCodePoints(target.substring(startPos, startPos + len))
+          .equals(lowercasePattern)) {
         return len;
       }
     }
