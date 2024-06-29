@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.{Map => JMap}
+import java.util.{Collections, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -57,10 +57,22 @@ import org.apache.spark.util.collection.OpenHashSet
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
-    var _blockManager: BlockManager = null,
-    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]] = JMap.of())
+    var _blockManager: BlockManager,
+    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]])
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
+
+  def this(conf: SparkConf) = {
+    this(conf, null, Collections.emptyMap())
+  }
+
+  def this(conf: SparkConf, _blockManager: BlockManager) = {
+    this(conf, _blockManager, Collections.emptyMap())
+  }
+
+  def this(conf: SparkConf, taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]]) = {
+    this(conf, null, taskIdMapsForShuffle)
+  }
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
