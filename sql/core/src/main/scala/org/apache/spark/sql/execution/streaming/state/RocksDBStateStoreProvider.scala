@@ -369,6 +369,14 @@ private[sql] class RocksDBStateStoreProvider
     if (!condition) { throw new IllegalStateException(msg) }
   }
 
+  /**
+   * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
+   * If snapshot for snapshotVersion does not exist, an error will be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   * @return [[StateStore]]
+   */
   override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
     try {
       if (snapshotVersion < 1) {
