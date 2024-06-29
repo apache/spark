@@ -99,9 +99,11 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  private lazy val cachedMessageWithContext: MessageWithContext = messageWithContext
 
-  def context: java.util.HashMap[String, String] = messageWithContext.context
+  def message: String = cachedMessageWithContext.message
+
+  def context: java.util.HashMap[String, String] = cachedMessageWithContext.context
 }
 
 /**

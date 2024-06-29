@@ -1764,8 +1764,10 @@ class SparkConnectPlanner(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
       envVars = Maps.newHashMap(),
-      pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
+      // Merge the user specified includes with the includes managed by the artifact manager.
+      pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++
+        sessionHolder.artifactManager.getPythonIncludes).asJava,
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
