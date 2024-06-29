@@ -90,7 +90,6 @@
     </dependency>
 
     <!-- Not needed by the test code, but referenced by SparkSubmit which is used by the tests. -->
-    <!--
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
@@ -104,7 +103,6 @@
       <version>${hadoop.version}</version>
       <scope>test</scope>
     </dependency>
-    -->
   </dependencies>
 
   <build>
