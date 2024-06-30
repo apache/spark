@@ -5474,8 +5474,8 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch first value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if first value is null then look for first non-null value.
+    ignorenulls : bool
+        if first value is null then look for first non-null value. ``False``` by default.
 
     Returns
     -------
@@ -5747,8 +5747,8 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch last value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if last value is null then look for non-null value.
+    ignorenulls : bool
+        if last value is null then look for non-null value. ``False``` by default.
 
     Returns
     -------
