@@ -127,7 +127,11 @@ class SparkConnectDataFrameDebug(ReusedConnectTestCase):
 
     def test_query_with_debug_and_other_ops(self):
         a: DataFrame = self.spark.range(100).repartition(10).groupBy("id").count()
-        b = a.debug(DataDebugOp.count_distinct_values("id"))
+        b = a.debug(
+            DataDebugOp.count_distinct_values("id"),
+            DataDebugOp.max_value("id"),
+            DataDebugOp.min_value("id"),
+        )
         b.collect()
         ei = b.executionInfo
         self.assertIsNotNone(ei, "The query execution must be set after the action is executed")
@@ -138,13 +142,17 @@ class SparkConnectDataFrameDebug(ReusedConnectTestCase):
         )
 
         o1 = ei.observations[0]  # count_values
-        self.assertEqual(2, len(o1.get.values()), "Two metrics were collected")
+        self.assertEqual(
+            4, len(o1.get.values()), "Four metrics were collected (count, min, max. distinct)"
+        )
         self.assertEqual(o1.get["count_values"], 100, "The count values must be 100")
         self.assertGreater(
             o1.get["count_distinct_values_id"],
             90,
             "The approx count distinct values must be roughly",
         )
+        self.assertEqual(o1.get["max_value_id"], 99, "The max value must be 99")
+        self.assertEqual(o1.get["min_value_id"], 0, "The min value must be 0")
 
 
 if __name__ == "__main__":
