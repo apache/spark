@@ -369,7 +369,22 @@ object functions {
    * @since 4.0.0
    */
   def collect_list(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("collect_list", e, lit(ignoreNulls))
+    collect_list(e, lit(ignoreNulls))
+
+  /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * The parameter ignoreNulls controls if nulls should be excluded from the result.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def collect_list(e: Column, ignoreNulls: Column): Column =
+    Column.fn("collect_list", e, ignoreNulls)
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
@@ -425,7 +440,22 @@ object functions {
    * @since 4.0.0
    */
   def collect_set(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("collect_set", e, lit(ignoreNulls))
+    collect_set(e, lit(ignoreNulls))
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated
+   *
+   * The parameter ignoreNulls controls if nulls should be excluded from the result.
+   *
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def collect_set(e: Column, ignoreNulls: Column): Column =
+    Column.fn("collect_set", e, ignoreNulls)
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
