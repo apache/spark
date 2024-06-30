@@ -768,6 +768,9 @@ public final class CollationSupport {
   /**
    * Other collation-aware expressions.
    */
+  public static Object getComplexCollationKey(Object o, StructType schema) {
+
+  }
 
   // TODO: Add other collation-aware expressions.
 
