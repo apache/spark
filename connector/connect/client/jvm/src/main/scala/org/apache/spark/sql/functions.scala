@@ -387,21 +387,6 @@ object functions {
     Column.fn("collect_list", e, ignoreNulls)
 
   /**
-   * Aggregate function: returns a list of objects with duplicates.
-   *
-   * The parameter ignoreNulls controls if nulls should be excluded from the result.
-   *
-   * @note
-   *   The function is non-deterministic because the order of collected results depends on the
-   *   order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_list(columnName: String, ignoreNulls: Boolean): Column =
-    collect_list(Column(columnName), ignoreNulls)
-
-  /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated and nulls
    * excluded.
    *
@@ -456,19 +441,6 @@ object functions {
    */
   def collect_set(e: Column, ignoreNulls: Column): Column =
     Column.fn("collect_set", e, ignoreNulls)
-
-  /**
-   * Aggregate function: returns a set of objects with duplicate elements eliminated.
-   *
-   * @note
-   *   The function is non-deterministic because the order of collected results depends on the
-   *   order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_set(columnName: String, ignoreNulls: Boolean): Column =
-    collect_set(Column(columnName), ignoreNulls)
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
