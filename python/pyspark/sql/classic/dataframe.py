@@ -1843,6 +1843,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             message_parameters={"member": "queryExecution"},
         )
 
+    def debug(self) -> "DataFrame":
+        raise PySparkValueError(
+            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            message_parameters={"member": "debug"},
+        )
+
 
 def _to_scala_map(sc: "SparkContext", jm: Dict) -> "JavaObject":
     """

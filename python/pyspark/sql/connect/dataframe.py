@@ -50,8 +50,10 @@ import json
 import warnings
 from collections.abc import Iterable
 import functools
+from uuid import uuid4
 
 from pyspark import _NoValue
+from pyspark.errors.utils import call_site_stack
 from pyspark._globals import _NoValueType
 from pyspark.util import is_remote_only
 from pyspark.sql.types import Row, StructType, _create_row
@@ -84,6 +86,7 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.metrics import DataDebugOp
 
 
 if TYPE_CHECKING:
@@ -101,7 +104,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
-    from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.metrics import ExecutionInfo, DataDebugOp
 
 
 class DataFrame(ParentDataFrame):
@@ -2227,7 +2230,37 @@ class DataFrame(ParentDataFrame):
 
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
+        # Update the observations if needed.
+        if self._plan.observations:
+            if self._execution_info and not self._execution_info.observations:
+                self._execution_info.setObservations(self._plan.observations)
         return self._execution_info
+
+    def debug(self, *other: List["DataDebugOp"]) -> "DataFrame":
+        # Needs to be imported here to avoid the recursive import.
+        from pyspark.sql.connect.observation import Observation
+
+        # Extract the stack
+        stack = call_site_stack(depth=10)
+        frames = [f"{s.filename}:{s.lineno}@{s.function}" for s in stack]
+
+        # Check that all elements are of type 'DataDebugOp'
+        for op in other:
+            if not isinstance(op, DataDebugOp):
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATADEBUGOP",
+                    message_parameters={"arg_name": "other", "arg_type": type(op).__name__},
+                )
+
+        # Capture the expressions for the debug op.
+        ops: List[DataDebugOp] = [
+            DataDebugOp.count_values(),
+        ] + list(other)
+        exprs = list(map(lambda x: x(), ops))
+
+        # Create the Observation that captures all the expressions for this "debug" op.
+        obs = Observation(name=f"debug:{uuid4()}", call_site=frames, plan_id=self._plan.plan_id)
+        return self.observe(obs, *exprs)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

@@ -6307,6 +6307,21 @@ class DataFrame:
         """
         ...
 
+    def debug(self) -> "DataFrame":
+        """
+        Helper function that allows to debug the query execution with customer observations.
+
+        Essentially, this method is a wrapper around the `observe()` method, but simplifies
+        the usage. In addition, it makes sure that the captured metrics are properly collected
+        as part of the execution info.
+
+        .. versionadded:: 4.0.0
+        Returns
+        -------
+        DataFrame instance with the observations added
+        """
+        ...
+
 
 class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
