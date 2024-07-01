@@ -44,13 +44,16 @@ case class ColumnFamilySchemaV1(
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    multipleValuesPerKey: Boolean) extends ColumnFamilySchema {
+    multipleValuesPerKey: Boolean,
+    valueEncoder: StructType,
+    userKeyEncoder: Option[StructType] = None) extends ColumnFamilySchema {
   def jsonValue: JsonAST.JObject = {
     ("columnFamilyName" -> JString(columnFamilyName)) ~
-      ("keySchema" -> keySchema.json) ~
-      ("valueSchema" -> valueSchema.json) ~
+      ("keySchema" -> JString(keySchema.json)) ~
+      ("valueSchema" -> JString(valueSchema.json)) ~
       ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
-      ("multipleValuesPerKey" -> JBool(multipleValuesPerKey))
+      ("multipleValuesPerKey" -> JBool(multipleValuesPerKey)) ~
+      ("valueEncoder" -> JString(valueEncoder.json))
   }
 
   def json: String = {
@@ -71,7 +74,9 @@ object ColumnFamilySchemaV1 {
       StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
       KeyStateEncoderSpec.fromJson(colFamilyMap("keyStateEncoderSpec")
         .asInstanceOf[Map[String, Any]]),
-      colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean]
+      colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean],
+      StructType.fromString(colFamilyMap("valueEncoder").asInstanceOf[String]),
+      colFamilyMap.get("userKeyEncoder").map(_.asInstanceOf[String]).map(StructType.fromString)
     )
   }
 }

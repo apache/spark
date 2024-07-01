@@ -24,13 +24,14 @@ import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoP
 import org.apache.spark.sql.streaming.ValueState
 
 object ValueStateImpl {
-  def columnFamilySchema(stateName: String): ColumnFamilySchemaV1 = {
+  def columnFamilySchema[T](stateName: String, valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
       VALUE_ROW_SCHEMA,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-      false)
+      false,
+      valueEncoder.schema)
   }
 }
 /**

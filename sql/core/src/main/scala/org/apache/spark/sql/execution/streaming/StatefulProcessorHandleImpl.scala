@@ -353,7 +353,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
    */
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName)
+    val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -374,7 +374,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName)
+    val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -391,7 +391,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
    */
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    val colFamilySchema = ListStateImpl.columnFamilySchema(stateName)
+    val colFamilySchema = ListStateImpl.columnFamilySchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -412,7 +412,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName)
+    val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -433,7 +433,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    val colFamilySchema = MapStateImpl.columnFamilySchema(stateName)
+    val colFamilySchema = MapStateImpl.columnFamilySchema(stateName, userKeyEnc, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -456,7 +456,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName)
+    val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName, userKeyEnc, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }

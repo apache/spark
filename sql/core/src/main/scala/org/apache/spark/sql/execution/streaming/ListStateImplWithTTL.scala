@@ -24,13 +24,14 @@ import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
 object ListStateImplWithTTL {
-  def columnFamilySchema(stateName: String): ColumnFamilySchemaV1 = {
+  def columnFamilySchema[T](stateName: String, valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
       VALUE_ROW_SCHEMA_WITH_TTL,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-      true)
+      true,
+      valueEncoder.schema)
   }
 }
 /**

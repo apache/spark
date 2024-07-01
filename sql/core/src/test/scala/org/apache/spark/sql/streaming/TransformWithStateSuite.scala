@@ -835,7 +835,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           KEY_ROW_SCHEMA,
           VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false
+          false, Encoders.scalaLong.schema, None
         )
         val actual = columnFamilySchemas.head.asInstanceOf[ColumnFamilySchemaV1]
         assert(expected == actual)
@@ -873,14 +873,18 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             KEY_ROW_SCHEMA,
             VALUE_ROW_SCHEMA,
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false
+            false,
+            Encoders.scalaLong.schema,
+            None
           ),
           ColumnFamilySchemaV1(
               "mostRecent",
               KEY_ROW_SCHEMA,
               VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-              false
+              false,
+              Encoders.STRING.schema,
+              None
           )
         )
         val actual = columnFamilySchemas.map(_.asInstanceOf[ColumnFamilySchemaV1])
