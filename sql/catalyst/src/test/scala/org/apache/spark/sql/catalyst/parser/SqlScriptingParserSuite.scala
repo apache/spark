@@ -173,7 +173,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END""".stripMargin
     val tree = parseScript(batch)
     assert(tree.collection.length == 5)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.equals("lbl"))
   }
 
@@ -189,7 +189,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |END lbl""".stripMargin
     val tree = parseScript(batch)
     assert(tree.collection.length == 5)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.equals("lbl"))
   }
 
