@@ -314,31 +314,31 @@ object LogicalPlanIntegrity {
    * in plan output. Returns the error message if the check does not pass.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Option[String] = {
-    val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
-      // NOTE: we still need to filter resolved expressions here because the output of
-      // some resolved logical plans can have unresolved references,
-      // e.g., outer references in `ExistenceJoin`.
-      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType.asNullable) }
-    }.flatten
+    val exprIds = mutable.HashMap.empty[ExprId, mutable.HashSet[DataType]]
+    val ignoredExprIds = mutable.HashSet.empty[ExprId]
 
-    val ignoredExprIds = plan.collect {
+    plan.foreach {
       // NOTE: `Union` currently reuses input `ExprId`s for output references, but we cannot
       // simply modify the code for assigning new `ExprId`s in `Union#output` because
       // the modification will make breaking changes (See SPARK-32741(#29585)).
       // So, this check just ignores the `exprId`s of `Union` output.
-      case u: Union if u.resolved => u.output.map(_.exprId)
-    }.flatten.toSet
+      case u: Union if u.resolved =>
+        ignoredExprIds ++= u.output.map(_.exprId)
+      case p if canGetOutputAttrs(p) =>
+        // NOTE: we still need to filter resolved expressions here because the output of
+        // some resolved logical plans can have unresolved references,
+        // e.g., outer references in `ExistenceJoin`.
+        p.output.filter(_.resolved).foreach { a =>
+          val prevTypes = exprIds.getOrElseUpdate(a.exprId, mutable.HashSet.empty[DataType])
+          prevTypes += a.dataType.asNullable
+        }
+      case _ =>
+    }
 
-    val groupedDataTypesByExprId = exprIds.filterNot { case (exprId, _) =>
-      ignoredExprIds.contains(exprId)
-    }.groupBy(_._1).values.map(_.distinct)
-
-    groupedDataTypesByExprId.collectFirst {
-      case group if group.length > 1 =>
-        val exprId = group.head._1
-        val types = group.map(_._2.sql)
+    exprIds.collectFirst {
+      case (exprId, types) if !ignoredExprIds.contains(exprId) && types.size > 1 =>
         s"Multiple attributes have the same expression ID ${exprId.id} but different data types: " +
-          types.mkString(", ") + ". The plan tree:\n" + plan.treeString
+          types.map(_.sql).mkString(", ") + ". The plan tree:\n" + plan.treeString
     }
   }
 
