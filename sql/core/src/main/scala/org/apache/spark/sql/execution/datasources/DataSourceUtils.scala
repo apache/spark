@@ -106,19 +106,6 @@ object DataSourceUtils extends PredicateHelper {
     }
   }
 
-  /**
-   * Verify that if the schema has collated types the relation supports them.
-   */
-  def verifyCollations(relation: CreatableRelationProvider, schema: StructType): Unit = {
-    schema.foreach { field =>
-      if (SchemaUtils.hasNonUTF8BinaryCollation(schema) && !relation.supportCollations) {
-        throw QueryCompilationErrors.collationsUnsupportedByDataSourceError(
-          relation.toString, field)
-      }
-    }
-  }
-
-
   // SPARK-24626: Metadata files and temporary files should not be
   // counted as data files, so that they shouldn't participate in tasks like
   // location size calculation.

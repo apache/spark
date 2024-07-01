@@ -157,14 +157,14 @@ abstract class DataSourceCollationSuite extends QueryTest
   }
 }
 
-class V1DataSourceCollationSuite extends DataSourceCollationSuite {
+class DataSourceCollationV1Suite extends DataSourceCollationSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, dataSourceMap.keys.mkString(","))
 }
 
-class V2DataSourceCollationSuite extends DataSourceCollationSuite {
+class DataSourceCollationV2Suite extends DataSourceCollationSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
