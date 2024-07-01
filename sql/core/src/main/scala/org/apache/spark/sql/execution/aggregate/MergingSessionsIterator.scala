@@ -134,7 +134,7 @@ class MergingSessionsIterator(
   } catch {
     case e: Exception =>
       errorOnIterator = true
-      throw e
+      throw SparkException.internalError(e.getMessage)
   }
 
   /** Processes rows in the current group. It will stop when it find a new group. */
