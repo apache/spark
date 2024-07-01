@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -180,7 +178,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.equals("lbl"))
   }
 
-  test("compound: beginLabel + endlLabel") {
+  test("compound: beginLabel + endLabel") {
     val batch =
       """
         |lbl: BEGIN
@@ -196,7 +194,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.equals("lbl"))
   }
 
-  test("compound: beginLabel + endlLabel with different values") {
+  test("compound: beginLabel + endLabel with different values") {
     val batch =
       """
         |lbl_begin: BEGIN
@@ -213,7 +211,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains("Begin label lbl_begin does not match end label lbl_end."))
   }
 
-  test("compound: endlLabel") {
+  test("compound: endLabel") {
     val batch =
       """
         |BEGIN
