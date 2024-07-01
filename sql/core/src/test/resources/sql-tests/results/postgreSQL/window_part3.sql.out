@@ -353,20 +353,14 @@ SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
+  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_EXECUTOR",
+  "sqlState" : "XXKD0",
   "messageParameters" : {
-    "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 58,
-    "stopIndex" : 67,
-    "fragment" : "GROUP BY 1"
-  } ]
+    "reason" : "Special expressions are placed in the wrong plan: Project [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, count(1)#xL]\n+- Project [count(1)#xL, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Window [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [1 ASC NULLS FIRST]\n      +- Aggregate [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$()))], [count(1) AS count(1)#xL]\n         +- SubqueryAlias spark_catalog.default.empsalary\n            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet\n\nPrevious schema:RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, count(1)#xL\nPrevious plan: Project [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, count(1)#xL]\n+- Project [count(1)#xL, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]\n   +- Window [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [1 ASC NULLS FIRST]\n      +- Aggregate [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$()))], [count(1) AS count(1)#xL]\n         +- SubqueryAlias spark_catalog.default.empsalary\n            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet\n",
+    "ruleExecutor" : "org.apache.spark.sql.internal.BaseSessionStateBuilder$$anon$2"
+  }
 }
 
 
