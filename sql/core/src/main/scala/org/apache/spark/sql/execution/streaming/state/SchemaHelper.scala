@@ -40,11 +40,11 @@ sealed trait ColumnFamilySchema extends Serializable {
 }
 
 case class ColumnFamilySchemaV1(
-    val columnFamilyName: String,
-    val keySchema: StructType,
-    val valueSchema: StructType,
-    val keyStateEncoderSpec: KeyStateEncoderSpec,
-    val multipleValuesPerKey: Boolean) extends ColumnFamilySchema {
+    columnFamilyName: String,
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    multipleValuesPerKey: Boolean) extends ColumnFamilySchema {
   def jsonValue: JsonAST.JObject = {
     ("columnFamilyName" -> JString(columnFamilyName)) ~
       ("keySchema" -> keySchema.json) ~

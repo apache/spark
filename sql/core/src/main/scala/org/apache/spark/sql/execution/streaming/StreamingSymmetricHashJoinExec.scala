@@ -247,7 +247,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-    Option[String] = {
+    Array[String] = {
     var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
@@ -262,7 +262,7 @@ case class StreamingSymmetricHashJoinExec(
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
     }
-    None
+    Array.empty
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

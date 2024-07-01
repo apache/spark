@@ -52,8 +52,7 @@ case class StatefulOperatorStateInfo(
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
-    numPartitions: Int,
-    stateSchemaPath: Option[String] = None) {
+    numPartitions: Int) {
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
       s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
@@ -78,7 +77,7 @@ trait StatefulOperator extends SparkPlan {
   // schema changes in the future. Runs as part of a planning rule on the driver.
   // Returns the schema file path for operators that write this to the metadata file,
   // otherwise None
-  def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Option[String]
+  def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Array[String]
 }
 
 /**
@@ -434,10 +433,10 @@ case class StateStoreRestoreExec(
     keyExpressions, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-    Option[String] = {
+    Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
-    None
+    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -503,10 +502,10 @@ case class StateStoreSaveExec(
     keyExpressions, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-    Option[String] = {
+    Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
-    None
+    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -714,10 +713,10 @@ case class SessionWindowStateStoreRestoreExec(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-  Option[String] = {
+  Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
-    None
+    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -803,10 +802,10 @@ case class SessionWindowStateStoreSaveExec(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-  Option[String] = {
+  Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
-    None
+    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1118,10 +1117,10 @@ case class StreamingDeduplicateExec(
     copy(child = newChild)
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-  Option[String] = {
+  Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
-    None
+    Array.empty
   }
 }
 
@@ -1195,10 +1194,10 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override def shortName: String = "dedupeWithinWatermark"
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-  Option[String] = {
+  Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
-    None
+    Array.empty
   }
 
   override protected def withNewChildInternal(

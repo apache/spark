@@ -25,6 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{PRE_INIT, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
@@ -48,7 +49,7 @@ object ImplicitGroupingKeyTracker {
  */
 object StatefulProcessorHandleState extends Enumeration {
   type StatefulProcessorHandleState = Value
-  val CREATED, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
+  val CREATED, PRE_INIT, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
 }
 
 class QueryInfoImpl(
@@ -325,6 +326,21 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
   private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
 
+  private var currState: StatefulProcessorHandleState = PRE_INIT
+
+  def setHandleState(newState: StatefulProcessorHandleState): Unit = {
+    currState = newState
+  }
+
+  def getHandleState: StatefulProcessorHandleState = currState
+
+  private def verifyStateVarOperations(operationType: String): Unit = {
+    if (currState != PRE_INIT) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+        currState.toString)
+    }
+  }
+
   /**
    * Function to add the ValueState schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
@@ -336,6 +352,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
     val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null
@@ -356,6 +373,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
     val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null
@@ -372,6 +390,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
    * @return - instance of ListState of type T that can be used to store state persistently
    */
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
+    verifyStateVarOperations("get_list_state")
     val colFamilySchema = ListStateImpl.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null
@@ -392,6 +411,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
+    verifyStateVarOperations("get_list_state")
     val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null
@@ -412,6 +432,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       stateName: String,
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
     val colFamilySchema = MapStateImpl.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null
@@ -434,6 +455,7 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
     val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName)
     columnFamilySchemas.add(colFamilySchema)
     null

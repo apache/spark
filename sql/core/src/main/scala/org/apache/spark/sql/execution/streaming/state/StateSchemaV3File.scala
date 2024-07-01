@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
@@ -25,7 +25,7 @@ import scala.io.{Source => IOSource}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1}
+import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
 import org.apache.spark.sql.internal.SQLConf
 
 class StateSchemaV3File(

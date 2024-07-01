@@ -27,8 +27,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.{JInt, JsonAST, JString}
-import org.json4s.JsonAST.JObject
+import org.json4s.{JInt, JString}
+import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
@@ -283,7 +283,7 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
 }
 
 sealed trait KeyStateEncoderSpec {
-  def jsonValue: JsonAST.JObject
+  def jsonValue: JValue
   def json: String = compact(render(jsonValue))
 }
 
@@ -306,7 +306,7 @@ object KeyStateEncoderSpec {
 }
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
-  override def jsonValue: JsonAST.JObject = {
+  override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec")) ~
       ("keySchema" -> JString(keySchema.json))
   }
@@ -319,7 +319,7 @@ case class PrefixKeyScanStateEncoderSpec(
     throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
   }
 
-  override def jsonValue: JsonAST.JObject = {
+  override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
       ("keySchema" -> JString(keySchema.json)) ~
       ("numColsPrefixKey" -> JInt(numColsPrefixKey))
@@ -328,13 +328,13 @@ case class PrefixKeyScanStateEncoderSpec(
 
 /** Encodes rows so that they can be range-scanned based on orderingOrdinals */
 case class RangeKeyScanStateEncoderSpec(
-                                         keySchema: StructType,
-                                         orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
+    keySchema: StructType,
+    orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
   if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
   }
 
-  override def jsonValue: JObject = {
+  override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
       ("keySchema" -> JString(keySchema.json)) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))

@@ -187,32 +187,22 @@ class IncrementalExecution(
     }
   }
 
-  object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
+  // Planning rule used to record the state schema for the first run and validate state schema
+  // changes across query runs.
+  object StateSchemaValidationRuleAndStateMetadata extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      // In the case of TransformWithStateExec, we want to collect this StateSchema
+      // filepath, and write this path out in the OperatorStateMetadata file
       case stateStoreWriter: StateStoreWriter if isFirstBatch =>
+        val stateSchemaPaths =
+          stateStoreWriter.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
+        // write out the state schema paths to the metadata file
         val metadata = stateStoreWriter.operatorStateMetadata()
+        // TODO: Populate metadata with stateSchemaPaths if is v2
         val metadataWriter = new OperatorStateMetadataWriter(new Path(
           checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
         metadataWriter.write(metadata)
         stateStoreWriter
-    }
-  }
-
-  // Planning rule used to record the state schema for the first run and validate state schema
-  // changes across query runs.
-  object StateSchemaValidationRule extends SparkPlanPartialRule {
-    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      // In the case of TransformWithStateExec, we want to collect this StateSchema
-      // filepath, and write this path out in the OperatorStateMetadata file
-      case tws: TransformWithStateExec if isFirstBatch =>
-        val stateSchemaPath =
-          tws.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
-        // At this point, stateInfo should always be defined
-        tws.stateInfo match {
-            case Some(stateInfo) =>
-                tws.copy(stateInfo = Some(stateInfo.copy(stateSchemaPath = stateSchemaPath)))
-            case _ => tws
-        }
       case statefulOp: StatefulOperator if isFirstBatch =>
         statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
         statefulOp
@@ -493,10 +483,9 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
 
-      // The two rules below don't change the plan but can cause the side effect that
+      // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaValidationRule.rule
-      planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+      planWithStateOpId transform StateSchemaValidationRuleAndStateMetadata.rule
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

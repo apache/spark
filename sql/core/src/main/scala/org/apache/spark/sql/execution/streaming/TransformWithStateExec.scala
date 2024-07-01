@@ -95,12 +95,19 @@ case class TransformWithStateExec(
     }
   }
 
+  /**
+   * We initialize this processor handle in the driver to run the init function
+   * and fetch the schemas of the state variables initialized in this processor.
+   * @return a new instance of the driver processor handle
+   */
   private def getDriverProcessorHandle: DriverStatefulProcessorHandleImpl = {
     val driverProcessorHandle = new DriverStatefulProcessorHandleImpl
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
     statefulProcessor.init(outputMode, timeMode)
     driverProcessorHandle
   }
+
   def getNewSchema(): List[ColumnFamilySchema] = {
     val driverProcessorHandle = getDriverProcessorHandle
     val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
@@ -362,7 +369,7 @@ case class TransformWithStateExec(
   }
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-    Option[String] = {
+    Array[String] = {
     val newColumnFamilySchemas = getNewSchema()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaFilePath().toString)
@@ -376,7 +383,7 @@ case class TransformWithStateExec(
       add(batchId, newColumnFamilySchemas)
     // purge oldest files
     schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
-    Some(schemaFile.getPathFromBatchId(batchId))
+    Array(schemaFile.getPathFromBatchId(batchId))
   }
 
   private def validateSchemas(
