@@ -66,7 +66,10 @@ private[sql] class RocksDBStateStoreProvider
       if (useVirtualColumnFamily) {
         // if use virtual column family, then use default col family, no need to create new
         // TODO how to efficiently guarantee there isn't any value conflict for different key
-        colFamilyToLongMap.putIfAbsent(colFamilyName, scala.util.Random.nextLong())
+        def getNextRandShort: Short = {
+          (scala.util.Random.nextInt(Short.MaxValue - Short.MinValue + 1) + Short.MinValue).toShort
+        }
+        colFamilyToIdMap.putIfAbsent(colFamilyName, getNextRandShort)
 
       } else {
         rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
@@ -85,7 +88,7 @@ private[sql] class RocksDBStateStoreProvider
       val value = if (useVirtualColumnFamily) {
         kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key,
-            colFamilyToLongMap.get(colFamilyName))))
+            colFamilyToIdMap.get(colFamilyName))))
       } else {
         kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key), colFamilyName))
@@ -120,7 +123,7 @@ private[sql] class RocksDBStateStoreProvider
       "that supports multiple values for a single key.")
 
       val encodedValues = if (useVirtualColumnFamily) {
-        rocksDB.get(keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)))
+        rocksDB.get(keyEncoder.encodeKey(key, colFamilyToIdMap.get(colFamilyName)))
       } else {
         rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
       }
@@ -138,7 +141,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
       val (encodedKey, physicalColFamilyName) = if (useVirtualColumnFamily) {
-        (keyEncoder.encodeKey(key, colFamilyToLongMap.get(colFamilyName)),
+        (keyEncoder.encodeKey(key, colFamilyToIdMap.get(colFamilyName)),
           StateStore.DEFAULT_COL_FAMILY_NAME)
       } else {
         (keyEncoder.encodeKey(key), colFamilyName)
@@ -152,7 +155,7 @@ private[sql] class RocksDBStateStoreProvider
       require(value != null, "Cannot put a null value")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       if (useVirtualColumnFamily) {
-        rocksDB.put(kvEncoder._1.encodeKey(key, colFamilyToLongMap.get(colFamilyName)),
+        rocksDB.put(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)),
           kvEncoder._2.encodeValue(value))
       } else {
         rocksDB.put(kvEncoder._1.encodeKey(key),
@@ -165,7 +168,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       if (useVirtualColumnFamily) {
-        rocksDB.remove(kvEncoder._1.encodeKey(key, colFamilyToLongMap.get(colFamilyName)))
+        rocksDB.remove(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)))
       } else {
         rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
       }
@@ -175,7 +178,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
       if (useVirtualColumnFamily) {
-        val cfId: Long = colFamilyToLongMap.get(colFamilyName)
+        val cfId: Short = colFamilyToIdMap.get(colFamilyName)
         rocksDB.prefixScan(getIdBytes(cfId)).map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
             kvEncoder._2.decodeValue(kv.value))
@@ -208,7 +211,7 @@ private[sql] class RocksDBStateStoreProvider
 
       val rowPair = new UnsafeRowPair()
       if (useVirtualColumnFamily) {
-        val prefix = kvEncoder._1.encodePrefixKey(prefixKey, colFamilyToLongMap.get(colFamilyName))
+        val prefix = kvEncoder._1.encodePrefixKey(prefixKey, colFamilyToIdMap.get(colFamilyName))
 
         rocksDB.prefixScan(prefix).map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
@@ -324,10 +327,9 @@ private[sql] class RocksDBStateStoreProvider
     def dbInstance(): RocksDB = rocksDB
 
     // TODO How to avoid memcpy here
-    private def getIdBytes(id: Long): Array[Byte] = {
-      // Long is fixed to be 8 bytes
-      val encodedBytes = new Array[Byte](8)
-      Platform.putLong(encodedBytes, Platform.BYTE_ARRAY_OFFSET, id)
+    private def getIdBytes(id: Short): Array[Byte] = {
+      val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, id)
       encodedBytes
     }
 
@@ -339,7 +341,7 @@ private[sql] class RocksDBStateStoreProvider
       } else {
         // TODO more efficient way to do remove col family?
         val idPrefix = getIdBytes(
-          colFamilyToLongMap.get(colFamilyName)
+          colFamilyToIdMap.get(colFamilyName)
         )
         var colFamilyExists = false
         rocksDB.prefixScan(idPrefix).foreach { kv =>
@@ -348,7 +350,7 @@ private[sql] class RocksDBStateStoreProvider
         }
         colFamilyExists
       }
-      colFamilyToLongMap.remove(colFamilyName)
+      colFamilyToIdMap.remove(colFamilyName)
       result
     }
   }
@@ -454,7 +456,7 @@ private[sql] class RocksDBStateStoreProvider
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
-  private val colFamilyToLongMap = new java.util.concurrent.ConcurrentHashMap[String, Long]
+  private val colFamilyToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
 
   private var useVirtualColumnFamily: Boolean = false
 
@@ -467,6 +469,7 @@ object RocksDBStateStoreProvider {
   // Version as a single byte that specifies the encoding of the row data in RocksDB
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
+  val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis

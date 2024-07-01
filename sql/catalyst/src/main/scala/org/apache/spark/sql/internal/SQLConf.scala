@@ -2168,15 +2168,6 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
-  val STREAMING_ROCKSDB_VIRTUAL_COL_FAMILY_ENABLED =
-    buildConf("spark.databricks.streaming.rocksDBVirtualColFamily.enabled")
-      .internal()
-      .doc("Whether structured streaming use virtual column family. Currently this is " +
-        "only supported with TransformWithState operator.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
     .doc("Running multiple runs of the same streaming query concurrently is not supported. " +
