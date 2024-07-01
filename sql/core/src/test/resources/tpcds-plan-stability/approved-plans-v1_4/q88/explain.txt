@@ -186,7 +186,7 @@
 (1) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -318,7 +318,7 @@ Results [1]: [count(1)#15 AS h8_30_to_9#16]
 (29) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19, ss_sold_date_sk#20]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -420,7 +420,7 @@ Join condition: None
 (51) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32, ss_sold_date_sk#33]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -522,7 +522,7 @@ Join condition: None
 (73) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45, ss_sold_date_sk#46]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -624,7 +624,7 @@ Join condition: None
 (95) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58, ss_sold_date_sk#59]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -726,7 +726,7 @@ Join condition: None
 (117) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71, ss_sold_date_sk#72]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -828,7 +828,7 @@ Join condition: None
 (139) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84, ss_sold_date_sk#85]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -930,7 +930,7 @@ Join condition: None
 (161) Scan parquet spark_catalog.default.store_sales
 Output [4]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97, ss_sold_date_sk#98]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/store_sales]
+Location: InMemoryFileIndex []
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
