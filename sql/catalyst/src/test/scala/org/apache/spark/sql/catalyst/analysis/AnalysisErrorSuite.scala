@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -269,7 +269,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           |""".stripMargin),
       expectedErrorClass = "MISSING_WINDOW_SPECIFICATION",
       expectedMessageParameters = Map(
-        "windowName" -> "b"))
+        "windowName" -> "b",
+        "docroot" -> SPARK_DOC_ROOT))
   }
 
   test("higher order function with filter predicate") {

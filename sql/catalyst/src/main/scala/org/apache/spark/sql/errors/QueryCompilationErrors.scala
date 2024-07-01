@@ -420,7 +420,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def windowSpecificationNotDefinedError(windowName: String): Throwable = {
     new AnalysisException(
       errorClass = "MISSING_WINDOW_SPECIFICATION",
-      messageParameters = Map("windowName" -> windowName))
+      messageParameters = Map(
+        "windowName" -> windowName,
+        "docroot" -> SPARK_DOC_ROOT)
+      )
   }
 
   def selectExprNotInGroupByError(expr: Expression, groupByAliases: Seq[Alias]): Throwable = {
