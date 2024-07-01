@@ -324,6 +324,7 @@ connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf],
     source_file_regexes=[
+        "connect",
         "connector/connect",
     ],
     build_profile_flags=["-Pconnect"],
