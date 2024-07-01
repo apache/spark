@@ -2048,14 +2048,17 @@ case class InitCap(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
-    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId)
+    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId, useICU)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId))
+    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): InitCap =

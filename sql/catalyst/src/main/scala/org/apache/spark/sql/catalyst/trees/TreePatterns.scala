@@ -96,7 +96,6 @@ object TreePattern extends Enumeration  {
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val WINDOW_TIME: Value = Value
-  val UNARY_POSITIVE: Value = Value
   val UNPIVOT: Value = Value
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
