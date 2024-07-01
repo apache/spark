@@ -4651,7 +4651,7 @@ def collect_set(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     | Ana|       [3]|
     +----+----------+
 
-    Example 4: Collect values including nulls from a DataFrame and sort the result in descending order
+    Example 4: Collect values including nulls from a DataFrame
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(2,), (5,), (5,), (None,)], ('age',))
