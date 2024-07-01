@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.StructType
@@ -62,7 +63,8 @@ class StateScan(
     val fs = stateCheckpointPartitionsLocation.getFileSystem(hadoopConfBroadcast.value.value)
     val partitions = fs.listStatus(stateCheckpointPartitionsLocation, new PathFilter() {
       override def accept(path: Path): Boolean = {
-        fs.isDirectory(path) && Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
+        fs.getFileStatus(path).isDirectory &&
+        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
       }
     })
 
@@ -105,7 +107,17 @@ class StateScan(
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.none =>
-      new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema)
+      // Read the operator metadata once to see if we can find the information for prefix scan
+      // encoder used in session window aggregation queries.
+      val allStateStoreMetadata = new StateMetadataPartitionReader(
+        sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConfBroadcast.value)
+        .stateMetadata.toArray
+      val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+        entry.operatorId == sourceOptions.operatorId &&
+          entry.stateStoreName == sourceOptions.storeName
+      }
+      new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
+        stateStoreMetadata)
   }
 
   override def toBatch: Batch = this
