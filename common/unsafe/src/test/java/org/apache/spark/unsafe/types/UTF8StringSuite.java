@@ -1110,4 +1110,21 @@ public class UTF8StringSuite {
     testIsValid("0x9C 0x76 0x17", "0xEF 0xBF 0xBD 0x76 0x17");
   }
 
+  @Test
+  public void toBinaryString() {
+    assertEquals(ZERO_UTF8, UTF8String.toBinaryString(0));
+    assertEquals(UTF8String.fromString("1"), UTF8String.toBinaryString(1));
+    assertEquals(UTF8String.fromString("10"), UTF8String.toBinaryString(2));
+    assertEquals(UTF8String.fromString("100"), UTF8String.toBinaryString(4));
+    assertEquals(UTF8String.fromString("111"), UTF8String.toBinaryString(7));
+    assertEquals(
+      UTF8String.fromString("1111111111111111111111111111111111111111111111111111111111110011"),
+      UTF8String.toBinaryString(-13));
+    assertEquals(
+      UTF8String.fromString("1000000000000000000000000000000000000000000000000000000000000000"),
+      UTF8String.toBinaryString(Long.MIN_VALUE));
+    assertEquals(
+      UTF8String.fromString("111111111111111111111111111111111111111111111111111111111111111"),
+      UTF8String.toBinaryString(Long.MAX_VALUE));
+  }
 }

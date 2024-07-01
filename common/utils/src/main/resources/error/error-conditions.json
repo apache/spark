@@ -487,7 +487,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name."
+      "The value <collationName> does not represent a correct collation name. Suggested valid collation names: [<proposals>]."
     ],
     "sqlState" : "42704"
   },
@@ -1944,7 +1944,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation."
+          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
       "TIME_ZONE" : {
@@ -2908,6 +2908,12 @@
       "Invalid usage of <elem> in <prettyName>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_UTF8_STRING" : {
+    "message" : [
+      "Invalid UTF8 byte sequence found in string: <str>."
+    ],
+    "sqlState" : "22029"
   },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
@@ -4474,6 +4480,11 @@
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
+        "message" : [
+          "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {

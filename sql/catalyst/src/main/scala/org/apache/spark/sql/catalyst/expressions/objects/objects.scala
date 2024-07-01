@@ -360,6 +360,15 @@ case class StaticInvoke(
       super.stringArgs.toSeq.dropRight(1).iterator
     }
   }
+
+  override def toString: String =
+    s"static_invoke(${
+      if (objectName.startsWith("org.apache.spark.")) {
+        cls.getSimpleName
+      } else {
+        objectName
+      }
+    }.$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
@@ -509,7 +518,8 @@ case class Invoke(
     ev.copy(code = code)
   }
 
-  override def toString: String = s"$targetObject.$functionName"
+  override def toString: String =
+    s"invoke($targetObject.$functionName(${arguments.mkString(", ")}))"
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)

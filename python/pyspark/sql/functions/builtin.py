@@ -2118,7 +2118,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2171,7 +2171,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2432,7 +2432,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
 
     Returns
@@ -6216,8 +6216,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -6271,8 +6271,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -10938,11 +10938,15 @@ def substring(
         target column to work on.
     pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
+
+        .. versionchanged:: 4.0.0
+            `pos` now accepts column and column name.
+
     len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
         .. versionchanged:: 4.0.0
-            `pos` and `len` now also accept Columns or names of Columns.
+            `len` now accepts column and column name.
 
     Returns
     -------
@@ -10962,11 +10966,9 @@ def substring(
     >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
     [Row(s='par')]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    pos = _to_java_column(lit(pos) if isinstance(pos, int) else pos)
-    len = _to_java_column(lit(len) if isinstance(len, int) else len)
-    return _invoke_function("substring", _to_java_column(str), pos, len)
+    pos = lit(pos) if isinstance(pos, int) else pos
+    len = lit(len) if isinstance(len, int) else len
+    return _invoke_function_over_columns("substring", str, pos, len)
 
 
 @_try_remote_functions
@@ -13618,10 +13620,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |      true|
     +----------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = value._jc if isinstance(value, Column) else value
-    return _invoke_function("array_contains", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_contains", col, lit(value))
 
 
 @_try_remote_functions
@@ -14064,10 +14063,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
 
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("array_position", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_position", col, lit(value))
 
 
 @_try_remote_functions
@@ -14515,10 +14511,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     |                 [2, 3]|
     +-----------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    element = _to_java_column(element) if isinstance(element, Column) else element
-    return _invoke_function("array_remove", _to_java_column(col), element)
+    return _invoke_function_over_columns("array_remove", col, lit(element))
 
 
 @_try_remote_functions
@@ -17327,10 +17320,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     |                       true|
     +---------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("map_contains_key", _to_java_column(col), value)
+    return _invoke_function_over_columns("map_contains_key", col, lit(value))
 
 
 @_try_remote_functions

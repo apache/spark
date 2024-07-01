@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkConf
+import scala.jdk.CollectionConverters.MapHasAsScala
+
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, StringTrim, StringTrimLeft, StringTrimRight}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
@@ -665,6 +667,93 @@ class CollationStringExpressionsSuite
         assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
       }
     })
+  }
+
+  test("Support IsValidUTF8 string expression with collation") {
+    // Supported collations
+    case class IsValidUTF8TestCase(input: String, collationName: String, result: Any)
+    val testCases = Seq(
+      IsValidUTF8TestCase("null", "UTF8_BINARY", result = null),
+      IsValidUTF8TestCase("''", "UTF8_LCASE", result = true),
+      IsValidUTF8TestCase("'abc'", "UNICODE", result = true),
+      IsValidUTF8TestCase("x'FF'", "UNICODE_CI", result = false)
+    )
+    testCases.foreach { testCase =>
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> testCase.collationName) {
+        val query = s"SELECT is_valid_utf8(${testCase.input})"
+        // Result & data type
+        checkAnswer(sql(query), Row(testCase.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      }
+    }
+  }
+
+  test("Support MakeValidUTF8 string expression with collation") {
+    // Supported collations
+    case class MakeValidUTF8TestCase(input: String, collationName: String, result: Any)
+    val testCases = Seq(
+      MakeValidUTF8TestCase("null", "UTF8_BINARY", result = null),
+      MakeValidUTF8TestCase("''", "UTF8_LCASE", result = ""),
+      MakeValidUTF8TestCase("'abc'", "UNICODE", result = "abc"),
+      MakeValidUTF8TestCase("x'FF'", "UNICODE_CI", result = "\uFFFD")
+    )
+    testCases.foreach { testCase =>
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> testCase.collationName) {
+        val query = s"SELECT make_valid_utf8(${testCase.input})"
+        // Result & data type
+        checkAnswer(sql(query), Row(testCase.result))
+        val dataType = StringType(testCase.collationName)
+        assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+      }
+    }
+  }
+
+  test("Support ValidateUTF8 string expression with collation") {
+    // Supported collations
+    case class ValidateUTF8TestCase(input: String, collationName: String, result: Any)
+    val testCases = Seq(
+      ValidateUTF8TestCase("null", "UTF8_BINARY", result = null),
+      ValidateUTF8TestCase("''", "UTF8_LCASE", result = ""),
+      ValidateUTF8TestCase("'abc'", "UNICODE", result = "abc"),
+      ValidateUTF8TestCase("x'FF'", "UNICODE_CI", result = None)
+    )
+    testCases.foreach { testCase =>
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> testCase.collationName) {
+        val query = s"SELECT validate_utf8(${testCase.input})"
+        if (testCase.result == None) {
+          // Exception thrown
+          val e = intercept[SparkIllegalArgumentException] {
+            sql(query).collect()
+          }
+          assert(e.getErrorClass == "INVALID_UTF8_STRING")
+          assert(e.getMessageParameters.asScala == Map("str" -> "\\xFF"))
+        } else {
+          // Result & data type
+          checkAnswer(sql(query), Row(testCase.result))
+          val dataType = StringType(testCase.collationName)
+          assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+        }
+      }
+    }
+  }
+
+  test("Support TryValidateUTF8 string expression with collation") {
+    // Supported collations
+    case class ValidateUTF8TestCase(input: String, collationName: String, result: Any)
+    val testCases = Seq(
+      ValidateUTF8TestCase("null", "UTF8_BINARY", result = null),
+      ValidateUTF8TestCase("''", "UTF8_LCASE", result = ""),
+      ValidateUTF8TestCase("'abc'", "UNICODE", result = "abc"),
+      ValidateUTF8TestCase("x'FF'", "UNICODE_CI", result = null)
+    )
+    testCases.foreach { testCase =>
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> testCase.collationName) {
+        val query = s"SELECT try_validate_utf8(${testCase.input})"
+        // Result & data type
+        checkAnswer(sql(query), Row(testCase.result))
+        assert(sql(query).schema.fields.head.dataType.sameType(StringType(testCase.collationName)))
+      }
+    }
   }
 
   test("Support Left/Right/Substr with collation") {

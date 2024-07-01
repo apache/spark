@@ -740,6 +740,41 @@ Project [encode(scol#x, ecol#x) AS encode(scol, ecol)#x]
 
 
 -- !query
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query analysis
+Project [encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8) AS encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8)#x]
++- OneRowRelation
+
+
+-- !query
 select decode()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -1676,4 +1711,88 @@ Project [luhn_check(cast(6011111111111118 as string)) AS luhn_check(601111111111
 select luhn_check(123.456)
 -- !query analysis
 Project [luhn_check(cast(123.456 as string)) AS luhn_check(123.456)#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('')
+-- !query analysis
+Project [is_valid_utf8() AS is_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query analysis
+Project [is_valid_utf8(abc) AS is_valid_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query analysis
+Project [is_valid_utf8(cast(0x80 as string)) AS is_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('')
+-- !query analysis
+Project [make_valid_utf8() AS make_valid_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query analysis
+Project [make_valid_utf8(abc) AS make_valid_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query analysis
+Project [make_valid_utf8(cast(0x80 as string)) AS make_valid_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('')
+-- !query analysis
+Project [validate_utf8() AS validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8('abc')
+-- !query analysis
+Project [validate_utf8(abc) AS validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query analysis
+Project [validate_utf8(cast(0x80 as string)) AS validate_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('')
+-- !query analysis
+Project [try_validate_utf8() AS try_validate_utf8()#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query analysis
+Project [try_validate_utf8(abc) AS try_validate_utf8(abc)#x]
++- OneRowRelation
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query analysis
+Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
 +- OneRowRelation

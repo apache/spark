@@ -211,6 +211,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
+  def invalidUTF8StringError(str: UTF8String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_UTF8_STRING",
+      messageParameters = Map(
+        "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
+      )
+    )
+  }
+
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,

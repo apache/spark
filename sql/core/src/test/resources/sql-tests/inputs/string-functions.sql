@@ -132,6 +132,11 @@ select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(
 set spark.sql.legacy.codingErrorAction=false;
 select encode('客舍青青柳色新', 'US-ASCII');
 select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol);
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8');
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8');
 
 -- decode
 select decode();
@@ -288,3 +293,16 @@ select luhn_check(6011111111111117);
 select luhn_check(6011111111111118);
 select luhn_check(123.456);
 
+--utf8 string validation
+select is_valid_utf8('');
+select is_valid_utf8('abc');
+select is_valid_utf8(x'80');
+select make_valid_utf8('');
+select make_valid_utf8('abc');
+select make_valid_utf8(x'80');
+select validate_utf8('');
+select validate_utf8('abc');
+select validate_utf8(x'80');
+select try_validate_utf8('');
+select try_validate_utf8('abc');
+select try_validate_utf8(x'80');

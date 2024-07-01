@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.catalog.SQLFunction
 
 /**
  * The DDL command that creates a SQL function.
@@ -52,7 +53,27 @@ case class CreateSQLFunctionCommand(
     extends CreateUserDefinedFunctionCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // TODO: Implement this.
+    import SQLFunction._
+
+    val parser = sparkSession.sessionState.sqlParser
+
+    val inputParam = inputParamText.map(parser.parseTableSchema)
+    val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
+
+    val function = SQLFunction(
+      name,
+      inputParam,
+      returnType.getOrElse(if (isTableFunc) Right(null) else Left(null)),
+      exprText,
+      queryText,
+      comment,
+      isDeterministic,
+      containsSQL,
+      isTableFunc,
+      Map.empty)
+
+    // TODO: Implement the rest of the method.
+
     Seq.empty
   }
 }

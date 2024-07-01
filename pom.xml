@@ -206,8 +206,8 @@
     <libthrift.version>0.16.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.17.0</selenium.version>
-    <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
+    <selenium.version>4.21.0</selenium.version>
+    <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.8.0</commons-cli.version>
@@ -216,7 +216,7 @@
     <datasketches.version>6.0.0</datasketches.version>
     <netty.version>4.1.110.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
-    <icu4j.version>72.1</icu4j.version>
+    <icu4j.version>75.1</icu4j.version>
     <junit-jupiter.version>5.9.3</junit-jupiter.version>
     <junit-platform.version>1.9.3</junit-platform.version>
     <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
@@ -420,12 +420,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1156,25 +1156,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.18</version>
+        <version>3.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1186,19 +1186,19 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.10.0</version>
+        <version>5.12.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.11</version>
+        <version>1.14.17</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.11</version>
+        <version>1.14.17</version>
         <scope>test</scope>
       </dependency>
       <dependency>

@@ -900,6 +900,46 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+白日依山尽，黄河入海流。欲穷千里目，更上一层楼。
+
+
+-- !query
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。
+
+
+-- !query
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark
+
+
+-- !query
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως
+
+
+-- !query
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>
@@ -2126,3 +2166,106 @@ select luhn_check(123.456)
 struct<luhn_check(123.456):boolean>
 -- !query output
 false
+
+
+-- !query
+select is_valid_utf8('')
+-- !query schema
+struct<is_valid_utf8():boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query schema
+struct<is_valid_utf8(abc):boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query schema
+struct<is_valid_utf8(X'80'):boolean>
+-- !query output
+false
+
+
+-- !query
+select make_valid_utf8('')
+-- !query schema
+struct<make_valid_utf8():string>
+-- !query output
+
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query schema
+struct<make_valid_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query schema
+struct<make_valid_utf8(X'80'):string>
+-- !query output
+�
+
+
+-- !query
+select validate_utf8('')
+-- !query schema
+struct<validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select validate_utf8('abc')
+-- !query schema
+struct<validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_UTF8_STRING",
+  "sqlState" : "22029",
+  "messageParameters" : {
+    "str" : "\\x80"
+  }
+}
+
+
+-- !query
+select try_validate_utf8('')
+-- !query schema
+struct<try_validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query schema
+struct<try_validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query schema
+struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL
