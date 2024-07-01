@@ -13,12 +13,11 @@
   ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
- -->
+-->
 <!--
 This file defines a Scala style check to ensure logged inline variables follow the
 Structured Logging Framework guidelines, as outlined in SPARK-47240.
 -->
-
 <scalastyle>
     <name>Scalastyle configuration for prod only</name>
 
