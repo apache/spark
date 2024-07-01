@@ -58,6 +58,8 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  override lazy val foldable: Boolean = deterministic && children.forall(_.foldable)
+
   // `ScalaUDF` uses `ExpressionEncoder` to convert the function result to Catalyst internal format.
   // `ExpressionEncoder` is stateful as it reuses the `UnsafeRow` instance, thus `ScalaUDF` is
   // stateful as well.
