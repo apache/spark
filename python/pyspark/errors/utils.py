@@ -175,9 +175,12 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
 
     # We try import here since IPython is not a required dependency
     try:
-        from IPython import get_ipython
+        import IPython
 
-        ipython = get_ipython()
+        ipython = IPython.get_ipython()
+        # Filtering out IPython frame
+        ipy_root = os.path.dirname(IPython.__file__)
+        selected_frames = [frame for frame in selected_frames if ipy_root not in frame.filename]
     except ImportError:
         ipython = None
 
