@@ -5987,7 +5987,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def mergeInto(self, table: str, condition: "ColumnOrName") -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
         """
         Merges a set of updates, insertions, and deletions based on a source table into
         a target table.

@@ -17,10 +17,10 @@
 import sys
 from typing import Dict, Optional, TYPE_CHECKING
 
+from pyspark.sql import Column
 from pyspark.sql.utils import to_scala_map
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
 
@@ -35,7 +35,7 @@ class MergeIntoWriter:
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, df: "DataFrame", table: str, condition: "ColumnOrName"):
+    def __init__(self, df: "DataFrame", table: str, condition: Column):
         self._df = df
         self._spark = df.sparkSession
 
@@ -44,7 +44,7 @@ class MergeIntoWriter:
         self._jwriter = df._jdf.mergeInto(table, _to_java_column(condition))
 
     def whenMatched(
-        self, condition: Optional["ColumnOrName"] = None
+        self, condition: Optional[Column] = None
     ) -> "MergeIntoWriter.WhenMatched":
         """
         Initialize a `WhenMatched` action with a condition.
@@ -61,7 +61,7 @@ class MergeIntoWriter:
         return self.WhenMatched(self, condition)
 
     def whenNotMatched(
-        self, condition: Optional["ColumnOrName"] = None
+        self, condition: Optional[Column] = None
     ) -> "MergeIntoWriter.WhenNotMatched":
         """
         Initialize a `WhenNotMatched` action with a condition.
@@ -76,7 +76,7 @@ class MergeIntoWriter:
         return self.WhenNotMatched(self, condition)
 
     def whenNotMatchedBySource(
-        self, condition: Optional["ColumnOrName"] = None
+        self, condition: Optional[Column] = None
     ) -> "MergeIntoWriter.WhenNotMatchedBySource":
         """
         Initialize a `WhenNotMatchedBySource` action with a condition.
@@ -109,7 +109,7 @@ class MergeIntoWriter:
         A class for defining actions to be taken when matching rows in a DataFrame during
         a merge operation."""
 
-        def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
+        def __init__(self, writer: "MergeIntoWriter", condition: Optional[Column]):
             self.writer = writer
             if condition is None:
                 self.when_matched = writer._jwriter.whenMatched()
@@ -125,7 +125,7 @@ class MergeIntoWriter:
             self.writer._jwriter = self.when_matched.updateAll()
             return self.writer
 
-        def update(self, assignments: Dict[str, "ColumnOrName"]) -> "MergeIntoWriter":
+        def update(self, assignments: Dict[str, Column]) -> "MergeIntoWriter":
             """
             Specifies an action to update matched rows in the DataFrame with the provided column
             assignments.
@@ -149,7 +149,7 @@ class MergeIntoWriter:
         A class for defining actions to be taken when no matching rows are found in a DataFrame
         during a merge operation."""
 
-        def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
+        def __init__(self, writer: "MergeIntoWriter", condition: Optional[Column]):
             self.writer = writer
             if condition is None:
                 self.when_not_matched = writer._jwriter.whenNotMatched()
@@ -165,7 +165,7 @@ class MergeIntoWriter:
             self.writer._jwriter = self.when_not_matched.insertAll()
             return self.writer
 
-        def insert(self, assignments: Dict[str, "ColumnOrName"]) -> "MergeIntoWriter":
+        def insert(self, assignments: Dict[str, Column]) -> "MergeIntoWriter":
             """
             Specifies an action to insert non-matched rows into the DataFrame with the provided
             column assignments.
@@ -183,7 +183,7 @@ class MergeIntoWriter:
         during a merge operation in a MergeIntoWriter.
         """
 
-        def __init__(self, writer: "MergeIntoWriter", condition: Optional["ColumnOrName"]):
+        def __init__(self, writer: "MergeIntoWriter", condition: Optional[Column]):
             self.writer = writer
             if condition is None:
                 self.when_not_matched_by_source = writer._jwriter.whenNotMatchedBySource()
@@ -202,7 +202,7 @@ class MergeIntoWriter:
             self.writer._jwriter = self.when_not_matched_by_source.updateAll()
             return self.writer
 
-        def update(self, assignments: Dict[str, "ColumnOrName"]) -> "MergeIntoWriter":
+        def update(self, assignments: Dict[str, Column]) -> "MergeIntoWriter":
             """
             Specifies an action to update non-matched rows in the target DataFrame with the provided
             column assignments when not matched by the source.

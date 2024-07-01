@@ -27,7 +27,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType
+    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
