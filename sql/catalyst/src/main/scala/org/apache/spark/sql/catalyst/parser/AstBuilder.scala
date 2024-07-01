@@ -121,7 +121,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), java.util.UUID.randomUUID.toString)
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
+        java.util.UUID.randomUUID.toString)
     }
   }
 
