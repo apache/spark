@@ -25,12 +25,18 @@ import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
 object MapStateImpl {
-  def columnFamilySchema(stateName: String): ColumnFamilySchemaV1 = {
+  def columnFamilySchema[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valueEncoder: Encoder[V]): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
       VALUE_ROW_SCHEMA,
-      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1), false)
+      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
+      false,
+      valueEncoder.schema,
+      Some(userKeyEnc.schema))
   }
 }
 
