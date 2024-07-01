@@ -3323,7 +3323,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1319",
+      errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
       messageParameters = Map("joinType" -> joinType.sql))
   }
 
@@ -4088,6 +4088,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
       messageParameters = Map()
+    )
+  }
+
+  def avroNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
     )
   }
 }

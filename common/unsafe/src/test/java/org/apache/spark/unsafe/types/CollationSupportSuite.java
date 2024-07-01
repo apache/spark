@@ -41,7 +41,7 @@ public class CollationSupportSuite {
    */
 
   private void assertStringCompare(String s1, String s2, String collationName, int expected)
-          throws SparkException {
+      throws SparkException {
     UTF8String l = UTF8String.fromString(s1);
     UTF8String r = UTF8String.fromString(s2);
     int compare = CollationFactory.fetchCollation(collationName).comparator.compare(l, r);
@@ -129,13 +129,26 @@ public class CollationSupportSuite {
     assertStringCompare("ς", "σ", "UNICODE_CI", 0);
     assertStringCompare("ς", "Σ", "UNICODE_CI", 0);
     assertStringCompare("σ", "Σ", "UNICODE_CI", 0);
+    // Maximum code point.
+    int maxCodePoint = Character.MAX_CODE_POINT;
+    String maxCodePointStr = new String(Character.toChars(maxCodePoint));
+    for (int i = 0; i < maxCodePoint && Character.isValidCodePoint(i); ++i) {
+      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_BINARY", -1);
+      assertStringCompare(new String(Character.toChars(i)), maxCodePointStr, "UTF8_LCASE", -1);
+    }
+    // Minimum code point.
+    int minCodePoint = Character.MIN_CODE_POINT;
+    String minCodePointStr = new String(Character.toChars(minCodePoint));
+    for (int i = minCodePoint + 1; i <= maxCodePoint && Character.isValidCodePoint(i); ++i) {
+      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_BINARY", 1);
+      assertStringCompare(new String(Character.toChars(i)), minCodePointStr, "UTF8_LCASE", 1);
+    }
   }
 
   private void assertLowerCaseCodePoints(UTF8String target, UTF8String expected,
       Boolean useCodePoints) {
     if (useCodePoints) {
-      assertEquals(expected.toString(),
-        CollationAwareUTF8String.lowerCaseCodePoints(target.toString()));
+      assertEquals(expected, CollationAwareUTF8String.lowerCaseCodePoints(target));
     } else {
       assertEquals(expected, target.toLowerCase());
     }
@@ -171,10 +184,10 @@ public class CollationSupportSuite {
     // Surrogate pairs are treated as invalid UTF8 sequences
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), false);
+      UTF8String.fromString("\uFFFD\uFFFD"), false);
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\ufffd\ufffd"), true);
+      UTF8String.fromString("\uFFFD\uFFFD"), true);
   }
 
   /**
@@ -606,7 +619,11 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId));
+    // Testing the new ICU-based implementation of the Upper function.
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Upper function.
+    assertEquals(expected_utf8, CollationSupport.Upper.exec(target_utf8, collationId, false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
   @Test
@@ -660,7 +677,11 @@ public class CollationSupportSuite {
     UTF8String target_utf8 = UTF8String.fromString(target);
     UTF8String expected_utf8 = UTF8String.fromString(expected);
     int collationId = CollationFactory.collationNameToId(collationName);
-    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId));
+    // Testing the new ICU-based implementation of the Lower function.
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Lower function.
+    assertEquals(expected_utf8, CollationSupport.Lower.exec(target_utf8, collationId, false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
   @Test

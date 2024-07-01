@@ -527,10 +527,9 @@ private[spark] class ApplicationMaster(
       userClassThread.join()
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
-        logError(
-          log"""SparkContext did not initialize after waiting for
-          |${MDC(LogKeys.TIMEOUT, totalWaitTime)} ms.
-          | Please check earlier log output for errors. Failing the application.""".stripMargin)
+        logError(log"SparkContext did not initialize after waiting for " +
+            log"${MDC(LogKeys.TIMEOUT, totalWaitTime)} ms. " +
+            log"Please check earlier log output for errors. Failing the application.")
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
           "Timed out waiting for SparkContext.")
@@ -869,7 +868,7 @@ private[spark] class ApplicationMaster(
           }
         } else {
           logError(log"Application Master lost connection with driver! Shutting down. " +
-            log"${MDC(LogKeys.REMOTE_ADDRESS, remoteAddress)}")
+            log"${MDC(LogKeys.HOST_PORT, remoteAddress)}")
           finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_DISCONNECTED)
         }
       }
