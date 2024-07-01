@@ -169,7 +169,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
   def resolveColumnDefaultInAssignmentValue(
       key: Expression,
       value: Expression,
-      invalidColumnDefaultException: Throwable): Expression = {
+      invalidColumnDefaultException: => Throwable): Expression = {
     key match {
       case attr: AttributeReference =>
         value match {
