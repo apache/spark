@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -52,13 +52,12 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "4.0.0")
 // scalastyle:on line.size.limit
 case class XmlToStructs(
-    schema: DataType,
+    schema: StructType,
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with CodegenFallback
   with ExpectsInputTypes
   with NullIntolerant
   with QueryErrorsBase {
@@ -74,7 +73,7 @@ case class XmlToStructs(
 
   // The XML input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
-  val nullableSchema = schema.asNullable
+  private val nullableSchema = schema.asNullable
 
   def this(child: Expression, schema: Expression) = this(child, schema, Map.empty[String, String])
 
@@ -87,42 +86,27 @@ case class XmlToStructs(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
-    case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-    case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
-  }
+  private lazy val converter =
+    (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
 
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  @transient lazy val parser = {
+  @transient
+  private lazy val parser = {
     val parsedOptions = new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
     }
-    val (parserSchema, actualSchema) = nullableSchema match {
-      case s: StructType =>
-        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
-        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
-      case other =>
-        (StructType(Array(StructField("value", other))), other)
-    }
-
-    val rowSchema: StructType = schema match {
-      case st: StructType => st
-      case ArrayType(st: StructType, _) => st
-    }
-    val rawParser = new StaxXmlParser(rowSchema, parsedOptions)
+    ExprUtils.verifyColumnNameOfCorruptRecord(
+      nullableSchema, parsedOptions.columnNameOfCorruptRecord)
+    val rawParser = new StaxXmlParser(schema, parsedOptions)
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
     new FailureSafeParser[String](
       input => rawParser.doParseColumn(input, mode, xsdSchema),
       mode,
-      parserSchema,
+      nullableSchema,
       parsedOptions.columnNameOfCorruptRecord)
   }
 
@@ -131,22 +115,16 @@ case class XmlToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     copy(timeZoneId = Option(timeZoneId))
   }
-  override def nullSafeEval(xml: Any): Any = xml match {
-    case arr: GenericArrayData =>
-      new GenericArrayData(arr.array.map(s => converter(parser.parse(s.toString))))
-    case arr: ArrayData =>
-      new GenericArrayData(arr.array.map(s => converter(parser.parse(s.toString))))
-    case _ =>
-      val str = xml.asInstanceOf[UTF8String].toString
-      converter(parser.parse(str))
+
+  override def nullSafeEval(xml: Any): Any =
+    converter(parser.parse(xml.asInstanceOf[UTF8String].toString))
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
-
-  override def sql: String = schema match {
-    case _: MapType => "entries"
-    case _ => super.sql
-  }
 
   override def prettyName: String = "from_xml"
 

@@ -772,13 +772,27 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.isValidCollation,
+      .checkValue(
+        collationName => {
+          try {
+            CollationFactory.fetchCollation(collationName)
+            true
+          } catch {
+            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+          }
+        },
         "DEFAULT_COLLATION",
-        name =>
-          Map(
-            "proposal" -> CollationFactory.getClosestCollation(name)
-          ))
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
+
+  val ICU_CASE_MAPPINGS_ENABLED =
+    buildConf("spark.sql.icu.caseMappings.enabled")
+      .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +
+        " for strings under UTF8_BINARY collation.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
@@ -1569,7 +1583,7 @@ object SQLConf {
         "side. This could help to eliminate unnecessary shuffles")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled")
@@ -1700,15 +1714,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val VIEW_SCHEMA_BINDING_MODE = buildConf("spark.sql.viewSchemaBindingMode")
-    .doc("Set to DISABLE to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
-      " DESCRIBE EXTENDED. The default, and only other value, is COMPENSATION. Views without " +
-      " WITH SCHEMA clause are defaulted to WITH SCHEMA COMPENSATION.")
+  val VIEW_SCHEMA_BINDING_ENABLED = buildConf("spark.sql.legacy.viewSchemaBindingMode")
+    .internal()
+    .doc("Set to false to disable the WITH SCHEMA clause for view DDL and suppress the line in " +
+      "DESCRIBE EXTENDED and SHOW CREATE TABLE.")
     .version("4.0.0")
-    .stringConf
-    .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(Set("COMPENSATION", "DISABLED"))
-    .createWithDefault("COMPENSATION")
+    .booleanConf
+    .createWithDefault(true)
+
+  val VIEW_SCHEMA_COMPENSATION = buildConf("spark.sql.legacy.viewSchemaCompensation")
+    .internal()
+    .doc("Set to false to revert default view schema binding mode from WITH SCHEMA COMPENSATION " +
+      "to WITH SCHEMA BINDING.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
@@ -1963,6 +1983,14 @@ object SQLConf {
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
     .version("2.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
+    .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
+      "the option is enabled, table with two partition directories 'table/invalid' and " +
+      "'table/col=1' will only load the latter directory and ignore the invalid partition")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -2290,7 +2318,9 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-      "The number of skipped null values will be shown as custom metric of stream join operator.")
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2320,6 +2350,17 @@ object SQLConf {
         "may show unexpected behavior including duplication, data loss, etc. So use with " +
         "extreme care! The ideal direction is to persuade developers of source(s) to " +
         "support Trigger.AvailableNow.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
+    buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")
+      .internal()
+      .doc("When true, enable OptimizeOneRowPlan rule for the case where the child is a " +
+        "streaming Dataset. This is a fallback flag to revert the 'incorrect' behavior, hence " +
+        "this configuration must not be used without understanding in depth. Use this only to " +
+        "quickly recover failure in existing query!")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2575,6 +2616,14 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR =
+    buildConf("spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr")
+      .doc("Whether to avoid collapsing projections that would duplicate expensive expressions " +
+        "in UDFs.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -4223,6 +4272,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mysql.timestampNTZMapping.enabled")
+      .internal()
+      .doc("When true, TimestampNTZType and MySQL TIMESTAMP can be converted bidirectionally. " +
+        "For reading, MySQL TIMESTAMP is converted to TimestampNTZType when JDBC read option " +
+        "preferTimestampNTZ is true. For writing, TimestampNTZType is converted to MySQL " +
+        "TIMESTAMP; otherwise, DATETIME")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.oracle.timestampMapping.enabled")
       .internal()
@@ -4236,6 +4296,25 @@ object SQLConf {
     buildConf("spark.sql.legacy.db2.numericMapping.enabled")
       .internal()
       .doc("When true, SMALLINT maps to IntegerType in DB2; otherwise, ShortType" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_DB2_BOOLEAN_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.db2.booleanMapping.enabled")
+      .internal()
+      .doc("When true, BooleanType maps to CHAR(1) in DB2; otherwise, BOOLEAN" )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.postgres.datetimeMapping.enabled")
+      .internal()
+      .doc("When true, TimestampType maps to TIMESTAMP WITHOUT TIME ZONE in PostgreSQL for " +
+        "writing; otherwise, TIMESTAMP WITH TIME ZONE. When true, TIMESTAMP WITH TIME ZONE " +
+        "can be converted to TimestampNTZType when JDBC read option preferTimestampNTZ is " +
+        "true; otherwise, converted to TimestampType regardless of preferTimestampNTZ.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -4554,6 +4633,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
+    .internal()
+    .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
+      s"comparison predicates, when '${READ_SIDE_CHAR_PADDING.key}' is false.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -4861,6 +4948,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
+    buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
+      .internal()
+      .doc("When set to true, use incorrect legacy behavior for checking whether a scalar " +
+        "subquery with a group-by on correlated columns is allowed. See SPARK-48503")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT =
+    buildConf("spark.sql.analyzer.scalarSubqueryAllowGroupByColumnEqualToConstant")
+      .internal()
+      .doc("When set to true, allow scalar subqueries with group-by on a column that also " +
+        " has an equality filter with a constant (SPARK-48557).")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()
@@ -4910,6 +5015,14 @@ object SQLConf {
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
       "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_CODING_ERROR_ACTION = buildConf("spark.sql.legacy.codingErrorAction")
+    .internal()
+    .doc("When set to true, encode/decode functions replace unmappable characters with mojibake " +
+      "instead of reporting coding errors.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -5187,6 +5300,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
+  def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
+
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
@@ -5373,11 +5488,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
 
+  def legacyMySqlTimestampNTZMappingEnabled: Boolean =
+    getConf(LEGACY_MYSQL_TIMESTAMPNTZ_MAPPING_ENABLED)
+
   def legacyOracleTimestampMappingEnabled: Boolean =
     getConf(LEGACY_ORACLE_TIMESTAMP_MAPPING_ENABLED)
 
   def legacyDB2numericMappingEnabled: Boolean =
     getConf(LEGACY_DB2_TIMESTAMP_MAPPING_ENABLED)
+
+  def legacyDB2BooleanMappingEnabled: Boolean =
+    getConf(LEGACY_DB2_BOOLEAN_MAPPING_ENABLED)
+
+  def legacyPostgresDatetimeMappingEnabled: Boolean =
+    getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
@@ -5524,7 +5648,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
-  def viewSchemaBindingMode: String = getConf(VIEW_SCHEMA_BINDING_MODE)
+  def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
+
+  def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL))
@@ -5859,6 +5985,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
+  def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
@@ -5874,6 +6002,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 

@@ -17,33 +17,85 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
+/**
+ * Trait for all SQL scripting execution nodes used during interpretation phase.
+ */
 sealed trait CompoundStatementExec extends Logging {
+
+  /**
+   * Whether the statement originates from the SQL script or is created during the interpretation.
+   * Example: DropVariable statements are automatically created at the end of each compound.
+   */
   val isInternal: Boolean = false
+
+  /**
+   * Reset execution of the current node.
+   */
   def reset(): Unit
 }
 
+/**
+ * Leaf node in the execution tree.
+ */
 trait LeafStatementExec extends CompoundStatementExec
 
+/**
+ * Non-leaf node in the execution tree. It is an iterator over executable child nodes.
+ */
 trait NonLeafStatementExec extends CompoundStatementExec with Iterator[CompoundStatementExec]
 
-class SparkStatementWithPlanExec(
+/**
+ * Executable node for SingleStatement.
+ * @param parsedPlan
+ *   Logical plan of the parsed statement.
+ * @param origin
+ *   Origin descriptor for the statement.
+ * @param isInternal
+ *   Whether the statement originates from the SQL script or it is created during the
+ *   interpretation. Example: DropVariable statements are automatically created at the end of each
+ *   compound.
+ */
+class SingleStatementExec(
     var parsedPlan: LogicalPlan,
-    val sourceStart: Int,
-    val sourceEnd: Int,
-    override val isInternal : Boolean)
-  extends LeafStatementExec {
+    override val origin: Origin,
+    override val isInternal: Boolean)
+  extends LeafStatementExec
+  with WithOrigin {
 
+  /**
+   * Whether this statement had to be executed during the interpretation phase.
+   * Example: Statements in conditions of If/Else, While, etc.
+   */
   var consumed = false
+
+  /**
+   * Reset execution of the current node.
+   */
   override def reset(): Unit = consumed = false
-  def getText(batch: String): String = batch.substring(sourceStart, sourceEnd)
+
+  /**
+   * Get the SQL query text corresponding to this statement.
+   * @return
+   *   SQL query text.
+   */
+  def getText: String = {
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  }
 }
 
-class CompoundNestedStatementIteratorExec(collection: List[CompoundStatementExec])
+/**
+ * Abstract class for all statements that contain nested statements.
+ * Implements recursive iterator logic over all child execution nodes.
+ * @param collection
+ *   Collection of child execution nodes.
+ */
+abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
   extends NonLeafStatementExec {
 
   var localIterator = collection.iterator
@@ -54,17 +106,18 @@ class CompoundNestedStatementIteratorExec(collection: List[CompoundStatementExec
       case Some(body: NonLeafStatementExec) => body.hasNext
       case Some(_: LeafStatementExec) => true
       case None => false
-      case _ => throw new IllegalStateException("Unknown statement type")
+      case _ => throw SparkException.internalError(
+        "Unknown statement type encountered during SQL script interpretation.")
     }
     localIterator.hasNext || childHasNext
   }
 
   override def next(): CompoundStatementExec = {
     curr match {
-      case None => throw new IllegalStateException("No more elements")
+      case None => throw SparkException.internalError(
+        "No more elements to iterate through in the current SQL compound statement.")
       case Some(statement: LeafStatementExec) =>
-        if (localIterator.hasNext) curr = Some(localIterator.next())
-        else curr = None
+        curr = if (localIterator.hasNext) Some(localIterator.next()) else None
         statement
       case Some(body: NonLeafStatementExec) =>
         if (body.hasNext) {
@@ -73,7 +126,8 @@ class CompoundNestedStatementIteratorExec(collection: List[CompoundStatementExec
           curr = if (localIterator.hasNext) Some(localIterator.next()) else None
           next()
         }
-      case _ => throw new IllegalStateException("Unknown statement type")
+      case _ => throw SparkException.internalError(
+        "Unknown statement type encountered during SQL script interpretation.")
     }
   }
 
@@ -84,34 +138,10 @@ class CompoundNestedStatementIteratorExec(collection: List[CompoundStatementExec
   }
 }
 
-class CompoundBodyExec(statements: List[CompoundStatementExec], label: String = "")
+/**
+ * Executable node for CompoundBody.
+ * @param statements
+ *   Executable nodes for nested statements within the CompoundBody.
+ */
+class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: String = "")
   extends CompoundNestedStatementIteratorExec(statements)
-
-// Evaluators
-trait StatementBooleanEvaluator {
-  def eval(statement: LeafStatementExec): Boolean
-}
-
-case class DataFrameEvaluator(session: SparkSession) extends StatementBooleanEvaluator {
-  override def eval(statement: LeafStatementExec): Boolean = statement match {
-    case sparkStatement: SparkStatementWithPlanExec =>
-      assert(!sparkStatement.consumed)
-      sparkStatement.consumed = true
-      val df = Dataset.ofRows(session, sparkStatement.parsedPlan)
-
-      // Check schema first - if it does not match, we return false for sure.
-      if (df.schema.fields.length > 1 || df.schema.fields(0).dataType != BooleanType) {
-        return false
-      }
-
-      val res = df.limit(2).collect()
-      // More than one rows returned - return false.
-      if (res.length > 1) {
-        return false
-      }
-
-      // Return boolean value from single row - single column result.
-      res(0).getBoolean(0)
-    case _ => false
-  }
-}

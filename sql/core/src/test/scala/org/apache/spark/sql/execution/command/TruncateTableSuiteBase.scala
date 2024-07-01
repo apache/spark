@@ -206,7 +206,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         )
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         checkError(
@@ -245,7 +245,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         checkCachedRelation("v1", Seq(Row(0, 0, 0)))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"INSERT INTO $t PARTITION (width = 10, length = 10) SELECT 10")
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")

@@ -19,15 +19,34 @@ import re
 import functools
 import inspect
 import os
-from typing import Any, Callable, Dict, Match, TypeVar, Type, TYPE_CHECKING
+import threading
+from typing import Any, Callable, Dict, Match, TypeVar, Type, Optional, TYPE_CHECKING
+import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
-
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession
-    from py4j.java_gateway import JavaClass
 
 T = TypeVar("T")
+
+_current_origin = threading.local()
+
+
+def current_origin() -> threading.local:
+    global _current_origin
+
+    if not hasattr(_current_origin, "fragment"):
+        _current_origin.fragment = None
+    if not hasattr(_current_origin, "call_site"):
+        _current_origin.call_site = None
+    return _current_origin
+
+
+def set_current_origin(fragment: Optional[str], call_site: Optional[str]) -> None:
+    global _current_origin
+
+    _current_origin.fragment = fragment
+    _current_origin.call_site = call_site
 
 
 class ErrorClassesReader:
@@ -130,9 +149,7 @@ class ErrorClassesReader:
         return message_template
 
 
-def _capture_call_site(
-    spark_session: "SparkSession", pyspark_origin: "JavaClass", fragment: str
-) -> None:
+def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     """
     Capture the call site information including file name, line number, and function name.
     This function updates the thread-local storage from JVM side (PySparkCurrentOrigin)
@@ -142,25 +159,38 @@ def _capture_call_site(
     ----------
     spark_session : SparkSession
         Current active Spark session.
-    pyspark_origin : py4j.JavaClass
-        PySparkCurrentOrigin from current active Spark session.
-    fragment : str
-        The name of the PySpark API function being captured.
 
     Notes
     -----
     The call site information is used to enhance error messages with the exact location
     in the user code that led to the error.
     """
-    stack = list(reversed(inspect.stack()))
-    depth = int(
-        spark_session.conf.get("spark.sql.stackTracesInDataFrameContext")  # type: ignore[arg-type]
-    )
+    # Filtering out PySpark code and keeping user code only
+    pyspark_root = os.path.dirname(pyspark.__file__)
+    stack = [
+        frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
+    ]
+
     selected_frames = stack[:depth]
-    call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+
+    # We try import here since IPython is not a required dependency
+    try:
+        from IPython import get_ipython
+
+        ipython = get_ipython()
+    except ImportError:
+        ipython = None
+
+    # Identifying the cell is useful when the error is generated from IPython Notebook
+    if ipython:
+        call_sites = [
+            f"line {frame.lineno} in cell [{ipython.execution_count}]" for frame in selected_frames
+        ]
+    else:
+        call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
     call_sites_str = "\n".join(call_sites)
 
-    pyspark_origin.set(fragment, call_sites_str)
+    return call_sites_str
 
 
 def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -172,19 +202,38 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         from pyspark.sql import SparkSession
+        from pyspark.sql.utils import is_remote
 
         spark = SparkSession.getActiveSession()
         if spark is not None and hasattr(func, "__name__"):
-            assert spark._jvm is not None
-            pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+            if is_remote():
+                global current_origin
 
-            # Update call site when the function is called
-            _capture_call_site(spark, pyspark_origin, func.__name__)
+                # Getting the configuration requires RPC call. Uses the default value for now.
+                depth = 1
+                set_current_origin(func.__name__, _capture_call_site(spark, depth))
 
-            try:
-                return func(*args, **kwargs)
-            finally:
-                pyspark_origin.clear()
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    set_current_origin(None, None)
+            else:
+                assert spark._jvm is not None
+                jvm_pyspark_origin = (
+                    spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+                )
+                depth = int(
+                    spark.conf.get(  # type: ignore[arg-type]
+                        "spark.sql.stackTracesInDataFrameContext"
+                    )
+                )
+                # Update call site when the function is called
+                jvm_pyspark_origin.set(func.__name__, _capture_call_site(spark, depth))
+
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    jvm_pyspark_origin.clear()
         else:
             return func(*args, **kwargs)
 

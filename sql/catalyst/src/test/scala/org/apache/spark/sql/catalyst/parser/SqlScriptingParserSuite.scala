@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -25,27 +27,27 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
   test("single select") {
-    val batch = "SELECT 1;"
-    val tree = parseScript(batch)
+    val sqlScriptText = "SELECT 1;"
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[SparkStatementWithPlan])
-    val sparkStatement = tree.collection.head.asInstanceOf[SparkStatementWithPlan]
-    assert(sparkStatement.getText(batch) == "SELECT 1;")
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
+    assert(sparkStatement.getText == "SELECT 1;")
   }
 
   test("single select without ;") {
-    val batch = "SELECT 1"
-    val tree = parseScript(batch)
+    val sqlScriptText = "SELECT 1"
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[SparkStatementWithPlan])
-    val sparkStatement = tree.collection.head.asInstanceOf[SparkStatementWithPlan]
-    assert(sparkStatement.getText(batch) == "SELECT 1")
+    assert(tree.collection.head.isInstanceOf[SingleStatement])
+    val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
+    assert(sparkStatement.getText == "SELECT 1")
   }
 
   test("multi select without ; - should fail") {
-    val batch = "SELECT 1 SELECT 1"
+    val sqlScriptText = "SELECT 1 SELECT 1"
     val e = intercept[ParseException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -53,39 +55,39 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("multi select") {
-    val batch = "BEGIN SELECT 1;SELECT 2; END"
-    val tree = parseScript(batch)
+    val sqlScriptText = "BEGIN SELECT 1;SELECT 2; END"
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 2)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
 
-    batch.split(";")
+    sqlScriptText.split(";")
       .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
-        val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
-        val statementText = sparkStatement.getText(batch)
+        val sparkStatement = statement.asInstanceOf[SingleStatement]
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
 
   test("empty BEGIN END block") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |END""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.isEmpty)
   }
 
   test("multiple ; in row - should fail") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  SELECT 1;;
         |  SELECT 2;
         |END""".stripMargin
     val e = intercept[ParseException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -93,14 +95,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("without ; in last statement - should fail") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  SELECT 1;
         |  SELECT 2
         |END""".stripMargin
     val e = intercept[ParseException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
@@ -108,7 +110,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("multi statement") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  SELECT 1;
@@ -117,21 +119,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
-    assert(tree.collection.forall(_.isInstanceOf[SparkStatementWithPlan]))
-    batch.split(";")
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    sqlScriptText.split(";")
       .map(cleanupStatementString)
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
-        val sparkStatement = statement.asInstanceOf[SparkStatementWithPlan]
-        val statementText = sparkStatement.getText(batch)
+        val sparkStatement = statement.asInstanceOf[SingleStatement]
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
 
   test("nested begin end") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  BEGIN
@@ -144,21 +146,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |    END;
         |  END;
         |END""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 2)
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     val body1 = tree.collection.head.asInstanceOf[CompoundBody]
     assert(body1.collection.length == 1)
-    assert(body1.collection.head.asInstanceOf[SparkStatementWithPlan].getText(batch) == "SELECT 1")
+    assert(body1.collection.head.asInstanceOf[SingleStatement].getText
+      == "SELECT 1")
 
     val body2 = tree.collection(1).asInstanceOf[CompoundBody]
     assert(body2.collection.length == 1)
     assert(body2.collection.head.isInstanceOf[CompoundBody])
     val nestedBody = body2.collection.head.asInstanceOf[CompoundBody]
-    assert(
-      nestedBody.collection.head.asInstanceOf[SparkStatementWithPlan].getText(batch) == "SELECT 2")
-    assert(
-      nestedBody.collection(1).asInstanceOf[SparkStatementWithPlan].getText(batch) == "SELECT 3")
+    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText
+      == "SELECT 2")
+    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText
+      == "SELECT 3")
   }
 
   test("compound: beginLabel") {

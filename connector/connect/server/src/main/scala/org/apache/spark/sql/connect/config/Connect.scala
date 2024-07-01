@@ -38,6 +38,14 @@ object Connect {
       .intConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_BINDING_PORT)
 
+  val CONNECT_GRPC_PORT_MAX_RETRIES =
+    buildStaticConf("spark.connect.grpc.port.maxRetries")
+      .doc("The max port retry attempts for the gRPC server binding." +
+        "By default, it's set to 0, and the server will fail fast in case of port conflicts.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_PORT_MAX_RETRIES)
+
   val CONNECT_GRPC_INTERCEPTOR_CLASSES =
     buildStaticConf("spark.connect.grpc.interceptor.classes")
       .doc(
@@ -279,6 +287,7 @@ object Connect {
       .doc("Sets the maximum number of cached resolved logical plans in Spark Connect Session." +
         " If set to a value less or equal than zero will disable the plan cache.")
       .version("4.0.0")
+      .internal()
       .intConf
       .createWithDefault(5)
 
@@ -289,6 +298,7 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
       .booleanConf
       .createWithDefault(true)
 }

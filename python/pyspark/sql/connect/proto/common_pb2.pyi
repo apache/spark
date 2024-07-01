@@ -296,3 +296,54 @@ class ResourceProfile(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ResourceProfile = ResourceProfile
+
+class Origin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PYTHON_ORIGIN_FIELD_NUMBER: builtins.int
+    @property
+    def python_origin(self) -> global___PythonOrigin: ...
+    def __init__(
+        self,
+        *,
+        python_origin: global___PythonOrigin | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "python_origin", b"python_origin"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "function", b"function", "python_origin", b"python_origin"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["function", b"function"]
+    ) -> typing_extensions.Literal["python_origin"] | None: ...
+
+global___Origin = Origin
+
+class PythonOrigin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FRAGMENT_FIELD_NUMBER: builtins.int
+    CALL_SITE_FIELD_NUMBER: builtins.int
+    fragment: builtins.str
+    """(Required) Name of the origin, for example, the name of the function"""
+    call_site: builtins.str
+    """(Required) Callsite to show to end users, for example, stacktrace."""
+    def __init__(
+        self,
+        *,
+        fragment: builtins.str = ...,
+        call_site: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["call_site", b"call_site", "fragment", b"fragment"],
+    ) -> None: ...
+
+global___PythonOrigin = PythonOrigin

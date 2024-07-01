@@ -183,12 +183,12 @@ public class RetryingBlockTransferor {
       if (numRetries > 0) {
         logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
           MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCK_IDS$.MODULE$, blockIdsToTransfer.length),
-          MDC.of(LogKeys.RETRY_COUNT$.MODULE$, numRetries));
+          MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, blockIdsToTransfer.length),
+          MDC.of(LogKeys.NUM_RETRY$.MODULE$, numRetries));
       } else {
         logger.error("Exception while beginning {} of {} outstanding blocks", e,
           MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-          MDC.of(LogKeys.NUM_BLOCK_IDS$.MODULE$, blockIdsToTransfer.length));
+          MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, blockIdsToTransfer.length));
       }
       if (shouldRetry(e) && initiateRetry(e)) {
         // successfully initiated a retry
@@ -217,9 +217,9 @@ public class RetryingBlockTransferor {
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
       MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
-      MDC.of(LogKeys.RETRY_COUNT$.MODULE$, retryCount),
+      MDC.of(LogKeys.NUM_RETRY$.MODULE$, retryCount),
       MDC.of(LogKeys.MAX_ATTEMPTS$.MODULE$, maxRetries),
-      MDC.of(LogKeys.NUM_BLOCK_IDS$.MODULE$, outstandingBlocksIds.size()),
+      MDC.of(LogKeys.NUM_BLOCKS$.MODULE$, outstandingBlocksIds.size()),
       MDC.of(LogKeys.RETRY_WAIT_TIME$.MODULE$, retryWaitTime));
 
     try {
@@ -313,7 +313,7 @@ public class RetryingBlockTransferor {
               logger.error("Failed to {} block {}, and will not retry ({} retries)", exception,
                 MDC.of(LogKeys.TRANSFER_TYPE$.MODULE$, listener.getTransferType()),
                 MDC.of(LogKeys.BLOCK_ID$.MODULE$, blockId),
-                MDC.of(LogKeys.RETRY_COUNT$.MODULE$,retryCount));
+                MDC.of(LogKeys.NUM_RETRY$.MODULE$,retryCount));
             } else {
               logger.debug(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",

@@ -18,50 +18,66 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SparkStatementWithPlan}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.Origin
 
-trait ProceduralLanguageInterpreter {
-  def buildExecutionPlan(
-      compound: CompoundBody,
-      evaluator: StatementBooleanEvaluator) : Iterator[CompoundStatementExec]
-}
+/**
+ * SQL scripting interpreter - builds SQL script execution plan.
+ */
+case class SqlScriptingInterpreter() {
 
-case class SqlScriptingInterpreter() extends ProceduralLanguageInterpreter {
-  override def buildExecutionPlan(
-      compound: CompoundBody,
-      evaluator: StatementBooleanEvaluator): Iterator[CompoundStatementExec] = {
-    val executable = transformTreeIntoExecutable(compound, evaluator)
-    executable.asInstanceOf[CompoundBodyExec]
+  /**
+   * Build execution plan and return statements that need to be executed,
+   *   wrapped in the execution node.
+   *
+   * @param compound
+   *   CompoundBody for which to build the plan.
+   * @return
+   *   Iterator through collection of statements to be executed.
+   */
+  def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
   }
 
+  /**
+   * Fetch the name of the Create Variable plan.
+   * @param plan
+   *   Plan to fetch the name from.
+   * @return
+   *   Name of the variable.
+   */
   private def getDeclareVarNameFromPlan(plan: LogicalPlan): Option[UnresolvedIdentifier] =
     plan match {
       case CreateVariable(name: UnresolvedIdentifier, _, _) => Some(name)
       case _ => None
     }
 
-  private def transformTreeIntoExecutable(
-      node: CompoundPlanStatement,
-      evaluator: StatementBooleanEvaluator): CompoundStatementExec = {
+  /**
+   * Transform the parsed tree to the executable node.
+   * @param node
+   *   Root node of the parsed tree.
+   * @return
+   *   Executable statement.
+   */
+  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
+        // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
         val variables = body.collection.flatMap {
-          case st: SparkStatementWithPlan => getDeclareVarNameFromPlan(st.parsedPlan)
+          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
           case _ => None
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SparkStatementWithPlanExec(_, 0, 0, isInternal = true))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st, evaluator)) ++ dropVariables)
-      case sparkStatement: SparkStatementWithPlan =>
-        new SparkStatementWithPlanExec(
+          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables)
+      case sparkStatement: SingleStatement =>
+        new SingleStatementExec(
           sparkStatement.parsedPlan,
-          sparkStatement.sourceStart,
-          sparkStatement.sourceEnd,
+          sparkStatement.origin,
           isInternal = false)
     }
-  }
 }

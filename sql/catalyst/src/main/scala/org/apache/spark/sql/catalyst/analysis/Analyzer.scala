@@ -254,7 +254,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  override def batches: Seq[Batch] = Seq(
+  private def earlyBatches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       new SubstituteExecuteImmediate(catalogManager),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
@@ -274,7 +274,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs),
+      KeepLegacyOutputs)
+  )
+
+  override def batches: Seq[Batch] = earlyBatches ++ Seq(
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
@@ -319,7 +322,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      ResolveIdentifierClause ::
+      new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
@@ -2203,11 +2206,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val alias = SubqueryAlias.generateSubqueryName(s"_${tableArgs.size}")
 
           // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
+          val f: FunctionTableSubqueryArgumentExpression = tableArgs.head._1
           val tvfWithTableColumnIndexes = tvf match {
             case g @ Generate(pyudtf: PythonUDTF, _, _, _, _, _)
-                if tableArgs.head._1.partitioningExpressionIndexes.nonEmpty =>
-              val partitionColumnIndexes =
-                PythonUDTFPartitionColumnIndexes(tableArgs.head._1.partitioningExpressionIndexes)
+                if f.extraProjectedPartitioningExpressions.nonEmpty =>
+              val partitionColumnIndexes = if (f.selectedInputExpressions.isEmpty) {
+                PythonUDTFPartitionColumnIndexes(f.partitioningExpressionIndexes)
+              } else {
+                // If the UDTF specified 'select' expression(s), we added a projection to compute
+                // them plus the 'partitionBy' expression(s) afterwards.
+                PythonUDTFPartitionColumnIndexes(
+                  (0 until f.extraProjectedPartitioningExpressions.length)
+                    .map(_ + f.selectedInputExpressions.length))
+              }
               g.copy(generator = pyudtf.copy(
                 pythonUDTFPartitionColumnIndexes = Some(partitionColumnIndexes)))
             case _ => tvf

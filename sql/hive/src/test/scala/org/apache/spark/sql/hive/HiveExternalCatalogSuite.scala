@@ -231,7 +231,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     // perform alter table
     val newSchema = StructType(Seq(
-      StructField("col1", StringType("UTF8_BINARY_LCASE"))
+      StructField("col1", StringType("UTF8_LCASE"))
     ))
     catalog.alterTableDataSchema("db1", tableName, newSchema)
 

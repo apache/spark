@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -976,76 +977,75 @@ class DataFrame:
         """
         ...
 
-    if not is_remote_only():
+    def checkpoint(self, eager: bool = True) -> "DataFrame":
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially
+        useful in iterative algorithms where the plan may grow exponentially. It will be
+        saved to files inside the checkpoint directory set with
+        :meth:`SparkContext.setCheckpointDir`, or `spark.checkpoint.dir` configuration.
 
-        def checkpoint(self, eager: bool = True) -> "DataFrame":
-            """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be
-            used to truncate the logical plan of this :class:`DataFrame`, which is especially
-            useful in iterative algorithms where the plan may grow exponentially. It will be
-            saved to files inside the checkpoint directory set with
-            :meth:`SparkContext.setCheckpointDir`.
+        .. versionadded:: 2.1.0
 
-            .. versionadded:: 2.1.0
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
 
-            Parameters
-            ----------
-            eager : bool, optional, default True
-                Whether to checkpoint this :class:`DataFrame` immediately.
+        Parameters
+        ----------
+        eager : bool, optional, default True
+            Whether to checkpoint this :class:`DataFrame` immediately.
 
-            Returns
-            -------
-            :class:`DataFrame`
-                Checkpointed DataFrame.
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
 
-            Notes
-            -----
-            This API is experimental.
+        Notes
+        -----
+        This API is experimental.
 
-            Examples
-            --------
-            >>> import tempfile
-            >>> df = spark.createDataFrame([
-            ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-            >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
-            ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
-            ...     df.checkpoint(False)
-            DataFrame[age: bigint, name: string]
-            """
-            ...
+        Examples
+        --------
+        >>> df = spark.createDataFrame([
+        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.checkpoint(False)  # doctest: +SKIP
+        DataFrame[age: bigint, name: string]
+        """
+        ...
 
-    if not is_remote_only():
+    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
+        be used to truncate the logical plan of this :class:`DataFrame`, which is especially
+        useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
+        are stored in the executors using the caching subsystem and therefore they are not
+        reliable.
 
-        def localCheckpoint(self, eager: bool = True) -> "DataFrame":
-            """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
-            be used to truncate the logical plan of this :class:`DataFrame`, which is especially
-            useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
-            are stored in the executors using the caching subsystem and therefore they are not
-            reliable.
+        .. versionadded:: 2.3.0
 
-            .. versionadded:: 2.3.0
+        .. versionchanged:: 4.0.0
+            Supports Spark Connect.
 
-            Parameters
-            ----------
-            eager : bool, optional, default True
-                Whether to checkpoint this :class:`DataFrame` immediately.
+        Parameters
+        ----------
+        eager : bool, optional, default True
+            Whether to checkpoint this :class:`DataFrame` immediately.
 
-            Returns
-            -------
-            :class:`DataFrame`
-                Checkpointed DataFrame.
+        Returns
+        -------
+        :class:`DataFrame`
+            Checkpointed DataFrame.
 
-            Notes
-            -----
-            This API is experimental.
+        Notes
+        -----
+        This API is experimental.
 
-            Examples
-            --------
-            >>> df = spark.createDataFrame([
-            ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-            >>> df.localCheckpoint(False)
-            DataFrame[age: bigint, name: string]
-            """
-            ...
+        Examples
+        --------
+        >>> df = spark.createDataFrame([
+        ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.localCheckpoint(False)
+        DataFrame[age: bigint, name: string]
+        """
+        ...
 
     @dispatch_df_method
     def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
@@ -4569,7 +4569,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
@@ -4585,6 +4585,9 @@ class DataFrame:
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
         Parameters
         ----------
@@ -4617,7 +4620,7 @@ class DataFrame:
 
         Deduplicate values on 'name' and 'height' columns.
 
-        >>> df.dropDuplicates(['name', 'height']).show()
+        >>> df.dropDuplicates('name', 'height').show()
         +-----+---+------+
         | name|age|height|
         +-----+---+------+
@@ -4627,7 +4630,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
@@ -4643,6 +4646,9 @@ class DataFrame:
         Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
+
+         .. versionchanged:: 4.0.0
+            Supports variable-length argument
 
          Parameters
          ----------
@@ -4673,7 +4679,7 @@ class DataFrame:
 
          Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+         >>> df.dropDuplicatesWithinWatermark('value')  # doctest: +SKIP
         """
         ...
 
@@ -5930,11 +5936,17 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+    def drop_duplicates(self, *subset: Union[str, List[str]]) -> "DataFrame":
         """
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect
+
+        .. versionchanged:: 4.0.0
+            Supports variable-length argument
         """
         ...
 
@@ -6267,6 +6279,31 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        """
+        Returns a QueryExecution object after the query was executed.
+
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution will return None.
+
+        If the same DataFrame is executed multiple times, the execution info will be
+        overwritten by the latest operation.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
         """
         ...
 

@@ -1370,7 +1370,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         """
           |CREATE TABLE parquet_streaming_tbl
           |(
-          |  key STRING COLLATE UTF8_BINARY_LCASE,
+          |  key STRING COLLATE UTF8_LCASE,
           |  value_stream INTEGER
           |) USING parquet""".stripMargin)
 
@@ -1396,7 +1396,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   test("SPARK-47776: streaming aggregation having binary inequality column in the grouping " +
     "key must be disallowed") {
     val tableName = "parquet_dummy_tbl"
-    val collationName = "UTF8_BINARY_LCASE"
+    val collationName = "UTF8_LCASE"
 
     withTable(tableName) {
       sql(
@@ -1425,10 +1425,27 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
         errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
         parameters = Map(
-          "schema" -> ".+\"type\":\"string collate UTF8_BINARY_LCASE\".+"
+          "schema" -> ".+\"c1\":\"spark.UTF8_LCASE\".+"
         ),
         matchPVals = true
       )
+    }
+  }
+
+  test("SPARK-48447: check state store provider class before invoking the constructor") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[Object].getCanonicalName) {
+      val input = MemoryStream[Int]
+      input.addData(1)
+      val query = input.toDF().limit(2).writeStream
+        .trigger(Trigger.AvailableNow())
+        .format("console")
+        .start()
+      val ex = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(ex.getMessage.contains(
+        s"The given State Store Provider ${classOf[Object].getCanonicalName} does not " +
+          "extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."))
     }
   }
 

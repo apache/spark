@@ -266,10 +266,10 @@ class XmlSuite
         .xml(inputFile)
         .collect()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -298,10 +298,10 @@ class XmlSuite
         .xml(inputFile)
         .show()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -1294,26 +1294,6 @@ class XmlSuite
     assert(result.select("decoded.pid").head().getString(0) === "14ft3")
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
-
-  /*
-  test("from_xml array basic test") {
-    val xmlData =
-      """<parent><pid>12345</pid><name>dave guy</name></parent>
-        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin
-    val df = Seq((8, xmlData)).toDF("number", "payload")
-    val xmlSchema = ArrayType(
-      StructType(
-        StructField("pid", IntegerType) ::
-          StructField("name", StringType) :: Nil))
-    val expectedSchema = df.schema.add("decoded", xmlSchema)
-    val result = df.withColumn("decoded",
-      from_xml(df.col("payload"), xmlSchema))
-    assert(expectedSchema === result.schema)
-    // TODO: ArrayType and MapType support in from_xml
-    // assert(result.selectExpr("decoded[0].pid").head().getInt(0) === 12345)
-    // assert(result.selectExpr("decoded[1].pid").head().getInt(1) === 67890)
-  }
-  */
 
   test("from_xml error test") {
     // XML contains error
@@ -2461,7 +2441,6 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
@@ -2469,7 +2448,7 @@ class XmlSuite
         checkErrorMatchPVals(
           exception = err,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2988,11 +2967,10 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
             checkErrorMatchPVals(
               exception = e,
               errorClass = "TASK_WRITE_FAILED",
-              parameters = Map("path" -> s"$actualPath.*"))
+              parameters = Map("path" -> s".*${dir.getName}.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }

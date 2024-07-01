@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
@@ -1387,7 +1387,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def reduce(func: (T, T) => T): T = {
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: agnosticEncoder :: Nil,
       outputEncoder = agnosticEncoder)
@@ -2705,7 +2705,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def filter(func: T => Boolean): Dataset[T] = {
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = PrimitiveBooleanEncoder)
@@ -2758,7 +2758,7 @@ class Dataset[T] private[sql] (
    */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     val outputEncoder = encoderFor[U]
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = outputEncoder)
@@ -2830,7 +2830,7 @@ class Dataset[T] private[sql] (
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
-    val generator = ScalarUserDefinedFunction(
+    val generator = ScalaUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
@@ -2862,7 +2862,7 @@ class Dataset[T] private[sql] (
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
       f: A => IterableOnce[B]): DataFrame = {
-    val generator = ScalarUserDefinedFunction(
+    val generator = ScalaUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])
@@ -3402,20 +3402,105 @@ class Dataset[T] private[sql] (
     df
   }
 
-  def checkpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
-  def checkpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("checkpoint is not implemented.")
-  }
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint directory set
+   * with `SparkContext#setCheckpointDir`.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def checkpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = true)
 
-  def localCheckpoint(): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
-  }
+  /**
+   * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
+   * to truncate the logical plan of this Dataset, which is especially useful in iterative
+   * algorithms where the plan may grow exponentially. Local checkpoints are written to executor
+   * storage and despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
 
-  def localCheckpoint(eager: Boolean): Dataset[T] = {
-    throw new UnsupportedOperationException("localCheckpoint is not implemented.")
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   *
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false)
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param reliableCheckpoint
+   *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
+   *   false creates a local checkpoint using the caching subsystem
+   */
+  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
+    sparkSession.newDataset(agnosticEncoder) { builder =>
+      val command = sparkSession.newCommand { builder =>
+        builder.getCheckpointCommandBuilder
+          .setLocal(!reliableCheckpoint)
+          .setEager(eager)
+          .setRelation(this.plan.getRoot)
+      }
+      val responseIter = sparkSession.execute(command)
+      try {
+        val response = responseIter
+          .find(_.hasCheckpointCommandResult)
+          .getOrElse(throw new RuntimeException("CheckpointCommandResult must be present"))
+
+        val cachedRemoteRelation = response.getCheckpointCommandResult.getRelation
+        sparkSession.cleaner.register(cachedRemoteRelation)
+
+        // Update the builder with the values from the result.
+        builder.setCachedRemoteRelation(cachedRemoteRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
+    }
   }
 
   /**
