@@ -178,7 +178,7 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
         import IPython
 
         # ipykernel is required for IPython
-        import ipykernel
+        import ipykernel  # type: ignore[import-not-found]
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames
