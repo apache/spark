@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
+
 import java.util
 import java.util.Locale
 import java.util.concurrent.atomic.LongAdder
@@ -30,14 +31,15 @@ import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-
 import org.apache.spark.{SparkConf, SparkEnv}
+
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -288,11 +290,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   // Run bunch of validations specific to HDFSBackedStateStoreProvider
   private def runValidation(
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       useMultipleValuesPerKey: Boolean,
       keyStateEncoderSpec: KeyStateEncoderSpec): Unit = {
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
-    if (useColumnFamilies) {
+    if (!useColumnFamilies.equals(ColumnFamilyType.None)) {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
@@ -319,7 +321,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {

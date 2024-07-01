@@ -22,12 +22,13 @@ import java.io._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.{SparkConf, SparkEnv}
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
@@ -56,14 +57,13 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        useVirtualColFamily: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
-      verify(useColumnFamilies, "Column families are not supported in this store")
+      verify(!useColumnFamilies.equals((ColumnFamilyType.None)),
+        "Column families are not supported in this store")
 
-      useVirtualColumnFamily = useVirtualColFamily
-      if (useVirtualColumnFamily) {
+      if (useVirtualColumnFamily.equals(ColumnFamilyType.UseVirtualColFamily)) {
         // if use virtual column family, then use default col family, no need to create new
         // TODO how to efficiently guarantee there isn't any value conflict for different key
         def getNextRandShort: Short = {
@@ -80,7 +80,6 @@ private[sql] class RocksDBStateStoreProvider
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
-    // TODO verify with changelog checkpoint
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -94,7 +93,7 @@ private[sql] class RocksDBStateStoreProvider
           rocksDB.get(kvEncoder._1.encodeKey(key), colFamilyName))
       }
 
-      if (!isValidated && value != null && !useColumnFamilies) {
+      if (!isValidated && value != null && useColumnFamilies.equals(ColumnFamilyType.None)) {
         StateStoreProvider.validateStateRowFormat(
           key, keySchema, value, valueSchema, storeConf)
         isValidated = true
@@ -182,7 +181,7 @@ private[sql] class RocksDBStateStoreProvider
         rocksDB.prefixScan(getIdBytes(cfId)).map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
             kvEncoder._2.decodeValue(kv.value))
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          if (!isValidated && rowPair.value != null && useColumnFamilies.equals(ColumnFamilyType.None)) {
             StateStoreProvider.validateStateRowFormat(
               rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
             isValidated = true
@@ -193,7 +192,7 @@ private[sql] class RocksDBStateStoreProvider
         rocksDB.iterator(colFamilyName).map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          if (!isValidated && rowPair.value != null && useColumnFamilies.equals(ColumnFamilyType.None)) {
             StateStoreProvider.validateStateRowFormat(
               rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
             isValidated = true
@@ -335,7 +334,8 @@ private[sql] class RocksDBStateStoreProvider
 
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
-      verify(useColumnFamilies, "Column families are not supported in this store")
+      verify(!useColumnFamilies.equals(ColumnFamilyType.None),
+        "Column families are not supported in this store")
       val result = if (!useVirtualColumnFamily) {
         rocksDB.removeColFamilyIfExists(colFamilyName)
       } else {
@@ -360,7 +360,7 @@ private[sql] class RocksDBStateStoreProvider
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
@@ -375,7 +375,8 @@ private[sql] class RocksDBStateStoreProvider
     this.useColumnFamilies = useColumnFamilies
 
     if (useMultipleValuesPerKey) {
-      require(useColumnFamilies, "Multiple values per key support requires column families to be" +
+      require(!useColumnFamilies.equals(ColumnFamilyType.None),
+        "Multiple values per key support requires column families to be" +
         " enabled in RocksDBStateStore.")
     }
 
@@ -441,7 +442,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
-  @volatile private var useColumnFamilies: Boolean = _
+  @volatile private var useColumnFamilies: ColumnFamilyType = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString

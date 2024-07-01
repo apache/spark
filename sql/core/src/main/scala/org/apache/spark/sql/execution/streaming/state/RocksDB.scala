@@ -34,11 +34,12 @@ import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
-
 import org.apache.spark.TaskContext
+
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -64,7 +65,8 @@ case object StoreMaintenance extends RocksDBOpType("store_maintenance")
  * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
- * @param useColumnFamilies Used to determine whether a single or multiple column families are used
+ * @param useColumnFamilies Used to determine whether a single or multiple column families are used,
+ *                          and whether physical or virtual column families are used
  */
 class RocksDB(
     dfsRootDir: String,
@@ -72,7 +74,7 @@ class RocksDB(
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
-    useColumnFamilies: Boolean = false) extends Logging {
+    useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None) extends Logging {
 
   case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
     def close(): Unit = {
@@ -238,7 +240,8 @@ class RocksDB(
       try {
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
-          if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
+          if ((!useColumnFamilies.equals(ColumnFamilyType.None))
+            && !checkColFamilyExists(colFamilyName)) {
             createColFamilyIfAbsent(colFamilyName, checkInternalColumnFamilies(colFamilyName))
           }
 
@@ -282,7 +285,7 @@ class RocksDB(
       colFamilyName: String): Unit = {
     if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
       // if the state store instance does not support multiple column families, throw an exception
-      if (!useColumnFamilies) {
+      if (useColumnFamilies.equals(ColumnFamilyType.None)) {
         throw StateStoreErrors.unsupportedOperationException(operationName,
           multColFamiliesDisabledStr)
       }
@@ -311,7 +314,7 @@ class RocksDB(
       colFamilyName: String,
       isInternal: Boolean = false): Unit = {
     // if the state store instance does not support multiple column families, throw an exception
-    if (!useColumnFamilies) {
+    if (useColumnFamilies.equals(ColumnFamilyType.None)) {
       throw StateStoreErrors.unsupportedOperationException(operationName,
         multColFamiliesDisabledStr)
     }
@@ -394,7 +397,7 @@ class RocksDB(
     }
 
     db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
-    if (useColumnFamilies) {
+    if (!useColumnFamilies.equals(ColumnFamilyType.None)) {
       changelogWriter.foreach(_.put(key, value, colFamilyName))
     } else {
       changelogWriter.foreach(_.put(key, value))
@@ -416,7 +419,7 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    if (!useColumnFamilies) {
+    if (useColumnFamilies.equals(ColumnFamilyType.None)) {
       throw StateStoreErrors.unsupportedOperationException("merge",
         multColFamiliesDisabledStr)
     }
@@ -448,7 +451,7 @@ class RocksDB(
       }
     }
     db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
-    if (useColumnFamilies) {
+    if (!useColumnFamilies.equals(ColumnFamilyType.None)) {
       changelogWriter.foreach(_.delete(key, colFamilyName))
     } else {
       changelogWriter.foreach(_.delete(key))

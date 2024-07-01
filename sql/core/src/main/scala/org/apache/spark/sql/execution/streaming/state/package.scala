@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -58,7 +60,7 @@ package object state {
         keyStateEncoderSpec: KeyStateEncoderSpec,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
-        useColumnFamilies: Boolean = false,
+        useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None,
         extraOptions: Map[String, String] = Map.empty,
         useMultipleValuesPerKey: Boolean = false)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
@@ -98,7 +100,7 @@ package object state {
         keyStateEncoderSpec: KeyStateEncoderSpec,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
-        useColumnFamilies: Boolean = false,
+        useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None,
         extraOptions: Map[String, String] = Map.empty)(
         storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
       : ReadStateStoreRDD[T, U] = {

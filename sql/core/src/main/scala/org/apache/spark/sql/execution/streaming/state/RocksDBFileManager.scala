@@ -36,12 +36,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
-
 import org.apache.spark.{SparkConf, SparkEnv}
+
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -160,14 +161,14 @@ class RocksDBFileManager(
 
   def getChangeLogWriter(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
+      useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None): StateStoreChangelogWriter = {
     val changelogFile = dfsChangelogFile(version)
     if (!rootDirChecked) {
       val rootDir = new Path(dfsRootDir)
       if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
       rootDirChecked = true
     }
-    val changelogWriter = if (useColumnFamilies) {
+    val changelogWriter = if (!useColumnFamilies.equals(ColumnFamilyType.None)) {
       new StateStoreChangelogWriterV2(fm, changelogFile, codec)
     } else {
       new StateStoreChangelogWriterV1(fm, changelogFile, codec)
@@ -178,9 +179,9 @@ class RocksDBFileManager(
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
+      useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version)
-    if (useColumnFamilies) {
+    if (!useColumnFamilies.equals(ColumnFamilyType.None)) {
       new StateStoreChangelogReaderV2(fm, changelogFile, codec)
     } else {
       new StateStoreChangelogReaderV1(fm, changelogFile, codec)

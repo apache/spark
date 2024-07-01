@@ -24,11 +24,12 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -46,7 +47,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   import StateStoreTestsHelper._
 
   test("Implicit key operations") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -90,7 +91,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("Value state operations for single instance") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -116,7 +117,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("Value state operations for multiple instances") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -161,7 +162,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("Value state operations for unsupported type name should fail") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -188,7 +189,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
         storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-        useColumnFamilies = true, storeConf, new Configuration)
+        useColumnFamilies = ColumnFamilyType.UseVirtualColFamily, storeConf, new Configuration)
     }
     checkError(
       ex,
@@ -201,7 +202,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for Primitive(Double) instances") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -227,7 +228,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for Primitive(Long) instances") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -253,7 +254,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for case class instances") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -279,7 +280,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for POJO instances") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
@@ -306,7 +307,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
 
   test(s"test Value state TTL") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -362,7 +363,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test negative or zero TTL duration throws error") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(ColumnFamilyType.UseVirtualColFamily)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -416,7 +417,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   protected def useMultipleValuesPerKey = false
 
   protected def newStoreProviderWithStateVariable(
-      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+      useColumnFamilies: ColumnFamilyType): RocksDBStateStoreProvider = {
     newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
       NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       useColumnFamilies = useColumnFamilies)
@@ -427,7 +428,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
       keyStateEncoderSpec: KeyStateEncoderSpec,
       sqlConf: SQLConf = SQLConf.get,
       conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+      useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,

@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.File
 
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
@@ -64,20 +65,20 @@ trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
   protected val codecsInShortName =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
-  protected def testWithAllCodec(name: String)(func: Boolean => Any): Unit = {
-    Seq(true, false).foreach { colFamiliesEnabled =>
+  protected def testWithAllCodec(name: String)(func: ColumnFamilyType => Any): Unit = {
+    Seq(ColumnFamilyType.None, ColumnFamilyType.UsePhysicalColFamily).foreach { colFamilyType =>
       codecsInShortName.foreach { codecShortName =>
-        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+        test(s"$name - with codec $codecShortName - with colFamilyType=$colFamilyType") {
           withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-            func(colFamiliesEnabled)
+            func(colFamilyType)
           }
         }
       }
 
       CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
-        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+        test(s"$name - with codec $codecShortName - with colFamilyType=$colFamilyType") {
           withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-            func(colFamiliesEnabled)
+            func(colFamilyType)
           }
         }
       }

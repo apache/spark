@@ -228,7 +228,7 @@ trait FlatMapGroupsWithStateExecBase
             stateManager.stateSchema,
             NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
             stateInfo.get.storeVersion,
-            useColumnFamilies = false,
+            useColumnFamilies = ColumnFamilyType.None,
             storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
           processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))

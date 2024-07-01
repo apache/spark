@@ -2168,6 +2168,10 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
     .doc("Running multiple runs of the same streaming query concurrently is not supported. " +

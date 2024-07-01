@@ -365,7 +365,7 @@ case class TransformWithStateExec(
               VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
               version = stateInfo.get.storeVersion,
-              useColumnFamilies = true,
+              useColumnFamilies = ColumnFamilyType.UseVirtualColFamily,
               storeConf = storeConf,
               hadoopConf = hadoopConfBroadcast.value.value
             )
@@ -434,7 +434,7 @@ case class TransformWithStateExec(
       KEY_ROW_SCHEMA,
       VALUE_ROW_SCHEMA,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-      useColumnFamilies = true,
+      useColumnFamilies = ColumnFamilyType.UseVirtualColFamily,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true)

@@ -22,7 +22,9 @@ import java.util.UUID
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -77,7 +79,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    useColumnFamilies: Boolean = false,
+    useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None,
     extraOptions: Map[String, String] = Map.empty)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
@@ -112,7 +114,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     keyStateEncoderSpec: KeyStateEncoderSpec,
     sessionState: SessionState,
     @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
-    useColumnFamilies: Boolean = false,
+    useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None,
     extraOptions: Map[String, String] = Map.empty,
     useMultipleValuesPerKey: Boolean = false)
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,

@@ -28,14 +28,15 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
+
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -131,7 +132,6 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
-      useVirtualColFamily: Boolean = false,
       isInternal: Boolean = false): Unit
 
   /**
@@ -312,6 +312,14 @@ case class RangeKeyScanStateEncoderSpec(
 }
 
 /**
+ * Enum type for deciding column family type.
+ */
+object ColumnFamilyType extends Enumeration {
+  type ColumnFamilyType = Value
+  val UsePhysicalColFamily, UseVirtualColFamily, None = Value
+}
+
+/**
  * Trait representing a provider that provide [[StateStore]] instances representing
  * versions of state data.
  *
@@ -353,7 +361,7 @@ trait StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit
@@ -408,7 +416,7 @@ object StateStoreProvider {
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
@@ -619,7 +627,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
@@ -638,7 +646,7 @@ object StateStore extends Logging {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): StateStore = {
@@ -664,7 +672,7 @@ object StateStore extends Logging {
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
+      useColumnFamilies: ColumnFamilyType,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {

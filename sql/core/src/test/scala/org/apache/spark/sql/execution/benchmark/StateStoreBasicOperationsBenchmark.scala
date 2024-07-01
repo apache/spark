@@ -23,7 +23,8 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilyType, HDFSBackedStateStoreProvider, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.ColumnFamilyType.ColumnFamilyType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}
 import org.apache.spark.util.Utils
@@ -164,10 +165,10 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
         // note that merge is only supported for RocksDB state store provider
         val rocksDBProvider = newRocksDBStateProvider(trackTotalNumberOfRows = true,
-          useColumnFamilies = true,
+          useColumnFamilies = ColumnFamilyType.UsePhysicalColFamily,
           useMultipleValuesPerKey = true)
         val rocksDBWithNoTrackProvider = newRocksDBStateProvider(trackTotalNumberOfRows = false,
-          useColumnFamilies = true,
+          useColumnFamilies = ColumnFamilyType.UsePhysicalColFamily,
           useMultipleValuesPerKey = true)
 
         val committedRocksDBVersion = loadInitialDataWithMultipleValues(rocksDBProvider, testData)
@@ -468,13 +469,13 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeConf = new StateStoreConf(new SQLConf())
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, storeConf, new Configuration)
+      useColumnFamilies = ColumnFamilyType.None, storeConf, new Configuration)
     provider
   }
 
   private def newRocksDBStateProvider(
       trackTotalNumberOfRows: Boolean = true,
-      useColumnFamilies: Boolean = false,
+      useColumnFamilies: ColumnFamilyType = ColumnFamilyType.None,
       useMultipleValuesPerKey: Boolean = false): StateStoreProvider = {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new RocksDBStateStoreProvider()
