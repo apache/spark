@@ -989,9 +989,11 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
           // If we can not write to output file in the task, there's no point in trying to
           // re-execute it.
-          logError(log"Task ${MDC(TASK_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
-            log"(TID ${MDC(TID, tid)}) can not write to output file: " +
-            log"${MDC(ERROR, ef.description)}; not retrying")
+          logError(
+            log"Task ${MDC(TASK_INDEX, info.index)}.${MDC(TASK_ATTEMPT_ID, info.attemptNumber)} " +
+              log"in stage ${MDC(STAGE_ID, taskSet.stageId)}." +
+            log"${MDC(STAGE_ATTEMPT, taskSet.stageAttemptId)} (TID ${MDC(TASK_ID, tid)}) " +
+            log"can not write to output file: ${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
@@ -1057,8 +1059,8 @@ private[spark] class TaskSetManager(
         info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
-          log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
+        logError(log"Task ${MDC(TASK_INDEX, index)} in stage " + taskSet.logId +
+          log" failed ${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
           .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
         return
@@ -1252,8 +1254,8 @@ private[spark] class TaskSetManager(
         if (speculated) {
           addPendingTask(index, speculatable = true)
           logInfo(
-            log"Marking task ${MDC(INDEX, index)} in stage ${MDC(STAGE_ID, taskSet.id)} (on " +
-            log"${MDC(HOST, info.host)}) as speculatable because it ran more than " +
+            log"Marking task ${MDC(TASK_INDEX, index)} in stage " + taskSet.logId +
+            log" (on ${MDC(HOST, info.host)}) as speculatable because it ran more than " +
             log"${MDC(TIMEOUT, threshold)} ms(${MDC(NUM_TASKS, speculatableTasks.size + 1)}" +
             log"speculatable tasks in this taskset now)")
           speculatableTasks += index

@@ -42,7 +42,7 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
 
     tableIdent.database match {
-      case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
+      case Some(db) if db == sparkSession.sharedState.globalTempDB =>
         val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
           throw QueryCompilationErrors.noSuchTableError(db, tableIdent.identifier)
         }

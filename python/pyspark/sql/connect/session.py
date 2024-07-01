@@ -23,7 +23,7 @@ import threading
 import os
 import warnings
 from collections.abc import Sized
-from functools import reduce
+import functools
 from threading import RLock
 from typing import (
     Optional,
@@ -399,7 +399,7 @@ class SparkSession:
             "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
             "spark.sql.timestampType",
         )
-        return reduce(
+        return functools.reduce(
             _merge_type,
             (
                 _infer_schema(
@@ -720,9 +720,12 @@ class SparkSession:
                 _views.append(SubqueryAlias(df._plan, name))
 
         cmd = SQL(sqlQuery, _args, _named_args, _views)
-        data, properties = self.client.execute_command(cmd.command(self._client))
+        data, properties, ei = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
-            return DataFrame(CachedRelation(properties["sql_command_result"]), self)
+            df = DataFrame(CachedRelation(properties["sql_command_result"]), self)
+            # A command result contains the execution.
+            df._execution_info = ei
+            return df
         else:
             return DataFrame(cmd, self)
 
@@ -898,7 +901,7 @@ class SparkSession:
 
     dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
-    @property
+    @functools.cached_property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None
