@@ -227,7 +227,8 @@ case class StreamingSymmetricHashJoinExec(
   private val stateStoreNames =
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
-  override def operatorStateMetadata(): OperatorStateMetadata = {
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =

@@ -387,7 +387,7 @@ case class TransformWithStateExec(
     // Write the new schema to the schema file
     schemaFile.add(batchId, newColumnFamilySchemas)
     // purge oldest files
-    schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
+    // schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
     Array(schemaFile.getPathFromBatchId(batchId))
   }
 
@@ -398,14 +398,14 @@ case class TransformWithStateExec(
   }
 
   /** Metadata of this stateful operator and its states stores. */
-  override def operatorStateMetadata(): OperatorStateMetadata = {
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     // stateSchemaFilePath should be populated at this point
-    assert(info.stateSchemaPath.isDefined)
     val stateStoreInfo =
       Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, info.stateSchemaPath.get))
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
 
     val operatorPropertiesJson: JValue =
       ("timeMode" -> JString(timeMode.toString)) ~

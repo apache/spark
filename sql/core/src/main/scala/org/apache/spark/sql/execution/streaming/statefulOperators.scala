@@ -197,7 +197,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
   /** Metadata of this stateful operator and its states stores. */
-  def operatorStateMetadata(): OperatorStateMetadata = {
+  def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo =
@@ -918,7 +919,8 @@ case class SessionWindowStateStoreSaveExec(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
-  override def operatorStateMetadata(): OperatorStateMetadata = {
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
     val stateStoreInfo = Array(StateStoreMetadataV1(
