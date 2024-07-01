@@ -389,9 +389,11 @@ case class AdaptiveSparkPlanExec(
             currentPhysicalPlan = currentPhysicalPlan match {
               case broadcast: BroadcastQueryStageExec =>
                 broadcast.plan match {
-                  case b: BroadcastExchangeExec =>
+                  case b: BroadcastExchangeExec
+                    if !newPhysicalPlan.isInstanceOf[BroadcastExchangeExec] =>
                     broadcast.copy(plan = b.copy(child = newPhysicalPlan))
-                  case ReusedExchangeExec(_, b: BroadcastExchangeExec) =>
+                  case ReusedExchangeExec(_, b: BroadcastExchangeExec)
+                    if !newPhysicalPlan.isInstanceOf[BroadcastExchangeExec] =>
                     broadcast.copy(plan = b.copy(child = newPhysicalPlan))
                 }
               case p => p
