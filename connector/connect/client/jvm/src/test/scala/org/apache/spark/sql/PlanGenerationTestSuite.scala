@@ -973,7 +973,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("collect_list including nulls") {
-    fn.collect_list("a", false)
+    fn.collect_list(fn.col("a"), fn.lit(false))
   }
 
   functionTest("collect_set") {
@@ -981,7 +981,7 @@ class PlanGenerationTestSuite
   }
 
   functionTest("collect_set including nulls") {
-    fn.collect_set("a", false)
+    fn.collect_set(fn.col("a"), fn.lit(false))
   }
 
   functionTest("corr") {

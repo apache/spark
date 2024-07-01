@@ -351,7 +351,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_list(e: Column): Column = collect_list(e, ignoreNulls = true)
+  def collect_list(e: Column): Column = collect_list(e, lit(true))
 
   /**
    * Aggregate function: returns a list of objects with duplicates and excluding nulls.
@@ -363,34 +363,6 @@ object functions {
    * @since 1.6.0
    */
   def collect_list(columnName: String): Column = collect_list(Column(columnName))
-
-  /**
-   * Aggregate function: returns a list of objects with duplicates.
-   *
-   * The parameter ignoreNulls controls if nulls should be excluded from the result.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_list(columnName: String, ignoreNulls: Boolean): Column =
-    collect_list(Column(columnName), ignoreNulls)
-
-  /**
-   * Aggregate function: returns a list of objects with duplicates.
-   *
-   * The parameter ignoreNulls controls if nulls should be excluded from the result.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_list(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("collect_list", false, ignoreNulls, e)
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
@@ -417,7 +389,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_set(e: Column): Column = collect_set(e, ignoreNulls = true)
+  def collect_set(e: Column): Column = collect_set(e, lit(true))
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated and nulls
@@ -430,34 +402,6 @@ object functions {
    * @since 1.6.0
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
-
-  /**
-   * Aggregate function: returns a set of objects with duplicate elements eliminated.
-   *
-   * The parameter ignoreNulls controls if nulls should be excluded from the result.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_set(e: Column, ignoreNulls: Boolean): Column =
-    Column.fn("collect_set", false, ignoreNulls, e)
-
-  /**
-   * Aggregate function: returns a set of objects with duplicate elements eliminated.
-   *
-   * The parameter ignoreNulls controls if nulls should be excluded from the result.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on the order of the rows which may be non-deterministic after a shuffle.
-   *
-   * @group agg_funcs
-   * @since 4.0.0
-   */
-  def collect_set(columnName: String, ignoreNulls: Boolean): Column =
-    collect_set(Column(columnName), ignoreNulls)
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
