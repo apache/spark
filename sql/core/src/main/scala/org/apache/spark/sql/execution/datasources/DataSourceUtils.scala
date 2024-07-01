@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, PredicateHelper, Unevaluable}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -290,12 +290,21 @@ object DataSourceUtils extends PredicateHelper {
   def shouldPushFilter(expression: Expression, isCollationPushDownSupported: Boolean): Boolean = {
     if (!expression.deterministic) return false
 
+    if (hasUnevaluableExpression(expression)) return false
+
     isCollationPushDownSupported || !expression.exists {
       case childExpression @ (_: Attribute | _: GetStructField) =>
         // don't push down filters for types with non-binary sortable collation
         // as it could lead to incorrect results
         SchemaUtils.hasNonUTF8BinaryCollation(childExpression.dataType)
 
+      case _ => false
+    }
+  }
+
+  private def hasUnevaluableExpression(expression: Expression): Boolean = {
+    expression.exists {
+      case _: Unevaluable => true
       case _ => false
     }
   }
