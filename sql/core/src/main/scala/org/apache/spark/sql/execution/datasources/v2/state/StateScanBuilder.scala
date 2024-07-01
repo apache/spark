@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.StructType
@@ -36,8 +36,10 @@ class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateStoreConf: StateStoreConf) extends ScanBuilder {
-  override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf)
+    stateStoreConf: StateStoreConf,
+    stateStoreMetadata: Array[StateMetadataTableEntry]) extends ScanBuilder {
+  override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
+    stateStoreMetadata)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -51,7 +53,8 @@ class StateScan(
     session: SparkSession,
     schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateStoreConf: StateStoreConf) extends Scan with Batch {
+    stateStoreConf: StateStoreConf,
+    stateStoreMetadata: Array[StateMetadataTableEntry]) extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = session.sparkContext.broadcast(
@@ -107,15 +110,6 @@ class StateScan(
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.none =>
-      // Read the operator metadata once to see if we can find the information for prefix scan
-      // encoder used in session window aggregation queries.
-      val allStateStoreMetadata = new StateMetadataPartitionReader(
-        sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConfBroadcast.value)
-        .stateMetadata.toArray
-      val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
-        entry.operatorId == sourceOptions.operatorId &&
-          entry.stateStoreName == sourceOptions.storeName
-      }
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
         stateStoreMetadata)
   }
