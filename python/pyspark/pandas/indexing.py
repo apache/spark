@@ -1840,7 +1840,8 @@ def _test() -> None:
     if Version(np.__version__) >= Version("2"):
         # Numpy 2.0+ changed its string format,
         # adding type information to numeric scalars.
-        np.set_printoptions(legacy="1.25")
+        # `legacy="1.25"` only available in `nump>=2`
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
 
     globs = pyspark.pandas.indexing.__dict__.copy()
     globs["ps"] = pyspark.pandas
