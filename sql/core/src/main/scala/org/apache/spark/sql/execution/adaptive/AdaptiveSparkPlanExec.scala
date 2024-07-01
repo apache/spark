@@ -386,7 +386,16 @@ case class AdaptiveSparkPlanExec(
               sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
             logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
             cleanUpTempTags(newPhysicalPlan)
-            currentPhysicalPlan = newPhysicalPlan
+            currentPhysicalPlan = currentPhysicalPlan match {
+              case broadcast: BroadcastQueryStageExec =>
+                broadcast.plan match {
+                  case b: BroadcastExchangeExec =>
+                    broadcast.copy(plan = b.copy(child = newPhysicalPlan))
+                  case ReusedExchangeExec(_, b: BroadcastExchangeExec) =>
+                    broadcast.copy(plan = b.copy(child = newPhysicalPlan))
+                }
+              case p => p
+            }
             currentLogicalPlan = newLogicalPlan
             stagesToReplace = Seq.empty[QueryStageExec]
           }
