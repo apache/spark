@@ -177,10 +177,18 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     try:
         import IPython
 
+        # ipykernel is required for IPython
+        import ipykernel
+
         ipython = IPython.get_ipython()
         # Filtering out IPython frame
         ipy_root = os.path.dirname(IPython.__file__)
-        selected_frames = [frame for frame in selected_frames if ipy_root not in frame.filename]
+        ipykernel_root = os.path.dirname(ipykernel.__file__)
+        selected_frames = [
+            frame
+            for frame in selected_frames
+            if (ipy_root not in frame.filename) and (ipykernel_root not in frame.filename)
+        ]
     except ImportError:
         ipython = None
 
