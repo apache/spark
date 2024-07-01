@@ -2487,8 +2487,8 @@ class MergeIntoWriter:
         """
         Initialize a `WhenMatched` action with a condition.
 
-        This `WhenMatched` action will be executed when a source row matches a target table row based
-        on the merge condition and the specified `condition` is satisfied.
+        This `WhenMatched` action will be executed when a source row matches a target table row
+        based on the merge condition and the specified `condition` is satisfied.
 
         This `WhenMatched` can be followed by one of the following merge actions:
           - `updateAll`: Update all the matched target table rows with source dataset rows.
@@ -2503,12 +2503,13 @@ class MergeIntoWriter:
     ) -> "MergeIntoWriter.WhenNotMatched":
         """
         Initialize a `WhenNotMatched` action with a condition.
-        This `WhenNotMatched` action will be executed when a source row does not match any target row
-        based on the merge condition and the specified `condition` is satisfied.
+        This `WhenNotMatched` action will be executed when a source row does not match any target
+        row based on the merge condition and the specified `condition` is satisfied.
+
         This `WhenNotMatched` can be followed by one of the following merge actions:
           - `insertAll`: Insert all rows from the source that are not already in the target table.
-          - `insert(Dict)`: Insert all rows from the source that are not already in the target table,
-            with the specified columns based on the provided assignment.
+          - `insert(Dict)`: Insert all rows from the source that are not already in the target
+            table, with the specified columns based on the provided assignment.
         """
         return self.WhenNotMatched(self, condition)
 
@@ -2522,7 +2523,7 @@ class MergeIntoWriter:
         is satisfied.
         This `WhenNotMatchedBySource` can be followed by one of the following merge actions:
           - `updateAll`: Update all the not matched target table rows with source dataset rows.
-          - `update(Map)`: Update all the not matched target table rows while changing only
+          - `update(Dict)`: Update all the not matched target table rows while changing only
             the specified columns based on the provided assignment.
           - `delete`: Delete all target rows that have no matches in the source table.
         """
