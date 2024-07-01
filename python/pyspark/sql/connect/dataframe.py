@@ -23,7 +23,7 @@ from pyspark.errors.exceptions.base import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.readwriter import MergeIntoWriter
+from pyspark.sql.merge import MergeIntoWriter
 
 check_dependencies(__name__)
 

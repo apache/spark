@@ -56,7 +56,8 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
-from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2, MergeIntoWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
     StructType,

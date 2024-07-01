@@ -37,7 +37,8 @@ from pyspark.util import is_remote_only
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
-from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2, MergeIntoWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
