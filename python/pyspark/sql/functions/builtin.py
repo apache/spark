@@ -14099,7 +14099,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     -----
     The position is not zero based, but 1 based index.
     If extraction is a string, :meth:`element_at` treats it as a literal string,
-    while :meth:`try_element_at` treate it as a column name.
+    while :meth:`try_element_at` treats it as a column name.
 
     See Also
     --------
@@ -14189,13 +14189,13 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     Notes
     -----
     The position is not zero based, but 1 based index.
-    If extraction is a string, :meth:`try_element_at` treate it as a column name,
+    If extraction is a string, :meth:`try_element_at` treats it as a column name,
     while :meth:`element_at` treats it as a literal string.
 
     See Also
     --------
     :meth:`get`
-    :meth:`try_element_at`
+    :meth:`element_at`
 
     Examples
     --------
