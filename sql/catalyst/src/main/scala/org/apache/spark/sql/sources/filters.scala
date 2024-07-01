@@ -385,6 +385,7 @@ object AlwaysFalse extends AlwaysFalse {
 /**
  * Base class for collation aware string filters.
  */
+@Evolving
 abstract class CollatedFilter() extends Filter {
 
   /** The corresponding non-collation aware filter. */
@@ -396,60 +397,70 @@ abstract class CollatedFilter() extends Filter {
 }
 
 /** Collation aware equivalent of [[EqualTo]]. */
+@Evolving
 case class CollatedEqualTo(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = EqualTo(attribute, value)
 }
 
 /** Collation aware equivalent of [[EqualNullSafe]]. */
+@Evolving
 case class CollatedEqualNullSafe(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = EqualNullSafe(attribute, value)
 }
 
 /** Collation aware equivalent of [[GreaterThan]]. */
+@Evolving
 case class CollatedGreaterThan(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThan(attribute, value)
 }
 
 /** Collation aware equivalent of [[GreaterThanOrEqual]]. */
+@Evolving
 case class CollatedGreaterThanOrEqual(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = GreaterThanOrEqual(attribute, value)
 }
 
 /** Collation aware equivalent of [[LessThan]]. */
+@Evolving
 case class CollatedLessThan(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = LessThan(attribute, value)
 }
 
 /** Collation aware equivalent of [[LessThanOrEqual]]. */
+@Evolving
 case class CollatedLessThanOrEqual(attribute: String, value: Any, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = LessThanOrEqual(attribute, value)
 }
 
 /** Collation aware equivalent of [[In]]. */
+@Evolving
 case class CollatedIn(attribute: String, values: Array[Any], dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = In(attribute, values)
 }
 
 /** Collation aware equivalent of [[StringStartsWith]]. */
+@Evolving
 case class CollatedStringStartsWith(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringStartsWith(attribute, value)
 }
 
 /** Collation aware equivalent of [[StringEndsWith]]. */
+@Evolving
 case class CollatedStringEndsWith(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringEndsWith(attribute, value)
 }
 
 /** Collation aware equivalent of [[StringContains]]. */
+@Evolving
 case class CollatedStringContains(attribute: String, value: String, dataType: DataType)
   extends CollatedFilter {
   override def correspondingFilter: Filter = StringContains(attribute, value)

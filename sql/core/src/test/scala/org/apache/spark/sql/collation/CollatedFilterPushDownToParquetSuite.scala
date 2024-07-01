@@ -177,7 +177,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
       expectedRowCount = 2)
   }
 
-  test("mix or and and") {
+  test("mix OR and AND") {
     testPushDown(
       filterString = s"$collatedCol = 'aaa' AND ($nonCollatedCol = 'aaa' OR $collatedCol = 'aaa')",
       expectedPushedFilters = Seq(IsNotNull(collatedCol)),
@@ -221,7 +221,7 @@ abstract class CollatedFilterPushDownToParquetSuite extends QueryTest
   }
 }
 
-class V1CollatedFilterPushDownToParquetSuite extends CollatedFilterPushDownToParquetSuite {
+class CollatedFilterPushDownToParquetV1Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
@@ -249,7 +249,7 @@ class V1CollatedFilterPushDownToParquetSuite extends CollatedFilterPushDownToPar
   }
 }
 
-class V2CollatedFilterPushDownToParquetSuite extends CollatedFilterPushDownToParquetSuite {
+class CollatedFilterPushDownToParquetV2Suite extends CollatedFilterPushDownToParquetSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
