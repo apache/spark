@@ -2916,9 +2916,9 @@
     "sqlState" : "22029"
   },
   "SQL_SCRIPTING_LABEL_ERROR" : {
-      "message" : [
+    "message" : [
       "Invalid usage of labels."
-      ],
+    ],
     "subClass" : {
       "LABELS_MISMATCH" : {
         "message" : [
@@ -2930,7 +2930,8 @@
           "End label <endLabel> can not exist without begin label."
         ]
       }
-    }
+    },
+    "sqlState" : "42K0L"
   },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
