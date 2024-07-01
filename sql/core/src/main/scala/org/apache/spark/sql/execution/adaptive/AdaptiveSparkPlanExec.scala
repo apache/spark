@@ -386,18 +386,7 @@ case class AdaptiveSparkPlanExec(
               sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
             logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
             cleanUpTempTags(newPhysicalPlan)
-            currentPhysicalPlan = currentPhysicalPlan match {
-              case broadcast: BroadcastQueryStageExec =>
-                broadcast.plan match {
-                  case b: BroadcastExchangeExec
-                    if !newPhysicalPlan.isInstanceOf[BroadcastExchangeExec] =>
-                    broadcast.copy(plan = b.copy(child = newPhysicalPlan))
-                  case ReusedExchangeExec(_, b: BroadcastExchangeExec)
-                    if !newPhysicalPlan.isInstanceOf[BroadcastExchangeExec] =>
-                    broadcast.copy(plan = b.copy(child = newPhysicalPlan))
-                }
-              case p => p
-            }
+            currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
             stagesToReplace = Seq.empty[QueryStageExec]
           }
@@ -773,7 +762,13 @@ case class AdaptiveSparkPlanExec(
       // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
       // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan is
       // already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
-      val finalPlan = inputPlan match {
+      val finalPlan = currentPhysicalPlan match {
+        case BroadcastQueryStageExec(_, broadcast, _)
+          if (!newPlan.isInstanceOf[BroadcastExchangeLike]) =>
+          broadcast match {
+            case b: BroadcastExchangeLike => b.withNewChildren(Seq(newPlan))
+            case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b.withNewChildren(Seq(newPlan))
+          }
         case b: BroadcastExchangeLike
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
         case _ => newPlan
