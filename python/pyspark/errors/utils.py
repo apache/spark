@@ -181,7 +181,7 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
         import ipykernel
 
         ipython = IPython.get_ipython()
-        # Filtering out IPython frame
+        # Filtering out IPython related frames
         ipy_root = os.path.dirname(IPython.__file__)
         ipykernel_root = os.path.dirname(ipykernel.__file__)
         selected_frames = [
