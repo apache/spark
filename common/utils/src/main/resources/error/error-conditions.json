@@ -3746,6 +3746,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_COLUMN_FAMILY_MISMATCH" : {
+    "message" : [
+      "Incompatible transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",

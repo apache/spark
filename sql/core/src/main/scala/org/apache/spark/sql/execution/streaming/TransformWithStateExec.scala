@@ -101,7 +101,7 @@ case class TransformWithStateExec(
    * @return a new instance of the driver processor handle
    */
   private def getDriverProcessorHandle: DriverStatefulProcessorHandleImpl = {
-    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -393,21 +393,20 @@ case class TransformWithStateExec(
   private def validateSchemas(
       oldSchema: List[ColumnFamilySchema],
       newSchema: List[ColumnFamilySchema]): Unit = {
-    if (oldSchema.size != newSchema.size) {
-      throw new RuntimeException
-    }
     // turn oldSchema to map
     val oldSchemaMap = oldSchema.map(schema =>
       (schema.columnFamilyName, schema)).toMap
     newSchema.foreach { case newSchema: ColumnFamilySchemaV1 =>
-        val oldSchema = oldSchemaMap.get(newSchema.columnFamilyName)
-        if (oldSchema.isEmpty) {
-            throw new RuntimeException
-        }
-        if (oldSchema.get != newSchema) {
-            throw new RuntimeException
+      val oldSchema = oldSchemaMap.get(newSchema.columnFamilyName)
+      oldSchema.foreach { oldSchema =>
+        if (oldSchema != newSchema) {
+          throw StateStoreErrors.stateStoreColumnFamilyMismatch(
+            newSchema.columnFamilyName,
+            oldSchema.json,
+            newSchema.json)
         }
       }
+    }
   }
 
   /** Metadata of this stateful operator and its states stores. */

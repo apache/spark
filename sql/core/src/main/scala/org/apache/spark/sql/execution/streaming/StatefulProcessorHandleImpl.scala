@@ -23,9 +23,8 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{PRE_INIT, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
@@ -86,7 +85,8 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends StatefulProcessorHandle with Logging {
+  extends StatefulProcessorHandleImplBase(timeMode)
+  with StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
   /**
@@ -120,12 +120,6 @@ class StatefulProcessorHandleImpl(
     metrics.get(metricName).foreach(_.add(1))
   }
 
-  def setHandleState(newState: StatefulProcessorHandleState): Unit = {
-    currState = newState
-  }
-
-  def getHandleState: StatefulProcessorHandleState = currState
-
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
@@ -156,18 +150,6 @@ class StatefulProcessorHandleImpl(
 
   private def verifyStateVarOperations(operationType: String): Unit = {
     if (currState != CREATED) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
-        currState.toString)
-    }
-  }
-
-  private def verifyTimerOperations(operationType: String): Unit = {
-    if (timeMode == NoTime) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
-        timeMode.toString)
-    }
-
-    if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
       throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
         currState.toString)
     }
@@ -321,18 +303,12 @@ class StatefulProcessorHandleImpl(
  * actually done. We need this class because we can only collect the schemas after
  * the StatefulProcessor is initialized.
  */
-class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
+class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
+  extends StatefulProcessorHandleImplBase(timeMode)
+    with StatefulProcessorHandle {
 
   private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
-
-  private var currState: StatefulProcessorHandleState = PRE_INIT
-
-  def setHandleState(newState: StatefulProcessorHandleState): Unit = {
-    currState = newState
-  }
-
-  def getHandleState: StatefulProcessorHandleState = currState
 
   private def verifyStateVarOperations(operationType: String): Unit = {
     if (currState != PRE_INIT) {
@@ -470,11 +446,20 @@ class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
    * Methods that are only included to satisfy the interface.
    * These methods are no-ops on the driver side
    */
-  override def registerTimer(expiryTimestampMs: Long): Unit = {}
+  override def registerTimer(expiryTimestampMs: Long): Unit = {
+    verifyTimerOperations("register_timer")
+  }
 
-  override def deleteTimer(expiryTimestampMs: Long): Unit = {}
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+    verifyTimerOperations("delete_timer")
+  }
 
-  override def listTimers(): Iterator[Long] = Iterator.empty
+  override def listTimers(): Iterator[Long] = {
+    verifyTimerOperations("list_timers")
+    Iterator.empty
+  }
 
-  override def deleteIfExists(stateName: String): Unit = {}
+  override def deleteIfExists(stateName: String): Unit = {
+    verifyStateVarOperations("delete_if_exists")
+  }
 }
