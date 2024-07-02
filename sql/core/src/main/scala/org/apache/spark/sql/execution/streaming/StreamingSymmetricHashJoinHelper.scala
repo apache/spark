@@ -23,7 +23,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
@@ -198,11 +198,14 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)
 
+    // Returns a predicate that drops data less than the state watermark.
+    // oneSideInputAttributes are the attributes to base the state watermark off of, while
+    // otherSideInputAttributes are the attributes on which the watermark is defined.
     def getOneSideStateWatermarkPredicate(
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
-      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
+      val isWatermarkDefinedOnInput = otherSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -219,10 +222,41 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction)
-        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map(JoinStateValueWatermarkPredicate.apply _)
 
+        // If the condition itself is empty (for example, left_time < left_time + INTERVAL ...),
+        // then we will not have generated a stateValueWatermark.
+        if (stateValueWatermark.isEmpty) {
+          None
+        } else {
+          // For example, if the condition is of the form:
+          //    left_time > right_time + INTERVAL 30 MINUTES
+          // Then this extracts left_time and right_time.
+          val attributesInCondition = AttributeSet(
+            condition.get.collect { case a: AttributeReference => a }
+          )
+
+          // Construct an AttributeSet so that we can perform equality between attributes,
+          // which we do in the filter below.
+          val oneSideInputAttributeSet = AttributeSet(oneSideInputAttributes)
+
+          // oneSideInputAttributes could be [left_value, left_time], and we just
+          // want the attribute _in_ the time-interval condition.
+          val oneSideStateWatermarkAttributes = attributesInCondition.filter { a =>
+            oneSideInputAttributeSet.contains(a)
+          }
+
+          // There should be a single attribute per side in the time-interval condition, so,
+          // filtering for oneSideInputAttributes as done above should lead us with 1 attribute.
+          if (oneSideStateWatermarkAttributes.size == 1) {
+            val expr =
+              watermarkExpression(Some(oneSideStateWatermarkAttributes.head), stateValueWatermark)
+            expr.map(JoinStateValueWatermarkPredicate.apply _)
+          } else {
+            // This should never happen, since the grammar will ensure that we have one attribute
+            // from either side in the condition.
+            None
+          }
+        }
       } else {
         None
       }
