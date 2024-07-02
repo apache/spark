@@ -908,19 +908,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
 
-      val schema0 = List(ColumnFamilySchemaV1(
-        "countState",
-        KEY_ROW_SCHEMA,
-        VALUE_ROW_SCHEMA,
-        NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-        false,
-        Encoders.scalaLong.schema,
-        None
-      ))
 
-      val schema1 = List(
-        ColumnFamilySchemaV1(
+        val schema0 = List(ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
           VALUE_ROW_SCHEMA,
@@ -928,32 +919,45 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           false,
           Encoders.scalaLong.schema,
           None
-        ),
-        ColumnFamilySchemaV1(
-          "mostRecent",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false,
-          Encoders.STRING.schema,
-          None
+        ))
+
+        val schema1 = List(
+          ColumnFamilySchemaV1(
+            "countState",
+            KEY_ROW_SCHEMA,
+            VALUE_ROW_SCHEMA,
+            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            false,
+            Encoders.scalaLong.schema,
+            None
+          ),
+          ColumnFamilySchemaV1(
+            "mostRecent",
+            KEY_ROW_SCHEMA,
+            VALUE_ROW_SCHEMA,
+            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            false,
+            Encoders.STRING.schema,
+            None
+          )
         )
-      )
 
-      val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(), "/tmp/schema")
-      schemaFile.add(0, schema0)
+        val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(),
+          checkpointDir.getCanonicalPath)
+        schemaFile.add(0, schema0)
 
-      assert(schemaFile.get(0).isDefined)
-      assert(schemaFile.get(0).get == schema0)
+        assert(schemaFile.get(0).isDefined)
+        assert(schemaFile.get(0).get == schema0)
 
-      // test the case where we are trying to add the schema after
-      // restarting after a few batches
-      schemaFile.add(3, schema1)
-      val latestFile = schemaFile.getLatest()
+        // test the case where we are trying to add the schema after
+        // restarting after a few batches
+        schemaFile.add(3, schema1)
+        val latestFile = schemaFile.getLatest()
 
-      assert(latestFile.isDefined)
-      assert(latestFile.get._1 == 3)
-      assert(latestFile.get._2 == schema1)
+        assert(latestFile.isDefined)
+        assert(latestFile.get._1 == 3)
+        assert(latestFile.get._2 == schema1)
+      }
     }
   }
 
