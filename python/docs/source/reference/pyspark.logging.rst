@@ -34,7 +34,7 @@ Classes
 Methods
 -------
 
-.. currentmodule:: pyspark.errors
+.. currentmodule:: pyspark.logging
 
 .. autosummary::
     :toctree: api/

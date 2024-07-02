@@ -1,0 +1,149 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+==================
+Logging in PySpark
+==================
+
+.. currentmodule:: pyspark.logging
+
+Introduction
+============
+
+The :ref:`pyspark.logging</reference/pyspark.logging.rst>` module facilitates structured client-side logging for PySpark users.
+
+This module includes a :class:`PySparkLogger` class that provides several methods for logging messages at different levels in a structured JSON format:
+
+- :meth:`PySparkLogger.log_info`
+- :meth:`PySparkLogger.log_warn`
+- :meth:`PySparkLogger.log_error`
+
+The logger can be easily configured to write logs to either the console or a specified file.
+
+Customizing Log Format
+======================
+The default log format is JSON, which includes the timestamp, log level, logger name, and the log message along with any additional context provided.
+
+Example log entry:
+
+.. code-block:: python
+
+    {
+      "timestamp": "2024-06-28T10:53:48.528Z",
+      "level": "ERROR",
+      "name": "DataFrameQueryContextLogger",
+      "message": "[DIVIDE_BY_ZERO] Division by zero.",
+      "context": {
+        "file": "/path/to/file.py",
+        "line_no": "17",
+        "fragment": "__truediv__"
+      },
+      "error_class": "DIVIDE_BY_ZERO"
+    }
+
+Setting Up
+==========
+To start using the PySpark logging module, you need to import the :class:`PySparkLogger` from the :ref:`pyspark.logging</reference/pyspark.logging.rst>`.
+
+.. code-block:: python
+
+    from pyspark.logging import PySparkLogger
+
+Usage
+=====
+Creating a Logger
+-----------------
+You can create a logger instance by calling the :meth:`PySparkLogger.get_logger`. By default, it creates a logger named "PySparkLogger" with an INFO log level.
+
+.. code-block:: python
+
+    logger = PySparkLogger.get_logger()
+
+Logging Messages
+----------------
+The logger provides three main methods for logging messages: :meth:`PySparkLogger.log_info`, :meth:`PySparkLogger.log_warn`, and :meth:`PySparkLogger.log_error`.
+
+- **log_info**: Use this method to log informational messages.
+  
+  .. code-block:: python
+
+      user = "test_user"
+      action = "login"
+      logger.log_info(f"User {user} performed {action}", user=user, action=action)
+
+- **log_warn**: Use this method to log warning messages.
+  
+  .. code-block:: python
+
+      user = "test_user"
+      action = "access"
+      logger.log_warn("User {user} attempted an unauthorized {action}", user=user, action=action)
+
+- **log_error**: Use this method to log error messages.
+  
+  .. code-block:: python
+
+      user = "test_user"
+      action = "update_profile"
+      logger.log_error("An error occurred for user {user} during {action}", user=user, action=action)
+
+Logging to Console
+------------------
+
+.. code-block:: python
+
+    from pyspark.logging import PySparkLogger
+
+    # Create a logger that logs to console
+    logger = PySparkLogger.get_logger("ConsoleLogger")
+
+    user = "test_user"
+    action = "test_action"
+
+    logger.log_info(f"User {user} takes an {action}", user=user, action=action)
+
+This logs an information in the following JSON format:
+
+.. code-block:: python
+
+    {
+      "timestamp": "2024-06-28 19:44:19,030",
+      "level": "INFO",
+      "name": "ConsoleLogger",
+      "message": "User test_user takes an test_action",
+      "user": "test_user",
+      "action": "test_action"
+    }
+
+Logging to a File
+-----------------
+
+To log messages to a file, you can specify a filename when getting the logger:
+
+.. code-block:: python
+
+    from pyspark.logging import PySparkLogger
+
+    # Create a logger that logs to a file
+    file_logger = PySparkLogger.get_logger("FileLogger", filename="application.log")
+
+    user = "test_user"
+    action = "test_action"
+
+    file_logger.log_info(f"User {user} takes an {action}", user=user, action=action)
+
+The log messages will be saved in `application.log` in the same JSON format.
