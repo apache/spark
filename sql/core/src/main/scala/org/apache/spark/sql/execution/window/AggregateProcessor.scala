@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -46,7 +47,8 @@ private[window] object AggregateProcessor {
       functions: Array[Expression],
       ordinal: Int,
       inputAttributes: Seq[Attribute],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+      isDistinct: Boolean = false)
     : AggregateProcessor = {
     val aggBufferAttributes = mutable.Buffer.empty[AttributeReference]
     val initialValues = mutable.Buffer.empty[Expression]
@@ -95,6 +97,18 @@ private[window] object AggregateProcessor {
         throw SparkException.internalError(s"Unsupported aggregate function: $other")
     }
 
+    // Bind reference for distinct fields.
+    val distinctBoundReferences: Seq[BoundReference] = {
+      if (isDistinct) {
+        // children of function is one of frame key in windowFrameExpressionFactoryPairs, so just
+        // use functions(0).children
+        BindReferences.bindReferences(functions(0).children, inputAttributes)
+          .distinct.map(_.asInstanceOf[BoundReference])
+      } else {
+        Seq.empty
+      }
+    }
+
     // Create the projections.
     val initialProj = newMutableProjection(initialValues.toSeq, partitionSize.toSeq)
     val updateProj =
@@ -108,7 +122,8 @@ private[window] object AggregateProcessor {
       updateProj,
       evalProj,
       imperatives.toArray,
-      partitionSize.isDefined)
+      partitionSize.isDefined,
+      distinctBoundReferences)
   }
 }
 
@@ -122,7 +137,8 @@ private[window] final class AggregateProcessor(
     private[this] val updateProjection: MutableProjection,
     private[this] val evaluateProjection: MutableProjection,
     private[this] val imperatives: Array[ImperativeAggregate],
-    private[this] val trackPartitionSize: Boolean) {
+    private[this] val trackPartitionSize: Boolean,
+    private[this] val distinctBoundReferences: Seq[BoundReference]) {
 
   private[this] val join = new JoinedRow
   private[this] val numImperatives = imperatives.length
@@ -130,6 +146,7 @@ private[window] final class AggregateProcessor(
     new SpecificInternalRow(bufferSchema.toImmutableArraySeq.map(_.dataType))
   initialProjection.target(buffer)
   updateProjection.target(buffer)
+  private[this] val distinctSet = new mutable.HashSet[Any]()
 
   /** Create the initial state. */
   def initialize(size: Int): Unit = {
@@ -139,6 +156,7 @@ private[window] final class AggregateProcessor(
     if (trackPartitionSize) {
       buffer.setInt(0, size)
     }
+    distinctSet.clear()
     initialProjection(buffer)
     var i = 0
     while (i < numImperatives) {
@@ -147,13 +165,31 @@ private[window] final class AggregateProcessor(
     }
   }
 
+  /** Use HashSet to distinct. when window is too large may cause oom. */
+  def contains(input: InternalRow): Boolean = {
+    val key = distinctBoundReferences.map(bf => {
+      bf.dataType match {
+        case BinaryType => UnsafeArrayData.fromPrimitiveArray(
+          input.get(bf.ordinal, bf.dataType).asInstanceOf[Array[Byte]])
+        case _ => InternalRow.copyValue(input.get(bf.ordinal, bf.dataType))
+      }
+    })
+    val contains = if (key.contains(null)) true else distinctSet.contains(key)
+    if (!contains) {
+      distinctSet.add(key)
+    }
+    contains
+  }
+
   /** Update the buffer. */
   def update(input: InternalRow): Unit = {
-    updateProjection(join(buffer, input))
-    var i = 0
-    while (i < numImperatives) {
-      imperatives(i).update(buffer, input)
-      i += 1
+    if (distinctBoundReferences.isEmpty || !contains(input)) {
+      updateProjection(join(buffer, input))
+      var i = 0
+      while (i < numImperatives) {
+        imperatives(i).update(buffer, input)
+        i += 1
+      }
     }
   }
 

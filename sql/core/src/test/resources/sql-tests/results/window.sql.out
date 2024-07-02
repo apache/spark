@@ -1432,3 +1432,69 @@ a	1	2
 a	NULL	1
 b	1	1
 b	2	2
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate) as s
+FROM
+    testData
+-- !query schema
+struct<cate:string,val:int,ct:bigint,s:bigint>
+-- !query output
+NULL	3	1	1
+NULL	NULL	0	1
+a	1	2	2147483653
+a	1	2	2147483653
+a	2	3	2147483653
+a	NULL	1	2147483653
+b	1	0	2147483653
+b	2	1	2147483653
+b	3	2	2147483653
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as s
+FROM
+    testData
+-- !query schema
+struct<cate:string,val:int,ct:bigint,s:bigint>
+-- !query output
+NULL	3	1	1
+NULL	NULL	0	NULL
+a	1	2	3
+a	1	2	3
+a	2	3	2147483653
+a	NULL	1	1
+b	1	0	NULL
+b	2	1	3
+b	3	2	2147483653
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    rank() OVER(PARTITION BY cate ORDER BY val) as r
+FROM
+    testData
+-- !query schema
+struct<cate:string,val:int,ct:bigint,r:int>
+-- !query output
+NULL	3	1	2
+NULL	NULL	0	1
+a	1	2	2
+a	1	2	2
+a	2	3	4
+a	NULL	1	1
+b	1	0	1
+b	2	1	2
+b	3	2	3

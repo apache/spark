@@ -1410,3 +1410,67 @@ Project [cate#x, val#x, r#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate) as s
+FROM
+    testData
+-- !query analysis
+Project [cate#x, val#x, ct#xL, s#xL]
++- Project [cate#x, val#x, val_long#xL, ct#xL, s#xL, ct#xL, s#xL]
+   +- Window [sum(distinct val_long#xL) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS s#xL], [cate#x]
+      +- Window [count(distinct val_long#xL) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS ct#xL], [cate#x], [val#x ASC NULLS FIRST]
+         +- Project [cate#x, val#x, val_long#xL]
+            +- SubqueryAlias testdata
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                     +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                        +- SubqueryAlias testData
+                           +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as s
+FROM
+    testData
+-- !query analysis
+Project [cate#x, val#x, ct#xL, s#xL]
++- Project [cate#x, val#x, val_long#xL, ct#xL, s#xL, ct#xL, s#xL]
+   +- Window [count(distinct val_long#xL) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS ct#xL, sum(distinct val_long#xL) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS s#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x, val_long#xL]
+         +- SubqueryAlias testdata
+            +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    rank() OVER(PARTITION BY cate ORDER BY val) as r
+FROM
+    testData
+-- !query analysis
+Project [cate#x, val#x, ct#xL, r#x]
++- Project [cate#x, val#x, val_long#xL, ct#xL, r#x, ct#xL, r#x]
+   +- Window [count(distinct val_long#xL) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS ct#xL, rank(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS r#x], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x, val_long#xL]
+         +- SubqueryAlias testdata
+            +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]

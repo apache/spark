@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.Utils
 
 trait WindowEvaluatorFactoryBase {
@@ -130,12 +130,16 @@ trait WindowEvaluatorFactoryBase {
    * [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
+    type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression], Boolean)
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
-    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
+    def collect(tpe: String,
+                fr: SpecifiedWindowFrame,
+                e: Expression,
+                fn: Expression,
+                isDistinct: Boolean = false): Unit = {
       val key = fn match {
         // This branch is used for Lead/Lag to support ignoring null and optimize the performance
         // for NthValue ignoring null.
@@ -143,8 +147,13 @@ trait WindowEvaluatorFactoryBase {
         // a row and operating on different input expressions, they should not be moved uniformly
         // by row. Therefore, we put these functions in different window frames.
         case f: OffsetWindowFunction if f.ignoreNulls =>
-          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
-        case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
+          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized), false)
+        case _ =>
+          if (isDistinct) {
+            (tpe, fr.frameType, fr.lower, fr.upper, fn.children.sortBy(_.sql), isDistinct)
+          } else {
+            (tpe, fr.frameType, fr.lower, fr.upper, Nil, false)
+          }
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
@@ -158,7 +167,8 @@ trait WindowEvaluatorFactoryBase {
         case e@WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
+            case AggregateExpression(f, _, isDistinct, _, _) =>
+              collect("AGGREGATE", frame, e, f, isDistinct)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
             case f: OffsetWindowFunction if frame.frameType == RowFrame &&
@@ -196,13 +206,13 @@ trait WindowEvaluatorFactoryBase {
             ordinal,
             childOutput,
             (expressions, schema) =>
-              MutableProjection.create(expressions, schema))
+              MutableProjection.create(expressions, schema),
+            key._6)
         }
-
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Frameless offset Frame
-          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow =>
               new FrameLessOffsetWindowFunctionFrame(
                 target,
@@ -214,7 +224,7 @@ trait WindowEvaluatorFactoryBase {
                   MutableProjection.create(expressions, schema),
                 offset,
                 expr.nonEmpty)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
@@ -227,7 +237,7 @@ trait WindowEvaluatorFactoryBase {
                 offset,
                 expr.nonEmpty)
             }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr, _) =>
             target: InternalRow => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
@@ -242,13 +252,13 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _, _) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _, _) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
@@ -257,7 +267,7 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _, _) =>
             target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
@@ -266,7 +276,7 @@ trait WindowEvaluatorFactoryBase {
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper, _) =>
+          case ("AGGREGATE", frameType, lower, upper, _, _) =>
             target: InternalRow => {
               new SlidingWindowFunctionFrame(
                 target,
