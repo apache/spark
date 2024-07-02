@@ -1183,8 +1183,8 @@ case class ShowCreateTableCommand(
       } else {
         // For a Hive serde table, we try to convert it to Spark DDL.
         if (tableMetadata.unsupportedFeatures.nonEmpty) {
-          throw QueryCompilationErrors.showCreateTableFailToExecuteUnsupportedFeatureError(
-            tableMetadata)
+          throw QueryCompilationErrors.showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
+            tableMetadata, tableMetadata.unsupportedFeatures)
         }
 
         if ("true".equalsIgnoreCase(tableMetadata.properties.getOrElse("transactional", "false"))) {
@@ -1325,9 +1325,9 @@ case class ShowCreateTableAsSerdeCommand(
   }
 
   private def showCreateHiveTable(metadata: CatalogTable): String = {
-    def reportUnsupportedError(features: Seq[String]): Unit = {
+    def reportUnsupportedError(unsupportedFeatures: Seq[String]): Unit = {
       throw QueryCompilationErrors.showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
-        metadata, features)
+        metadata, unsupportedFeatures)
     }
 
     if (metadata.unsupportedFeatures.nonEmpty) {
