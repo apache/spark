@@ -101,6 +101,8 @@ private[spark] class ApplicationMaster(
 
   private val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(sparkConf)
 
+  private val amFailureValidity = sparkConf.get(AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS)
+
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
@@ -191,6 +193,45 @@ private[spark] class ApplicationMaster(
     resources.toMap
   }
 
+  /**
+   * Determines if this should be the last attempt or not. If no validity interval was defined,
+   * this simply compares the current attempt ID to the max number of attempts. If a validity
+   * interval is defined, we do our best to replicate Yarn's logic for determining which previous
+   * attempts should count toward the max attempt limit.
+   *
+   * Adapted from RMAppAttemptImpl.shouldCountTowardsMaxAttemptRetry.
+   */
+  private def isLastAttempt: Boolean = {
+    val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
+    amFailureValidity.map { interval =>
+      logInfo("Loading previous ApplicationMaster attempts")
+      val previousAttempts = client.getPreviousAttempts(yarnConf, appAttemptId)
+
+      val ignoredExitStatuses = Seq(
+        ContainerExitStatus.PREEMPTED,
+        ContainerExitStatus.ABORTED,
+        ContainerExitStatus.DISKS_FAILED,
+        ContainerExitStatus.KILLED_BY_RESOURCEMANAGER
+      )
+      val validAfter = System.currentTimeMillis() - interval
+      val validAttempts = previousAttempts.filter { case (attempt, exitStatus) =>
+        val validFinishTime = attempt.getFinishTime() >= validAfter
+
+        // If we don't have the exit status, or it's not one of the statuses yarn ignores, count it
+        // toward out total failures.
+        val validStatusCode = !exitStatus.exists(ignoredExitStatuses.contains(_))
+
+        val valid = validFinishTime && validStatusCode
+        valid
+      }
+
+      // Include this attempt
+      validAttempts.length + 1 >= maxAppAttempts
+    }.getOrElse {
+      appAttemptId.getAttemptId() >= maxAppAttempts
+    }
+  }
+
   final def run(): Int = {
     try {
       val attemptID = if (isClusterMode) {
@@ -228,9 +269,6 @@ private[spark] class ApplicationMaster(
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
         try {
-          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-          val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts
-
           if (!finished) {
             // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
             // This behavior is different compared to 1.x version.
