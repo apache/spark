@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
@@ -204,6 +205,20 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.GetStorageLevel
             .newBuilder()
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.SIZE_IN_BYTES =>
+        val sizeInBytes = Dataset
+          .ofRows(session, transformRelation(request.getSizeInBytes.getRelation))
+          .queryExecution
+          .optimizedPlan
+          .stats
+          .sizeInBytes
+          .toByteArray
+        builder.setSizeInBytes(
+          proto.AnalyzePlanResponse.SizeInBytes
+            .newBuilder()
+            .setResult(ByteString.copyFrom(sizeInBytes))
             .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")

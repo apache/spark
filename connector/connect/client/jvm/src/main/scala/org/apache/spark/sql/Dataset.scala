@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.math.BigInteger
 import java.util.{Collections, Locale}
 
 import scala.collection.mutable
@@ -282,6 +283,16 @@ class Dataset[T] private[sql] (
    */
   def printSchema(level: Int): Unit = println(schema.treeString(level))
   // scalastyle:on println
+
+  /**
+   * Returns an approximate size in bytes of the Dataset.
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def sizeInBytesApproximation(): BigInteger = {
+    sparkSession.sizeInBytes(plan.getRoot)
+  }
 
   /**
    * Prints the plans (logical and physical) with a format specified by a given explain mode.
