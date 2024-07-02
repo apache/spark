@@ -1,6 +1,6 @@
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testRegression AS SELECT * FROM VALUES
-(1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35)
+(1, 10, null), (2, 10, 11), (2, 20, 22), (2, 25, null), (2, 30, 35), (2, null, 40)
 AS testRegression(k, y, x);
 
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
