@@ -4319,6 +4319,146 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DB2_JDBC_VERSION = buildConf("spark.sql.connector.db2.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for db2 connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val DB2_DIALECT_VERSION = buildConf("spark.sql.connector.db2.dialectVersion")
+    .internal()
+    .doc("Dialect version used for db2 connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val DATABRICKS_JDBC_VERSION = buildConf("spark.sql.connector.databricks.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for databricks connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val DATABRICKS_DIALECT_VERSION = buildConf("spark.sql.connector.databricks.dialectVersion")
+    .internal()
+    .doc("Dialect version used for databricks connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val DERBY_JDBC_VERSION = buildConf("spark.sql.connector.derby.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for derby connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val DERBY_DIALECT_VERSION = buildConf("spark.sql.connector.derby.dialectVersion")
+    .internal()
+    .doc("Dialect version used for derby connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val H2_JDBC_VERSION = buildConf("spark.sql.connector.h2.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for h2 connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val H2_DIALECT_VERSION = buildConf("spark.sql.connector.h2.dialectVersion")
+    .internal()
+    .doc("Dialect version used for h2 connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val MSSQLSERVER_JDBC_VERSION = buildConf("spark.sql.connector.mssqlserver.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for mssqlserver connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val MSSQLSERVER_DIALECT_VERSION = buildConf("spark.sql.connector.mssqlserver.dialectVersion")
+    .internal()
+    .doc("Dialect version used for mssqlserver connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val MYSQL_JDBC_VERSION = buildConf("spark.sql.connector.mysql.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for mysql connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val MYSQL_DIALECT_VERSION = buildConf("spark.sql.connector.mysql.dialectVersion")
+    .internal()
+    .doc("Dialect version used for mysql connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val ORACLE_JDBC_VERSION = buildConf("spark.sql.connector.oracle.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for oracle connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val ORACLE_DIALECT_VERSION = buildConf("spark.sql.Dialect oracle.dialectVersion")
+    .internal()
+    .doc("JDBC version used for oracle connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val POSTGRES_JDBC_VERSION = buildConf("spark.sql.connector.postgres.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for postgres connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val POSTGRES_DIALECT_VERSION = buildConf("spark.sql.connector.postgres dialectVersion")
+    .internal()
+    .doc("JDBC version used for postgres connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val SNOWFLAKE_JDBC_VERSION = buildConf("spark.sql.connector.snowflake.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for snowflake connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val SNOWFLAKE_DIALECT_VERSION = buildConf("spark.sql.connector.snowflake.dialectVersion")
+    .internal()
+    .doc("Dialect version used for snowflake connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val TERADATA_JDBC_VERSION = buildConf("spark.sql.connector.teradata.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for teradata connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val TERADATA_DIALECT_VERSION = buildConf("spark.sql.connector.teradata.dialectVersion")
+    .internal()
+    .doc("Dialect version used for teradata connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")

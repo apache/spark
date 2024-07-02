@@ -66,6 +66,16 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
   }
 
   /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = dialects.head.jdbcVersion()
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = dialects.head.dialectVersion()
+
+  /**
    * The SQL query used to truncate a table.
    * @param table The table to truncate.
    * @param cascade Whether or not to cascade the truncation. Default value is the
