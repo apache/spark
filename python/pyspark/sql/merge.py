@@ -21,7 +21,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.utils import to_scala_map
 
 if TYPE_CHECKING:
-    from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["MergeIntoWriter"]
