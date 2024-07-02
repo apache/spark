@@ -18,9 +18,9 @@
 package org.apache.spark.graphx
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
+import org.apache.spark.internal.config
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
