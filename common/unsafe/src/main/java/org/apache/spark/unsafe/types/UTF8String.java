@@ -346,6 +346,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(makeValidBytes());
   }
 
+  /**
+   * Similar to `makeValid`, but returns a (Java) String instead of a UTF8String object.
+   *
+   * @return A new String that is a valid UTF8 string.
+   */
+  private String makeValidString() {
+    ArrayList<Byte> validBytes = makeValidBytes();
+    byte[] byteArray = new byte[validBytes.size()];
+    for (int i = 0; i < validBytes.size(); i++) {
+      byteArray[i] = validBytes.get(i);
+    }
+    return new String(byteArray, StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Private helper method to create a valid UTF-8 byte sequence from the current UTF8String.
+   */
   private ArrayList<Byte> makeValidBytes() {
     ArrayList<Byte> bytes = new ArrayList<>();
     int byteIndex = 0;
@@ -1784,7 +1801,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public String toValidString() {
     if (isValid()) return toString();
-    return makeValidBytes().toString();
+    return makeValidString();
   }
 
   @Override

@@ -43,7 +43,9 @@ public class UTF8StringSuite {
     assertEquals(len, s2.numChars());
 
     assertEquals(str, s1.toString());
+    assertEquals(str, s1.toValidString());
     assertEquals(str, s2.toString());
+    assertEquals(str, s2.toValidString());
     assertEquals(s1, s2);
 
     assertEquals(s1.hashCode(), s2.hashCode());
@@ -886,7 +888,10 @@ public class UTF8StringSuite {
     for (String hex : expected.split(" ")) exp.write(Integer.parseInt(hex.substring(2), 16));
     ByteArrayOutputStream inp = new ByteArrayOutputStream();
     for (String hex : input.split(" ")) inp.write(Integer.parseInt(hex.substring(2), 16));
-    assertEquals(fromBytes(exp.toByteArray()), fromBytes(inp.toByteArray()).makeValid());
+    UTF8String expUTF8String = fromBytes(exp.toByteArray());
+    UTF8String inpUTF8String = fromBytes(inp.toByteArray());
+    assertEquals(expUTF8String, inpUTF8String.makeValid());
+    assertEquals(inpUTF8String.toValidString(), inpUTF8String.toString());
   }
   @Test
   public void makeValid() {
