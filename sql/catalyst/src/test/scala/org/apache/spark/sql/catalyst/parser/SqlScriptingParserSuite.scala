@@ -29,7 +29,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText(sqlScriptText) == "SELECT 1;")
+    assert(sparkStatement.getText == "SELECT 1;")
   }
 
   test("single select without ;") {
@@ -38,7 +38,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText(sqlScriptText) == "SELECT 1")
+    assert(sparkStatement.getText == "SELECT 1")
   }
 
   test("multi select without ; - should fail") {
@@ -62,7 +62,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SingleStatement]
-        val statementText = sparkStatement.getText(sqlScriptText)
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
@@ -124,7 +124,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SingleStatement]
-        val statementText = sparkStatement.getText(sqlScriptText)
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
@@ -148,16 +148,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     val body1 = tree.collection.head.asInstanceOf[CompoundBody]
     assert(body1.collection.length == 1)
-    assert(body1.collection.head.asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(body1.collection.head.asInstanceOf[SingleStatement].getText
       == "SELECT 1")
 
     val body2 = tree.collection(1).asInstanceOf[CompoundBody]
     assert(body2.collection.length == 1)
     assert(body2.collection.head.isInstanceOf[CompoundBody])
     val nestedBody = body2.collection.head.asInstanceOf[CompoundBody]
-    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText
       == "SELECT 2")
-    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText
       == "SELECT 3")
   }
 
