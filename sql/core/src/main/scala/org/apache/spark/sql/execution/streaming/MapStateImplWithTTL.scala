@@ -24,7 +24,6 @@ import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoder
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
-
 /**
  * Class that provides a concrete implementation for map state associated with state
  * variables (with ttl expiration support) used in the streaming transformWithState operator.
