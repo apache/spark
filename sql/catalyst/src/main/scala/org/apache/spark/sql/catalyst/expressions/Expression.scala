@@ -538,6 +538,12 @@ trait ConditionalExpression extends Expression {
    * so that we can eagerly evaluate the common expressions of a group.
    */
   def branchGroups: Seq[Seq[Expression]]
+
+  /**
+   * Returns children expressions which are conditionally evaluated. If the same expression
+   * will be always evaluated elsewhere, we can make it a subexpression.
+   */
+  def conditionallyEvaluatedInputs: Seq[Expression]
 }
 
 /**
