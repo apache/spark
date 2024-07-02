@@ -122,7 +122,7 @@ class StatefulProcessorHandleImpl(
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state")
+    verifyStateVarOperations("get_value_state", CREATED)
     incrementMetric("numValueStateVars")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -132,7 +132,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
-    verifyStateVarOperations("get_value_state")
+    verifyStateVarOperations("get_value_state", CREATED)
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -146,13 +146,6 @@ class StatefulProcessorHandleImpl(
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
   private lazy val timerState = new TimerStateImpl(store, timeMode, keyEncoder)
-
-  private def verifyStateVarOperations(operationType: String): Unit = {
-    if (currState != CREATED) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
-        currState.toString)
-    }
-  }
 
   /**
    * Function to register a timer for the given expiryTimestampMs
@@ -214,14 +207,14 @@ class StatefulProcessorHandleImpl(
    * @param stateName - name of the state variable
    */
   override def deleteIfExists(stateName: String): Unit = {
-    verifyStateVarOperations("delete_if_exists")
+    verifyStateVarOperations("delete_if_exists", CREATED)
     if (store.removeColFamilyIfExists(stateName)) {
       incrementMetric("numDeletedStateVars")
     }
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
-    verifyStateVarOperations("get_list_state")
+    verifyStateVarOperations("get_list_state", CREATED)
     incrementMetric("numListStateVars")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
@@ -247,7 +240,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
 
-    verifyStateVarOperations("get_list_state")
+    verifyStateVarOperations("get_list_state", CREATED)
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -263,7 +256,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state")
+    verifyStateVarOperations("get_map_state", CREATED)
     incrementMetric("numMapStateVars")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
@@ -274,7 +267,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state")
+    verifyStateVarOperations("get_map_state", CREATED)
     validateTTLConfig(ttlConfig, stateName)
 
     assert(batchTimestampMs.isDefined)
@@ -311,13 +304,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
   private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
 
-  private def verifyStateVarOperations(operationType: String): Unit = {
-    if (currState != PRE_INIT) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
-        currState.toString)
-    }
-  }
-
   /**
    * Function to add the ValueState schema to the list of column family schemas.
    * The user must ensure to call this function only within the `init()` method of the
@@ -329,10 +315,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state")
-    val colFamilySchema = columnFamilySchemaFactory.getValueStateSchema(stateName, valEncoder)
+    verifyStateVarOperations("get_value_state", PRE_INIT)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getValueStateSchema(stateName, valEncoder, false)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[ValueState[T]]
   }
 
   /**
@@ -350,10 +337,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
-    verifyStateVarOperations("get_value_state")
-    val colFamilySchema = columnFamilySchemaFactory.getValueStateTtlSchema(stateName, valEncoder)
+    verifyStateVarOperations("get_value_state", PRE_INIT)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getValueStateSchema(stateName, valEncoder, true)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[ValueState[T]]
   }
 
   /**
@@ -367,10 +355,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
    * @return - instance of ListState of type T that can be used to store state persistently
    */
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
-    verifyStateVarOperations("get_list_state")
-    val colFamilySchema = columnFamilySchemaFactory.getListStateSchema(stateName, valEncoder)
+    verifyStateVarOperations("get_list_state", PRE_INIT)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getListStateSchema(stateName, valEncoder, false)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[ListState[T]]
   }
 
   /**
@@ -388,10 +377,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
-    verifyStateVarOperations("get_list_state")
-    val colFamilySchema = columnFamilySchemaFactory.getListStateTtlSchema(stateName, valEncoder)
+    verifyStateVarOperations("get_list_state", PRE_INIT)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getListStateSchema(stateName, valEncoder, true)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[ListState[T]]
   }
 
   /**
@@ -409,11 +399,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       stateName: String,
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state")
+    verifyStateVarOperations("get_map_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaFactory.
-      getMapStateSchema(stateName, userKeyEnc, valEncoder)
+      getMapStateSchema(stateName, userKeyEnc, valEncoder, false)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[MapState[K, V]]
   }
 
   /**
@@ -433,11 +423,11 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
-    verifyStateVarOperations("get_map_state")
+    verifyStateVarOperations("get_map_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaFactory.
-      getMapStateTtlSchema(stateName, userKeyEnc, valEncoder)
+      getMapStateSchema(stateName, userKeyEnc, valEncoder, true)
     columnFamilySchemas.add(colFamilySchema)
-    null
+    null.asInstanceOf[MapState[K, V]]
   }
 
   /** Function to return queryInfo for currently running task */
@@ -447,7 +437,9 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
 
   /**
    * Methods that are only included to satisfy the interface.
-   * These methods are no-ops on the driver side
+   * These methods will fail if called from the driver side, as the handle
+   * will be in the PRE_INIT phase, and all these timer operations need to be
+   * called from the INITIALIZED phase.
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
@@ -463,6 +455,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
   }
 
   override def deleteIfExists(stateName: String): Unit = {
-    verifyStateVarOperations("delete_if_exists")
+    verifyStateVarOperations("delete_if_exists", PRE_INIT)
   }
 }

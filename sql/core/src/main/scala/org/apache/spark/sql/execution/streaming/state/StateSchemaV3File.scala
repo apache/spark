@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 object StateSchemaV3File {
   val COLUMN_FAMILY_SCHEMA_VERSION = 1
 }
+
 /**
  * The StateSchemaV3File is used to write the schema of multiple column families.
  * Right now, this is primarily used for the TransformWithState operator, which supports

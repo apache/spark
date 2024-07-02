@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, Colum
 /**
  * Singleton class to fetch the ColumnFamilySchema for each state type
  */
-private[sql] object ColumnFamilySchemaFactory {
+object ColumnFamilySchemaFactory {
 
   def getFactory(version: Int): ColumnFamilySchemaFactory = {
     version match {
@@ -32,55 +32,40 @@ private[sql] object ColumnFamilySchemaFactory {
     }
   }
 }
-private[sql] trait ColumnFamilySchemaFactory {
+trait ColumnFamilySchemaFactory {
   def getValueStateSchema[T](
       stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchema
+      valueEncoder: Encoder[T],
+      hasTtl: Boolean): ColumnFamilySchema
 
-  def getValueStateTtlSchema[T](
-      stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchema
 
   def getListStateSchema[T](
       stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchema
+      valueEncoder: Encoder[T],
+      hasTtl: Boolean): ColumnFamilySchema
 
-  def getListStateTtlSchema[T](
-      stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchema
 
   def getMapStateSchema[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],
-      valueEncoder: Encoder[V]): ColumnFamilySchema
-
-  def getMapStateTtlSchema[K, V](
-      stateName: String,
-      userKeyEnc: Encoder[K],
-      valueEncoder: Encoder[V]): ColumnFamilySchema
+      valueEncoder: Encoder[V],
+      hasTtl: Boolean): ColumnFamilySchema
 }
 
-private[sql] object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactory {
+object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactory {
 
   def getValueStateSchema[T](
       stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
+      valueEncoder: Encoder[T],
+      hasTtl: Boolean): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-      false,
-      valueEncoder.schema)
-  }
-
-  def getValueStateTtlSchema[T](
-      stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
-      stateName,
-      KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA_WITH_TTL,
+      if (hasTtl) {
+        VALUE_ROW_SCHEMA_WITH_TTL
+      } else {
+        VALUE_ROW_SCHEMA
+      },
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       false,
       valueEncoder.schema)
@@ -88,23 +73,16 @@ private[sql] object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactor
 
   def getListStateSchema[T](
       stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
+      valueEncoder: Encoder[T],
+      hasTtl: Boolean): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-      true,
-      valueEncoder.schema)
-  }
-
-  def getListStateTtlSchema[T](
-      stateName: String,
-      valueEncoder: Encoder[T]): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
-      stateName,
-      KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA_WITH_TTL,
+      if (hasTtl) {
+        VALUE_ROW_SCHEMA_WITH_TTL
+      } else {
+        VALUE_ROW_SCHEMA
+      },
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       true,
       valueEncoder.schema)
@@ -113,26 +91,16 @@ private[sql] object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactor
   def getMapStateSchema[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],
-      valueEncoder: Encoder[V]): ColumnFamilySchemaV1 = {
+      valueEncoder: Encoder[V],
+      hasTtl: Boolean): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA,
-      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
-      false,
-      valueEncoder.schema,
-      Some(userKeyEnc.schema))
-  }
-
-  def getMapStateTtlSchema[K, V](
-    stateName: String,
-    userKeyEnc: Encoder[K],
-    valueEncoder: Encoder[V]
-  ): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
-      stateName,
-      COMPOSITE_KEY_ROW_SCHEMA,
-      VALUE_ROW_SCHEMA_WITH_TTL,
+      if (hasTtl) {
+        VALUE_ROW_SCHEMA_WITH_TTL
+      } else {
+        VALUE_ROW_SCHEMA
+      },
       PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
       false,
       valueEncoder.schema,

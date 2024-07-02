@@ -3746,12 +3746,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATE_STORE_COLUMN_FAMILY_MISMATCH" : {
-    "message" : [
-      "Incompatible transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
-    ],
-    "sqlState" : "42802"
-  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
@@ -3798,6 +3792,12 @@
       "However, please note that running the query with incompatible schema could cause non-deterministic behavior."
     ],
     "sqlState" : "XXKST"
+  },
+  "STATE_STORE_NEW_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
+    ],
+    "sqlState" : "42802"
   },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [

@@ -44,4 +44,12 @@ abstract class StatefulProcessorHandleImplBase(timeMode: TimeMode)
     }
   }
 
+  def verifyStateVarOperations(
+      operationType: String,
+      requiredState: StatefulProcessorHandleState): Unit = {
+    if (currState != requiredState) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+        currState.toString)
+    }
+  }
 }
