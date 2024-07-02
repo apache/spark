@@ -142,8 +142,10 @@
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.21</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <jakarta.activation-api.version>2.1.3</jakarta.activation-api.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
+    <jaxb-runtime.version>4.0.5</jaxb-runtime.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -560,7 +562,7 @@
       <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
-        <version>1.4.8</version>
+        <version>1.6.4</version>
         <scope>provided</scope>
         <exclusions>
           <exclusion>
@@ -576,7 +578,7 @@
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>2.3.2</version>
+        <version>${jaxb-runtime.version}</version>
         <scope>compile</scope>
         <exclusions>
           <!-- for now, we only write XML in PMML export, and these can be excluded -->
@@ -2852,6 +2854,11 @@
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.activation</groupId>
+        <artifactId>jakarta.activation-api</artifactId>
+        <version>${jakarta.activation-api.version}</version>
       </dependency>
       <dependency>
         <groupId>jakarta.servlet</groupId>
