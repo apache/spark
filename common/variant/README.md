@@ -375,3 +375,7 @@ Field names are case-sensitive. Field names are required to be unique for each o
 # Versions and extensions
 
 An implementation is not expected to parse a Variant value whose metadata version is higher than the version supported by the implementation. However, new types may be added to the specification without incrementing the version ID. In such a situation, an implementation should be able to read the rest of the Variant value if desired.
+
+# Shredding
+
+For columnar storage formats, a single Variant object may have poor read performance when only a small number of fields are needed. A better approach is to create separate columns for individual fields, referred to as shredding or subcolumnarization. [shredding.md](shredding.md) describes an approach to shredding Variant columns in Parquet and similar columnar formats.
