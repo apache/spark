@@ -763,11 +763,13 @@ case class AdaptiveSparkPlanExec(
       // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan is
       // already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
       val finalPlan = currentPhysicalPlan match {
-        case BroadcastQueryStageExec(_, broadcast, _)
+        case broadcastQueryStage @ BroadcastQueryStageExec(_, broadcast, _)
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) =>
           broadcast match {
-            case b: BroadcastExchangeLike => b.withNewChildren(Seq(newPlan))
-            case ReusedExchangeExec(_, b: BroadcastExchangeLike) => b.withNewChildren(Seq(newPlan))
+            case b: BroadcastExchangeLike =>
+              broadcastQueryStage.copy(plan = b.withNewChildren(Seq(newPlan)))
+            case ReusedExchangeExec(_, b: BroadcastExchangeLike) =>
+              broadcastQueryStage.copy(plan = b.withNewChildren(Seq(newPlan)))
           }
         case b: BroadcastExchangeLike
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
