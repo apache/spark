@@ -143,7 +143,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       cache(i) = cache(i).copy(plan =
         if (header.merged) {
           CTERelationDef(
-            createProject(header.attributes, removeReferences(header.plan, cache)),
+            createProject(header.attributes,
+              removeReferences(removePropagatedFilters(header.plan), cache)),
             underSubquery = true)
         } else {
           removeReferences(header.plan, cache)
@@ -189,9 +190,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
           val mappedOutput = mapAttributes(output, outputMap)
           val headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
           subqueryIndex -> headerIndex
-        }.orElse{
-          tryMergePlans(plan, header.plan).map {
-            case (mergedPlan, outputMap) =>
+        }.orElse {
+          tryMergePlans(plan, header.plan, false).collect {
+            case (mergedPlan, outputMap, None, None, _) =>
               val mappedOutput = mapAttributes(output, outputMap)
               var headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
               val newHeaderAttributes = if (headerIndex == -1) {
@@ -223,87 +224,383 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
     }
   }
 
-  // Recursively traverse down and try merging 2 plans. If merge is possible then return the merged
-  // plan with the attribute mapping from the new to the merged version.
-  // Please note that merging arbitrary plans can be complicated, the current version supports only
-  // some of the most important nodes.
+  /**
+   * Recursively traverse down and try merging 2 plans.
+   *
+   * Please note that merging arbitrary plans can be complicated, the current version supports only
+   * some of the most important nodes.
+   *
+   * @param newPlan a new plan that we want to merge to an already processed plan
+   * @param cachedPlan a plan that we already processed, it can be either an original plan or a
+   *                   merged version of 2 or more plans
+   * @param filterPropagationSupported a boolean flag that we propagate down to signal we have seen
+   *                                   an `Aggregate` node where propagated filters can be merged
+   * @return A tuple of:
+   *         - the merged plan,
+   *         - the attribute mapping from the new to the merged version,
+   *         - the 2 optional filters of both plans that we need to propagate up and merge in
+   *           an ancestor `Aggregate` node if possible,
+   *         - the optional accumulated extra cost of merge that we need to propagate up and
+   *           check in the ancestor `Aggregate` node.
+   *         The cost is optional to signal if the cost needs to be taken into account up in the
+   *         `Aggregate` node to decide about merge.
+   */
   private def tryMergePlans(
       newPlan: LogicalPlan,
-      cachedPlan: LogicalPlan): Option[(LogicalPlan, AttributeMap[Attribute])] = {
-    checkIdenticalPlans(newPlan, cachedPlan).map(cachedPlan -> _).orElse(
+      cachedPlan: LogicalPlan,
+      filterPropagationSupported: Boolean):
+    Option[(LogicalPlan, AttributeMap[Attribute], Option[Expression], Option[Expression],
+        Option[Double])] = {
+    checkIdenticalPlans(newPlan, cachedPlan).map { outputMap =>
+      // Currently the cost is always propagated up when `filterPropagationSupported` is true but
+      // later we can address cases when we don't need to take cost into account. Please find the
+      // details at the `Filter` node handling.
+      val mergeCost = if (filterPropagationSupported) Some(0d) else None
+
+      (cachedPlan, outputMap, None, None, mergeCost)
+    }.orElse(
       (newPlan, cachedPlan) match {
         case (np: Project, cp: Project) =>
-          tryMergePlans(np.child, cp.child).map { case (mergedChild, outputMap) =>
-            val (mergedProjectList, newOutputMap) =
-              mergeNamedExpressions(np.projectList, outputMap, cp.projectList)
-            val mergedPlan = Project(mergedProjectList, mergedChild)
-            mergedPlan -> newOutputMap
+          tryMergePlans(np.child, cp.child, filterPropagationSupported).map {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              val (mergedProjectList, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost) =
+                mergeNamedExpressions(np.projectList, outputMap, cp.projectList, newChildFilter,
+                  mergedChildFilter, childMergeCost)
+              val mergedPlan = Project(mergedProjectList, mergedChild)
+              (mergedPlan, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost)
           }
         case (np, cp: Project) =>
-          tryMergePlans(np, cp.child).map { case (mergedChild, outputMap) =>
-            val (mergedProjectList, newOutputMap) =
-              mergeNamedExpressions(np.output, outputMap, cp.projectList)
-            val mergedPlan = Project(mergedProjectList, mergedChild)
-            mergedPlan -> newOutputMap
+          tryMergePlans(np, cp.child, filterPropagationSupported).map {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              val (mergedProjectList, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost) =
+                mergeNamedExpressions(np.output, outputMap, cp.projectList, newChildFilter,
+                  mergedChildFilter, childMergeCost)
+              val mergedPlan = Project(mergedProjectList, mergedChild)
+              (mergedPlan, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost)
           }
         case (np: Project, cp) =>
-          tryMergePlans(np.child, cp).map { case (mergedChild, outputMap) =>
-            val (mergedProjectList, newOutputMap) =
-              mergeNamedExpressions(np.projectList, outputMap, cp.output)
-            val mergedPlan = Project(mergedProjectList, mergedChild)
-            mergedPlan -> newOutputMap
+          tryMergePlans(np.child, cp, filterPropagationSupported).map {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              val (mergedProjectList, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost) =
+                mergeNamedExpressions(np.projectList, outputMap, cp.output, newChildFilter,
+                  mergedChildFilter, childMergeCost)
+              val mergedPlan = Project(mergedProjectList, mergedChild)
+              (mergedPlan, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost)
           }
         case (np: Aggregate, cp: Aggregate) if supportedAggregateMerge(np, cp) =>
-          tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
-            val mappedNewGroupingExpression =
-              np.groupingExpressions.map(mapAttributes(_, outputMap))
-            // Order of grouping expression does matter as merging different grouping orders can
-            // introduce "extra" shuffles/sorts that might not present in all of the original
-            // subqueries.
-            if (mappedNewGroupingExpression.map(_.canonicalized) ==
-              cp.groupingExpressions.map(_.canonicalized)) {
-              val (mergedAggregateExpressions, newOutputMap) =
-                mergeNamedExpressions(np.aggregateExpressions, outputMap, cp.aggregateExpressions)
-              val mergedPlan =
-                Aggregate(cp.groupingExpressions, mergedAggregateExpressions, mergedChild)
-              Some(mergedPlan -> newOutputMap)
-            } else {
-              None
-            }
-          }
-
-        case (np: Filter, cp: Filter) =>
-          tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
-            val mappedNewCondition = mapAttributes(np.condition, outputMap)
-            // Comparing the canonicalized form is required to ignore different forms of the same
-            // expression.
-            if (mappedNewCondition.canonicalized == cp.condition.canonicalized) {
-              val mergedPlan = cp.withNewChildren(Seq(mergedChild))
-              Some(mergedPlan -> outputMap)
-            } else {
-              None
-            }
-          }
-
-        case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
-          tryMergePlans(np.left, cp.left).flatMap { case (mergedLeft, leftOutputMap) =>
-            tryMergePlans(np.right, cp.right).flatMap { case (mergedRight, rightOutputMap) =>
-              val outputMap = leftOutputMap ++ rightOutputMap
-              val mappedNewCondition = np.condition.map(mapAttributes(_, outputMap))
-              // Comparing the canonicalized form is required to ignore different forms of the same
-              // expression and `AttributeReference.quailifier`s in `cp.condition`.
-              if (mappedNewCondition.map(_.canonicalized) == cp.condition.map(_.canonicalized)) {
-                val mergedPlan = cp.withNewChildren(Seq(mergedLeft, mergedRight))
-                Some(mergedPlan -> outputMap)
+          val filterPropagationSupported =
+            conf.getConf(SQLConf.PLAN_MERGE_FILTER_PROPAGATION_ENABLED) &&
+              supportsFilterPropagation(np) && supportsFilterPropagation(cp)
+          tryMergePlans(np.child, cp.child, filterPropagationSupported).flatMap {
+            case (mergedChild, outputMap, None, None, _) =>
+              val mappedNewGroupingExpression =
+                np.groupingExpressions.map(mapAttributes(_, outputMap))
+              // Order of grouping expression does matter as merging different grouping orders can
+              // introduce "extra" shuffles/sorts that might not present in all of the original
+              // subqueries.
+              if (mappedNewGroupingExpression.map(_.canonicalized) ==
+                cp.groupingExpressions.map(_.canonicalized)) {
+                // No need to calculate and check costs as there is no propagated filter
+                val (mergedAggregateExpressions, newOutputMap, _, _, _) =
+                  mergeNamedExpressions(np.aggregateExpressions, outputMap, cp.aggregateExpressions,
+                    None, None, None)
+                val mergedPlan =
+                  Aggregate(cp.groupingExpressions, mergedAggregateExpressions, mergedChild)
+                Some(mergedPlan, newOutputMap, None, None, None)
               } else {
                 None
               }
-            }
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              // No need to calculate cost in `mergeNamedExpressions()`
+              val (mergedAggregateExpressions, newOutputMap, _, _, _) =
+                mergeNamedExpressions(
+                  filterAggregateExpressions(np.aggregateExpressions, newChildFilter),
+                  outputMap,
+                  filterAggregateExpressions(cp.aggregateExpressions, mergedChildFilter),
+                  None,
+                  None,
+                  None)
+
+              val mergeFilters = newChildFilter.isEmpty || mergedChildFilter.isEmpty || {
+                val mergeCost = childMergeCost.map { c =>
+                  val newPlanExtraCost = mergedChildFilter.map(getCost).getOrElse(0d) +
+                    newChildFilter.map(getCost).getOrElse(0d)
+                  val cachedPlanExtraCost = newPlanExtraCost
+                  c + newPlanExtraCost + cachedPlanExtraCost
+                }
+                mergeCost.forall { c =>
+                  val maxCost = conf.getConf(SQLConf.PLAN_MERGE_FILTER_PROPAGATION_MAX_COST)
+                  val enableMerge = maxCost < 0 || c <= maxCost
+                  if (!enableMerge) {
+                    logDebug(
+                      s"Plan merge of\n${np}and\n${cp}failed as the merge cost is too high: $c")
+                  }
+                  enableMerge
+                }
+              }
+              if (mergeFilters) {
+                val mergedPlan = Aggregate(Seq.empty, mergedAggregateExpressions, mergedChild)
+                Some(mergedPlan, newOutputMap, None, None, None)
+              } else {
+                None
+              }
+            case _ => None
+          }
+
+        // If `Filter` conditions are not exactly the same we can still try propagating up their
+        // differing conditions because in some cases we will be able to merge them in an
+        // aggregate parent node.
+        //
+        // The differing `Filter`s can be merged if:
+        // - they both they have an ancestor `Aggregate` node that has no grouping and
+        // - there are only `Project` or `Filter` nodes in between the differing `Filter` and the
+        //   ancestor `Aggregate` nodes.
+        //
+        // E.g. we can merge:
+        //
+        // SELECT avg(a) FROM t WHERE c = 1
+        //
+        // and:
+        //
+        // SELECT sum(b) FROM t WHERE c = 2
+        //
+        // into:
+        //
+        // SELECT
+        //   avg(a) FILTER (WHERE c = 1),
+        //   sum(b) FILTER (WHERE c = 2)
+        // FORM t
+        // WHERE c = 1 OR c = 2
+        //
+        // But there are some special cases we need to consider:
+        //
+        // - The plans to be merged might contain multiple adjacent `Filter` nodes and the parent
+        //   `Filter` nodes should incorporate the propagated filters from child ones during merge.
+        //
+        //   E.g. adjacent filters can appear in plans when some of the optimization rules (like
+        //   `PushDownPredicates`) are disabled.
+        //
+        //   Let's consider we want to merge query 1:
+        //
+        //   SELECT avg(a)
+        //   FROM (
+        //     SELECT * FROM t WHERE c1 = 1
+        //   )
+        //   WHERE c2 = 1
+        //
+        //   and query 2:
+        //
+        //   SELECT sum(b)
+        //   FROM (
+        //     SELECT * FROM t WHERE c1 = 2
+        //   )
+        //   WHERE c2 = 2
+        //
+        //   then the optimal merged query is:
+        //
+        //   SELECT
+        //     avg(a) FILTER (WHERE c1 = 1 AND c2 = 1),
+        //     sum(b) FILTER (WHERE c1 = 2 AND c2 = 2)
+        //   FORM (
+        //     SELECT * FROM t WHERE c1 = 1 OR c1 = 2
+        //   )
+        //   WHERE (c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2)
+        //
+        //   This is because the `WHERE (c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2)` parent `Filter`
+        //   condition is more selective than a simple `WHERE c2 = 1 OR c2 = 2` would be as the
+        //   simple condition would let trough rows containing c1 = 1 and c2 = 2, which none of the
+        //   original queries do.
+        //
+        // - When we merge plans to already merged plans the propagated filter conditions could grow
+        //   quickly, which we can avoid with tagging the already propagated filters.
+        //
+        //   E.g. if we merged the previous optimal merged query and query 3:
+        //
+        //   SELECT max(b)
+        //   FROM (
+        //     SELECT * FROM t WHERE c1 = 3
+        //   )
+        //   WHERE c2 = 3
+        //
+        //   then a new double-merged query would look like this:
+        //
+        //   SELECT
+        //     avg(a) FILTER (WHERE
+        //       (c1 = 1 AND c2 = 1) AND
+        //         ((c1 = 1 OR c1 = 2) AND ((c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2)))
+        //     ),
+        //     sum(b) FILTER (WHERE
+        //       (c1 = 2 AND c2 = 2) AND
+        //         ((c1 = 1 OR c1 = 2) AND ((c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2)))
+        //     ),
+        //     max(b) FILTER (WHERE c1 = 3 AND c2 = 3)
+        //   FORM (
+        //     SELECT * FROM t WHERE (c1 = 1 OR c1 = 2) OR c1 = 3
+        //   )
+        //   WHERE
+        //     ((c1 = 1 OR c1 = 2) AND ((c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2))) OR
+        //       (c1 = 3 AND c2 = 3)
+        //
+        //   which is not optimal and contains unnecessary complex conditions.
+        //
+        //   Please note that `BooleanSimplification` and other rules could help simplifying filter
+        //   conditions, but when we merge large number if queries in this rule, the plan size can
+        //   increase exponentially and can cause memory issues before `BooleanSimplification` could
+        //   run.
+        //
+        //   We can avoid that complexity if we tag already propagated filter conditions with a
+        //   simple `PropagatedFilter` wrapper during merge.
+        //   E.g. the actual merged query of query 1 and query 2 produced by this rule looks like
+        //   this:
+        //
+        //   SELECT
+        //     avg(a) FILTER (WHERE c1 = 1 AND c2 = 1),
+        //     sum(b) FILTER (WHERE c1 = 2 AND c2 = 2)
+        //   FORM (
+        //     SELECT * FROM t WHERE PropagatedFilter(c1 = 1 OR c1 = 2)
+        //   )
+        //   WHERE PropagatedFilter((c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2))
+        //
+        //   And so when we merge query 3 we know that filter conditions tagged with
+        //   `PropagatedFilter` can be ignored during filter propagation and thus the we get a much
+        //   simpler double-merged query:
+        //
+        //   SELECT
+        //     avg(a) FILTER (WHERE c1 = 1 AND c2 = 1),
+        //     sum(b) FILTER (WHERE c1 = 2 AND c2 = 2),
+        //     max(b) FILTER (WHERE c1 = 3 AND c2 = 3)
+        //   FORM (
+        //     SELECT * FROM t WHERE PropagatedFilter(PropagatedFilter(c1 = 1 OR c1 = 2) OR c1 = 3)
+        //   )
+        //   WHERE
+        //     PropagatedFilter(
+        //       PropagatedFilter((c1 = 1 AND c2 = 1) OR (c1 = 2 AND c2 = 2)) OR
+        //         (c1 = 3 AND c2 = 3)
+        //
+        //   At the end of the rule we remove the `PropagatedFilter` wrappers.
+        //
+        // - When we merge plans we might introduce performance degradation in some corner cases.
+        //   The performance improvement of a merged query are due to:
+        //   - Spark needs scan the underlying common data source only once,
+        //   - common data needs to be shuffled only once between partial and final aggregates,
+        //   - there can be common expressions in the original plans that needs to be executed only
+        //     once.
+        //   But despite the above advantages, when differing filters can be pushed down to data
+        //   sources in the physical plan the original data source scans might not overlap and
+        //   return disjoint set of rows and so cancel out the above gains of merging. In this
+        //   unfortunate corner case if there are no common expressions in the original plans then
+        //   the merged query executes all expressions of both original queries on all rows from
+        //   both original queries.
+        //
+        //   As plan merge works on logical plans, identifying the above corner cases is
+        //   non-trivial. So to minimize the possible performance degradation we allow merging only
+        //   if:
+        //   - any of the propagated filters to the ancestor `Aggregate` node is empty, which means
+        //     that scans surely overlap, or
+        //   - the sum of cost differences between the original plans and the merged plan is low.
+        //
+        //   Currently we measure the cost of plans with a very simple `getCost` function that
+        //   allows only the most basic expressions.
+        case (np: Filter, cp: Filter) =>
+          tryMergePlans(np.child, cp.child, filterPropagationSupported).flatMap {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              val mappedNewCondition = mapAttributes(np.condition, outputMap)
+              // Comparing the canonicalized form is required to ignore different forms of the same
+              // expression.
+              if (mappedNewCondition.canonicalized == cp.condition.canonicalized) {
+                val filters = (mergedChildFilter.toSeq ++ newChildFilter.toSeq).reduceOption(Or)
+                  .map(PropagatedFilter)
+                // Please note that:
+                // - here we construct the merged `Filter` condition in a way that the filters we
+                //   propagate are wrapped by `PropagatedFilter` and are on the left side of the
+                //   `And` condition
+                // - at other places we always construct the merge condition that it is fully
+                //   wrapped by `PropagatedFilter`
+                // so as to be able to extract the already propagated filters in
+                // `extractNonPropagatedFilter()` easily.
+                val mergedCondition = (filters.toSeq :+ cp.condition).reduce(And)
+                val mergedPlan = Filter(mergedCondition, mergedChild)
+                val mergeCost = addFilterCost(childMergeCost, mergedCondition,
+                  getCost(np.condition), getCost(cp.condition))
+                Some(mergedPlan, outputMap, newChildFilter, mergedChildFilter, mergeCost)
+              } else if (filterPropagationSupported) {
+                val newPlanFilter = (newChildFilter.toSeq :+ mappedNewCondition).reduce(And)
+                val cachedPlanFilter = (mergedChildFilter.toSeq :+ cp.condition).reduce(And)
+                val mergedCondition = PropagatedFilter(Or(cachedPlanFilter, newPlanFilter))
+                val mergedPlan = Filter(mergedCondition, mergedChild)
+                // There might be `PropagatedFilter`s in the cached plan's `Filter` that we don't
+                // need to re-propagate.
+                val nonPropagatedCachedFilter = extractNonPropagatedFilter(cp.condition)
+                val mergedPlanFilter =
+                  (mergedChildFilter.toSeq ++ nonPropagatedCachedFilter.toSeq).reduceOption(And)
+                val mergeCost = addFilterCost(childMergeCost, mergedCondition,
+                  getCost(np.condition), getCost(cp.condition))
+                Some(mergedPlan, outputMap, Some(newPlanFilter), mergedPlanFilter, mergeCost)
+              } else {
+                None
+              }
+          }
+        case (np, cp: Filter) if filterPropagationSupported =>
+          tryMergePlans(np, cp.child, true).map {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              // There might be `PropagatedFilter`s in the cached plan's `Filter` and we don't
+              // need to re-propagate them.
+              val nonPropagatedCachedFilter = extractNonPropagatedFilter(cp.condition)
+              val mergedPlanFilter =
+                (mergedChildFilter.toSeq ++ nonPropagatedCachedFilter.toSeq).reduceOption(And)
+              if (newChildFilter.isEmpty) {
+                (mergedChild, outputMap, None, mergedPlanFilter, childMergeCost)
+              } else {
+                val cachedPlanFilter = (mergedChildFilter.toSeq :+ cp.condition).reduce(And)
+                val mergedCondition = PropagatedFilter(Or(cachedPlanFilter, newChildFilter.get))
+                val mergedPlan = Filter(mergedCondition, mergedChild)
+                val mergeCost =
+                  addFilterCost(childMergeCost, mergedCondition, 0d, getCost(cp.condition))
+                (mergedPlan, outputMap, newChildFilter, mergedPlanFilter, mergeCost)
+              }
+          }
+        case (np: Filter, cp) if filterPropagationSupported =>
+          tryMergePlans(np.child, cp, true).map {
+            case (mergedChild, outputMap, newChildFilter, mergedChildFilter, childMergeCost) =>
+              val mappedNewCondition = mapAttributes(np.condition, outputMap)
+              val newPlanFilter = (newChildFilter.toSeq :+ mappedNewCondition).reduce(And)
+              if (mergedChildFilter.isEmpty) {
+                (mergedChild, outputMap, Some(newPlanFilter), None, childMergeCost)
+              } else {
+                val mergedCondition = PropagatedFilter(Or(mergedChildFilter.get, newPlanFilter))
+                val mergedPlan = Filter(mergedCondition, mergedChild)
+                val mergeCost =
+                  addFilterCost(childMergeCost, mergedCondition, getCost(np.condition), 0d)
+                (mergedPlan, outputMap, Some(newPlanFilter), mergedChildFilter, mergeCost)
+              }
+          }
+
+        case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
+          // Filter propagation is not allowed through joins
+          tryMergePlans(np.left, cp.left, false).flatMap {
+            case (mergedLeft, leftOutputMap, None, None, _) =>
+              tryMergePlans(np.right, cp.right, false).flatMap {
+                case (mergedRight, rightOutputMap, None, None, _) =>
+                  val outputMap = leftOutputMap ++ rightOutputMap
+                  val mappedNewCondition = np.condition.map(mapAttributes(_, outputMap))
+                  // Comparing the canonicalized form is required to ignore different forms of the
+                  // same expression and `AttributeReference.quailifier`s in `cp.condition`.
+                  if (mappedNewCondition.map(_.canonicalized) ==
+                    cp.condition.map(_.canonicalized)) {
+                    val mergedPlan = cp.withNewChildren(Seq(mergedLeft, mergedRight))
+                    Some(mergedPlan, outputMap, None, None, None)
+                  } else {
+                    None
+                  }
+                case _ => None
+              }
+            case _ => None
           }
 
         // Otherwise merging is not possible.
         case _ => None
-      })
+      }
+    )
   }
 
   private def createProject(attributes: Seq[Attribute], plan: LogicalPlan): Project = {
@@ -320,14 +617,43 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
     }.asInstanceOf[T]
   }
 
-  // Applies `outputMap` attribute mapping on attributes of `newExpressions` and merges them into
-  // `cachedExpressions`. Returns the merged expressions and the attribute mapping from the new to
-  // the merged version that can be propagated up during merging nodes.
+  /**
+   * Merges named expression lists of `Project` or `Aggregate` nodes of the new plan into the named
+   * expression list of a similar node of the cached plan.
+   *
+   * - Before we can merge the new expressions we need to take into account the propagated
+   *   attribute mapping that describes the transformation from the input attributes of the new plan
+   *   node to the output attributes of the already merged child plan node.
+   * - While merging the new expressions we need to build a new attribute mapping to propagate up.
+   * - If any filters are propagated from `Filter` nodes below then we could add all the referenced
+   *   attributes of filter conditions to the merged expression list, but it is better if we alias
+   *   whole filter conditions and propagate only the new boolean attributes.
+   *
+   * @param newExpressions    the expression list of the new plan node
+   * @param outputMap         the propagated attribute mapping
+   * @param cachedExpressions the expression list of the cached plan node
+   * @param newChildFilter    the propagated filters from `Filter` nodes of the new plan
+   * @param mergedChildFilter the propagated filters from `Filter` nodes of the merged child plan
+   * @param childMergeCost    the optional accumulated extra costs of merge
+   * @return A tuple of:
+   *         - the merged expression list,
+   *         - the new attribute mapping to propagate,
+   *         - the output attribute of the merged newChildFilter to propagate,
+   *         - the output attribute of the merged mergedChildFilter to propagate,
+   *         - the extra costs of merging new expressions and filters added to `childMergeCost`
+   */
   private def mergeNamedExpressions(
       newExpressions: Seq[NamedExpression],
       outputMap: AttributeMap[Attribute],
-      cachedExpressions: Seq[NamedExpression]) = {
+      cachedExpressions: Seq[NamedExpression],
+      newChildFilter: Option[Expression],
+      mergedChildFilter: Option[Expression],
+      childMergeCost: Option[Double]):
+  (Seq[NamedExpression], AttributeMap[Attribute], Option[Attribute], Option[Attribute],
+      Option[Double]) = {
     val mergedExpressions = ArrayBuffer[NamedExpression](cachedExpressions: _*)
+    val commonCachedExpressions = mutable.Set.empty[NamedExpression]
+    var cachedPlanExtraCost = 0d
     val newOutputMap = AttributeMap(newExpressions.map { ne =>
       val mapped = mapAttributes(ne, outputMap)
       val withoutAlias = mapped match {
@@ -337,12 +663,82 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       ne.toAttribute -> mergedExpressions.find {
         case Alias(child, _) => child semanticEquals withoutAlias
         case e => e semanticEquals withoutAlias
+      }.map { e =>
+        if (childMergeCost.isDefined) {
+          commonCachedExpressions += e
+        }
+        e
       }.getOrElse {
         mergedExpressions += mapped
+        if (childMergeCost.isDefined) {
+          cachedPlanExtraCost += getCost(mapped)
+        }
         mapped
       }.toAttribute
     })
-    (mergedExpressions.toSeq, newOutputMap)
+
+    def mergeFilter(filter: Option[Expression]) = {
+      filter.map { f =>
+        mergedExpressions.find {
+          case Alias(child, _) => child semanticEquals f
+          case e => e semanticEquals f
+        }.map { e =>
+          if (childMergeCost.isDefined) {
+            commonCachedExpressions += e
+          }
+          e
+        }.getOrElse {
+          val named = f match {
+            case ne: NamedExpression => ne
+            case o => Alias(o, "propagatedFilter")()
+          }
+          mergedExpressions += named
+          if (childMergeCost.isDefined) {
+            cachedPlanExtraCost += getCost(named)
+          }
+          named
+        }.toAttribute
+      }
+    }
+
+    val mergedPlanFilter = mergeFilter(mergedChildFilter)
+    val newPlanFilter = mergeFilter(newChildFilter)
+
+    val mergeCost = childMergeCost.map { c =>
+      val newPlanExtraCost = cachedExpressions.collect {
+        case e if !commonCachedExpressions.contains(e) => getCost(e)
+      }.sum
+      c + newPlanExtraCost + cachedPlanExtraCost
+    }
+
+    (mergedExpressions.toSeq, newOutputMap, newPlanFilter, mergedPlanFilter, mergeCost)
+  }
+
+  /**
+   * Adds the extra cost of using `mergedCondition` (instead of the original cost of new and cached
+   * plan filter conditions) to the propagated extra cost from merged child plans.
+   */
+  private def addFilterCost(
+      childMergeCost: Option[Double],
+      mergedCondition: Expression,
+      newPlanFilterCost: Double,
+      cachedPlanFilterCost: Double) = {
+    childMergeCost.map { c =>
+      val mergedConditionCost = getCost(mergedCondition)
+      val newPlanExtraCost = mergedConditionCost - newPlanFilterCost
+      val cachedPlanExtraCost = mergedConditionCost - cachedPlanFilterCost
+      c + newPlanExtraCost + cachedPlanExtraCost
+    }
+  }
+
+  // Currently only the most basic expressions are supported.
+  private def getCost(e: Expression): Double = e match {
+    case _: Literal | _: Attribute => 0d
+    case PropagatedFilter(child) => getCost(child)
+    case Alias(child, _) => getCost(child)
+    case _: BinaryComparison | _: BinaryArithmetic | _: And  | _: Or | _: IsNull | _: IsNotNull =>
+      1d + e.children.map(getCost).sum
+    case _ => Double.PositiveInfinity
   }
 
   // Only allow aggregates of the same implementation because merging different implementations
@@ -371,6 +767,38 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
           newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate
       }
+  }
+
+  private def extractNonPropagatedFilter(e: Expression) = {
+    e match {
+      case And(_: PropagatedFilter, e) => Some(e)
+      case _: PropagatedFilter => None
+      case o => Some(o)
+    }
+  }
+
+  // We allow filter propagation into aggregates that doesn't have grouping expressions.
+  private def supportsFilterPropagation(a: Aggregate) = {
+    a.groupingExpressions.isEmpty
+  }
+
+  private def filterAggregateExpressions(
+      aggregateExpressions: Seq[NamedExpression],
+      filter: Option[Expression]) = {
+    if (filter.isDefined) {
+      aggregateExpressions.map(_.transform {
+        case ae: AggregateExpression =>
+          ae.copy(filter = (filter.get +: ae.filter.toSeq).reduceOption(And))
+      }.asInstanceOf[NamedExpression])
+    } else {
+      aggregateExpressions
+    }
+  }
+
+  private def removePropagatedFilters(plan: LogicalPlan) = {
+    plan.transformAllExpressions {
+      case pf: PropagatedFilter => pf.child
+    }
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
@@ -417,4 +845,15 @@ case class ScalarSubqueryReference(
   final override val nodePatterns: Seq[TreePattern] = Seq(SCALAR_SUBQUERY_REFERENCE)
 
   override def stringArgs: Iterator[Any] = Iterator(subqueryIndex, headerIndex, dataType, exprId.id)
+}
+
+
+/**
+ * Temporal wrapper around already propagated predicates.
+ */
+case class PropagatedFilter(child: Expression) extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
+
+  override protected def withNewChildInternal(newChild: Expression): PropagatedFilter =
+    copy(child = newChild)
 }
