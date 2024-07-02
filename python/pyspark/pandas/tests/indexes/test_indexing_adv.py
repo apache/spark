@@ -69,7 +69,7 @@ class IndexingAdvMixin:
         self.assertEqual(psdf.at[3, "b"], 6)
         self.assertEqual(psdf.at[3, "b"], pdf.at[3, "b"])
         self.assert_eq(psdf.at[9, "b"], np.array([0, 0, 0]))
-        self.assert_eq(psdf.at[9, "b"], pdf.at[9, "b"])
+        self.assert_eq(psdf.at[9, "b"], pdf.at[9, "b"].to_numpy())
 
         # Assert .at for Series
         self.assertEqual(test_series.at["b"], 6)
@@ -104,7 +104,7 @@ class IndexingAdvMixin:
         self.assertEqual(psdf.at[3, 1], 6)
         self.assertEqual(psdf.at[3, 1], pdf.at[3, 1])
         self.assert_eq(psdf.at[9, 1], np.array([0, 0, 0]))
-        self.assert_eq(psdf.at[9, 1], pdf.at[9, 1])
+        self.assert_eq(psdf.at[9, 1], pdf.at[9, 1].to_numpy())
 
     def test_at_multiindex(self):
         psdf = self.psdf.set_index("b", append=True)
