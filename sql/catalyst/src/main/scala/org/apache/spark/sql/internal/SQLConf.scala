@@ -535,8 +535,7 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
-        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .version("2.3.0")
       .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
