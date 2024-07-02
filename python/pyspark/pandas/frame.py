@@ -10064,7 +10064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 

@@ -1893,7 +1893,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index: array-like, optional
             New labels / index to conform to, should be specified using keywords.
             Preferably an Index object to avoid duplicating data
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 

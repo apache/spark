@@ -5370,6 +5370,18 @@ def _test() -> None:
     import tempfile
     from pyspark.core.context import SparkContext
 
+    try:
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        import numpy as np
+        from pandas.util.version import Version
+
+        if Version(np.__version__) >= Version("2"):
+            # `legacy="1.25"` only available in `nump>=2`
+            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+    except TypeError:
+        pass
+
     tmp_dir = tempfile.TemporaryDirectory()
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,

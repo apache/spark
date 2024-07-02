@@ -55,7 +55,7 @@ class IndexesAsTypeMixin:
         self.assert_eq(psidx.astype(bool), pidx.astype(bool))
         self.assert_eq(psidx.astype("bool"), pidx.astype("bool"))
         self.assert_eq(psidx.astype("?"), pidx.astype("?"))
-        self.assert_eq(psidx.astype(np.unicode_), pidx.astype(np.unicode_))
+        self.assert_eq(psidx.astype(np.str_), pidx.astype(np.str_))
         self.assert_eq(psidx.astype("str"), pidx.astype("str"))
         self.assert_eq(psidx.astype("U"), pidx.astype("U"))
 
