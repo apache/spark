@@ -1075,25 +1075,6 @@ class DDLParserSuite extends AnalysisTest {
         ifExists = true))
   }
 
-  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-  test("alter table: alter table properties") {
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-
-    comparePlans(
-      parsePlan(sql2_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = false))
-    comparePlans(
-      parsePlan(sql3_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = true))
-  }
-
   test("alter table: add column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),

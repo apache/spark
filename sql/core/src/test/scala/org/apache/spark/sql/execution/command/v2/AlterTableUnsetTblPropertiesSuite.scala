@@ -25,11 +25,11 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. SET TBLPROPERTIES` command to
+ * The class contains tests for the `ALTER TABLE .. UNSET TBLPROPERTIES` command to
  * check V2 table catalogs.
  */
-class AlterTableSetTblPropertiesSuite
-  extends command.AlterTableSetTblPropertiesSuiteBase with CommandSuiteBase {
+class AlterTableUnsetTblPropertiesSuite
+  extends command.AlterTableUnsetTblPropertiesSuiteBase with CommandSuiteBase {
 
   private def normalizeTblProps(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("provider", "owner").contains(p._1))
@@ -50,5 +50,27 @@ class AlterTableSetTblPropertiesSuite
 
   override def getTblPropertyValue(tableIdent: TableIdentifier, key: String): String = {
     getTableMetadata(tableIdent).properties.asScala.toMap.getOrElse(key, null)
+  }
+
+  /**
+   * When using the v2 command to unset `non-existent` properties,
+   * the command will ignore `non-existent` properties and finally succeed
+   */
+  test("alter table unset non-existent properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
+      val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
+
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3')")
+      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3"))
+
+      // property to unset does not exist
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k3', 'k4')")
+      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2"))
+
+      // property to unset does not exist, but "IF EXISTS" is specified
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('k2', 'k3')")
+      checkTblProps(tableIdent, Map("k1" -> "v1"))
+    }
   }
 }

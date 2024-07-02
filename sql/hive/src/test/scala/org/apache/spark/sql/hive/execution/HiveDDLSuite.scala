@@ -154,10 +154,6 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
-  test("alter table: unset properties") {
-    testUnsetProperties(isDatasourceTable = false)
-  }
-
   test("alter table: change column") {
     testChangeColumn(isDatasourceTable = false)
   }
