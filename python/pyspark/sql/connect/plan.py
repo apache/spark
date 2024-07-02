@@ -87,6 +87,10 @@ class LogicalPlan:
         assert plan_id is not None
         return plan_id
 
+    @property
+    def plan_id(self) -> int:
+        return self._plan_id
+
     def _create_proto_relation(self) -> proto.Relation:
         plan = proto.Relation()
         plan.common.plan_id = self._plan_id

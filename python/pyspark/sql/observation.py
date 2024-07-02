@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import os
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING, List
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
 from pyspark.sql.column import Column
@@ -77,7 +77,7 @@ class Observation:
             return ConnectObservation(*args, **kwargs)
         return super().__new__(cls)
 
-    def __init__(self, name: Optional[str] = None) -> None:
+    def __init__(self, name: Optional[str] = None, call_site: Optional[List[str]] = None) -> None:
         """Constructs a named or unnamed Observation instance.
 
         Parameters
@@ -99,6 +99,8 @@ class Observation:
         self._name = name
         self._jvm: Optional[JVMView] = None
         self._jo: Optional["JavaObject"] = None
+        self._call_site = call_site
+        self._plan_id = -1
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.

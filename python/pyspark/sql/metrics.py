@@ -18,7 +18,10 @@ import abc
 import dataclasses
 from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING, Sequence
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkValueError, PySparkTypeError
+from pyspark.sql import Observation, Column
+
+import pyspark.sql.functions as F
 
 if TYPE_CHECKING:
     from pyspark.testing.connectutils import have_graphviz
@@ -96,6 +99,72 @@ class PlanMetrics:
     @property
     def metrics(self) -> List[MetricValue]:
         return self._metrics
+
+
+class DataDebugOp:
+    """
+    The DataDebugOp class is a helper class that allows to encapsulate different reusable
+    data debug operations.
+    """
+
+    @classmethod
+    def count_values(cls) -> "DataDebugOp":
+        return DataDebugOp("count_values", F.count(F.lit(1)).alias("count_values"))
+
+    @classmethod
+    def count_null_values(cls, name: str) -> "DataDebugOp":
+        if not isinstance(name, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+            )
+        return DataDebugOp(
+            f"count_null_values_{name}",
+            F.count(F.when(F.col(name).isNull(), 1)).alias(f"count_null_values_{name}"),
+        )
+
+    @classmethod
+    def count_distinct_values(cls, name: str) -> "DataDebugOp":
+        if not isinstance(name, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+            )
+        return DataDebugOp(
+            f"count_distinct_values_{name}",
+            F.approx_count_distinct(name).alias(f"count_distinct_values_{name}"),
+        )
+
+    @classmethod
+    def max_value(cls, name: str) -> "DataDebugOp":
+        if not isinstance(name, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+            )
+        return DataDebugOp(
+            f"max_value_{name}",
+            F.max(name).alias(f"max_value_{name}"),
+        )
+
+    @classmethod
+    def min_value(cls, name: str) -> "DataDebugOp":
+        if not isinstance(name, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+            )
+        return DataDebugOp(
+            f"min_value_{name}",
+            F.min(name).alias(f"min_value_{name}"),
+        )
+
+    def __init__(self, name: str, col: Column):
+        self._name = name
+        self._col = col
+
+    def __call__(self) -> Column:
+        return self._col
 
 
 class CollectedMetrics:
@@ -276,7 +345,12 @@ class ExecutionInfo:
         self, metrics: Optional[list[PlanMetrics]], obs: Optional[Sequence[ObservedMetrics]]
     ):
         self._metrics = CollectedMetrics(metrics) if metrics else None
-        self._observations = obs if obs else []
+        # These are the metrics that were observed from the
+        self._observed_metrics = [o for o in obs if o.name.startswith("debug:")] if obs else []
+        self._observations: Optional[Dict[str, Observation]] = None
+
+    def setObservations(self, observations: Dict[str, Observation]) -> None:
+        self._observations = observations
 
     @property
     def metrics(self) -> Optional[CollectedMetrics]:
@@ -284,4 +358,23 @@ class ExecutionInfo:
 
     @property
     def flows(self) -> List[Tuple[str, Dict[str, Any]]]:
-        return [(f.name, f.pairs) for f in self._observations]
+        return [(f.name, f.pairs) for f in self._observed_metrics]
+
+    @property
+    def observedMetrics(self) -> List[ObservedMetrics]:
+        return self._observed_metrics
+
+    @property
+    def observations(self) -> Optional[List[Observation]]:
+        """
+        Returns the observations that were collected during the execution of the query. The
+        observations are returned as a list oredered by the plan ID under the assumption that
+        lower plan IDs have been created earlier.
+
+        Returns
+        -------
+        A list of observations, None if no observations were collected.
+        """
+        if self._observations:
+            return sorted(self._observations.values(), key=lambda x: x._plan_id)
+        return None

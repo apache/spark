@@ -1028,6 +1028,11 @@
       "Unknown value for `<var>`."
     ]
   },
+  "UNSUPPORTED_DATADEBUGOP": {
+    "message": [
+      "Argument `<arg_name>` should be a DataDebugOp, got <arg_type>."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE": {
     "message": [
       "Unsupported DataType `<data_type>`."

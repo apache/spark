@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 import uuid
 
 from pyspark.errors import (
@@ -33,7 +33,9 @@ __all__ = ["Observation"]
 
 
 class Observation:
-    def __init__(self, name: Optional[str] = None) -> None:
+    def __init__(
+        self, name: Optional[str] = None, call_site: Optional[List[str]] = None, plan_id: int = -1
+    ) -> None:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
@@ -47,8 +49,18 @@ class Observation:
                 )
         self._name = name
         self._result: Optional[Dict[str, Any]] = None
+        self._call_site = call_site
+        self._plan_id = plan_id
 
     __init__.__doc__ = PySparkObservation.__init__.__doc__
+
+    @property
+    def callSite(self) -> Optional[List[str]]:
+        return self._call_site
+
+    @property
+    def planId(self) -> int:
+        return self._plan_id
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         if self._result is not None:
@@ -74,6 +86,14 @@ class Observation:
             raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
 
         return self._result
+
+    def debugString(self) -> str:
+        call_site = self._call_site[0] if self._call_site is not None else ""
+        metrics = ", ".join([f"{k}={v}" for k, v in self.get.items()])
+        return (
+            f"Observation(name={self._name}, planId={self._plan_id},"
+            f" metrics={metrics}, callSite={call_site})"
+        )
 
     get.__doc__ = PySparkObservation.get.__doc__
 

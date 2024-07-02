@@ -20,7 +20,7 @@ import functools
 import inspect
 import os
 import threading
-from typing import Any, Callable, Dict, Match, TypeVar, Type, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Match, TypeVar, Type, Optional, TYPE_CHECKING, List
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -165,19 +165,11 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     The call site information is used to enhance error messages with the exact location
     in the user code that led to the error.
     """
-    # Filtering out PySpark code and keeping user code only
-    pyspark_root = os.path.dirname(pyspark.__file__)
-    stack = [
-        frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
-    ]
-
-    selected_frames = stack[:depth]
-
-    # We try import here since IPython is not a required dependency
+    selected_frames = call_site_stack(depth)
     try:
-        from IPython import get_ipython
+        import IPython
 
-        ipython = get_ipython()
+        ipython = IPython.get_ipython()
     except ImportError:
         ipython = None
 
@@ -189,7 +181,6 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     else:
         call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
     call_sites_str = "\n".join(call_sites)
-
     return call_sites_str
 
 
@@ -257,3 +248,41 @@ def with_origin_to_class(cls: Type[T]) -> Type[T]:
             ):
                 setattr(cls, name, _with_origin(method))
     return cls
+
+
+def call_site_stack(depth: int = 10) -> List[inspect.FrameInfo]:
+    """
+    Capture the call site stack and filter out all stack frames that are not user code.
+
+    This function will return the call stack above all PySpark code and IPython code. Usually
+    the first frame will be the place where the user code reached the PySpark API.
+
+    If SPARK_TESTING is set in the environment, all frames will be returned.
+
+    Parameters
+    ----------
+    depth : int
+        How many stack frames to select
+
+    """
+
+    # Filtering out PySpark code and keeping user code only
+    pyspark_root = os.path.dirname(pyspark.__file__)
+    stack = [
+        frame_info
+        for frame_info in inspect.stack()
+        if pyspark_root not in frame_info.filename or "SPARK_TESTING" in os.environ
+    ]
+
+    selected_frames = stack[:depth]
+
+    # We try import here since IPython is not a required dependency
+    try:
+        import IPython
+
+        ipy_root = IPython.__file__
+        selected_frames = [f for f in selected_frames if ipy_root not in f.filename]
+    except ImportError:
+        pass
+
+    return selected_frames

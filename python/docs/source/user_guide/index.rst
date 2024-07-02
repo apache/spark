@@ -28,6 +28,7 @@ PySpark specific user guides are available here:
    python_packaging
    sql/index
    pandas_on_spark/index
+   connect_execution_info_and_debug
 
 There are also basic programming guides covering multiple languages available in
 `the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_, including these:
