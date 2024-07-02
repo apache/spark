@@ -1333,30 +1333,34 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql3)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION_AND_TABLE",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "j",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`j`",
+              "tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "proposal" -> "`i`, `s`, `point`"
+              ),
             context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
-          val e2 = intercept[AnalysisException] {
-            parseAndResolve(sql4)
-          }
           checkError(
-            exception = e2,
+            exception = intercept[AnalysisException] {
+              parseAndResolve(sql4)
+            },
             errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))
+
+          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN i SET NOT NULL"
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(sql5)
+            },
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN ... SET NOT NULL"))
         } else {
           parsed1 match {
             case AlterColumn(
@@ -1417,18 +1421,13 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION_AND_TABLE",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "I",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
+              "objectName" -> "`I`",
+              "tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "proposal" -> "`i`, `s`, `point`"
+            ),
             context = ExpectedContext(fragment = sql, start = 0, stop = 55))
         } else {
           val actual = parseAndResolve(sql)

@@ -2846,15 +2846,13 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION_AND_TABLE",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "non_exist",
-          "table" -> "testcat.tbl",
-          "schema" ->
-            """root
-              | |-- id: long (nullable = true)
-              | |-- data: string (nullable = true)
-              |""".stripMargin),
+          "objectName" -> "`non_exist`",
+          "tableName" -> "`testcat`.`tbl`",
+          "proposal" -> "`id`, `data`"
+        ),
         context = ExpectedContext(
           fragment = sql1,
           start = 0,
