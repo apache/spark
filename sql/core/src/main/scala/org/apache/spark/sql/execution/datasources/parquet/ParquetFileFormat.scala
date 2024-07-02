@@ -361,6 +361,8 @@ class ParquetFileFormat
     case _ => false
   }
 
+  override def supportCollations: Boolean = true
+
   override def metadataSchemaFields: Seq[StructField] = {
     super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
   }
