@@ -42,6 +42,16 @@ package object config {
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
   private[spark] val LISTENER_BUS_EVENT_QUEUE_PREFIX = "spark.scheduler.listenerbus.eventqueue"
 
+  private[spark] val DEFAULT_PARALLELISM =
+    ConfigBuilder("spark.default.parallelism")
+      .doc("For distributed shuffle operations like reduceByKey and join, the largest number of " +
+        "partitions in a parent RDD. For operations like parallelize with no parent RDDs, " +
+        "it depends on the cluster manager: Local mode: number of cores on the local machine " +
+        "Mesos fine grained mode: 8 Others: total number of cores on all executor nodes or 2, " +
+        "whichever is larger")
+      .version("0.5.0")
+      .intConf
+
   private[spark] val RESOURCES_DISCOVERY_PLUGIN =
     ConfigBuilder("spark.resources.discoveryPlugin")
       .doc("Comma-separated list of class names implementing" +
