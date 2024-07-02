@@ -28,6 +28,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
 import org.apache.spark.sql.internal.SQLConf
 
+object StateSchemaV3File {
+  val COLUMN_FAMILY_SCHEMA_VERSION = 1
+}
 /**
  * The StateSchemaV3File is used to write the schema of multiple column families.
  * Right now, this is primarily used for the TransformWithState operator, which supports
@@ -43,7 +46,6 @@ class StateSchemaV3File(
   extends HDFSMetadataLog[List[ColumnFamilySchema]](hadoopConf, path, metadataCacheEnabled) {
 
   val VERSION = 3
-  private val COLUMN_FAMILY_SCHEMA_VERSION = 1
 
   def this(sparkSession: SparkSession, path: String) = {
     this(
@@ -77,7 +79,7 @@ class StateSchemaV3File(
   override def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
     out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
-    out.write(s"v${COLUMN_FAMILY_SCHEMA_VERSION}".getBytes(UTF_8))
+    out.write(s"v${StateSchemaV3File.COLUMN_FAMILY_SCHEMA_VERSION}".getBytes(UTF_8))
     out.write('\n')
     out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
   }

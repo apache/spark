@@ -338,6 +338,10 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
     }
   }
 
+  /**
+   * Removes the oldest log files so that we only have the
+   * latest `minEntriesToMaintain` log files.
+   */
   def purgeOldest(minEntriesToMaintain: Int): Unit = {
     val batchIds = listBatches.sorted
     if (batchIds.length > minEntriesToMaintain) {

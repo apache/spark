@@ -247,7 +247,10 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   override def validateAndMaybeEvolveStateSchema(
-      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int
+    ):
     Array[String] = {
     var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
@@ -259,7 +262,7 @@ case class StreamingSymmetricHashJoinExec(
       right.output, rightKeys, stateFormatVersion)
 
     // validate and maybe evolve schema for all state stores across both sides of the join
-    result.flatten { case (stateStoreName, (keySchema, valueSchema)) =>
+    result.iterator.flatMap { case (stateStoreName, (keySchema, valueSchema)) =>
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
     }.toArray

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -85,8 +85,7 @@ class StatefulProcessorHandleImpl(
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
-  extends StatefulProcessorHandleImplBase(timeMode)
-  with StatefulProcessorHandle with Logging {
+  extends StatefulProcessorHandleImplBase(timeMode) with Logging {
   import StatefulProcessorHandleState._
 
   /**
@@ -96,6 +95,8 @@ class StatefulProcessorHandleImpl(
   private[sql] val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
+
+  currState = CREATED
 
   private def buildQueryInfo(): QueryInfo = {
     val taskCtxOpt = Option(TaskContext.get())
@@ -302,8 +303,10 @@ class StatefulProcessorHandleImpl(
  * the StatefulProcessor is initialized.
  */
 class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
-  extends StatefulProcessorHandleImplBase(timeMode)
-    with StatefulProcessorHandle {
+  extends StatefulProcessorHandleImplBase(timeMode) {
+
+  private[sql] val columnFamilySchemaFactory = ColumnFamilySchemaFactory.
+    getFactory(StateSchemaV3File.COLUMN_FAMILY_SCHEMA_VERSION)
 
   private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
     new util.ArrayList[ColumnFamilySchema]()
@@ -327,7 +330,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
    */
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.getValueStateSchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -348,7 +351,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.getValueStateTtlSchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -365,7 +368,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
    */
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    val colFamilySchema = ListStateImpl.columnFamilySchema(stateName, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.getListStateSchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -386,7 +389,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state")
-    val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.getListStateTtlSchema(stateName, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -407,7 +410,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    val colFamilySchema = MapStateImpl.columnFamilySchema(stateName, userKeyEnc, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getMapStateSchema(stateName, userKeyEnc, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }
@@ -430,7 +434,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
-    val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName, userKeyEnc, valEncoder)
+    val colFamilySchema = columnFamilySchemaFactory.
+      getMapStateTtlSchema(stateName, userKeyEnc, valEncoder)
     columnFamilySchemas.add(colFamilySchema)
     null
   }

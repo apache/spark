@@ -65,6 +65,10 @@ case class ColumnFamilySchemaV1(
 
 object ColumnFamilySchemaV1 {
 
+  /**
+   * Create a ColumnFamilySchemaV1 object from the Json string
+   * This function is to read the StateSchemaV3 file
+   */
   def fromJson(json: String): ColumnFamilySchema = {
     implicit val formats: DefaultFormats.type = DefaultFormats
     val colFamilyMap = JsonMethods.parse(json).extract[Map[String, Any]]

@@ -377,23 +377,20 @@ case class TransformWithStateExec(
       batchId: Long,
       stateSchemaVersion: Int):
     Array[String] = {
-    stateSchemaVersion match {
-      case 2 => Array.empty
-      case 3 =>
-        val newColumnFamilySchemas = getColFamilySchemas()
-        val schemaFile = new StateSchemaV3File(
-          hadoopConf, stateSchemaFilePath().toString)
-        schemaFile.getLatest() match {
-          case Some((_, oldColumnFamilySchemas)) =>
-            validateSchemas(oldColumnFamilySchemas, newColumnFamilySchemas)
-          case None =>
-        }
-        // Write the new schema to the schema file
-        schemaFile.add(batchId, newColumnFamilySchemas)
-        // purge oldest files
-        schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
-        Array(schemaFile.getPathFromBatchId(batchId))
+    assert(stateSchemaVersion >= 3)
+    val newColumnFamilySchemas = getColFamilySchemas()
+    val schemaFile = new StateSchemaV3File(
+      hadoopConf, stateSchemaFilePath().toString)
+    schemaFile.getLatest() match {
+      case Some((_, oldColumnFamilySchemas)) =>
+        validateSchemas(oldColumnFamilySchemas, newColumnFamilySchemas)
+      case None =>
     }
+    // Write the new schema to the schema file
+    schemaFile.add(batchId, newColumnFamilySchemas)
+    // purge oldest files
+    schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
+    Array(schemaFile.getPathFromBatchId(batchId))
   }
 
   private def validateSchemas(
@@ -549,7 +546,6 @@ case class TransformWithStateExec(
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
       isStreaming, batchTimestampMs, metrics)
-    processorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -564,7 +560,6 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
-    processorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
