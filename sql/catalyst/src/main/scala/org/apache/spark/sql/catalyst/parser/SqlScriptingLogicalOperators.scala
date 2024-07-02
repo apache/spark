@@ -37,11 +37,14 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 
   override val origin: Origin = CurrentOrigin.get
 
-  def getText(sqlScriptText: String): String = {
-    if (origin.startIndex.isEmpty || origin.stopIndex.isEmpty) {
-      return null
-    }
-    sqlScriptText.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  /**
+   * Get the SQL query text corresponding to this statement.
+   * @return
+   *   SQL query text.
+   */
+  def getText: String = {
+    assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
+    origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 }
 
@@ -49,4 +52,6 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * Logical operator for a compound body. Contains all statements within the compound body.
  * @param collection Collection of statements within the compound body.
  */
-case class CompoundBody(collection: Seq[CompoundPlanStatement]) extends CompoundPlanStatement
+case class CompoundBody(
+    collection: Seq[CompoundPlanStatement],
+    label: String) extends CompoundPlanStatement

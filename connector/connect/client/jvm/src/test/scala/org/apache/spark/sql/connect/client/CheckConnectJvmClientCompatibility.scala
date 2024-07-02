@@ -164,6 +164,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.streaming.ui.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.test.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.util.*"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.scripting.*"),
 
       // Skip private[sql] constructors
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.*.this"),
