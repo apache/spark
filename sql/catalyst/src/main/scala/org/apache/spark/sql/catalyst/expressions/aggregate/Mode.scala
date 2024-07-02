@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -111,6 +111,22 @@ case class Mode(
          case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
         }(x => x)((x, y) => (x._1, x._2 + y._2)).values
         modeMap
+      case c: StructType if c.existsRecursively(
+        s => s.isInstanceOf[StringType] && !CollationFactory.fetchCollation(
+          s.asInstanceOf[StringType].collationId).supportsBinaryEquality) => {
+          val modeMap = buffer.toSeq.groupMapReduce {
+            case (k, _) => getComplexCollationKey(k.asInstanceOf[InternalRow], c)
+          }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+          modeMap
+        }
+      case a: ArrayType if a.existsRecursively(
+        s => s.isInstanceOf[StringType] && !CollationFactory.fetchCollation(
+          s.asInstanceOf[StringType].collationId).supportsBinaryEquality) => {
+        val modeMap = buffer.toSeq.groupMapReduce {
+          case (k, _) => getComplexCollationKey(k.asInstanceOf[InternalRow], a)
+        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+        modeMap
+      }
       case _ => buffer
     }
     reverseOpt.map { reverse =>
@@ -122,6 +138,20 @@ case class Mode(
       val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
       collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
     }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
+  }
+
+  private def getComplexCollationKey(k: InternalRow, dt: DataType): AnyRef = {
+    dt match {
+      case c: StructType => c.fields.map {
+        case f if f.dataType.isInstanceOf[StringType] =>
+          CollationFactory.getCollationKey(
+            k.getUTF8String(c.fieldIndex(f.name)),
+            f.dataType.asInstanceOf[StringType].collationId)
+        case f if f.dataType.isInstanceOf[StructType] =>
+          getComplexCollationKey(k.getStruct(c.fieldIndex(f.name), f.dataType.asInstanceOf[StructType]), f.dataType.asInstanceOf[StructType])
+      }
+      case other => other
+    }
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
