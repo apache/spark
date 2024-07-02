@@ -129,7 +129,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
+  test("SPARK-16845: GeneratedClass$<hash>$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 
     // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
