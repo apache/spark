@@ -3671,7 +3671,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
   }
 
-  private def cleanNamespaceProperties(
+  protected def cleanNamespaceProperties(
       properties: Map[String, String],
       ctx: ParserRuleContext): Map[String, String] = withOrigin(ctx) {
     import SupportsNamespaces._
