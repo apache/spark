@@ -28,6 +28,14 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * The StateSchemaV3File is used to write the schema of multiple column families.
+ * Right now, this is primarily used for the TransformWithState operator, which supports
+ * multiple column families to keep the data for multiple state variables.
+ * @param hadoopConf Hadoop configuration that is used to read / write metadata files.
+ * @param path Path to the directory that will be used for writing metadata.
+ * @param metadataCacheEnabled Whether to cache the batches' metadata in memory.
+ */
 class StateSchemaV3File(
     hadoopConf: Configuration,
     path: String,
@@ -87,7 +95,6 @@ class StateSchemaV3File(
 
   override def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
     val batchMetadataFile = batchIdToPath(batchId)
-
     if (metadataCacheEnabled && batchCache.containsKey(batchId)) {
       false
     } else {
