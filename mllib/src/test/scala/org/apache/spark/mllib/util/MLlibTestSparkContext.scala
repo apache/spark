@@ -69,7 +69,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.sqlContext
+    protected override def session: SparkSession = self.spark
   }
 
   private[spark] def standardize(instances: Array[Instance]): Array[Instance] = {

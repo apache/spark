@@ -240,7 +240,7 @@ private[sql] trait SQLTestUtilsBase
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.sqlContext
+    protected override def session: SparkSession = self.spark
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
