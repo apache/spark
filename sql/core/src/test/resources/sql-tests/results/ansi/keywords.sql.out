@@ -203,6 +203,7 @@ NANOSECOND	false
 NANOSECONDS	false
 NATURAL	true
 NO	false
+NONE	false
 NOT	true
 NULL	true
 NULLS	false

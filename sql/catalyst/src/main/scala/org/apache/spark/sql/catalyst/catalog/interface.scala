@@ -231,6 +231,14 @@ object ClusterBySpec {
       case ClusterByTransform(columnNames) => ClusterBySpec(columnNames)
     }
   }
+
+  def extractClusterByTransform(
+      schema: StructType,
+      clusterBySpec: ClusterBySpec,
+      resolver: Resolver): ClusterByTransform = {
+    val normalizedClusterBySpec = normalizeClusterBySpec(schema, clusterBySpec, resolver)
+    ClusterByTransform(normalizedClusterBySpec.columnNames)
+  }
 }
 
 /**
