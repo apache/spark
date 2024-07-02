@@ -244,7 +244,7 @@ private[spark] class ApplicationMaster(
 
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
-            if (isLastAttempt) {
+            if (isLastAttempt || exitCode == ApplicationMaster.EXIT_STOP_AM_RETYR) {
               cleanupStagingDir(stagingDirFs, stagingDirPath)
               unregister(finalStatus, finalMsg)
             } else if (finalStatus == FinalApplicationStatus.SUCCEEDED) {
@@ -888,6 +888,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
   private val EXIT_DISCONNECTED = 17
+  private val EXIT_STOP_AM_RETYR = 18
 
   private var master: ApplicationMaster = _
 
