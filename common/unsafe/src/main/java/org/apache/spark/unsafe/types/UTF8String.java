@@ -21,7 +21,6 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Iterator;
@@ -141,14 +140,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       return null;
     }
-  }
-
-  private static UTF8String fromBytes(ArrayList<Byte> bytes) {
-    byte[] byteArray = new byte[bytes.size()];
-    for (int i = 0; i < bytes.size(); i++) {
-      byteArray[i] = bytes.get(i);
-    }
-    return fromBytes(byteArray);
   }
 
   /**
