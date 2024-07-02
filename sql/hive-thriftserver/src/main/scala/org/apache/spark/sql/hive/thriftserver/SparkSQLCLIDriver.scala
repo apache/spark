@@ -409,7 +409,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
     hiveVariables.asScala.foreach(kv =>
-      SparkSQLEnv.sparkSession.conf.set(kv._1, kv._2))
+      SparkSQLEnv.sparkSession.sessionState.conf.setConfString(kv._1, kv._2))
   }
 
   def printMasterAndAppId(): Unit = {
