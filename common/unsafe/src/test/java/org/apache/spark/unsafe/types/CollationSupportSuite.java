@@ -187,7 +187,7 @@ public class CollationSupportSuite {
       UTF8String.fromString("\uFFFD\uFFFD"), false);
     assertLowerCaseCodePoints(UTF8String.fromBytes(new byte[]
       {(byte) 0xED, (byte) 0xA0, (byte) 0x80, (byte) 0xED, (byte) 0xB0, (byte) 0x80}),
-      UTF8String.fromString("\uFFFD\uFFFD"), true);
+      UTF8String.fromString("\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD"), true); // != Java toLowerCase
   }
 
   /**
