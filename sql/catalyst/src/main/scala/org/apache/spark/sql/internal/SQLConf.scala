@@ -3885,6 +3885,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val COMBINE_UNIONED_SUBQUERYS_ENABLED =
+    buildConf("spark.sql.optimizer.combineUnionedSubquery.enabled")
+      .doc("When true, we attempt to eliminate union by combine subquery " +
+        "to reduce the scan times and avoid shuffle.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
     .doc(s"If it is set to false, or ${ANSI_ENABLED.key} is true, then size of null returns " +
@@ -5850,6 +5858,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
+
+  def combineUnionedAggregatesEnabled: Boolean =
+    getConf(SQLConf.COMBINE_UNIONED_SUBQUERYS_ENABLED)
 
   def legacySizeOfNull: Boolean = {
     // size(null) should return null under ansi mode.
