@@ -432,7 +432,7 @@ case class TransformWithStateExec(
 
     val operatorPropertiesJson: JValue =
       ("timeMode" -> JString(timeMode.toString)) ~
-        ("outputMode" -> JString(outputMode.toString))
+      ("outputMode" -> JString(outputMode.toString))
 
     val json = compact(render(operatorPropertiesJson))
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
