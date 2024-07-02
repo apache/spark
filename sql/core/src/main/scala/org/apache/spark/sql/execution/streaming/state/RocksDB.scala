@@ -23,8 +23,6 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -136,10 +134,10 @@ class RocksDB(
     dbOptions.setWriteBufferManager(writeBufferManager)
   }
 
-  // Maintain mapping of column family name to handle
+  // Maintain a set of column family name
   @GuardedBy("acquireLock")
-  private val colFamilyNameToHandleMap =
-    scala.collection.mutable.Map[String, ColumnFamilyHandle]()
+  private val colFamilyNameSet =
+    scala.collection.mutable.Set[String]()
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
   dbOptions.setStatistics(new Statistics())
@@ -266,7 +264,7 @@ class RocksDB(
    * @return - true if the column family exists, false otherwise
    */
   private def checkColFamilyExists(colFamilyName: String): Boolean = {
-    colFamilyNameToHandleMap.contains(colFamilyName)
+    colFamilyNameSet.contains(colFamilyName)
   }
 
   private val multColFamiliesDisabledStr = "multiple column families disabled in " +
@@ -344,9 +342,7 @@ class RocksDB(
     verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
     if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
-      val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
-      val handle = db.createColumnFamily(descriptor)
-      colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
+      colFamilyNameSet += colFamilyName
     }
   }
 
@@ -357,9 +353,7 @@ class RocksDB(
     verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
     if (checkColFamilyExists(colFamilyName)) {
       assert(db != null)
-      val handle = colFamilyNameToHandleMap(colFamilyName)
-      db.dropColumnFamily(handle)
-      colFamilyNameToHandleMap.remove(colFamilyName)
+      colFamilyNameSet.remove(colFamilyName)
       true
     } else {
       false
@@ -374,7 +368,7 @@ class RocksDB(
       key: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     verifyColFamilyOperations("get", colFamilyName)
-    db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+    db.get(readOptions, key)
   }
 
   /**
@@ -387,13 +381,13 @@ class RocksDB(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     verifyColFamilyOperations("put", colFamilyName)
     if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+      val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
         numKeysOnWritingVersion += 1
       }
     }
 
-    db.put(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+    db.put(writeOptions, key, value)
     if (useColumnFamilies) {
       changelogWriter.foreach(_.put(key, value, colFamilyName))
     } else {
@@ -423,12 +417,12 @@ class RocksDB(
     verifyColFamilyOperations("merge", colFamilyName)
 
     if (conf.trackTotalNumberOfRows) {
-      val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+      val oldValue = db.get(readOptions, key)
       if (oldValue == null) {
         numKeysOnWritingVersion += 1
       }
     }
-    db.merge(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+    db.merge(writeOptions, key, value)
 
     changelogWriter.foreach(_.merge(key, value, colFamilyName))
   }
@@ -442,12 +436,12 @@ class RocksDB(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     verifyColFamilyOperations("remove", colFamilyName)
     if (conf.trackTotalNumberOfRows) {
-      val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+      val value = db.get(readOptions, key)
       if (value != null) {
         numKeysOnWritingVersion -= 1
       }
     }
-    db.delete(colFamilyNameToHandleMap(colFamilyName), writeOptions, key)
+    db.delete(writeOptions, key)
     if (useColumnFamilies) {
       changelogWriter.foreach(_.delete(key, colFamilyName))
     } else {
@@ -462,7 +456,7 @@ class RocksDB(
     Iterator[ByteArrayPair] = {
     verifyColFamilyOperations("iterator", colFamilyName)
 
-    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
     iter.seekToFirst()
 
@@ -490,7 +484,7 @@ class RocksDB(
 
   private def countKeys(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Long = {
     verifyColFamilyOperations("countKeys", colFamilyName)
-    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    val iter = db.newIterator()
 
     try {
       logInfo(log"Counting keys - getting iterator from version " +
@@ -513,7 +507,7 @@ class RocksDB(
   def prefixScan(prefix: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[ByteArrayPair] = {
     verifyColFamilyOperations("prefixScan", colFamilyName)
-    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    val iter = db.newIterator()
     iter.seek(prefix)
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
@@ -558,17 +552,16 @@ class RocksDB(
         // because rocksdb wal is disabled.
         logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
         flushTimeMs = timeTakenMs {
-          // Flush updates to all available column families
-          assert(!colFamilyNameToHandleMap.isEmpty)
-          db.flush(flushOptions, colFamilyNameToHandleMap.values.toSeq.asJava)
+          assert(!colFamilyNameSet.isEmpty)
+          db.flush(flushOptions)
         }
 
         if (conf.compactOnCommit) {
           logInfo("Compacting")
           compactTimeMs = timeTakenMs {
             // Perform compaction on all available column families
-            assert(!colFamilyNameToHandleMap.isEmpty)
-            colFamilyNameToHandleMap.values.foreach(db.compactRange(_))
+            assert(!colFamilyNameSet.isEmpty)
+            db.compactRange()
           }
         }
 
@@ -773,9 +766,9 @@ class RocksDB(
     }
 
     // Used for metrics reporting around internal/external column families
-    val numInternalColFamilies = colFamilyNameToHandleMap
-      .keys.filter(checkInternalColumnFamilies(_)).size
-    val numExternalColFamilies = colFamilyNameToHandleMap.keys.size - numInternalColFamilies
+    val numInternalColFamilies = colFamilyNameSet
+      .filter(checkInternalColumnFamilies(_)).size
+    val numExternalColFamilies = colFamilyNameSet.size - numInternalColFamilies
 
     // if bounded memory usage is enabled, we share the block cache across all state providers
     // running on the same node and account the usage to this single cache. In this case, its not
@@ -873,45 +866,22 @@ class RocksDB(
 
   private def getDBProperty(property: String): Long = {
     // get cumulative sum across all available column families
-    assert(!colFamilyNameToHandleMap.isEmpty)
-    colFamilyNameToHandleMap
-      .values
-      .map(handle => db.getProperty(handle, property).toLong)
-      .sum
+    assert(!colFamilyNameSet.isEmpty)
+    db.getProperty(property).toLong
   }
 
   private def openDB(): Unit = {
     assert(db == null)
-    val colFamilies = NativeRocksDB.listColumnFamilies(dbOptions, workingDir.toString)
+    db = NativeRocksDB.open(dbOptions, workingDir.toString)
 
-    val colFamilyDescriptors = new ArrayBuffer[ColumnFamilyDescriptor]
-    // populate the list of available col family descriptors
-    colFamilies.asScala.toList.foreach { family =>
-      val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)
-      colFamilyDescriptors += descriptor
-    }
-
-    if (colFamilyDescriptors.isEmpty) {
-      colFamilyDescriptors += new ColumnFamilyDescriptor(NativeRocksDB.DEFAULT_COLUMN_FAMILY,
-        columnFamilyOptions)
-    }
-
-    val colFamilyHandles = new java.util.ArrayList[ColumnFamilyHandle]()
-    db = NativeRocksDB.open(new DBOptions(dbOptions), workingDir.toString,
-      colFamilyDescriptors.asJava, colFamilyHandles)
-
-    // Store the mapping of names to handles in the internal map
-    colFamilyHandles.asScala.toList.foreach { handle =>
-      colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
-    }
+    // TODO is the colFamilyNameSet still working?
+    colFamilyNameSet += StateStore.DEFAULT_COL_FAMILY_NAME
     logInfo(log"Opened DB with conf ${MDC(LogKeys.CONFIG, conf)}")
   }
 
   private def closeDB(): Unit = {
     if (db != null) {
-      // Close the column family handles in case multiple column families are used
-      colFamilyNameToHandleMap.values.map(handle => handle.close)
-      colFamilyNameToHandleMap.clear()
+      colFamilyNameSet.clear()
 
       // Cancel and wait until all background work finishes
       db.cancelAllBackgroundWork(true)

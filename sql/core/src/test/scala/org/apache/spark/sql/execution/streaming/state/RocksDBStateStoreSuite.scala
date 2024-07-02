@@ -990,23 +990,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         // assert col family existence
         assert(store.removeColFamilyIfExists(cfName))
 
-        // TODO eliminate behavior difference
-        assert(!store.iterator(cfName).hasNext)
-        /*
-        if (virtualColFamilyEnabled) {
-          assert(!store.iterator(cfName).hasNext)
-        } else {
-          val e = intercept[Exception] {
-            store.iterator(cfName)
-          }
+        val e = intercept[Exception] {
+          store.iterator(cfName)
+        }
 
-          checkError(
-            exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
-            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
-            sqlState = Some("42802"),
-            parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
-          )
-        } */
+        checkError(
+          exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
+          errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+          sqlState = Some("42802"),
+          // TODO how to throw error with iterator?
+          parameters = Map("operationType" -> "prefixScan", "colFamilyName" -> cfName)
+        )
       }
     }
   }
