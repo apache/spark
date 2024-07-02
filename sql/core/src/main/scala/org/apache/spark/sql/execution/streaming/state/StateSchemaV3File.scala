@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 
 import scala.io.{Source => IOSource}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
@@ -85,28 +87,31 @@ class StateSchemaV3File(
     out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
   }
 
+  def addWithUUID(batchId: Long, metadata: List[ColumnFamilySchema]): Path = {
+    val batchMetadataPath = batchIdToPath(batchId)
+    val schemaFilePath = new Path(batchMetadataPath, UUID.randomUUID().toString)
+    fileManager.mkdirs(batchMetadataPath)
+    write(schemaFilePath, out => serialize(metadata, out))
+    schemaFilePath
+  }
+
+  def getWithPath(schemaFilePath: Path): List[ColumnFamilySchema] = {
+    deserialize(fileManager.open(schemaFilePath))
+  }
+
   override def add(batchId: Long, metadata: List[ColumnFamilySchema]): Boolean = {
-    require(metadata != null, "'null' metadata cannot written to a metadata log")
-    val batchMetadataFile = batchIdToPath(batchId)
-    if (fileManager.exists(batchMetadataFile)) {
-      fileManager.delete(batchMetadataFile)
-    }
-    val res = addNewBatchByStream(batchId) { output => serialize(metadata, output) }
-    if (metadataCacheEnabled && res) batchCache.put(batchId, metadata)
-    res
+    throw new UnsupportedOperationException("StateSchemaFile does not support add operation." +
+      "Please use addWithUUID instead.")
   }
 
-  override def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
-    val batchMetadataFile = batchIdToPath(batchId)
-    if (metadataCacheEnabled && batchCache.containsKey(batchId)) {
-      false
-    } else {
-      write(batchMetadataFile, fn)
-      true
-    }
+  override def get(batchId: Long): Option[List[ColumnFamilySchema]] = {
+    throw new UnsupportedOperationException("StateSchemaFile does not support get operation." +
+      "Please use getWithPath instead.")
   }
 
-  def getPathFromBatchId(batchId: Long): String = {
-    batchIdToPath(batchId).toString
+  override def getLatest(): Option[(Long, List[ColumnFamilySchema])] = {
+    throw new UnsupportedOperationException(
+      "StateSchemaFile does not support getLatest operation." +
+        "Please use getWithpath instead.")
   }
 }

@@ -206,7 +206,7 @@ class IncrementalExecution(
             stateSchemaVersion)
         // write out the state schema paths to the metadata file
         val metadata = stateStoreWriter.operatorStateMetadata()
-        // TODO: Populate metadata with stateSchemaPaths if is v2
+        // TODO: Populate metadata with stateSchemaPaths if metadata version is v2
         val metadataWriter = new OperatorStateMetadataWriter(new Path(
           checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
         metadataWriter.write(metadata)

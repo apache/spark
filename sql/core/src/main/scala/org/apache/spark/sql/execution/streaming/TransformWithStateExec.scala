@@ -378,17 +378,13 @@ case class TransformWithStateExec(
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
-      hadoopConf, stateSchemaFilePath().toString)
-    schemaFile.getLatest() match {
-      case Some((_, oldColumnFamilySchemas)) =>
-        validateSchemas(oldColumnFamilySchemas, newColumnFamilySchemas)
-      case None =>
-    }
+      hadoopConf, stateSchemaFilePath(StateStoreId.DEFAULT_STORE_NAME).toString)
+    // TODO: Read the schema path from the OperatorStateMetadata file
+    // and validate it with the new schema
+
     // Write the new schema to the schema file
-    schemaFile.add(batchId, newColumnFamilySchemas.values.toList)
-    // purge oldest files
-    schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
-    Array(schemaFile.getPathFromBatchId(batchId))
+    val schemaPath = schemaFile.addWithUUID(batchId, newColumnFamilySchemas.values.toList)
+    Array(schemaPath.toString)
   }
 
   private def validateSchemas(
@@ -406,18 +402,16 @@ case class TransformWithStateExec(
     }
   }
 
-  private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
+  private def stateSchemaFilePath(
+      storeName: String): Path = {
+    assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
     def stateInfo = getStateInfo
     val stateCheckpointPath =
       new Path(getStateInfo.checkpointLocation,
         s"${stateInfo.operatorId.toString}")
-    storeName match {
-      case Some(storeName) =>
-        val storeNamePath = new Path(stateCheckpointPath, storeName)
-        new Path(new Path(storeNamePath, "_metadata"), "schema")
-      case None =>
-        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
-    }
+
+    val storeNamePath = new Path(stateCheckpointPath, storeName)
+    new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

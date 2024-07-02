@@ -3803,7 +3803,7 @@
     ],
     "sqlState" : "XXKST"
   },
-  "STATE_STORE_NEW_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
     ],

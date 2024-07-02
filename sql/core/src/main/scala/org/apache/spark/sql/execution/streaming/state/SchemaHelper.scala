@@ -44,7 +44,6 @@ sealed trait ColumnFamilySchema extends Serializable {
 case class ColumnFamilySchemaV1(
     columnFamilyName: String,
     keySchema: StructType,
-    valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     multipleValuesPerKey: Boolean,
     valueEncoder: StructType,
@@ -52,7 +51,6 @@ case class ColumnFamilySchemaV1(
   def jsonValue: JValue = {
     ("columnFamilyName" -> JString(columnFamilyName)) ~
       ("keySchema" -> JString(keySchema.json)) ~
-      ("valueSchema" -> JString(valueSchema.json)) ~
       ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
       ("multipleValuesPerKey" -> JBool(multipleValuesPerKey)) ~
       ("valueEncoder" -> JString(valueEncoder.json))
@@ -78,7 +76,6 @@ object ColumnFamilySchemaV1 {
     new ColumnFamilySchemaV1(
       colFamilyMap("columnFamilyName").asInstanceOf[String],
       keySchema,
-      StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
       KeyStateEncoderSpec.fromJson(keySchema, colFamilyMap("keyStateEncoderSpec")
         .asInstanceOf[Map[String, Any]]),
       colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean],

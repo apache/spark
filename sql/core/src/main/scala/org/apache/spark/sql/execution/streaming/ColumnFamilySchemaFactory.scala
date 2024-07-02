@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec}
 
 /**
@@ -61,11 +61,6 @@ object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactory {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
-      if (hasTtl) {
-        VALUE_ROW_SCHEMA_WITH_TTL
-      } else {
-        VALUE_ROW_SCHEMA
-      },
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       false,
       valueEncoder.schema)
@@ -78,11 +73,6 @@ object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactory {
     new ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
-      if (hasTtl) {
-        VALUE_ROW_SCHEMA_WITH_TTL
-      } else {
-        VALUE_ROW_SCHEMA
-      },
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       true,
       valueEncoder.schema)
@@ -96,11 +86,6 @@ object ColumnFamilySchemaFactoryV1 extends ColumnFamilySchemaFactory {
     new ColumnFamilySchemaV1(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
-      if (hasTtl) {
-        VALUE_ROW_SCHEMA_WITH_TTL
-      } else {
-        VALUE_ROW_SCHEMA
-      },
       PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
       false,
       valueEncoder.schema,

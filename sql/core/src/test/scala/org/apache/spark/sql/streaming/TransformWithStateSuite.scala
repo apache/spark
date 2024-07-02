@@ -20,15 +20,13 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.UUID
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.KEY_ROW_SCHEMA
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -788,168 +786,28 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  private def fetchColumnFamilySchemas(
-      checkpointDir: String,
-      operatorId: Int): List[ColumnFamilySchema] = {
-    fetchStateSchemaV3File(checkpointDir, operatorId).getLatest().get._2
-  }
-
-  private def fetchStateSchemaV3File(
-      checkpointDir: String,
-      operatorId: Int): StateSchemaV3File = {
-      val hadoopConf = spark.sessionState.newHadoopConf()
-      val stateChkptPath = new Path(checkpointDir, s"state/$operatorId")
-      val stateSchemaPath = new Path(new Path(stateChkptPath, "_metadata"), "schema")
-      new StateSchemaV3File(hadoopConf, stateSchemaPath.toString)
-  }
-
-  test("transformWithState - verify StateSchemaV3 file is written correctly") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { chkptDir =>
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "1")),
-          StopStream
-        )
-
-        val columnFamilySchemas = fetchColumnFamilySchemas(chkptDir.getCanonicalPath, 0)
-        assert(columnFamilySchemas.length == 1)
-
-        val expected = ColumnFamilySchemaV1(
-          "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false, Encoders.scalaLong.schema, None
-        )
-        val actual = columnFamilySchemas.head.asInstanceOf[ColumnFamilySchemaV1]
-        assert(expected == actual)
-      }
-    }
-  }
-
-  test("transformWithState - verify StateSchemaV3 file is written correctly," +
-    " multiple column families") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { chkptDir =>
-        val inputData = MemoryStream[(String, String)]
-        val result = inputData.toDS()
-          .groupByKey(x => x._1)
-          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, ("a", "str1")),
-          CheckNewAnswer(("a", "1", "")),
-          StopStream
-        )
-
-        val columnFamilySchemas = fetchColumnFamilySchemas(chkptDir.getCanonicalPath, 0)
-        assert(columnFamilySchemas.length == 2)
-
-        val expected = List(
-          ColumnFamilySchemaV1(
-            "countState",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
-            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.scalaLong.schema,
-            None
-          ),
-          ColumnFamilySchemaV1(
-              "mostRecent",
-              KEY_ROW_SCHEMA,
-              VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-              false,
-              Encoders.STRING.schema,
-              None
-          )
-        )
-        val actual = columnFamilySchemas.map(_.asInstanceOf[ColumnFamilySchemaV1])
-        assert(expected == actual)
-      }
-    }
-  }
-
-  test("transformWithState - verify that StateSchemaV3 files are purged") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
-      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
-      withTempDir { chkptDir =>
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "1")),
-          StopStream,
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "2")),
-          StopStream,
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(),
-          StopStream
-        )
-        // If the StateSchemaV3 files are not purged, there would be
-        // three files, but we should have only one file.
-        val batchesWithSchemaV3File = fetchStateSchemaV3File(
-          chkptDir.getCanonicalPath, 0).listBatchesOnDisk
-        assert(batchesWithSchemaV3File.length == 1)
-        // Make sure that only the latest batch has the schema file
-        assert(batchesWithSchemaV3File.head == 2)
-      }
-    }
-  }
-
   test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
     " works with one batch") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val schema = List(ColumnFamilySchemaV1(
+          "countState",
+          KEY_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          false,
+          Encoders.scalaLong.schema,
+          None
+        ))
 
-      val schema = List(ColumnFamilySchemaV1(
-        "countState",
-        KEY_ROW_SCHEMA,
-        VALUE_ROW_SCHEMA,
-        NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-        false,
-        Encoders.scalaLong.schema,
-        None
-      ))
+        val schemaFile = new StateSchemaV3File(
+          spark.sessionState.newHadoopConf(), checkpointDir.getCanonicalPath)
+        val path = schemaFile.addWithUUID(0, schema)
 
-      val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(), "/tmp/schema")
-      schemaFile.add(0, schema)
-
-      assert(schemaFile.get(0).isDefined)
-      assert(schemaFile.get(0).get == schema)
+        assert(schemaFile.getWithPath(path) == schema)
+      }
     }
   }
 
@@ -965,7 +823,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema0 = List(ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           false,
           Encoders.scalaLong.schema,
@@ -976,7 +833,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ColumnFamilySchemaV1(
             "countState",
             KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
             false,
             Encoders.scalaLong.schema,
@@ -985,7 +841,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ColumnFamilySchemaV1(
             "mostRecent",
             KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
             false,
             Encoders.STRING.schema,
@@ -995,19 +850,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(),
           checkpointDir.getCanonicalPath)
-        schemaFile.add(0, schema0)
+        val path0 = schemaFile.addWithUUID(0, schema0)
 
-        assert(schemaFile.get(0).isDefined)
-        assert(schemaFile.get(0).get == schema0)
+        assert(schemaFile.getWithPath(path0) == schema0)
 
         // test the case where we are trying to add the schema after
         // restarting after a few batches
-        schemaFile.add(3, schema1)
-        val latestFile = schemaFile.getLatest()
+        val path1 = schemaFile.addWithUUID(3, schema1)
+        val latestSchema = schemaFile.getWithPath(path1)
 
-        assert(latestFile.isDefined)
-        assert(latestFile.get._1 == 3)
-        assert(latestFile.get._2 == schema1)
+        assert(latestSchema == schema1)
       }
     }
   }
