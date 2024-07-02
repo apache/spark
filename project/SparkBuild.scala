@@ -155,14 +155,18 @@ object SparkBuild extends PomBuild {
   // We special case the 'println' lint rule to only be a warning on compile, because adding
   // printlns for debugging is a common use case and is easy to remember to remove.
   val scalaStyleOnCompileConfig: String = {
-    val in = "scalastyle-config.xml"
+    val base_style_config = "scalastyle-config.xml"
+    val prod_style_config = "scalastyle-config-prod.xml"
     val out = "scalastyle-on-compile.generated.xml"
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    val source = Source.fromFile(in)
+    val base_source = Source.fromFile(base_style_config)
+    val prod_source = Source.fromFile(prod_style_config)
     try {
-      var contents = source.getLines.mkString("\n")
+      val base_lines = base_source.getLines().toList.dropRight(1)
+      val prod_lines = prod_source.getLines().drop(23)
+      var contents = base_lines.mkString("\n") + "\n" + prod_lines.mkString("\n")
       for ((k, v) <- replacements) {
         require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
         contents = contents.replace(k, v)
@@ -173,7 +177,8 @@ object SparkBuild extends PomBuild {
       }
       out
     } finally {
-      source.close()
+      base_source.close()
+      prod_source.close()
     }
   }
 
