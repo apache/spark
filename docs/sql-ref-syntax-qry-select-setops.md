@@ -31,7 +31,7 @@ Note that input relations must have the same number of columns and compatible da
 
 ### EXCEPT
 
-`EXCEPT` and `EXCEPT ALL` return the rows that are found in one relation but not the other. `EXCEPT` (alternatively, `EXCEPT DISTINCT`) takes only distinct rows while `EXCEPT ALL` does not remove duplicates from the result rows. Note that `MINUS` is an alias for `EXCEPT`.
+`EXCEPT` (alternatively, `EXCEPT DISTINCT`) takes only distinct rows while `EXCEPT ALL` does not remove duplicates from the result rows. Note that `MINUS` is an alias for `EXCEPT`.
 
 #### Syntax
 
@@ -102,7 +102,7 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 ### INTERSECT
 
-`INTERSECT` and `INTERSECT ALL` return the rows that are found in both relations. `INTERSECT` (alternatively, `INTERSECT DISTINCT`) takes only distinct rows while `INTERSECT ALL` does not remove duplicates from the result rows.
+`INTERSECT` (alternatively, `INTERSECT DISTINCT`) takes only distinct rows while `INTERSECT ALL` does not remove duplicates from the result rows.
 
 #### Syntax
 
@@ -141,7 +141,7 @@ SELECT c FROM number1 MINUS ALL (SELECT c FROM number2);
 
 ### UNION
 
-`UNION` and `UNION ALL` return the rows that are found in either relation. `UNION` (alternatively, `UNION DISTINCT`) takes only distinct rows while `UNION ALL` does not remove duplicates from the result rows.
+`UNION` (alternatively, `UNION DISTINCT`) takes only distinct rows while `UNION ALL` does not remove duplicates from the result rows.
 
 #### Syntax
 
