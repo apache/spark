@@ -62,7 +62,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
     }
   }
 
-  test("alter table set tblproperties") {
+  test("alter table set properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
       val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
@@ -80,7 +80,7 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
     }
   }
 
-  test("test reserved properties") {
+  test("alter table set reserved properties") {
     import TableCatalog._
     val keyParameters = Map[String, String](
       PROP_PROVIDER -> "please use the USING clause to specify it",

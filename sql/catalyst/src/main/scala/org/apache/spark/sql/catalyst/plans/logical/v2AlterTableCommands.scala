@@ -91,7 +91,7 @@ case class UnsetTableProperties(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    propertyKeys.map(key => TableChange.removeProperty(key, ifExists))
+    propertyKeys.map(key => TableChange.removeProperty(key))
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)

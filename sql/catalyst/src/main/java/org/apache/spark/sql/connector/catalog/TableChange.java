@@ -61,11 +61,10 @@ public interface TableChange {
    * If the property does not exist, the change will succeed.
    *
    * @param property the property name
-   * @param ifExists silence the error if property doesn't exist during unset
    * @return a TableChange for the addition
    */
-  static TableChange removeProperty(String property, boolean ifExists) {
-    return new RemoveProperty(property, ifExists);
+  static TableChange removeProperty(String property) {
+    return new RemoveProperty(property);
   }
 
   /**
@@ -293,19 +292,13 @@ public interface TableChange {
    */
   final class RemoveProperty implements TableChange {
     private final String property;
-    private final boolean ifExists;
 
-    private RemoveProperty(String property, boolean ifExists) {
+    private RemoveProperty(String property) {
       this.property = property;
-      this.ifExists = ifExists;
     }
 
     public String property() {
       return property;
-    }
-
-    public boolean ifExists() {
-      return ifExists;
     }
 
     @Override
@@ -313,7 +306,7 @@ public interface TableChange {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       RemoveProperty that = (RemoveProperty) o;
-      return property.equals(that.property) && that.ifExists() == this.ifExists();
+      return property.equals(that.property);
     }
 
     @Override

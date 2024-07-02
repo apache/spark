@@ -269,7 +269,7 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.properties.asScala == Map("prop-1" -> "1"))
 
-    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1", false))
+    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
     assert(updated.properties.asScala == Map())
 
     val loaded = catalog.loadTable(testIdent)
@@ -285,7 +285,7 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.properties.asScala == Map())
 
-    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1", true))
+    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
     assert(updated.properties.asScala == Map())
 
     val loaded = catalog.loadTable(testIdent)

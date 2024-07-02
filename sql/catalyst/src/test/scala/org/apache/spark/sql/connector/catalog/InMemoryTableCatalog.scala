@@ -131,7 +131,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryTable]
-    val properties = CatalogV2Util.applyPropertiesChanges(name, ident, table.properties, changes)
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
 
     // fail if the last column in the schema was dropped

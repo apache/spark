@@ -38,13 +38,15 @@ class AlterTableUnsetTblPropertiesParserSuite extends AnalysisTest with SharedSp
     comparePlans(
       parsePlan(sql1),
       UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES",
+          suggestAlternative = true),
         Seq("comment", "test"),
         ifExists = false))
     comparePlans(
       parsePlan(sql2),
       UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES",
+          suggestAlternative = true),
         Seq("comment", "test"),
         ifExists = true))
   }

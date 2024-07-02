@@ -62,7 +62,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
     }
   }
 
-  test("alter table unset tblproperties") {
+  test("alter table unset properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
       val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
@@ -79,23 +79,10 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
       sql(s"USE $catalog.ns")
       sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('k2')")
       checkTblProps(tableIdent, Map("k3" -> "v3", "k4" -> "v4"))
-
-      // property to unset does not exist
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k3', 'k5')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map("properties" -> "`k5`", "table" -> toSQLId(tableIdent.nameParts))
-      )
-
-      // property to unset does not exist, but "IF EXISTS" is specified
-      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('k3', 'k5')")
-      checkTblProps(tableIdent, Map("k4" -> "v4"))
     }
   }
 
-  test("test reserved properties") {
+  test("alter table unset reserved properties") {
     import TableCatalog._
     val keyParameters = Map[String, String](
       PROP_PROVIDER -> "please use the USING clause to specify it",

@@ -272,8 +272,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
 
-    val properties = CatalogV2Util.applyPropertiesChanges(
-      name, ident, catalogTable.properties, changes)
+    val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       catalogTable.schema, changes, catalogTable.provider, "ALTER TABLE")
     val comment = properties.get(TableCatalog.PROP_COMMENT)
