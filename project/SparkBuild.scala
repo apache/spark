@@ -209,13 +209,49 @@ object SparkBuild extends PomBuild {
       }
     }
 
-    cachedFun(findFiles((config / scalaSource).value))
+    val findFilesResult = findFiles((config / scalaSource).value)
+
+    val debugFile = new File("debugging2.txt")
+    val fileWriter = new BufferedWriter(new FileWriter(debugFile, true))
+
+    try {
+      findFilesResult.foreach { file =>
+        fileWriter.write(file.getAbsolutePath)
+        fileWriter.newLine()
+      }
+    } finally {
+      fileWriter.close()
+    }
+
+    cachedFun(findFilesResult)
   }
 
-  private def findFiles(file: File): Set[File] = if (file.isDirectory) {
-    file.listFiles().toSet.flatMap(findFiles) + file
-  } else {
-    Set(file)
+  private def findFiles(file: File): Set[File] = {
+    val debugFile = new File("debugging.txt")
+    val fileWriter = new BufferedWriter(new FileWriter(debugFile, true)) // Append mode
+
+    // Case-insensitive check for "MavenUtils.scala" in the file path
+    def isValid(file: File): Boolean = !file.getAbsolutePath.contains("MavenUtils.scala") &
+      !file.getAbsolutePath.contains("Test")
+
+    try {
+      if (file.isDirectory) {
+        file.listFiles()
+          .filter(isValid)
+          .toSet
+          .flatMap(findFiles) + file
+      } else if (isValid(file)) {
+        if (file.getAbsolutePath.contains(".scala")) {
+          fileWriter.write(file.getAbsolutePath)
+          fileWriter.newLine()
+        }
+        Set(file)
+      } else {
+        Set.empty[File]
+      }
+    } finally {
+      fileWriter.close()
+    }
   }
 
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
