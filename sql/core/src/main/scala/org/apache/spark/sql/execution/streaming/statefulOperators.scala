@@ -77,7 +77,8 @@ trait StatefulOperator extends SparkPlan {
   // schema changes in the future. Runs as part of a planning rule on the driver.
   // Returns the schema file path for operators that write this to the metadata file,
   // otherwise None
-  def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long): Array[String]
+  def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int): Array[String]
 }
 
 /**
@@ -186,6 +187,8 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+
+  def stateSchemaVersion: Int = 2
 
   /** Metadata of this stateful operator and its states stores. */
   def operatorStateMetadata(): OperatorStateMetadata = {
@@ -432,11 +435,11 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
-    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -501,11 +504,11 @@ case class StateStoreSaveExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
-    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -712,11 +715,11 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
   Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
-    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -801,11 +804,11 @@ case class SessionWindowStateStoreSaveExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
   Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
-    Array.empty
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1116,11 +1119,11 @@ case class StreamingDeduplicateExec(
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
   Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
-    Array.empty
   }
 }
 
@@ -1193,11 +1196,11 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
   override def shortName: String = "dedupeWithinWatermark"
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
   Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
-    Array.empty
   }
 
   override protected def withNewChildInternal(

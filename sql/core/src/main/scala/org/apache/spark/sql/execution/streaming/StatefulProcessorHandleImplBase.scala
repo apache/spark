@@ -16,11 +16,9 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.util
-
 import org.apache.spark.sql.catalyst.plans.logical.NoTime
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{INITIALIZED, PRE_INIT, StatefulProcessorHandleState, TIMER_PROCESSED}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.TimeMode
 
 abstract class StatefulProcessorHandleImplBase(timeMode: TimeMode) {

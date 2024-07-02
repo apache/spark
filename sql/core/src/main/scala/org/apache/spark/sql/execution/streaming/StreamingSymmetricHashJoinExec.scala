@@ -246,7 +246,8 @@ case class StreamingSymmetricHashJoinExec(
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     Array[String] = {
     var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
@@ -258,11 +259,10 @@ case class StreamingSymmetricHashJoinExec(
       right.output, rightKeys, stateFormatVersion)
 
     // validate and maybe evolve schema for all state stores across both sides of the join
-    result.foreach { case (stateStoreName, (keySchema, valueSchema)) =>
+    result.flatten { case (stateStoreName, (keySchema, valueSchema)) =>
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
-    }
-    Array.empty
+    }.toArray
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

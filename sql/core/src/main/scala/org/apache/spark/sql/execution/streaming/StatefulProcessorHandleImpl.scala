@@ -114,8 +114,6 @@ class StatefulProcessorHandleImpl(
 
   private lazy val currQueryInfo: QueryInfo = buildQueryInfo()
 
-  private var currState: StatefulProcessorHandleState = CREATED
-
   private def incrementMetric(metricName: String): Unit = {
     metrics.get(metricName).foreach(_.add(1))
   }
