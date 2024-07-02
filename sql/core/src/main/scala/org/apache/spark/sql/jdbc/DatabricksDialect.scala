@@ -23,9 +23,20 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCError {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.DATABRICKS_JDBC_VERSION)
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.DATABRICKS_DIALECT_VERSION)
 
   override def canHandle(url: String): Boolean = {
     url.startsWith("jdbc:databricks")
