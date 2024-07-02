@@ -144,15 +144,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     (beginLabelCtx, endLabelCtx) match {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.label().getText.nonEmpty && bl.label().getText != el.label().getText =>
-        throw SparkException.internalError("Both labels should be same.")
+        if bl.multipartIdentifier().getText.nonEmpty &&
+          bl.multipartIdentifier().getText != el.multipartIdentifier().getText =>
+          throw SparkException.internalError("Both labels should be same.")
       case (None, Some(_)) =>
         throw SparkException.internalError("End label can't exist without begin label.")
       case _ =>
     }
 
     val labelText = beginLabelCtx.
-      map(_.label().getText).getOrElse(java.util.UUID.randomUUID.toString)
+      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString)
     visitCompoundBodyImpl(ctx.compoundBody(), labelText)
   }
 

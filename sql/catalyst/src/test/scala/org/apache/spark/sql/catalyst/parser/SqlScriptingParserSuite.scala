@@ -177,7 +177,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.equals("lbl"))
   }
 
-  test("compound: beginLabel + endlLabel") {
+  test("compound: beginLabel + endLabel") {
     val batch =
       """
         |lbl: BEGIN
@@ -193,7 +193,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.equals("lbl"))
   }
 
-  test("compound: beginLabel + endlLabel with different values") {
+  test("compound: beginLabel + endLabel with different values") {
     val batch =
       """
         |lbl_begin: BEGIN
@@ -210,7 +210,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains("Both labels should be same."))
   }
 
-  test("compound: endlLabel") {
+  test("compound: endLabel") {
     val batch =
       """
         |BEGIN
