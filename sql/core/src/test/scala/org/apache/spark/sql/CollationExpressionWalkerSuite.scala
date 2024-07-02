@@ -630,7 +630,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     )
 
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      println("checking - " + funInfo.getName)
       for (m <- "> .*;".r.findAllIn(funInfo.getExamples)) {
         try {
           val resultUTF8 = sql(m.substring(2))
