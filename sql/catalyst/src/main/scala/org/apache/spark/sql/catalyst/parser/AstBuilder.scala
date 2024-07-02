@@ -127,7 +127,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
   }
 
-  private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String): CompoundBody = {
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String = ""): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
@@ -141,20 +141,21 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     (beginLabelCtx, endLabelCtx) match {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.label().getText.nonEmpty && bl.label().getText != el.label().getText =>
-          throw SqlScriptingErrors.labelsMismatch(bl.label().getText, el.label().getText)
-      case (None, Some(el: EndLabelContext)) =>
-        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.label().getText)
+        if bl.multipartIdentifier().getText.nonEmpty &&
+          bl.multipartIdentifier().getText != el.multipartIdentifier().getText =>
+          throw SparkException.internalError("Both labels should be same.")
+      case (None, Some(_)) =>
+        throw SparkException.internalError("End label can't exist without begin label.")
       case _ =>
     }
 
     val labelText = beginLabelCtx.
-      map(_.label().getText).getOrElse(java.util.UUID.randomUUID.toString)
+      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString)
     visitCompoundBodyImpl(ctx.compoundBody(), labelText)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx, "")
+    visitCompoundBodyImpl(ctx)
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =

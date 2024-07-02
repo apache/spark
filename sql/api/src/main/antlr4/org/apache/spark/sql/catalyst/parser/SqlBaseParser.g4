@@ -68,16 +68,12 @@ singleStatement
     : statement SEMICOLON* EOF
     ;
 
-label
-    : multipartIdentifier
-    ;
-
 beginLabel
-    : label COLON
+    : multipartIdentifier COLON
     ;
 
 endLabel
-    : label
+    : multipartIdentifier
     ;
 
 singleExpression
