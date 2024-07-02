@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
-import scala.jdk.CollectionConverters.CollectionHasAsScala
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -112,11 +110,11 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  def getColFamilySchemas(): List[ColumnFamilySchema] = {
+  def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
     val driverProcessorHandle = getDriverProcessorHandle
-    val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
+    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
     closeProcessorHandle()
-    columnFamilySchemas.asScala.toList
+    columnFamilySchemas
   }
 
   private def closeProcessorHandle(): Unit = {
@@ -387,21 +385,17 @@ case class TransformWithStateExec(
       case None =>
     }
     // Write the new schema to the schema file
-    schemaFile.add(batchId, newColumnFamilySchemas)
+    schemaFile.add(batchId, newColumnFamilySchemas.values.toList)
     // purge oldest files
     schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
     Array(schemaFile.getPathFromBatchId(batchId))
   }
 
   private def validateSchemas(
-      oldSchema: List[ColumnFamilySchema],
-      newSchema: List[ColumnFamilySchema]): Unit = {
-    // turn oldSchema to map
-    val oldSchemaMap = oldSchema.map(schema =>
-      (schema.columnFamilyName, schema)).toMap
-    newSchema.foreach { case newSchema: ColumnFamilySchemaV1 =>
-      val oldSchema = oldSchemaMap.get(newSchema.columnFamilyName)
-      oldSchema.foreach { oldSchema =>
+      oldSchemas: List[ColumnFamilySchema],
+      newSchemas: Map[String, ColumnFamilySchema]): Unit = {
+    oldSchemas.foreach { case oldSchema: ColumnFamilySchemaV1 =>
+      newSchemas.get(oldSchema.columnFamilyName).foreach { newSchema =>
         if (oldSchema != newSchema) {
           throw StateStoreErrors.stateStoreColumnFamilyMismatch(
             newSchema.columnFamilyName,
