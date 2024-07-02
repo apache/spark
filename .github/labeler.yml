@@ -225,6 +225,7 @@ DEPLOY:
 CONNECT:
   - changed-files:
     - any-glob-to-any-file: [
+     'connect/**/*',
      'connector/connect/**/*',
      'python/pyspark/sql/**/connect/**/*',
      'python/pyspark/ml/**/connect/**/*'

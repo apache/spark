@@ -33,7 +33,7 @@ SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 SCBUILD="${SCBUILD:-1}"
 if [ "$SCBUILD" -eq "1" ]; then
   # Build the jars needed for spark submit and spark connect
-  build/sbt "${SCALA_ARG}" -Phive -Pconnect package || exit 1
+  build/sbt "${SCALA_ARG}" -Phive package || exit 1
 fi
 
 exec "${SPARK_HOME}"/bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin "$@"
