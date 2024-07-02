@@ -18224,6 +18224,46 @@ def _invoke_higher_order_function(
     return Column(cast(JVMView, sc._jvm).Column(expr(*jcols + jfuns)))
 
 
+@_try_remote_functions
+def filter_value(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
+    """
+    Returns the column if the predicate holds true, otherwise null.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column or expression
+    f : function
+        a function that takes the input column and returns a boolean indicating whether to
+        return the value or null.
+
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
+        :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
+        Python ``UserDefinedFunctions`` are not supported
+        (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the column passed in if the predicate returns true, otherwise null.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([[1], [2], [3]], ["value"])
+    >>> df.select(filter_value("value", lambda x: x % 2 == 0).alias("even")).show()
+    +----+
+    |even|
+    +----+
+    |NULL|
+    |   2|
+    |NULL|
+    +----+
+    """
+    return _invoke_higher_order_function("FilterValue", [col], [f])
+
+
 @overload
 def transform(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     ...
