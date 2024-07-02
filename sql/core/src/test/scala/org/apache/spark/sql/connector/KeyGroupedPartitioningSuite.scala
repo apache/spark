@@ -2168,8 +2168,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
      val df = createJoinTestDF(Seq("id" -> "item_id"))
      val shuffles = collectShuffles(df.queryExecution.executedPlan)
-     assert(shuffles.size == 2, "SPJ should not be triggered for transform expression with" +
-       "less join keys than partition keys for now.")
+     assert(shuffles.size == 1, "SPJ should be triggered")
      checkAnswer(df, Seq(Row(1, "aa", 30.0, 42.0),
        Row(1, "aa", 30.0, 89.0),
        Row(1, "aa", 40.0, 42.0),

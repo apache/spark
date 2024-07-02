@@ -130,6 +130,15 @@ case class BatchScanExec(
         }
         k.copy(expressions = expressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues)
+      case k: KeyGroupedPartitioning if spjParams.joinKeyPositions.isDefined =>
+        val expressions = spjParams.joinKeyPositions.get.map(i => k.expressions(i))
+        val newPartValues = k.partitionValues.map{r =>
+          val projectedRow = KeyGroupedPartitioning.project(expressions,
+            spjParams.joinKeyPositions.get, r)
+          InternalRowComparableWrapper(projectedRow, expressions)
+        }.distinct.map(_.row)
+        k.copy(expressions = expressions, numPartitions = newPartValues.length,
+          partitionValues = newPartValues)
       case p => p
     }
   }
@@ -279,7 +288,8 @@ case class StoragePartitionJoinParams(
     case other: StoragePartitionJoinParams =>
       this.commonPartitionValues == other.commonPartitionValues &&
       this.replicatePartitions == other.replicatePartitions &&
-      this.applyPartialClustering == other.applyPartialClustering
+      this.applyPartialClustering == other.applyPartialClustering &&
+      this.joinKeyPositions == other.joinKeyPositions
     case _ =>
       false
   }
