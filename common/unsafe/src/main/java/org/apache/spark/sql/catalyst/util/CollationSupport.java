@@ -332,7 +332,7 @@ public final class CollationSupport {
       if (collation.supportsBinaryEquality) {
         return String.format(expr + "Binary(%s, %s)", word, set);
       } else {
-        return String.format(expr + "execCollationAware(%s, %s, %d)", word, set, collationId);
+        return String.format(expr + "CollationAware(%s, %s, %d)", word, set, collationId);
       }
     }
     public static int execBinary(final UTF8String word, final UTF8String set) {
