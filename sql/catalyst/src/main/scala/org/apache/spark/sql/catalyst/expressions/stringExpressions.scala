@@ -3352,39 +3352,51 @@ case class FormatNumber(x: Expression, d: Expression)
   group = "string_funcs")
 case class Sentences(
     str: Expression,
-    language: Expression = Literal(""),
-    country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+    language: Option[Expression] = None,
+    country: Option[Expression] = None)
+  extends Expression with ImplicitCastInputTypes {
 
-  def this(str: Expression) = this(str, Literal(""), Literal(""))
-  def this(str: Expression, language: Expression) = this(str, language, Literal(""))
+  def this(str: Expression) = this(str, None, None)
+
+  def this(str: Expression, language: Expression, country: Expression) =
+    this(str, Some(language), Some(country))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length == 1 || children.length == 3) {
+      super.checkInputDataTypes()
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq(1, 3), children.length)
+    }
+  }
 
   override def nullable: Boolean = true
   override def dataType: DataType =
     ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
-  override def first: Expression = str
-  override def second: Expression = language
-  override def third: Expression = country
 
   override def eval(input: InternalRow): Any = {
-    val string = str.eval(input)
-    if (string == null) {
-      null
-    } else {
-      val languageStr = language.eval(input).asInstanceOf[UTF8String]
-      val countryStr = country.eval(input).asInstanceOf[UTF8String]
-      val locale = if (languageStr != null && countryStr != null) {
-        new Locale(languageStr.toString, countryStr.toString)
-      } else {
-        Locale.US
-      }
-      getSentences(string.asInstanceOf[UTF8String].toString, locale)
+    val s = str.eval(input).asInstanceOf[UTF8String]
+    val (l, c) = (language, country) match {
+      case (Some(l), Some(c)) =>
+        (l.eval(input).asInstanceOf[UTF8String], c.eval(input).asInstanceOf[UTF8String])
+      case _ => (null, null)
     }
+    getSentences(s, l, c)
   }
 
-  private def getSentences(sentences: String, locale: Locale) = {
+  protected def getSentences(
+      str: UTF8String,
+      language: UTF8String,
+      country: UTF8String): ArrayData = {
+    if (str == null) return null
+    val sentences = str.toString
+    val locale = if (language != null && country != null) {
+      new Locale(language.toString, country.toString)
+    } else {
+      Locale.US
+    }
     val bi = BreakIterator.getSentenceInstance(locale)
     bi.setText(sentences)
     var idx = 0
@@ -3407,10 +3419,58 @@ case class Sentences(
     new GenericArrayData(result)
   }
 
-  override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
-    copy(str = newFirst, language = newSecond, country = newThird)
+  override def children: Seq[Expression] = {
+    (language, country) match {
+      case (Some(l), Some(c)) => Seq(str, l, c)
+      case _ => Seq(str)
+    }
+  }
 
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    (language, country) match {
+      case (Some(_), Some(_)) =>
+        copy(str = newChildren.head,
+          language = Some(newChildren(1)), country = Some(newChildren(2)))
+      case _ =>
+        copy(str = newChildren.head, language = None, country = None)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val expr = ctx.addReferenceObj("this", this)
+    val strEval = str.genCode(ctx)
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    val baseCode = (language, country) match {
+      case (Some(l), Some(c)) =>
+        val languageEval = l.genCode(ctx)
+        val countryEval = c.genCode(ctx)
+        s"""
+           |${strEval.code}
+           |${languageEval.code}
+           |${countryEval.code}
+           |$resultType $resultTerm = ($resultType) $expr.getSentences(
+           |  ${strEval.value}, ${languageEval.value}, ${countryEval.value});
+           |""".stripMargin
+      case _ =>
+        s"""
+           |${strEval.code}
+           |$resultType $resultTerm = ($resultType) $expr.getSentences(
+           |  ${strEval.value}, null, null);
+           |""".stripMargin
+    }
+    ev.copy(code =
+      code"""
+         |$baseCode
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin
+    )
+  }
 }
 
 /**
