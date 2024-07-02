@@ -150,9 +150,8 @@ class ClientE2ETestSuite
         assert(ex.getQueryContext.head.stopIndex() == 7)
         assert(ex.getQueryContext.head.fragment() == "x")
         assert(
-          ex.getStackTrace
-            .find(_.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis"))
-            .isDefined)
+          ex.getStackTrace.exists(
+            _.getClassName.contains("org.apache.spark.sql.catalyst.analysis.CheckAnalysis")))
       }
     }
   }

@@ -519,12 +519,12 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       Execute { q =>
         // Filter for idle progress events and then verify the custom metrics for stateful operator
         val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).size > 0)
-        assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).size > 0)
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0))
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0))
+        assert(progData.exists(prog =>
+          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0))
       }
     )
   }

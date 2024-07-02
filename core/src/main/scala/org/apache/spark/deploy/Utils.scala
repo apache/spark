@@ -69,8 +69,7 @@ private[deploy] object Utils extends Logging {
       val fileName = if (logType.equals("out")) {
         val normalizedUri = new File(logDirectory).toURI.normalize()
         val normalizedLogDir = new File(normalizedUri.getPath)
-        normalizedLogDir.listFiles.map(_.getName).filter(_.endsWith(".out"))
-          .headOption.getOrElse(logType)
+        normalizedLogDir.listFiles.map(_.getName).find(_.endsWith(".out")).getOrElse(logType)
       } else {
         logType
       }

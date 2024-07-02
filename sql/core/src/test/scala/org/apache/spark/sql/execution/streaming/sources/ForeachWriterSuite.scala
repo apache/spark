@@ -254,7 +254,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     try {
       inputData.addData(10, 11, 12)
       query.processAllAvailable()
-      val recentProgress = query.recentProgress.filter(_.numInputRows != 0).headOption
+      val recentProgress = query.recentProgress.find(_.numInputRows != 0)
       assert(recentProgress.isDefined && recentProgress.get.numInputRows === 3,
         s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
     } finally {
