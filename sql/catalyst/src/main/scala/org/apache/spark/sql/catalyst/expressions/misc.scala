@@ -394,6 +394,8 @@ case class AesEncrypt(
     aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
+  override protected[spark] def expectedCost = 100
+
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
@@ -471,6 +473,8 @@ case class AesDecrypt(
     padding: Expression,
     aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override protected[spark] def expectedCost = 200
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
