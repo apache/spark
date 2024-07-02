@@ -20,11 +20,13 @@ package org.apache.spark.sql
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
@@ -244,13 +246,12 @@ class DatasetCacheSuite extends QueryTest
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
     assert(df1LimitInnerPlan.isDefined && df1LimitInnerPlan.get == df1InnerPlan)
-
-    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
-    // on df, since df2's cache had not been loaded before df.unpersist().
     val df2Limit = df2.limit(2)
     val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
+    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
+    // on df, since df2's cache had not been loaded before df.unpersist().
     assert(df2LimitInnerPlan.isDefined &&
       !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
   }
@@ -273,6 +274,77 @@ class DatasetCacheSuite extends QueryTest
             df.sparkSession.sessionState.conf.defaultSizeInBytes)
       }
     }
+  }
+
+  test("SPARK-47609. Partial match IMR with more columns than base") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select($"id".as("a"), ($"id" % 2).as("b"),
+      ($"id" + 1).as("d"), ($"id" % 3).as("c") )
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with less columns than base") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select($"id".as("a"), ($"id" % 2).as("b"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with columns remapped to different value") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select(($"id" + ($"id" % 3)).as("a"),
+     ($"id" % 2).as("b"), ($"id" % 3).as("c"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with extra columns as literal") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select(($"id" + ($"id" % 3)).as("a"),
+      ($"id" % 2).as("b"), expr("100").cast(IntegerType).as("t"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with multiple columns remap") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select((($"id" % 3) * ($"id" % 2)).as("c"),
+      ($"id" - ($"id" % 3)).as("a"), $"id".as("b"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with multiple columns remap and one remap as constant") {
+    val baseDfCreator = () => spark.range(0, 50).selectExpr("id as a ", "id % 2 AS b",
+      "id % 3 AS c")
+    val testDfCreator = () => spark.range(0, 50).select((($"id" % 3) * ($"id" % 2)).as("c"),
+      ($"id" - ($"id" % 3)).as("a"), expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Partial match IMR with partial filters match") {
+    val baseDfCreator = () => spark.range(0, 100).
+      selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c").filter($"a" > 7)
+    val testDfCreator = () => spark.range(0, 100).filter($"id"> 7).filter(($"id" % 3) > 8).select(
+      (($"id" % 3) * ($"id" % 2)).as("c"), ($"id" - ($"id" % 3)).as("a"),
+      expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    checkIMRUseAndInvalidation(baseDfCreator, testDfCreator)
+  }
+
+  test("SPARK-47609. Because of filter mismatch partial match should not happen") {
+    val baseDfCreator = () => spark.range(0, 100).
+      selectExpr("id as a ", "id % 2 AS b", "id % 3 AS c").filter($"a" > 7)
+    val testDfCreator = () => spark.range(0, 100).filter(($"id" % 3) > 8).select(
+      (($"id" % 3) * ($"id" % 2)).as("c"), ($"id" - ($"id" % 3)).as("a"),
+      expr("100").cast(IntegerType).as("b"), $"b".as("d"))
+    val baseDf = baseDfCreator()
+    baseDf.cache()
+    val testDf = testDfCreator()
+    verifyCacheDependency(baseDfCreator(), 1)
+    // cache should not be used
+    verifyCacheDependency(testDf, 0)
+    baseDf.unpersist(true)
   }
 
   test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
@@ -311,5 +383,41 @@ class DatasetCacheSuite extends QueryTest
         assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
       }
     }
+  }
+
+  protected def checkIMRUseAndInvalidation(
+      baseDfCreator: () => DataFrame,
+      testExec: () => DataFrame): Unit = {
+    // now check if the results of optimized dataframe and completely unoptimized dataframe are
+    // same
+    val baseDf = baseDfCreator()
+    val testDf = testExec()
+    val testDfRows = testDf.collect()
+    baseDf.cache()
+    verifyCacheDependency(baseDfCreator(), 1)
+    verifyCacheDependency(testExec(), 1)
+    baseDfCreator().unpersist(true)
+    verifyCacheDependency(baseDfCreator(), 0)
+    verifyCacheDependency(testExec(), 0)
+    baseDfCreator().cache()
+    val newTestDf = testExec()
+    // re-verify cache dependency
+    verifyCacheDependency(newTestDf, 1)
+    checkAnswer(newTestDf, testDfRows)
+    baseDfCreator().unpersist(true)
+  }
+
+  def verifyCacheDependency(df: DataFrame, numOfCachesExpected: Int): Unit = {
+    def recurse(sparkPlan: SparkPlan): Int = {
+      val imrs = sparkPlan.collect {
+        case i: InMemoryTableScanExec => i
+      }
+      imrs.size + imrs.map(ime => recurse(ime.relation.cacheBuilder.cachedPlan)).sum
+    }
+    val cachedPlans = df.queryExecution.withCachedData.collect {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    val totalIMRs = cachedPlans.size + cachedPlans.map(ime => recurse(ime)).sum
+    assert(totalIMRs == numOfCachesExpected)
   }
 }
