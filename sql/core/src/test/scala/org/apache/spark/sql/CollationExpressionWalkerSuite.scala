@@ -120,6 +120,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case _: DoubleType => Literal(5.0)
       case IntegerType | NumericType | IntegralType => Literal(5)
       case LongType => Literal(5L)
+      case NullType => Literal(null)
       case _: StringType | AnyDataType | _: AbstractStringType =>
         collationType match {
           case Utf8Binary =>
@@ -197,6 +198,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           case Utf8Binary => "'dummy string' COLLATE UTF8_BINARY"
           case Utf8BinaryLcase => "'DuMmY sTrInG' COLLATE UTF8_LCASE"
         }
+      case NullType => "null"
       case VariantType => s"parse_json('{}')"
       case TypeCollection(typeCollection) =>
         val strTypes = typeCollection.filter(hasStringType)
@@ -524,16 +526,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
    * 5) Otherwise, check if exceptions are the same
    */
   test("SPARK-48280: Expression Walker for codeGen generation") {
-    var (funInfos, toSkip) = extractRelevantExpressions()
-    toSkip = toSkip ++ List(
-      // These expressions are not called as functions
-      "lead",
-      "lag",
-      "nth_value",
-      "session_window"
-    )
+    val (funInfos, toSkip) = extractRelevantExpressions()
+
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      println("checking - " + f.getName)
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors
         .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
@@ -543,49 +538,47 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
 
       withTable("tbl", "tbl_lcase") {
 
-        val utf8_df = generateTableData(expr.inputTypes, Utf8Binary)
-        val utf8_lcase_df = generateTableData(expr.inputTypes, Utf8BinaryLcase)
+        val utf8_df = generateTableData(expr.inputTypes.take(1), Utf8Binary)
+        val utf8_lcase_df = generateTableData(expr.inputTypes.take(1), Utf8BinaryLcase)
 
         val utf8BinaryResult = try {
-          utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
-            .getRows(1, 0)
-          None
+          val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
+          df.getRows(1, 0)
+          scala.util.Right(df)
         } catch {
-          case e: Throwable => Some(e)
+          case e: Throwable => scala.util.Left(e)
         }
         val utf8BinaryLcaseResult = try {
-          utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8BinaryLcase))
-            .getRows(1, 0)
-          None
+          val df = utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8BinaryLcase))
+          df.getRows(1, 0)
+          scala.util.Right(df)
         } catch {
-          case e: Throwable =>
-            println(e.getMessage)
-            Some(e)
+          case e: Throwable => scala.util.Left(e)
         }
 
-        assert(utf8BinaryResult.isDefined === utf8BinaryLcaseResult.isDefined)
+        assert(utf8BinaryResult.isLeft === utf8BinaryLcaseResult.isLeft)
 
-        if (utf8BinaryResult.isEmpty) {
-          val utf8BinaryResult =
-            utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
-          val utf8BinaryLcaseResult =
-            utf8_lcase_df.selectExpr(transformExpressionToString(expr, Utf8BinaryLcase))
+        if (utf8BinaryResult.isRight) {
+          val utf8BinaryResultChecked = utf8BinaryResult.getOrElse(null)
+          val utf8BinaryLcaseResultChecked = utf8BinaryLcaseResult.getOrElse(null)
 
-          val dt = utf8BinaryResult.schema.fields.head.dataType
+          val dt = utf8BinaryResultChecked.schema.fields.head.dataType
 
           dt match {
-            case st if utf8BinaryResult != null && utf8BinaryLcaseResult != null &&
+            case st if utf8BinaryResultChecked != null && utf8BinaryLcaseResultChecked != null &&
               hasStringType(st) =>
               // scalastyle:off caselocale
-              assert(utf8BinaryResult.getRows(1, 0).map(_.map(_.toLowerCase)) ===
-                utf8BinaryLcaseResult.getRows(1, 0).map(_.map(_.toLowerCase)))
+              assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase)) ===
+                utf8BinaryLcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase)))
               // scalastyle:on caselocale
             case _ =>
-              assert(utf8BinaryResult.getRows(1, 0)(1) === utf8BinaryLcaseResult.getRows(1, 0)(1))
+              assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
+                utf8BinaryLcaseResultChecked.getRows(1, 0)(1))
           }
         }
         else {
-          assert(utf8BinaryResult.get.getClass == utf8BinaryResult.get.getClass)
+          assert(utf8BinaryResult.getOrElse(new Exception()).getClass
+            == utf8BinaryResult.getOrElse(new Exception()).getClass)
         }
       }
     }
@@ -622,6 +615,9 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "replace",
       "grouping",
       "grouping_id",
+      "reflect",
+      "try_reflect",
+      "java_method",
       // need to skip as these are random functions
       "rand",
       "random",
@@ -629,12 +625,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "uuid",
       "shuffle",
       // other functions which are not yet supported
-      "reflect",
-      "try_reflect",
-      "java_method"
+      "to_avro",
+      "from_avro"
     )
 
     for (funInfo <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      println("checking - " + funInfo.getName)
       for (m <- "> .*;".r.findAllIn(funInfo.getExamples)) {
         try {
           val resultUTF8 = sql(m.substring(2))
