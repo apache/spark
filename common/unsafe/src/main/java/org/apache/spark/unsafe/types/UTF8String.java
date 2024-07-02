@@ -326,10 +326,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     };
   }
 
+  /**
+   * The Unicode replacement character (U+FFFD) is used to replace invalid code points.
+   */
   private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
     new byte[] { (byte) 0xEF, (byte) 0xBF, (byte) 0xBD };
 
-  private static void appendReplacementCharacter(byte[] bytes, int byteIndex) {
+  /**
+   * Private helper method to insert the Unicode replacement character (U+FFFD) to a byte array.
+   */
+  private static void insertReplacementCharacter(byte[] bytes, int byteIndex) {
     for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) {
       bytes[byteIndex++] = b;
     }
@@ -363,7 +369,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
       if (codePointLen == 0) {
-        appendReplacementCharacter(bytes, byteIndexValid);
+        insertReplacementCharacter(bytes, byteIndexValid);
         byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         ++byteIndex;
         continue;
@@ -374,7 +380,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           bytes[byteIndexValid++] = firstByte;
         }
         else {
-          appendReplacementCharacter(bytes, byteIndexValid);
+          insertReplacementCharacter(bytes, byteIndexValid);
           byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         }
         ++byteIndex;
@@ -383,7 +389,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // Read the second byte.
       byte secondByte = getByte(byteIndex + 1);
       if (!isValidSecondByte(secondByte, firstByte)) {
-        appendReplacementCharacter(bytes, byteIndexValid);
+        insertReplacementCharacter(bytes, byteIndexValid);
         byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         ++byteIndex;
         continue;
@@ -398,7 +404,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       // Invalid UTF-8 sequence (not enough continuation bytes).
       if (continuationBytes < expectedLen) {
-        appendReplacementCharacter(bytes, byteIndexValid);
+        insertReplacementCharacter(bytes, byteIndexValid);
         byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         byteIndex += continuationBytes;
         continue;
