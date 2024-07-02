@@ -83,6 +83,8 @@ import org.apache.spark.util.Utils
  * @param dynamoDBCreds Optional SparkAWSCredentials instance that will be used to generate the
  *                      AWSCredentialsProvider passed to the KCL to authorize DynamoDB API calls.
  *                      Will use kinesisCreds if value is None.
+ * @param dynamoDBEndpointUrl Optional Url of DynamoDB service
+ *                           (e.g., https://dynamodb.us-east-1.amazonaws.com)
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
@@ -97,7 +99,8 @@ private[kinesis] class KinesisReceiver[T](
     dynamoDBCreds: Option[SparkAWSCredentials],
     cloudWatchCreds: Option[SparkAWSCredentials],
     metricsLevel: MetricsLevel,
-    metricsEnabledDimensions: Set[String])
+    metricsEnabledDimensions: Set[String],
+    dynamoDBEndpointUrl: Option[String])
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -170,13 +173,19 @@ private[kinesis] class KinesisReceiver[T](
         .withMetricsLevel(metricsLevel)
         .withMetricsEnabledDimensions(metricsEnabledDimensions.asJava)
 
+      val withOptionalConfiguration = dynamoDBEndpointUrl match {
+        case Some(endpoint) => baseClientLibConfiguration
+          .withDynamoDBEndpoint(endpoint)
+        case _ => baseClientLibConfiguration
+      }
+
       // Update the Kinesis client lib config with timestamp
       // if InitialPositionInStream.AT_TIMESTAMP is passed
       initialPosition match {
         case ts: AtTimestamp =>
-          baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
+          withOptionalConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
         case _ =>
-          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
+          withOptionalConfiguration.withInitialPositionInStream(initialPosition.getPosition)
       }
     }
 

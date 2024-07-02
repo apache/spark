@@ -47,7 +47,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val dynamoDBCreds: Option[SparkAWSCredentials],
     val cloudWatchCreds: Option[SparkAWSCredentials],
     val metricsLevel: MetricsLevel,
-    val metricsEnabledDimensions: Set[String]
+    val metricsEnabledDimensions: Set[String],
+    val dynamoDBEndpointUrl: Option[String]
   ) extends ReceiverInputDStream[T](_ssc) {
 
   private[streaming]
@@ -82,7 +83,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     new KinesisReceiver(streamName, endpointUrl, regionName, initialPosition,
       checkpointAppName, checkpointInterval, _storageLevel, messageHandler,
       kinesisCreds, dynamoDBCreds, cloudWatchCreds,
-      metricsLevel, metricsEnabledDimensions)
+      metricsLevel, metricsEnabledDimensions, dynamoDBEndpointUrl)
   }
 }
 
@@ -109,6 +110,7 @@ object KinesisInputDStream {
     private var cloudWatchCredsProvider: Option[SparkAWSCredentials] = None
     private var metricsLevel: Option[MetricsLevel] = None
     private var metricsEnabledDimensions: Option[Set[String]] = None
+    private var dynamoDBEndpointUrl: Option[String] = None
 
     /**
      * Sets the StreamingContext that will be used to construct the Kinesis DStream. This is a
@@ -286,6 +288,17 @@ object KinesisInputDStream {
       this.metricsLevel = Option(metricsLevel)
       this
     }
+    /**
+     * Sets the AWS DynamoDB endpoint URL. Defaults to
+     * "https://dynamodb.us-east-1.amazonaws.com" if no custom value is specified
+     *
+     * @param url DynamoDB endpoint URL to use
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     */
+    def dynamoDBEndpointUrl(url: String): Builder = {
+      dynamoDBEndpointUrl = Option(url)
+      this
+    }
 
     /**
      * Sets the enabled CloudWatch metrics dimensions. Defaults to
@@ -327,7 +340,8 @@ object KinesisInputDStream {
         dynamoDBCredsProvider,
         cloudWatchCredsProvider,
         metricsLevel.getOrElse(DEFAULT_METRICS_LEVEL),
-        metricsEnabledDimensions.getOrElse(DEFAULT_METRICS_ENABLED_DIMENSIONS))
+        metricsEnabledDimensions.getOrElse(DEFAULT_METRICS_ENABLED_DIMENSIONS),
+        dynamoDBEndpointUrl)
     }
 
     /**
