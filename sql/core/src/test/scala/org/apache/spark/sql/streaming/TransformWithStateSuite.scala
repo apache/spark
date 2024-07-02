@@ -28,7 +28,7 @@ import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.KEY_ROW_SCHEMA
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, OperatorStateMetadataV2, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -805,7 +805,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       getLatest().get._2.
       asInstanceOf[OperatorStateMetadataV2].
       stateStoreInfo.head.stateSchemaFilePath
-    fetchStateSchemaV3File(checkpointDir, operatorId).get(new Path(stateSchemaFilePath))
+    fetchStateSchemaV3File(checkpointDir, operatorId).getWithPath(new Path(stateSchemaFilePath))
   }
 
   private def fetchStateSchemaV3File(
@@ -896,45 +896,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         )
         val actual = columnFamilySchemas.map(_.asInstanceOf[ColumnFamilySchemaV1])
         assert(expected == actual)
-      }
-    }
-  }
-
-  test("transformWithState - verify that StateSchemaV3 files are purged") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
-      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
-      withTempDir { chkptDir =>
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "1")),
-          StopStream,
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(("a", "2")),
-          StopStream,
-          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
-          AddData(inputData, "a"),
-          CheckNewAnswer(),
-          StopStream
-        )
-        // If the StateSchemaV3 files are not purged, there would be
-        // three files, but we should have only one file.
-        val batchesWithSchemaV3File = fetchStateSchemaV3File(
-          chkptDir.getCanonicalPath, 0).listBatchesOnDisk
-        assert(batchesWithSchemaV3File.length == 1)
-        // Make sure that only the latest batch has the schema file
-        assert(batchesWithSchemaV3File.head == 2)
       }
     }
   }

@@ -205,12 +205,22 @@ class IncrementalExecution(
             currentBatchId,
             stateSchemaVersion)
         // write out the state schema paths to the metadata file
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        // TODO: Populate metadata with stateSchemaPaths if metadata version is v2
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
+        val metadata = stateStoreWriter.operatorStateMetadata(stateSchemaPaths)
+
+        stateStoreWriter match {
+          case tws: TransformWithStateExec =>
+            val metadataPath = OperatorStateMetadataV2.metadataFilePath(new Path(
+              checkpointLocation, tws.getStateInfo.operatorId.toString))
+            val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
+              metadataPath.toString)
+            operatorStateMetadataLog.add(currentBatchId, metadata)
+            tws
+          case _ =>
+            val metadataWriter = new OperatorStateMetadataWriter(new Path(
+              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+            metadataWriter.write(metadata)
+            stateStoreWriter
+        }
       case statefulOp: StatefulOperator if isFirstBatch =>
         statefulOp.
           validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion = 2)

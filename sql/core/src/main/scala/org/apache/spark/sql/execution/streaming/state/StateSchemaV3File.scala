@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
+import org.apache.spark.sql.internal.SQLConf
 
 object StateSchemaV3File {
   val COLUMN_FAMILY_SCHEMA_VERSION = 1
