@@ -52,9 +52,9 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    *
    * @param sparkSession SparkSession to use for the server
-   * @param exitOnError  Whether to exit the JVM if HiveThriftServer2 fails to initialize.
-   *                     When true, the call logs the error and exits the JVM with exit code -1.
-   *                     When false, the call throws an exception instead.
+   * @param exitOnError Whether to exit the JVM if HiveThriftServer2 fails to initialize. When true,
+   *                    the call logs the error and exits the JVM with exit code -1. When false, the
+   *                    call throws an exception instead.
    */
   @Since("4.0.0")
   @DeveloperApi
