@@ -423,4 +423,55 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
       bmDecomManager.stop()
     }
   }
+
+  test("SPARK-48637: on-demand migration peer refresh") {
+    // Set refresh interval to the Long.MaxValue to avoid the periodic peer refresh
+    sparkConf.set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, Long.MaxValue)
+    // Set the max concurrent shuffle migration threads to 1
+    sparkConf.set(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS, 1)
+
+    val bm = mock(classOf[BlockManager])
+    val peer1 = mock(classOf[BlockManagerId])
+    val peer2 = mock(classOf[BlockManagerId])
+    when(bm.getPeers(mc.any())).thenReturn(Seq(peer1, peer2))
+
+    val blockTransferService = mock(classOf[BlockTransferService])
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+
+    val migratableShuffleBlockResolver = mock(classOf[MigratableResolver])
+    registerShuffleBlocks(migratableShuffleBlockResolver, Set())
+    when(bm.migratableResolver).thenReturn(migratableShuffleBlockResolver)
+
+    val decommissioner = new BlockManagerDecommissioner(sparkConf, bm)
+    assert(decommissioner.knownShuffleMigrationPeers.isEmpty)
+    assert(decommissioner.standbyShuffleMigrationPeers.isEmpty)
+    assert(decommissioner.activeShuffleMigrationPeers.isEmpty)
+    decommissioner.start()
+
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(decommissioner.knownShuffleMigrationPeers.size === 2)
+      assert(decommissioner.standbyShuffleMigrationPeers.size === 1)
+      assert(decommissioner.activeShuffleMigrationPeers.size === 1)
+    }
+
+    val preStandByPeer = decommissioner.standbyShuffleMigrationPeers.head
+    val preActivePeer = decommissioner.activeShuffleMigrationPeers.head
+
+    // Terminate the active migration peer
+    preActivePeer._2.keepRunning = false
+    decommissioner.shufflesToMigrate.add((ShuffleBlockInfo(1, 1L), 0))
+    when(migratableShuffleBlockResolver.getMigrationBlocks(mc.eq(ShuffleBlockInfo(1, 1L))))
+      .thenReturn(List.empty)
+
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(decommissioner.knownShuffleMigrationPeers.size === 2)
+      assert(decommissioner.standbyShuffleMigrationPeers.size === 0)
+      assert(decommissioner.activeShuffleMigrationPeers.size === 1)
+    }
+
+    // The previous active peer should be removed and the previous standby peer
+    // should be transferred to the active peer now
+    assert(!decommissioner.activeShuffleMigrationPeers.contains(preActivePeer._1))
+    assert(decommissioner.activeShuffleMigrationPeers.head._1 === preStandByPeer)
+  }
 }
