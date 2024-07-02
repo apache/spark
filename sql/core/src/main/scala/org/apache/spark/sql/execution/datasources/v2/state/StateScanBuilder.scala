@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf
+import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, StateStoreErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -81,9 +81,20 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      partitionNums.map {
-        pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
-      }.toArray
+      sourceOptions.snapshotPartitionId match {
+        case None => partitionNums.map { pn =>
+          new StateStoreInputPartition(pn, queryId, sourceOptions)
+        }.toArray
+
+        case Some(snapshotPartitionId) =>
+          if (partitionNums.contains(snapshotPartitionId)) {
+            Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+          } else {
+            throw StateStoreErrors.stateStoreSnapshotPartitionNotFound(
+              snapshotPartitionId, sourceOptions.operatorId,
+              sourceOptions.stateCheckpointLocation.toString)
+          }
+      }
     }
   }
 

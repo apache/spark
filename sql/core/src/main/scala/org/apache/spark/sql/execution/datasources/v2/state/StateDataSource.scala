@@ -116,12 +116,16 @@ case class StateSourceOptions(
     batchId: Long,
     operatorId: Int,
     storeName: String,
-    joinSide: JoinSideValues) {
+    joinSide: JoinSideValues,
+    snapshotStartBatchId: Option[Long],
+    snapshotPartitionId: Option[Int]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide)"
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
+      s"snapshotStartBatchId=${snapshotStartBatchId.getOrElse("None")}, " +
+      s"snapshotPartitionId=${snapshotPartitionId.getOrElse("None")})"
   }
 }
 
@@ -131,6 +135,8 @@ object StateSourceOptions extends DataSourceOptions {
   val OPERATOR_ID = newOption("operatorId")
   val STORE_NAME = newOption("storeName")
   val JOIN_SIDE = newOption("joinSide")
+  val SNAPSHOT_START_BATCH_ID = newOption("snapshotStartBatchId")
+  val SNAPSHOT_PARTITION_ID = newOption("snapshotPartitionId")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -190,7 +196,30 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
-    StateSourceOptions(resolvedCpLocation, batchId, operatorId, storeName, joinSide)
+    val snapshotStartBatchId = Option(options.get(SNAPSHOT_START_BATCH_ID)).map(_.toLong)
+    if (snapshotStartBatchId.exists(_ < 0)) {
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
+    } else if (snapshotStartBatchId.exists(_ > batchId)) {
+      throw StateDataSourceErrors.invalidOptionValue(
+        SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to $batchId")
+    }
+
+    val snapshotPartitionId = Option(options.get(SNAPSHOT_PARTITION_ID)).map(_.toInt)
+    if (snapshotPartitionId.exists(_ < 0)) {
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
+    }
+
+    // both snapshotPartitionId and snapshotStartBatchId are required at the same time, because
+    // each partition may have different checkpoint status
+    if (snapshotPartitionId.isDefined && snapshotStartBatchId.isEmpty) {
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID)
+    } else if (snapshotPartitionId.isEmpty && snapshotStartBatchId.isDefined) {
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
+    }
+
+    StateSourceOptions(
+      resolvedCpLocation, batchId, operatorId, storeName,
+      joinSide, snapshotStartBatchId, snapshotPartitionId)
   }
 
   private def resolvedCheckpointLocation(

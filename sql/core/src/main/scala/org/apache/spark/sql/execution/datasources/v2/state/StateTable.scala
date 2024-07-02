@@ -49,16 +49,21 @@ class StateTable(
   }
 
   override def name(): String = {
-    val desc = s"StateTable " +
+    var desc = s"StateTable " +
       s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
       s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
       s"[storeName=${sourceOptions.storeName}]"
 
     if (sourceOptions.joinSide != JoinSideValues.none) {
-      desc + s"[joinSide=${sourceOptions.joinSide}]"
-    } else {
-      desc
+      desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
+    if (sourceOptions.snapshotStartBatchId.isDefined) {
+      desc += s"[snapshotStartBatchId=${sourceOptions.snapshotStartBatchId}]"
+    }
+    if (sourceOptions.snapshotPartitionId.isDefined) {
+      desc += s"[snapshotPartitionId=${sourceOptions.snapshotPartitionId}]"
+    }
+    desc
   }
 
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
