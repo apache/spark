@@ -195,7 +195,7 @@ class IncrementalExecution(
       // filepath, and write this path out in the OperatorStateMetadata file
       case stateStoreWriter: StateStoreWriter if isFirstBatch =>
         val stateSchemaVersion = stateStoreWriter match {
-          case _: TransformWithStateExec => 3
+          case tws: TransformWithStateExec => tws.stateSchemaVersion
           case _ => sparkSession.sessionState.conf.getConf(SQLConf.STATE_SCHEMA_FILE_VERSION)
         }
         val stateSchemaPaths =

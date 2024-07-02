@@ -82,6 +82,8 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
+  def stateSchemaVersion: Int = 3
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
       // TODO: check if we can return true only if actual timers are registered, or there is
