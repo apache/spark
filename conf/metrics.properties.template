@@ -140,6 +140,8 @@
 #   unit      seconds       Units of poll period
 #   prefix    EMPTY STRING  Prefix to prepend to metric name
 #   regex     NONE          Optional filter to send only metrics matching this regex string
+#   protocol  udp           Protocol ("tcp" or "udp") to use
+#   connTimeoutMs 1000      Connection timeout for TCP
 
 ## Examples
 # Enable JmxSink for all instances by class name
@@ -152,6 +154,8 @@
 #*.sink.statsd.class=org.apache.spark.metrics.sink.StatsdSink
 #*.sink.statsd.prefix=spark
 #*.sink.statsd.regex=<optional_value>
+#*.sink.statsd.protocol=udp
+#*.sink.statsd.connTimeoutMs=1000
 
 # Polling period for the ConsoleSink
 #*.sink.console.period=10
