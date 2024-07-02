@@ -2181,8 +2181,8 @@ class Dataset[T] private[sql](
    * column become the new columns of the DataFrame. If no index column is provided, the first
    * column is used as the default. Note that values transposed must share the least common type.
    *
-   * @param indexColumn The column to use as the index for transposing. If not provided, the first
-   * column is used.
+   * @param indexColumn The single column to use as the index for transposing. If not provided,
+   * the first column is used.
    * @group untypedrel
    * @since 4.0.0
    */
