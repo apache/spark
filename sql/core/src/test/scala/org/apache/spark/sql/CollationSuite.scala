@@ -76,7 +76,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("collate function syntax with default collation set") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UTF8_LCASE") {
       assert(sql(s"select collate('aaa', 'utf8_lcase')").schema(0).dataType ==
         StringType("UTF8_LCASE"))
       assert(sql(s"select collate('aaa', 'UNICODE')").schema(0).dataType == StringType("UNICODE"))
@@ -591,7 +591,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row("UTF8_BINARY"))
     )
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       checkAnswer(
         sql(
           """EXECUTE IMMEDIATE stmtStr1 USING
@@ -608,7 +608,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row("UNICODE"))
     )
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       checkAnswer(
         sql(
           """EXECUTE IMMEDIATE stmtStr2 USING
@@ -627,7 +627,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row("UTF8_BINARY"))
     )
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       checkAnswer(
         spark.sql(
           "SELECT collation(:var1 || :var2)",
@@ -827,7 +827,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-47431: Default collation set to UNICODE, literal test") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
     }
   }
@@ -855,7 +855,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
 
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       checkError(
         exception = intercept[ParseException]
           (sql("SELECT cast(1 as string collate unicode)")),
@@ -873,7 +873,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
     withTable("t") {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
         sql(s"CREATE TABLE t(c1 STRING) USING PARQUET")
         sql(s"INSERT INTO t VALUES ('a')")
         checkAnswer(sql(s"SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
@@ -883,12 +883,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
     withTable("t") {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UTF8_BINARY") {
         sql("CREATE TABLE t(c1 STRING) USING PARQUET")
         sql("INSERT INTO t VALUES ('a')")
         checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
       }
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
         checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
       }
     }
@@ -1423,7 +1423,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       HllSketchAggTestCase("UNICODE_CI", 3)
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.c) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.c) {
         val q = "SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM " +
           "VALUES ('a'), ('A'), ('b'), ('b'), ('c') tab(col)"
         val df = sql(q)
@@ -1458,7 +1458,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       withTable("tbl") {
         checkCacheTable(s"'a' COLLATE $collation")
       }
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collation) {
         withTable("tbl") {
           checkCacheTable("'a'")
         }

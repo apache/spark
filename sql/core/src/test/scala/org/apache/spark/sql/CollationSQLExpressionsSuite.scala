@@ -60,7 +60,7 @@ class CollationSQLExpressionsSuite
            |select md5('${t.input}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -95,7 +95,7 @@ class CollationSQLExpressionsSuite
            |select sha2('${t.input}', ${t.bitLength})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -125,7 +125,7 @@ class CollationSQLExpressionsSuite
            |select sha1('${t.input}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -155,7 +155,7 @@ class CollationSQLExpressionsSuite
            |select crc32('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
       }
@@ -183,7 +183,7 @@ class CollationSQLExpressionsSuite
            |select hash('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
       }
@@ -211,7 +211,7 @@ class CollationSQLExpressionsSuite
            |select xxhash64('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
       }
@@ -243,7 +243,7 @@ class CollationSQLExpressionsSuite
            |select url_encode('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -277,7 +277,7 @@ class CollationSQLExpressionsSuite
            |select url_decode('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -312,7 +312,7 @@ class CollationSQLExpressionsSuite
            |select parse_url('${t.input}', '${t.path}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -360,7 +360,7 @@ class CollationSQLExpressionsSuite
            |select from_csv('${t.input}', ${t.schema} ${t.options})
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val queryResult = testQuery.collect().head
         checkAnswer(testQuery, Row(t.result))
@@ -393,7 +393,7 @@ class CollationSQLExpressionsSuite
            |select schema_of_csv('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -424,7 +424,7 @@ class CollationSQLExpressionsSuite
            |select to_csv(${t.input})
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -478,7 +478,7 @@ class CollationSQLExpressionsSuite
            |select bin(${t.num})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         checkAnswer(sql(query), Row(t.result))
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationName)))
       }
@@ -503,7 +503,7 @@ class CollationSQLExpressionsSuite
            |select hex(${t.num})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         checkAnswer(sql(query), Row(t.result))
         assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.collationName)))
       }
@@ -592,7 +592,7 @@ class CollationSQLExpressionsSuite
            |select ${t.functionName}('${t.xml}', '${t.xpath}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
@@ -621,7 +621,7 @@ class CollationSQLExpressionsSuite
            |select space(${t.input})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -653,7 +653,7 @@ class CollationSQLExpressionsSuite
            |select to_number('${t.input}', '${t.format}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
@@ -667,7 +667,7 @@ class CollationSQLExpressionsSuite
            |select try_to_number('${t.input}', '${t.format}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
@@ -679,7 +679,7 @@ class CollationSQLExpressionsSuite
     // to_number should throw an exception if the conversion fails
     val number = "xx"
     val query = s"SELECT to_number('$number', '999');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val e = intercept[SparkIllegalArgumentException] {
         val testQuery = sql(query)
         testQuery.collect()
@@ -692,7 +692,7 @@ class CollationSQLExpressionsSuite
     // try_to_number shouldn't throw an exception if the conversion fails
     val number = "xx"
     val query = s"SELECT try_to_number('$number', '999');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val testQuery = sql(query)
       checkAnswer(testQuery, Row(null))
     }
@@ -720,7 +720,7 @@ class CollationSQLExpressionsSuite
            |select to_char(${t.input}, '${t.format}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -751,7 +751,7 @@ class CollationSQLExpressionsSuite
            |SELECT get_json_object('${t.input}', '${t.path}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -786,7 +786,7 @@ class CollationSQLExpressionsSuite
            |SELECT json_tuple('${t.input}', ${t.names})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         val dataType = StringType(t.collationName)
@@ -821,7 +821,7 @@ class CollationSQLExpressionsSuite
            |SELECT from_json('${t.input}', '${t.schema}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         val dataType = StructType.fromDDL(t.schema)
@@ -855,7 +855,7 @@ class CollationSQLExpressionsSuite
            |SELECT to_json(${t.struct})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         val dataType = StringType(t.collationName)
@@ -885,7 +885,7 @@ class CollationSQLExpressionsSuite
            |SELECT json_array_length(${t.input})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         assert(testQuery.schema.fields.head.dataType.sameType(IntegerType))
@@ -918,7 +918,7 @@ class CollationSQLExpressionsSuite
            |SELECT json_object_keys('${t.input}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         val dataType = ArrayType(StringType(t.collationName))
@@ -952,7 +952,7 @@ class CollationSQLExpressionsSuite
            |SELECT schema_of_json(${t.input})
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, t.result)
         val dataType = StringType(t.collationName)
@@ -993,7 +993,7 @@ class CollationSQLExpressionsSuite
       RaiseErrorTestCase("custom error message 4", "UNICODE_CI")
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val query = s"SELECT raise_error('${t.errorMessage}')"
         // Result & data type
         val userException = intercept[SparkRuntimeException] {
@@ -1008,7 +1008,7 @@ class CollationSQLExpressionsSuite
   test("Support CurrentDatabase/Catalog/User expressions with collation") {
     // Supported collations
     Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val queryDatabase = sql("SELECT current_schema()")
         val queryCatalog = sql("SELECT current_catalog()")
         val queryUser = sql("SELECT current_user()")
@@ -1024,7 +1024,7 @@ class CollationSQLExpressionsSuite
   test("Support Uuid misc expression with collation") {
     // Supported collations
     Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val query = s"SELECT uuid()"
         // Result & data type
         val testQuery = sql(query)
@@ -1040,7 +1040,7 @@ class CollationSQLExpressionsSuite
   test("Support SparkVersion misc expression with collation") {
     // Supported collations
     Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val query = s"SELECT version()"
         // Result & data type
         val testQuery = sql(query)
@@ -1063,7 +1063,7 @@ class CollationSQLExpressionsSuite
       TypeOfTestCase("null", "UNICODE_CI", "void")
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val query = s"SELECT typeof(${t.input})"
         // Result & data type
         val testQuery = sql(query)
@@ -1095,7 +1095,7 @@ class CollationSQLExpressionsSuite
         "000000000000000000000000000000008DE7DB79A23F3E8ED530994DDEA98913")
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val query = s"SELECT hex(aes_encrypt('${t.input}', ${t.params}))"
         // Result & data type
         val testQuery = sql(query)
@@ -1125,7 +1125,7 @@ class CollationSQLExpressionsSuite
         "UNICODE_CI", "'1234567890abcdef', 'CBC', 'DEFAULT'", "Spark")
     )
     testCases.foreach(t => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val query = s"SELECT aes_decrypt(unhex('${t.input}'), ${t.params})"
         // Result & data type
         val testQuery = sql(query)
@@ -1217,7 +1217,7 @@ class CollationSQLExpressionsSuite
            |select from_xml('${t.input}', ${t.schema} ${t.options})
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StructType(t.structFields)
@@ -1249,7 +1249,7 @@ class CollationSQLExpressionsSuite
            |select schema_of_xml('${t.input}')
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -1301,7 +1301,7 @@ class CollationSQLExpressionsSuite
            |select to_xml(${t.input})
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         val dataType = StringType(t.collationName)
@@ -1331,7 +1331,7 @@ class CollationSQLExpressionsSuite
            |SELECT parse_json('${t.input}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
@@ -1346,7 +1346,7 @@ class CollationSQLExpressionsSuite
            |SELECT try_parse_json('${t.input}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
@@ -1359,7 +1359,7 @@ class CollationSQLExpressionsSuite
     // parse_json should throw an exception when the string is not valid JSON value
     val json = "{\"a\":1,"
     val query = s"SELECT parse_json('$json');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val e = intercept[SparkException] {
         val testQuery = sql(query)
         testQuery.collect()
@@ -1372,7 +1372,7 @@ class CollationSQLExpressionsSuite
     // try_parse_json shouldn't throw an exception when the string is not valid JSON value
     val json = "{\"a\":1,]"
     val query = s"SELECT try_parse_json('$json');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val testQuery = sql(query)
       val testResult = testQuery.collect().map(_.toString()).mkString("")
       assert(testResult === s"[null]")
@@ -1400,7 +1400,7 @@ class CollationSQLExpressionsSuite
            |SELECT is_variant_null(parse_json(${t.input}))
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
       }
@@ -1432,7 +1432,7 @@ class CollationSQLExpressionsSuite
            |SELECT variant_get(parse_json('${t.input}'), '${t.path}', '${t.variantType}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
@@ -1447,7 +1447,7 @@ class CollationSQLExpressionsSuite
            |SELECT try_variant_get(parse_json('${t.input}'), '${t.path}', '${t.variantType}')
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
@@ -1460,7 +1460,7 @@ class CollationSQLExpressionsSuite
     // variant_get should throw an exception if the cast fails
     val json = "[1, \"Spark\"]"
     val query = s"SELECT variant_get(parse_json('$json'), '$$[1]', 'int');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val e = intercept[SparkRuntimeException] {
         val testQuery = sql(query)
         testQuery.collect()
@@ -1473,7 +1473,7 @@ class CollationSQLExpressionsSuite
     // try_variant_get shouldn't throw an exception if the cast fails
     val json = "[1, \"Spark\"]"
     val query = s"SELECT try_variant_get(parse_json('$json'), '$$[1]', 'int');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UNICODE") {
       val testQuery = sql(query)
       val testResult = testQuery.collect().map(_.toString()).mkString("")
       assert(testResult === s"[null]")
@@ -1530,7 +1530,7 @@ class CollationSQLExpressionsSuite
            |SELECT * from variant_explode(parse_json('${t.input}'))
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === t.result) // can't use checkAnswer for Variant
@@ -1562,7 +1562,7 @@ class CollationSQLExpressionsSuite
            |SELECT schema_of_variant(parse_json('${t.input}'))
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         assert(testQuery.schema.fields.head.dataType.sameType(StringType(t.collationName)))
@@ -1593,7 +1593,7 @@ class CollationSQLExpressionsSuite
            |SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ${t.input} AS tab(j)
            |""".stripMargin
       // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
         assert(testQuery.schema.fields.head.dataType.sameType(StringType(t.collationName)))
@@ -1609,7 +1609,7 @@ class CollationSQLExpressionsSuite
            |select input_file_name()
            |""".stripMargin
       // Result
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(""))
         val dataType = StringType(collationName)
@@ -1640,7 +1640,7 @@ class CollationSQLExpressionsSuite
             s"'${t.format}'"
           }
 
-        withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collation) {
+        withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> t.collation) {
           val query = s"SELECT date_format(${dateArg}, ${formatArg})"
           // Result & data type
           checkAnswer(sql(query), Row(t.result))
@@ -1875,7 +1875,7 @@ class CollationSQLExpressionsSuite
       checkAnswer(sql(queryExtractor), Row(collation))
       checkAnswer(sql(queryElementAt), Row(collation))
 
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> defaultCollation) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> defaultCollation) {
         val res = if (collateVal) "UTF8_LCASE" else defaultCollation
         checkAnswer(sql(queryExtractor), Row(res))
         checkAnswer(sql(queryElementAt), Row(res))
@@ -1888,7 +1888,7 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query = "select current_timezone()"
       // Data type check
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
@@ -1901,7 +1901,7 @@ class CollationSQLExpressionsSuite
     testSuppCollations.foreach(collationName => {
       val query = "select dayname(current_date())"
       // Data type check
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
         assert(testQuery.schema.fields.head.dataType.sameType(dataType))
@@ -1934,7 +1934,7 @@ class CollationSQLExpressionsSuite
           |select from_unixtime(1609488000, collate('yyyy-MM-dd HH:mm:ss', '${collationName}'))
           |""".stripMargin
       // Result & data type check
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val testQuery = sql(query)
         val dataType = StringType(collationName)
         val expectedResult = "2021-01-01 00:00:00"
@@ -1952,7 +1952,7 @@ class CollationSQLExpressionsSuite
           |select next_day('2015-01-14', collate('TU', '${collationName}'))
           |""".stripMargin
       // Result & data type check
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val testQuery = sql(query)
         val dataType = DateType
         val expectedResult = "2015-01-20"
@@ -2082,7 +2082,7 @@ class CollationSQLExpressionsSuite
   test("ExtractValue expression with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val query =
           s"""
              |select col['Field1']
@@ -2178,7 +2178,7 @@ class CollationSQLExpressionsSuite
   test("WindowTime and TimeWindow expressions with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val query =
           s"""SELECT window_time(window)
              | FROM (SELECT a, window, count(*) as cnt FROM VALUES
@@ -2204,7 +2204,7 @@ class CollationSQLExpressionsSuite
   test("SessionWindow expressions with collation") {
     // Supported collations
     testSuppCollations.foreach(collationName => {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> collationName) {
         val query =
           s"""SELECT count(*) as cnt
              | FROM VALUES

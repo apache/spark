@@ -14,31 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
 
-import java.nio.file.Path
+package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
+class ParityDataFrameSuite extends SharedDataFrameSuite {
 
-trait ResourceHelper extends SparkFunSuite {
-
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "server",
-      "src",
-      "test",
-      "resources").toAbsolutePath
-  }
-
-  protected val commonResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources").toAbsolutePath
-  }
 }

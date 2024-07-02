@@ -41,7 +41,7 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * {{{
  * bin/spark-shell \
- * --jars `ls connector/connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
+ * --jars `ls connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
  * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
  * }}}
  *
@@ -63,10 +63,8 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
-    val connectJar = findJar(
-      "connector/connect/server",
-      "spark-connect-assembly",
-      "spark-connect").getCanonicalPath
+    val connectJar =
+      findJar("connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"
