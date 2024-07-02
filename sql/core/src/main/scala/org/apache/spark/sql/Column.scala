@@ -61,17 +61,25 @@ private[sql] object Column {
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
-    fn(name, isDistinct = false, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = false, ignoreNulls = None, inputs: _*)
   }
 
   private[sql] def fn(name: String, isDistinct: Boolean, inputs: Column*): Column = {
-    fn(name, isDistinct = isDistinct, ignoreNulls = false, inputs: _*)
+    fn(name, isDistinct = isDistinct, ignoreNulls = None, inputs: _*)
   }
 
   private[sql] def fn(
       name: String,
       isDistinct: Boolean,
       ignoreNulls: Boolean,
+      inputs: Column*): Column = {
+    fn(name, isDistinct = isDistinct, ignoreNulls = Some(ignoreNulls), inputs: _*)
+  }
+
+  private[sql] def fn(
+      name: String,
+      isDistinct: Boolean,
+      ignoreNulls: Option[Boolean],
       inputs: Column*): Column = withOrigin {
     Column {
       UnresolvedFunction(Seq(name), inputs.map(_.expr), isDistinct, ignoreNulls = ignoreNulls)
