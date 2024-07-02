@@ -552,7 +552,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // try to parse it. This will allow the cleaner code to detect the file as stale
               // later on if it was not possible to parse it.
               try {
-                if (conf.get(CLEANER_ENABLED) && reader.modificationTime <
+                if (conf.get(CLEANER_ENABLED) && reader.completed && reader.modificationTime <
                     clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000) {
                   logInfo(log"Deleting expired event log ${MDC(PATH, reader.rootPath.toString)}")
                   deleteLog(fs, reader.rootPath)
