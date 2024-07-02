@@ -80,7 +80,7 @@ case class TransformWithStateExec(
 
   override def shortName: String = "transformWithStateExec"
 
-  def stateSchemaVersion: Int = 3
+  override def stateSchemaVersion: Int = 3
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
