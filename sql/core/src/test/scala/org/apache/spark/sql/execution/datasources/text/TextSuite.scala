@@ -114,7 +114,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
         errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
           "codecName" -> "illegal",
-          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, zstd, lz4, gzip")
       )
     }
   }

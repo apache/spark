@@ -28,6 +28,7 @@ import org.apache.hadoop.io.compress.DeflateCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.io.compress.Lz4Codec;
 import org.apache.hadoop.io.compress.SnappyCodec;
+import org.apache.hadoop.io.compress.ZStandardCodec;
 
 /**
  * A mapper class from Spark supported hadoop compression codecs to hadoop compression codecs.
@@ -39,9 +40,8 @@ public enum HadoopCompressionCodec {
   DEFLATE(new DeflateCodec()),
   GZIP(new GzipCodec()),
   LZ4(new Lz4Codec()),
-  SNAPPY(new SnappyCodec());
-
-  // TODO supports ZStandardCodec
+  SNAPPY(new SnappyCodec()),
+  ZSTD(new ZStandardCodec());
 
   private final CompressionCodec compressionCodec;
 
