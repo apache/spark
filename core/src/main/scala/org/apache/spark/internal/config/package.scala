@@ -44,7 +44,9 @@ package object config {
 
   private[spark] val DEFAULT_PARALLELISM =
     ConfigBuilder("spark.default.parallelism")
-      .doc("For distributed shuffle operations like reduceByKey and join, the largest number of " +
+      .doc("Default number of partitions in RDDs returned by transformations like " +
+        "join, reduceByKey, and parallelize when not set by user. " +
+        "For distributed shuffle operations like reduceByKey and join, the largest number of " +
         "partitions in a parent RDD. For operations like parallelize with no parent RDDs, " +
         "it depends on the cluster manager: Local mode: number of cores on the local machine " +
         "Mesos fine grained mode: 8 Others: total number of cores on all executor nodes or 2, " +
