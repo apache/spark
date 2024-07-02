@@ -316,6 +316,8 @@ object LogicalPlanIntegrity {
    * in plan output. Returns the error message if the check does not pass.
    */
   def hasUniqueExprIdsForOutput(plan: LogicalPlan): Option[String] = {
+    // SPARK-48771: rewritten using mutable collections to improve this function's performance and
+    // avoid unnecessary traversals of the query plan.
     val exprIds = mutable.HashMap.empty[ExprId, mutable.HashSet[DataType]]
     val ignoredExprIds = mutable.HashSet.empty[ExprId]
 
@@ -325,20 +327,22 @@ object LogicalPlanIntegrity {
       // the modification will make breaking changes (See SPARK-32741(#29585)).
       // So, this check just ignores the `exprId`s of `Union` output.
       case u: Union if u.resolved =>
-        ignoredExprIds ++= u.output.map(_.exprId)
+        u.output.foreach(ignoredExprIds += _.exprId)
       case p if canGetOutputAttrs(p) =>
-        // NOTE: we still need to filter resolved expressions here because the output of
-        // some resolved logical plans can have unresolved references,
-        // e.g., outer references in `ExistenceJoin`.
-        p.output.filter(_.resolved).foreach { a =>
-          val prevTypes = exprIds.getOrElseUpdate(a.exprId, mutable.HashSet.empty[DataType])
-          prevTypes += a.dataType.asNullable
+        p.output.foreach { a =>
+          // NOTE: we still need to filter resolved expressions here because the output of
+          // some resolved logical plans can have unresolved references,
+          // e.g., outer references in `ExistenceJoin`.
+          if (a.resolved) {
+            val prevTypes = exprIds.getOrElseUpdate(a.exprId, mutable.HashSet.empty[DataType])
+            prevTypes += a.dataType.asNullable
+          }
         }
       case _ =>
     }
 
     exprIds.collectFirst {
-      case (exprId, types) if !ignoredExprIds.contains(exprId) && types.size > 1 =>
+      case (exprId, types) if types.size > 1 && !ignoredExprIds.contains(exprId) =>
         s"Multiple attributes have the same expression ID ${exprId.id} but different data types: " +
           types.map(_.sql).mkString(", ") + ". The plan tree:\n" + plan.treeString
     }
