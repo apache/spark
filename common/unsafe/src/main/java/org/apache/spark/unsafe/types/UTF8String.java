@@ -62,6 +62,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private int numBytes;
   private volatile int numChars = -1;
 
+  /**
+   * The validity of the UTF8Strings can be cached to avoid repeated validation checks, because
+   * that operation requires full string scan. Valid strings have no illegal UTF-8 byte sequences.
+   */
+  private enum UTF8StringValidity {
+    UNKNOWN, IS_VALID, NOT_VALID
+  }
+
+  /**
+   * Internal flag to indicate whether the UTF-8 string is valid or not. Initially, the validity
+   * is unknown, and will be set to either IS_VALID or NOT_VALID after the first validation check.
+   */
+  private volatile UTF8StringValidity isValid = UTF8StringValidity.UNKNOWN;
+
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
 
@@ -329,6 +343,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return A new UTF8String that is a valid UTF8 string.
    */
   public UTF8String makeValid() {
+    return UTF8String.fromBytes(makeValidBytes());
+  }
+
+  private ArrayList<Byte> makeValidBytes() {
     ArrayList<Byte> bytes = new ArrayList<>();
     int byteIndex = 0;
     while (byteIndex < numBytes) {
@@ -376,7 +394,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       byteIndex += codePointLen;
     }
-    return UTF8String.fromBytes(bytes);
+    return bytes;
   }
 
   /**
@@ -385,6 +403,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return If string represents a valid UTF8 string.
    */
   public boolean isValid() {
+    if (isValid == UTF8StringValidity.UNKNOWN) {
+      isValid = getIsValid() ? UTF8StringValidity.IS_VALID : UTF8StringValidity.NOT_VALID;
+    }
+    return isValid == UTF8StringValidity.IS_VALID;
+  }
+
+  /**
+   * Private helper method to calculate whether the current UTF-8 string is valid. Checking
+   * all code points is a linear time operation, as we need to scan the entire UTF-8 string.
+   * Hence, this method should generally only be called only once during UTF8String lifetime.
+   */
+  private boolean getIsValid() {
     int byteIndex = 0;
     while (byteIndex < numBytes) {
       // Read the first byte.
@@ -1734,9 +1764,27 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
+  /**
+   * Returns a string representation of this UTF8String object. The string representation consists
+   * of the string's characters encoded in UTF-8 and the result of this method is always a valid
+   * UTF-8 string. However, if the current UTF8String contains illegal UTF-8 byte sequences, the
+   * method will replace the illegal byte sequences with the Unicode replacement character U+FFFD,
+   * according to Java specification. Using this method with invalid UTF8Strings is NOT RECOMMENDED.
+   */
   @Override
   public String toString() {
     return new String(getBytes(), StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Returns a string representation of this UTF8String object, but uses our custom implementation
+   * for invalid UTF-8 byte sequence replacement, as per the specification defined in the Unicode
+   * standard 15, Section 3.9, Paragraph D86, Table 3-7. Hence, the result of this method is
+   * always a valid UTF-8 string. This is the recommended method to use with invalid UTF8Strings.
+   */
+  public String toValidString() {
+    if (isValid()) return toString();
+    return makeValidBytes().toString();
   }
 
   @Override
