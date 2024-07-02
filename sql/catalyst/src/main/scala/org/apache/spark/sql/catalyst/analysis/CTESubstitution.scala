@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -50,7 +50,8 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
  * If the query is a SQL command or DML statement (extends `CTEInChildren`),
  * place `WithCTE` into their children.
  */
-object CTESubstitution extends Rule[LogicalPlan] {
+class CTESubstitution(val catalogManager: CatalogManager)
+  extends Rule[LogicalPlan] with ColumnResolutionHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
@@ -272,7 +273,8 @@ object CTESubstitution extends Rule[LogicalPlan] {
       alwaysInline: Boolean,
       cteRelations: Seq[(String, CTERelationDef)]): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION)) {
+        _.containsAnyPattern(RELATION_TIME_TRAVEL, UNRESOLVED_RELATION, PLAN_EXPRESSION,
+          UNRESOLVED_IDENTIFIER)) {
       case RelationTimeTravel(UnresolvedRelation(Seq(table), _, _), _, _)
         if cteRelations.exists(r => plan.conf.resolver(r._1, table)) =>
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
@@ -286,6 +288,26 @@ object CTESubstitution extends Rule[LogicalPlan] {
             SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
           }
         }.getOrElse(u)
+
+      // Unresolved identifier clause can point to CTE definition
+      // We evaluate it if expression is resolved, and lookup session variables if not
+      // and then try to substitute CTE with that name
+      case p: PlanWithUnresolvedIdentifier =>
+        val identExpr = if (!p.identifierExpr.resolved
+          && p.identifierExpr.isInstanceOf[UnresolvedAttribute]) {
+          val u = p.identifierExpr.asInstanceOf[UnresolvedAttribute]
+
+          lookupVariable(u.nameParts) match {
+            case Some(v) => v
+            case None => p.identifierExpr
+          }
+        }
+        else {
+          p.identifierExpr
+        }
+
+        substituteCTE(p.planBuilder.apply(
+          ResolveIdentifierClause.evalIdentifierExpr(identExpr)), alwaysInline, cteRelations)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
