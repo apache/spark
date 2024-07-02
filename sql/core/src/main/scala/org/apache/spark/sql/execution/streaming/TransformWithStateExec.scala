@@ -116,14 +116,8 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-<<<<<<< HEAD
   private def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
-=======
-  def getColFamilySchemas(): List[ColumnFamilySchema] = {
-    val driverProcessorHandle = getDriverProcessorHandle
-    val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
->>>>>>> 6768eea5a98 (Feedback)
     closeProcessorHandle()
     columnFamilySchemas
   }
@@ -386,7 +380,6 @@ case class TransformWithStateExec(
     )
   }
 
-<<<<<<< HEAD
   private def fetchOperatorStateMetadataLog(
       hadoopConf: Configuration,
       checkpointDir: String,
@@ -402,11 +395,6 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): Array[String] = {
     assert(stateSchemaVersion >= 3)
     val newSchemas = getColFamilySchemas()
-=======
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
-    Array[String] = {
-    val newColumnFamilySchemas = getColFamilySchemas()
->>>>>>> 6768eea5a98 (Feedback)
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
     // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
@@ -427,7 +415,6 @@ case class TransformWithStateExec(
   }
 
   private def validateSchemas(
-<<<<<<< HEAD
       oldSchemas: List[ColumnFamilySchema],
       newSchemas: Map[String, ColumnFamilySchema]): Unit = {
     oldSchemas.foreach { case oldSchema: ColumnFamilySchemaV1 =>
@@ -440,24 +427,6 @@ case class TransformWithStateExec(
           )
       }
     }
-=======
-      oldSchema: List[ColumnFamilySchema],
-      newSchema: List[ColumnFamilySchema]): Unit = {
-    if (oldSchema.size != newSchema.size) {
-      throw new RuntimeException
-    }
-    // turn oldSchema to map
-    val oldSchemaMap = oldSchema.map(schema =>
-      (schema.columnFamilyName, schema)).toMap
-    newSchema.foreach { case newSchema: ColumnFamilySchemaV1 =>
-        val oldSchema = oldSchemaMap.get(newSchema.columnFamilyName)
-        if (oldSchema.isEmpty) {
-            throw new RuntimeException
-        }
-        if (oldSchema.get != newSchema) {
-            throw new RuntimeException
-        }
-      }
   }
 
   /** Metadata of this stateful operator and its states stores. */
@@ -476,7 +445,6 @@ case class TransformWithStateExec(
 
     val json = compact(render(operatorPropertiesJson))
     OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
->>>>>>> 6768eea5a98 (Feedback)
   }
 
   private def stateSchemaDirPath(storeName: String): Path = {
@@ -488,24 +456,6 @@ case class TransformWithStateExec(
 
     val storeNamePath = new Path(stateCheckpointPath, storeName)
     new Path(new Path(storeNamePath, "_metadata"), "schema")
-  }
-
-  /** Metadata of this stateful operator and its states stores. */
-  override def operatorStateMetadata(
-      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
-    val info = getStateInfo
-    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    // stateSchemaFilePath should be populated at this point
-    val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
-
-    val operatorPropertiesJson: JValue =
-      ("timeMode" -> JString(timeMode.toString)) ~
-      ("outputMode" -> JString(outputMode.toString))
-
-    val json = compact(render(operatorPropertiesJson))
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
