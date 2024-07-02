@@ -72,9 +72,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Internal flag to indicate whether the UTF-8 string is valid or not. Initially, the validity
-   * is unknown, and will be set to either IS_VALID or NOT_VALID after the first validation check.
+   * is UNKNOWN, and will be set to either IS_VALID or NOT_VALID after the first validation check.
    */
   private volatile UTF8StringValidity isValid = UTF8StringValidity.UNKNOWN;
+
+  /**
+   * In case the current UTF-8 string is not valid, the number of bytes of the validated version
+   * of the current string (after possible replacement) will be stored in this field. This value
+   * will be equal to `numBytes` if the current string is valid. However, note that this doesn't
+   * GUARANTEE that the string is valid - only the `isValid` field can provide that information.
+   */
+  private volatile int numBytesValid = -1;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -330,8 +338,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private static final byte[] UNICODE_REPLACEMENT_CHARACTER =
     new byte[] { (byte) 0xEF, (byte) 0xBF, (byte) 0xBD };
 
-  private static void appendReplacementCharacter(ArrayList<Byte> bytes) {
-    for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) bytes.add(b);
+  private static void appendReplacementCharacter(byte[] bytes, int byteIndex) {
+    for (byte b : UTF8String.UNICODE_REPLACEMENT_CHARACTER) {
+      bytes[byteIndex++] = b;
+    }
   }
 
   /**
@@ -343,29 +353,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return A new UTF8String that is a valid UTF8 string.
    */
   public UTF8String makeValid() {
+    if (isValid()) return this;
     return UTF8String.fromBytes(makeValidBytes());
   }
 
   /**
-   * Similar to `makeValid`, but returns a (Java) String instead of a UTF8String object.
-   *
-   * @return A new String that is a valid UTF8 string.
-   */
-  private String makeValidString() {
-    ArrayList<Byte> validBytes = makeValidBytes();
-    byte[] byteArray = new byte[validBytes.size()];
-    for (int i = 0; i < validBytes.size(); i++) {
-      byteArray[i] = validBytes.get(i);
-    }
-    return new String(byteArray, StandardCharsets.UTF_8);
-  }
-
-  /**
    * Private helper method to create a valid UTF-8 byte sequence from the current UTF8String.
+   * In order to use this method, the number of bytes of the validated version of the current
+   * string (after possible replacement) must be evaluated first by calling `getNumBytesValid`.
    */
-  private ArrayList<Byte> makeValidBytes() {
-    ArrayList<Byte> bytes = new ArrayList<>();
-    int byteIndex = 0;
+  private byte[] makeValidBytes() {
+    if (numBytesValid < 0) numBytesValid = getNumBytesValid();
+    byte[] bytes = new byte[numBytesValid];
+    int byteIndex = 0, byteIndexValid = 0;
     while (byteIndex < numBytes) {
       // Read the first byte.
       byte firstByte = getByte(byteIndex);
@@ -373,21 +373,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
       // 0B UTF-8 sequence (invalid first byte).
       if (codePointLen == 0) {
-        appendReplacementCharacter(bytes);
+        appendReplacementCharacter(bytes, byteIndexValid);
+        byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         ++byteIndex;
         continue;
       }
       // 1B UTF-8 sequence (ASCII or truncated).
       if (codePointLen == 1) {
-        if (firstByte >= 0) bytes.add(firstByte);
-        else appendReplacementCharacter(bytes);
+        if (firstByte >= 0) {
+          bytes[byteIndexValid++] = firstByte;
+        }
+        else {
+          appendReplacementCharacter(bytes, byteIndexValid);
+          byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
+        }
         ++byteIndex;
         continue;
       }
       // Read the second byte.
       byte secondByte = getByte(byteIndex + 1);
       if (!isValidSecondByte(secondByte, firstByte)) {
-        appendReplacementCharacter(bytes);
+        appendReplacementCharacter(bytes, byteIndexValid);
+        byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         ++byteIndex;
         continue;
       }
@@ -401,13 +408,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       // Invalid UTF-8 sequence (not enough continuation bytes).
       if (continuationBytes < expectedLen) {
-        appendReplacementCharacter(bytes);
+        appendReplacementCharacter(bytes, byteIndexValid);
+        byteIndexValid += UNICODE_REPLACEMENT_CHARACTER.length;
         byteIndex += continuationBytes;
         continue;
       }
       // Valid UTF-8 sequence.
       for (int i = 0; i < codePointLen; ++i) {
-        bytes.add(getByte(byteIndex + i));
+        bytes[byteIndexValid++] = getByte(byteIndex + i);
       }
       byteIndex += codePointLen;
     }
@@ -430,6 +438,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Private helper method to calculate whether the current UTF-8 string is valid. Checking
    * all code points is a linear time operation, as we need to scan the entire UTF-8 string.
    * Hence, this method should generally only be called only once during UTF8String lifetime.
+   * Unlike `getNumBytesValid`, this method performs early exit as soon as an invalid byte
+   * sequence is found, and returns a boolean indicating the validity of the current string.
    */
   private boolean getIsValid() {
     int byteIndex = 0;
@@ -466,6 +476,66 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Private helper method to calculate whether the current UTF-8 string is valid. Checking all
+   * code points is a linear time operation, as we need to scan the entire UTF-8 string. Hence,
+   * this method should generally only be called only once during UTF8String lifetime. The method
+   * the total number of bytes of the validated version of the current string (after possible
+   * replacement), which will be equal to `numBytes` if the current string is valid.
+   */
+  private int getNumBytesValid() {
+    int byteIndex = 0, byteCount = 0;
+    while (byteIndex < numBytes) {
+      // Read the first byte.
+      byte firstByte = getByte(byteIndex);
+      int expectedLen = bytesOfCodePointInUTF8[firstByte & 0xFF];
+      int codePointLen = Math.min(expectedLen, numBytes - byteIndex);
+      // 0B UTF-8 sequence (invalid first byte).
+      if (codePointLen == 0) {
+        byteCount += UNICODE_REPLACEMENT_CHARACTER.length;
+        ++byteIndex;
+        continue;
+      }
+      // 1B UTF-8 sequence (ASCII or truncated).
+      if (codePointLen == 1) {
+        if (firstByte >= 0) ++byteCount;
+        else byteCount += UNICODE_REPLACEMENT_CHARACTER.length;
+        ++byteIndex;
+        continue;
+      }
+      // Read the second byte.
+      byte secondByte = getByte(byteIndex + 1);
+      if (!isValidSecondByte(secondByte, firstByte)) {
+        byteCount += UNICODE_REPLACEMENT_CHARACTER.length;
+        ++byteIndex;
+        continue;
+      }
+      // Read remaining continuation bytes.
+      int continuationBytes = 2;
+      for (; continuationBytes < codePointLen; ++continuationBytes) {
+        byte nextByte = getByte(byteIndex + continuationBytes);
+        if (!isValidContinuationByte(nextByte)) {
+          break;
+        }
+      }
+      // Invalid UTF-8 sequence (not enough continuation bytes).
+      if (continuationBytes < expectedLen) {
+        byteCount += UNICODE_REPLACEMENT_CHARACTER.length;
+        byteIndex += continuationBytes;
+        continue;
+      }
+      // Valid UTF-8 sequence.
+      for (int i = 0; i < codePointLen; ++i) {
+        ++byteCount;
+      }
+      byteIndex += codePointLen;
+    }
+    if (byteCount < 0) {
+      throw new IllegalStateException("Error in UTF-8 byte count");
+    }
+    return byteCount;
+  }
+
+  /**
    * Code point iteration over a UTF8String can be done using one of two modes:
    * 1. CODE_POINT_ITERATOR_ASSUME_VALID: The caller ensures that the UTF8String is valid and does
    *    not contain any invalid UTF-8 byte sequences. In this case, the code point iterator will
@@ -492,7 +562,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public Iterator<Integer> codePointIterator(CodePointIteratorType iteratorMode) {
-    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID && !isValid()) {
+    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID) {
       return makeValid().codePointIterator();
     }
     return new CodePointIterator();
@@ -534,7 +604,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public Iterator<Integer> reverseCodePointIterator(CodePointIteratorType iteratorMode) {
-    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID && !isValid()) {
+    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID) {
       return makeValid().reverseCodePointIterator();
     }
     return new ReverseCodePointIterator();
@@ -1801,7 +1871,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public String toValidString() {
     if (isValid()) return toString();
-    return makeValidString();
+    return new String(makeValidBytes(), StandardCharsets.UTF_8);
   }
 
   @Override
