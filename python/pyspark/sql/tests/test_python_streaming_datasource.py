@@ -62,6 +62,21 @@ class BasePythonStreamingDataSourceTestsMixin:
         stream_reader = MyDataSourceStreamReader()
         self.assertEqual(list(stream_reader.read(None)), [(1, "abc")])
 
+    def test_basic_data_source_stream_reader_with_pyarrow_class(self):
+        import pyarrow as pa
+
+        # Create the RecordBatch
+        schema = pa.schema([("column1", pa.int32()), ("column2", pa.string())])
+        data = [pa.array([1, 2], type=pa.int32()), pa.array(["A", "B"], type=pa.string())]
+        record_batch = pa.RecordBatch.from_arrays(data, schema=schema)
+
+        class MyDataSourceStreamReader(DataSourceStreamReader):
+            def read(self, partition):
+                yield (2, record_batch)
+
+        stream_reader = MyDataSourceStreamReader()
+        self.assertEqual(list(stream_reader.read(None)), [(2, record_batch)])
+
     def _get_test_data_source(self):
         class RangePartition(InputPartition):
             def __init__(self, start, end):

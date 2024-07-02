@@ -25,7 +25,6 @@ from pyspark.errors import PySparkNotImplementedError
 if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
 
-
 __all__ = [
     "DataSource",
     "DataSourceReader",
@@ -332,8 +331,13 @@ class DataSourceReader(ABC):
             message_parameters={"feature": "partitions"},
         )
 
+    if TYPE_CHECKING:
+        from pyarrow import RecordBatch
+    else:
+        RecordBatch = None
+
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[Tuple]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -350,9 +354,10 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        iterator of tuples or :class:`Row`\\s
+        iterator of tuples or pyarrow RecordBatch
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
+            It can also return an iterator of pyarrow RecordBatch if the data source supports it.
 
         Examples
         --------
@@ -447,8 +452,13 @@ class DataSourceStreamReader(ABC):
             message_parameters={"feature": "partitions"},
         )
 
+    if TYPE_CHECKING:
+        from pyarrow import RecordBatch
+    else:
+        RecordBatch = None
+
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[Tuple]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator["RecordBatch"]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -470,9 +480,10 @@ class DataSourceStreamReader(ABC):
 
         Returns
         -------
-        iterator of tuples or :class:`Row`\\s
+        iterator of tuples or pyarrow RecordBatch
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
+            It can also return an iterator of pyarrow RecordBatch if the data source supports it.
         """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
