@@ -181,7 +181,7 @@ class StreamingQuery:
         cmd.query_id.run_id = self._run_id
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
@@ -260,7 +260,7 @@ class StreamingQueryManager:
     ) -> pb2.StreamingQueryManagerCommandResult:
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
-        (_, properties) = self._session.client.execute_command(exec_cmd)
+        (_, properties, _) = self._session.client.execute_command(exec_cmd)
         return cast(
             pb2.StreamingQueryManagerCommandResult,
             properties["streaming_query_manager_command_result"],

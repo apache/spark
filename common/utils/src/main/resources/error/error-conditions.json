@@ -106,6 +106,13 @@
     ],
     "sqlState" : "22KD3"
   },
+  "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE" : {
+    "message" : [
+      "Cannot call the <functionName> SQL function because the Avro data source is not loaded.",
+      "Please restart your job or session with the 'spark-avro' package loaded, such as by using the --packages argument on the command line, and then retry your query or command again."
+    ],
+    "sqlState" : "22KD3"
+  },
   "BATCH_METADATA_NOT_FOUND" : {
     "message" : [
       "Unable to find batch <batchMetadataFile>."
@@ -480,7 +487,7 @@
   },
   "COLLATION_INVALID_NAME" : {
     "message" : [
-      "The value <collationName> does not represent a correct collation name."
+      "The value <collationName> does not represent a correct collation name. Suggested valid collation names: [<proposals>]."
     ],
     "sqlState" : "42704"
   },
@@ -1937,7 +1944,7 @@
     "subClass" : {
       "DEFAULT_COLLATION" : {
         "message" : [
-          "Cannot resolve the given default collation."
+          "Cannot resolve the given default collation. Suggested valid collation names: ['<proposals>']?"
         ]
       },
       "TIME_ZONE" : {
@@ -2902,6 +2909,12 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_UTF8_STRING" : {
+    "message" : [
+      "Invalid UTF8 byte sequence found in string: <str>."
+    ],
+    "sqlState" : "22029"
+  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
@@ -2998,6 +3011,12 @@
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."
     ],
     "sqlState" : "42710"
+  },
+  "MALFORMED_CHARACTER_CODING" : {
+    "message" : [
+      "Invalid value found when performing <function> with <charset>"
+    ],
+    "sqlState" : "22000"
   },
   "MALFORMED_CSV_RECORD" : {
     "message" : [
@@ -4461,6 +4480,11 @@
       "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
         "message" : [
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
+        "message" : [
+          "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
