@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
@@ -137,7 +138,8 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
 
       checkError(
         exception = intercept[AnalysisException] {
-          spark.udf.register("testType", () => new IntervalData())
+          // Mark the UDF as non-deterministic to prevent constant folding removing the UDT
+          spark.udf.register("testType", udf(() => new IntervalData()).asNondeterministic())
           sql("select testType()").write.mode("overwrite").orc(orcDir)
         },
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",

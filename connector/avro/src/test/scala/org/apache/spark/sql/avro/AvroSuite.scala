@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
@@ -1645,7 +1645,8 @@ abstract class AvroSuite
         )
         checkError(
           exception = intercept[AnalysisException] {
-            spark.udf.register("testType", () => new IntervalData())
+            // Mark the UDF as non-deterministic to prevent constant folding removing the UDT
+            spark.udf.register("testType", udf(() => new IntervalData()).asNondeterministic())
             sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
           },
           errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
