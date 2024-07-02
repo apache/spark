@@ -2081,6 +2081,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATE_SCHEMA_FILE_VERSION =
+    buildConf("spark.sql.streaming.stateStore.stateSchemaVersion")
+      .doc("The version of the state schema. This is used to check if the schema of the state " +
+        "store is compatible with the schema of the state data. If the schema is not compatible, " +
+        "the query will fail.")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(2)
+
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
       .internal()
