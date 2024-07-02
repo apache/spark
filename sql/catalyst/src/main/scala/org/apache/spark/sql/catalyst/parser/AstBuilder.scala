@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
-
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
@@ -47,8 +44,8 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, Inte
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
@@ -121,7 +118,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
+        java.util.UUID.randomUUID.toString)
     }
   }
 
@@ -129,16 +127,32 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
   }
 
-  private def visitCompoundBodyImpl(ctx: CompoundBodyContext): CompoundBody = {
+  private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String = ""): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
-    CompoundBody(buff.toSeq)
+    CompoundBody(buff.toSeq, label)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx.compoundBody())
+    val beginLabelCtx = Option(ctx.beginLabel())
+    val endLabelCtx = Option(ctx.endLabel())
+
+    (beginLabelCtx, endLabelCtx) match {
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
+        if bl.multipartIdentifier().getText.nonEmpty &&
+          bl.multipartIdentifier().getText != el.multipartIdentifier().getText =>
+        throw SqlScriptingErrors.labelsMismatch(
+          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+      case (None, Some(el: EndLabelContext)) =>
+        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
+      case _ =>
+    }
+
+    val labelText = beginLabelCtx.
+      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString)
+    visitCompoundBodyImpl(ctx.compoundBody(), labelText)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
