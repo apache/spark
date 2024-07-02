@@ -41,7 +41,7 @@ class SplitInfo(
     hashCode = hashCode * 31 + hostLocation.hashCode
     hashCode = hashCode * 31 + path.hashCode
     // ignore overflow ? It is hashcode anyway !
-    hashCode = hashCode * 31 + (length & 0x7fffffff).toInt
+    hashCode = hashCode * 31 + length.toInt
     hashCode
   }
 

@@ -38,7 +38,7 @@ case class FileWriterFactory (
   @transient private lazy val jobId = SparkHadoopWriterUtils.createJobID(jobTrackerID, 0)
 
   override def createWriter(partitionId: Int, realTaskId: Long): DataWriter[InternalRow] = {
-    val taskAttemptContext = createTaskAttemptContext(partitionId, realTaskId.toInt & Int.MaxValue)
+    val taskAttemptContext = createTaskAttemptContext(partitionId, Math.abs(realTaskId.toInt))
     committer.setupTask(taskAttemptContext)
     if (description.partitionColumns.isEmpty) {
       new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
