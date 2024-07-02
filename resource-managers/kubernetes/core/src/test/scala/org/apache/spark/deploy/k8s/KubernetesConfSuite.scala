@@ -276,4 +276,16 @@ class KubernetesConfSuite extends SparkFunSuite {
       assert(KubernetesConf.getResourceNamePrefix(appName).matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
     }
   }
+
+  test("SPARK-48699: Resource name prefix should be truncated if app name is too long") {
+    // An app name of 330 characters
+    val longAppName = "foo-123-bar" * 30
+    val id = KubernetesUtils.uniqueID()
+    val resourceNamePrefix = KubernetesConf.getResourceNamePrefix(longAppName, id)
+    // We are at allowed max length
+    assert(resourceNamePrefix.length === KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - 24)
+    assert(resourceNamePrefix.matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
+    // We don't truncate the unique ID
+    assert(resourceNamePrefix.endsWith(id))
+  }
 }
