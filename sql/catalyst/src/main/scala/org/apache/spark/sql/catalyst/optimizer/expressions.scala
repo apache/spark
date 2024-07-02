@@ -1090,17 +1090,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
 
 /**
- * Removes nodes that are not necessary.
- */
-object RemoveDispensableExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(UNARY_POSITIVE), ruleId) {
-    case UnaryPositive(child) => child
-  }
-}
-
-
-/**
  * Removes the inner case conversion expressions that are unnecessary because
  * the inner conversion is overwritten by the outer one.
  */
