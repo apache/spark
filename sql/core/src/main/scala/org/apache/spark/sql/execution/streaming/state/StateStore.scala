@@ -439,9 +439,9 @@ object StateStoreProvider {
 }
 
 /**
- * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read fine
- * grained state data which is replayed from a specific snapshot version. It is used by the
- * snapshotStartBatchId option in state data source.
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read the change
+ * of state store over batches. This is used by State Data Source with additional options like
+ * snapshotStartBatchId or readChangeFeed.
  */
 trait SupportsFineGrainedReplay {
 
@@ -469,6 +469,15 @@ trait SupportsFineGrainedReplay {
   def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
     new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
   }
+
+  /**
+   *
+   * @param startVersion
+   * @param endVersion
+   * @return
+   */
+  def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    StateStoreChangeDataReader
 }
 
 /**

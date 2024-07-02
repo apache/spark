@@ -18,16 +18,20 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -392,6 +396,19 @@ private[sql] class RocksDBStateStoreProvider
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
+
+  override def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    StateStoreChangeDataReader = {
+    val statePath = stateStoreId.storeCheckpointLocation()
+    val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+    new RocksDBStateStoreChangeDataReader(
+      CheckpointFileManager.create(statePath, hadoopConf),
+      statePath,
+      startVersion,
+      endVersion,
+      CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
+      keyValueEncoderMap)
+  }
 }
 
 object RocksDBStateStoreProvider {
@@ -486,4 +503,35 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
+}
+
+/** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
+class RocksDBStateStoreChangeDataReader(
+    fm: CheckpointFileManager,
+    stateLocation: Path,
+    startVersion: Long,
+    endVersion: Long,
+    compressionCodec: CompressionCodec,
+    keyValueEncoderMap:
+      ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)])
+  extends StateStoreChangeDataReader(
+    fm, stateLocation, startVersion, endVersion, compressionCodec) {
+
+  override protected var changelogSuffix: String = "changelog"
+
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    val reader = currentChangelogReader()
+    if (reader == null) {
+      return null
+    }
+    val (recordType, keyArray, valueArray, columnFamily) = reader.next()
+    val (rocksDBKeyStateEncoder, rocksDBValueStateEncoder) = keyValueEncoderMap.get(columnFamily)
+    val keyRow = rocksDBKeyStateEncoder.decodeKey(keyArray)
+    if (valueArray == null) {
+      (recordType, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = rocksDBValueStateEncoder.decodeValue(valueArray)
+      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
+    }
+  }
 }

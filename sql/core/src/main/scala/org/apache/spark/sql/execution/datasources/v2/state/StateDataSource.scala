@@ -30,13 +30,15 @@ import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityChecker, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
@@ -46,6 +48,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
+  private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
+
   override def shortName(): String = "statestore"
 
   override def getTable(
@@ -54,7 +58,17 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    new StateTable(session, schema, sourceOptions, stateConf)
+    // Read the operator metadata once to see if we can find the information for prefix scan
+    // encoder used in session window aggregation queries.
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf)
+      .stateMetadata.toArray
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == sourceOptions.operatorId &&
+        entry.stateStoreName == sourceOptions.storeName
+    }
+
+    new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -80,10 +94,21 @@ class StateDataSource extends TableProvider with DataSourceRegister {
           manager.readSchemaFile()
       }
 
-      new StructType()
-        .add("key", keySchema)
-        .add("value", valueSchema)
-        .add("partition_id", IntegerType)
+      if (sourceOptions.readChangeFeed) {
+        new StructType()
+          .add("key", keySchema)
+          .add("value", valueSchema)
+          .add("change_type", StringType)
+          .add("batch_id", LongType)
+          .add("partition_id", IntegerType)
+      } else {
+        new StructType()
+          .add("key", keySchema)
+          .add("value", valueSchema)
+          .add("partition_id", IntegerType)
+      }
+
+
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
@@ -118,7 +143,10 @@ case class StateSourceOptions(
     storeName: String,
     joinSide: JoinSideValues,
     snapshotStartBatchId: Option[Long],
-    snapshotPartitionId: Option[Int]) {
+    snapshotPartitionId: Option[Int],
+    readChangeFeed: Boolean,
+    changeStartBatchId: Option[Long],
+    changeEndBatchId: Option[Long]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -137,6 +165,9 @@ object StateSourceOptions extends DataSourceOptions {
   val JOIN_SIDE = newOption("joinSide")
   val SNAPSHOT_START_BATCH_ID = newOption("snapshotStartBatchId")
   val SNAPSHOT_PARTITION_ID = newOption("snapshotPartitionId")
+  val READ_CHANGE_FEED = newOption("readChangeFeed")
+  val CHANGE_START_BATCH_ID = newOption("changeStartBatchId")
+  val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -217,9 +248,45 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
     }
 
+    val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
+
+    val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
+    var changeEndBatchId = Option(options.get(CHANGE_END_BATCH_ID)).map(_.toLong)
+
+    if (readChangeFeed) {
+      if (joinSide != JoinSideValues.none) {
+        throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, READ_CHANGE_FEED))
+      }
+      if (changeStartBatchId.isEmpty) {
+        throw StateDataSourceErrors.requiredOptionUnspecified(CHANGE_START_BATCH_ID)
+      }
+      changeEndBatchId = Option(changeEndBatchId.getOrElse(batchId))
+
+      // changeStartBatchId and changeEndBatchId must all be defined at this point
+      if (changeStartBatchId.get < 0) {
+        throw StateDataSourceErrors.invalidOptionValueIsNegative(CHANGE_START_BATCH_ID)
+      }
+      if (changeEndBatchId.get < changeStartBatchId.get) {
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
+          s"$CHANGE_END_BATCH_ID cannot be smaller than $CHANGE_START_BATCH_ID. " +
+          s"Please check the input to $CHANGE_END_BATCH_ID, or if you are using its default " +
+          s"value, make sure that $CHANGE_START_BATCH_ID is less than ${changeEndBatchId.get}.")
+      }
+    } else {
+      if (changeStartBatchId.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_START_BATCH_ID,
+            s"Only specify this option when $READ_CHANGE_FEED is set to true.")
+      }
+      if (changeEndBatchId.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
+          s"Only specify this option when $READ_CHANGE_FEED is set to true.")
+      }
+    }
+
     StateSourceOptions(
       resolvedCpLocation, batchId, operatorId, storeName,
-      joinSide, snapshotStartBatchId, snapshotPartitionId)
+      joinSide, snapshotStartBatchId, snapshotPartitionId,
+      readChangeFeed, changeStartBatchId, changeEndBatchId)
   }
 
   private def resolvedCheckpointLocation(
@@ -235,6 +302,15 @@ object StateSourceOptions extends DataSourceOptions {
       new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
     commitLog.getLatest() match {
       case Some((lastId, _)) => lastId
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+  }
+
+  private def getFirstCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
+    val commitLog = new CommitLog(session,
+      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    commitLog.getEarliestBatchId() match {
+      case Some(firstId) => firstId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
   }

@@ -264,6 +264,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /** Return the latest batch id without reading the file. */
   def getLatestBatchId(): Option[Long] = listBatches.sorted.lastOption
 
+  def getEarliestBatchId(): Option[Long] = listBatches.sorted.headOption
+
   override def getLatest(): Option[(Long, T)] = {
     listBatches.sorted.lastOption.map { batchId =>
       logInfo(log"Getting latest batch ${MDC(BATCH_ID, batchId)}")

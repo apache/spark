@@ -444,8 +444,8 @@ class SymmetricHashJoinStateManager(
   private val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   private val keyAttributes = toAttributes(keySchema)
-  private val keyToNumValues = new KeyToNumValuesStore()
-  private val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
+  private lazy val keyToNumValues = new KeyToNumValuesStore()
+  private lazy val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
 
   // Clean up any state store resources if necessary at the end of the task
   Option(TaskContext.get()).foreach { _.addTaskCompletionListener[Unit] { _ => abortIfNeeded() } }
@@ -476,6 +476,16 @@ class SymmetricHashJoinStateManager(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
+    private def initializeStateStoreProvider(keySchema: StructType, valueSchema: StructType):
+    Unit = {
+      val storeProviderId = StateStoreProviderId(
+        stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
+      stateStoreProvider = StateStoreProvider.createAndInit(
+        storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+        useColumnFamilies = false, storeConf, hadoopConf,
+        useMultipleValuesPerKey = false)
+    }
+
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
@@ -488,10 +498,7 @@ class SymmetricHashJoinStateManager(
           stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
       } else {
         // This class will manage the state store provider by itself.
-        stateStoreProvider = StateStoreProvider.createAndInit(
-          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          useColumnFamilies = false, storeConf, hadoopConf,
-          useMultipleValuesPerKey = false)
+        initializeStateStoreProvider(keySchema, valueSchema)
         if (snapshotStartVersion.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
             throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
