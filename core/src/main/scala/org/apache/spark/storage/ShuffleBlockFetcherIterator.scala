@@ -1156,6 +1156,12 @@ final class ShuffleBlockFetcherIterator(
           log"checksum support for push-based shuffle.")
         s"BlockChunk $shuffleBlockChunk is corrupted but corruption " +
           s"diagnosis is skipped due to lack of shuffle checksum support for push-based shuffle."
+      case shuffleBlockBatch: ShuffleBlockBatchId =>
+        logWarning(log"BlockBatch ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockBatch)} is corrupted " +
+          log"but corruption diagnosis is skipped due to lack of shuffle checksum support for " +
+          log"ShuffleBlockBatchId")
+        s"BlockBatch $shuffleBlockBatch is corrupted but corruption " +
+          s"diagnosis is skipped due to lack of shuffle checksum support for ShuffleBlockBatchId"
       case unexpected: BlockId =>
         throw SparkException.internalError(
           s"Unexpected type of BlockId, $unexpected", category = "STORAGE")
