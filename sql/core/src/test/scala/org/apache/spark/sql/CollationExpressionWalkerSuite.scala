@@ -529,6 +529,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     val (funInfos, toSkip) = extractRelevantExpressions()
 
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
+      println("checking - " + f.getName)
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors
         .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
