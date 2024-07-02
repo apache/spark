@@ -72,11 +72,18 @@ object ColumnFamilySchemaV1 {
     assert(colFamilyMap.isInstanceOf[Map[_, _]],
       s"Expected Map but got ${colFamilyMap.getClass}")
     val keySchema = StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String])
+<<<<<<< HEAD
     val valueSchema = StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String])
     ColumnFamilySchemaV1(
       colFamilyMap("columnFamilyName").asInstanceOf[String],
       keySchema,
       valueSchema,
+=======
+    new ColumnFamilySchemaV1(
+      colFamilyMap("columnFamilyName").asInstanceOf[String],
+      keySchema,
+      StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String]),
+>>>>>>> 6768eea5a98 (Feedback)
       KeyStateEncoderSpec.fromJson(keySchema, colFamilyMap("keyStateEncoderSpec")
         .asInstanceOf[Map[String, Any]]),
       colFamilyMap.get("userKeyEncoder").map(_.asInstanceOf[String]).map(StructType.fromString)
