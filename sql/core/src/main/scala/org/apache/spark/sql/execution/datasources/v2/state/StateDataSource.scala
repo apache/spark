@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
@@ -37,6 +38,7 @@ import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityC
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
@@ -46,6 +48,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
+  private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
+
   override def shortName(): String = "statestore"
 
   override def getTable(
@@ -54,7 +58,17 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    new StateTable(session, schema, sourceOptions, stateConf)
+    // Read the operator metadata once to see if we can find the information for prefix scan
+    // encoder used in session window aggregation queries.
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf)
+      .stateMetadata.toArray
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == sourceOptions.operatorId &&
+        entry.stateStoreName == sourceOptions.storeName
+    }
+
+    new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
