@@ -16,14 +16,14 @@
     under the License.
 
 
-=======
-Logging
-=======
+======
+Logger
+======
 
 Classes
 -------
 
-.. currentmodule:: pyspark.logging
+.. currentmodule:: pyspark.logger
 
 .. autosummary::
     :toctree: api/
@@ -34,7 +34,7 @@ Classes
 Methods
 -------
 
-.. currentmodule:: pyspark.logging
+.. currentmodule:: pyspark.logger
 
 .. autosummary::
     :toctree: api/

@@ -1423,12 +1423,12 @@ pyspark_errors = Module(
 )
 
 pyspark_logging = Module(
-    name="pyspark-logging",
+    name="pyspark-logger",
     dependencies=[],
-    source_file_regexes=["python/pyspark/logging"],
+    source_file_regexes=["python/pyspark/logger"],
     python_test_goals=[
         # unittests
-        "pyspark.logging.tests.test_logging",
+        "pyspark.logger.tests.test_logger",
     ],
 )
 

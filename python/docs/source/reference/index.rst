@@ -39,5 +39,5 @@ This page lists an overview of all public PySpark modules, classes, functions an
    pyspark
    pyspark.resource
    pyspark.errors
-   pyspark.logging
+   pyspark.logger
    pyspark.testing
