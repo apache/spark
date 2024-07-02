@@ -27,6 +27,7 @@ import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 import scala.language.existentials
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -220,8 +221,20 @@ private[spark] class SparkHadoopUtil extends Logging {
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
+      def fsHasPathCapability: Boolean =
+        fs.hasPathCapability(status.getPath, SparkHadoopUtil.DIRECTORY_LISTING_INCONSISTENT)
+      val statusResult = Try {
+        fs.listStatus(status.getPath)
+      }
+      statusResult match {
+        case Failure(e) =>
+          if (e.isInstanceOf[FileNotFoundException] && fsHasPathCapability) {
+            Seq.empty[FileStatus]
+          } else throw e
+        case Success(sr) =>
+          val (directories, leaves) = sr.partition(_.isDirectory)
+          (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
+      }
     }
 
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
@@ -355,6 +368,16 @@ private[spark] object SparkHadoopUtil extends Logging {
    * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
+
+  /**
+   * Determines if this store may have inconsistencies between parent directory listings
+   * and direct list/getFileStatus calls. This issue can occur with Amazon S3 Express
+   * One Zone Storage when there are pending uploads in a directory.
+   * Applications can use this flag to decide whether to consider FileNotFoundExceptions
+   * encountered during treewalks as errors or to downgrade them.
+   */
+  private[spark] val DIRECTORY_LISTING_INCONSISTENT =
+    "fs.capability.directory.listing.inconsistent"
 
   /**
    * Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the

@@ -35,9 +35,12 @@ import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
+import org.mockito.Mockito.{mock, verify, when}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
@@ -805,6 +808,65 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         conf, false, Some(testFileName))
       val newFileName = new File(testFileDir, testFileName)
       assert(newFileName.isFile())
+    }
+  }
+
+  test(
+    "SPARK-47008: Utils.fetchHcfsFile SHOULD NOT throw FileNotFoundException(FNFE)" +
+      " when fs.listStatus throws FNFE and fs.hasPathCapability is TRUE") {
+    withTempDir { tempDir =>
+      val sourceDir = new File(tempDir, "source-dir")
+      sourceDir.mkdir()
+      val targetDir = new File(tempDir, "target-dir")
+
+      val path =
+        if (Utils.isWindows) {
+          new Path("file:/" + sourceDir.getAbsolutePath.replace("\\", "/"))
+        } else {
+          new Path("file://" + sourceDir.getAbsolutePath)
+        }
+      val conf = new Configuration
+      val fs = {
+        path.getFileSystem(conf)
+      }
+
+      val mockFS: FileSystem = mock(classOf[FileSystem])
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(true)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new FileNotFoundException())
+      when(mockFS.getFileStatus(any(classOf[Path]))).thenReturn(fs.getFileStatus(path))
+
+      // no exception expected
+      Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(false)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new FileNotFoundException())
+
+      // FNFE expected
+      intercept[FileNotFoundException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(false)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new IOException())
+
+      // IOException expected
+      intercept[IOException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      when(mockFS.hasPathCapability(any(), any())).thenReturn(true)
+      when(mockFS.listStatus(any(classOf[Path]))).thenThrow(new IOException())
+
+      // IOException expected
+      intercept[IOException] {
+        Utils.fetchHcfsFile(path, targetDir, mockFS, new SparkConf(), conf, fileOverwrite = false)
+      }
+
+      verify(mockFS, Mockito.atLeast(4)).getFileStatus(any(classOf[Path]))
+      verify(mockFS, Mockito.atLeast(4)).listStatus(any(classOf[Path]))
+      // test lazy evaluation of the fsHasPathCapability
+      verify(mockFS, Mockito.atLeast(2)).hasPathCapability(any(), any())
     }
   }
 
