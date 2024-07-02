@@ -18,6 +18,7 @@
 #
 
 org.apache.spark.sql.jdbc.MySQLDialect
+org.apache.spark.sql.jdbc.HiveDialect
 org.apache.spark.sql.jdbc.PostgresDialect
 org.apache.spark.sql.jdbc.DB2Dialect
 org.apache.spark.sql.jdbc.MsSqlServerDialect
