@@ -1918,28 +1918,36 @@ abstract class JsonSuite
     }
   }
 
+  protected def ignoreCorruptFilesSuccess(inputFile: File): Unit = {
+    assert(spark.read.json(inputFile.toURI.toString).collect().isEmpty)
+    assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+      .isEmpty)
+  }
+
+  protected def ignoreCorruptFilesError(inputFile: File): Unit = {
+    val e = intercept[SparkException] {
+      spark.read.json(inputFile.toURI.toString).collect()
+    }
+    checkErrorMatchPVals(
+      exception = e,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*${inputFile.getName}.*"))
+    assert(e.getCause.isInstanceOf[EOFException])
+    assert(e.getCause.getMessage === "Unexpected end of input stream")
+    val e2 = intercept[SparkException] {
+      spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
+    }
+    assert(e2.getCause.isInstanceOf[EOFException])
+    assert(e2.getCause.getMessage === "Unexpected end of input stream")
+  }
+
   test("SPARK-45035: json enable ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-        val e = intercept[SparkException] {
-          spark.read.json(inputFile.toURI.toString).collect()
-        }
-        checkErrorMatchPVals(
-          exception = e,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> s".*${inputFile.getName}.*"))
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
-        val e2 = intercept[SparkException] {
-          spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
-        }
-        assert(e2.getCause.isInstanceOf[EOFException])
-        assert(e2.getCause.getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        assert(spark.read.json(inputFile.toURI.toString).collect().isEmpty)
-        assert(spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
-          .isEmpty)
+        ignoreCorruptFilesSuccess(inputFile)
       }
     })
     withTempPath { dir =>
@@ -1966,6 +1974,26 @@ abstract class JsonSuite
         assert(df2.collect().isEmpty)
       }
     }
+  }
+
+  test("SPARK-39901: Setting ignoreCorruptFilesErrorClasses") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+        ignoreCorruptFilesError(inputFile)
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.RuntimeException:Unexpected end of input stream") {
+          ignoreCorruptFilesError(inputFile)
+        }
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+          ignoreCorruptFilesSuccess(inputFile)
+        }
+      }
+    })
   }
 
   test("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)") {

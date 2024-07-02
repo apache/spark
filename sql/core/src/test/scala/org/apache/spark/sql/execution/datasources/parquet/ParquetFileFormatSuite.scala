@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -37,7 +38,9 @@ abstract class ParquetFileFormatSuite
   override protected def dataSourceFormat = "parquet"
 
   test("read parquet footers in parallel") {
-    def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
+    def testReadFooters(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String): Unit = {
       withTempDir { dir =>
         val fs = FileSystem.get(spark.sessionState.newHadoopConf())
         val basePath = dir.getCanonicalPath
@@ -54,20 +57,39 @@ abstract class ParquetFileFormatSuite
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          spark.sessionState.newHadoopConf(), fileStatuses,
+          ignoreCorruptFiles,
+          IgnoreCorruptFilesUtils.errorClassesStrToSeq(ignoreCorruptFilesErrorClasses))
 
         assert(footers.size == 2)
       }
     }
 
-    testReadFooters(true)
-    checkErrorMatchPVals(
-      exception = intercept[SparkException] {
-        testReadFooters(false)
-      }.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
-    )
+    def testReadFooterError(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String = ""): Unit = {
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          testReadFooters(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses)
+        }.getCause.asInstanceOf[SparkException],
+        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
+      )
+    }
+
+    def testReadFooterSuccess(
+       ignoreCorruptFiles: Boolean,
+       ignoreCorruptFilesErrorClasses: String = ""): Unit = {
+      testReadFooters(ignoreCorruptFiles, ignoreCorruptFilesErrorClasses)
+    }
+
+    testReadFooterSuccess(true)
+    testReadFooterError(false)
+
+    // setting ignoreCorruptFilesErrorClasses
+    testReadFooterSuccess(true, "java.lang.RuntimeException:not a Parquet file")
+    testReadFooterError(true, "java.lang.EOFException:not a Parquet file")
+    testReadFooterError(false, "java.lang.RuntimeException:not a Parquet file")
   }
 
   test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {

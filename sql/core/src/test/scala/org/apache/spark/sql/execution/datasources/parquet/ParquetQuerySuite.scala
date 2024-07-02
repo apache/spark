@@ -318,35 +318,51 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  protected def testIgnoreCorruptFiles(options: Map[String, String]): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+      spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+      val df = spark.read.options(options).parquet(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString,
+        new Path(basePath, "third").toString)
+      checkAnswer(df, Seq(Row(0), Row(1)))
+    }
+  }
+
+  protected def testIgnoreCorruptFilesWithoutSchemaInfer(options: Map[String, String]): Unit = {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+      spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+      spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+      val df = spark.read.options(options).schema("a long").parquet(
+        new Path(basePath, "first").toString,
+        new Path(basePath, "second").toString,
+        new Path(basePath, "third").toString)
+      checkAnswer(df, Seq(Row(0), Row(1)))
+    }
+  }
+
+  protected def ignoreCorruptFilesError(options: Map[String, String]): Unit = {
+    val exception = intercept[SparkException] {
+      testIgnoreCorruptFiles(options)
+    }.getCause
+    assert(exception.getMessage().contains("is not a Parquet file"))
+    val exception2 = intercept[SparkException] {
+      testIgnoreCorruptFilesWithoutSchemaInfer(options)
+    }.getCause
+    assert(exception2.getMessage().contains("is not a Parquet file"))
+  }
+
+  protected def ignoreCorruptFilesSuccess(options: Map[String, String]): Unit = {
+    testIgnoreCorruptFiles(options)
+    testIgnoreCorruptFilesWithoutSchemaInfer(options)
+  }
+
   test("Enabling/disabling ignoreCorruptFiles") {
-    def testIgnoreCorruptFiles(options: Map[String, String]): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.options(options).parquet(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
-    }
-
-    def testIgnoreCorruptFilesWithoutSchemaInfer(options: Map[String, String]): Unit = {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
-        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
-        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
-        val df = spark.read.options(options).schema("a long").parquet(
-          new Path(basePath, "first").toString,
-          new Path(basePath, "second").toString,
-          new Path(basePath, "third").toString)
-        checkAnswer(df, Seq(Row(0), Row(1)))
-      }
-    }
-
     // Test ignoreCorruptFiles = true
     Seq("SQLConf", "FormatOption").foreach { by =>
       val (sqlConf, options) = by match {
@@ -355,8 +371,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         case "FormatOption" => ("false", Map("ignoreCorruptFiles" -> "true"))
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        testIgnoreCorruptFiles(options)
-        testIgnoreCorruptFilesWithoutSchemaInfer(options)
+        ignoreCorruptFilesSuccess(options)
       }
     }
 
@@ -367,16 +382,54 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         // Explicitly set SQLConf to true but still should not ignore corrupt files
         case "FormatOption" => ("true", Map("ignoreCorruptFiles" -> "false"))
       }
-
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
-        val exception = intercept[SparkException] {
-          testIgnoreCorruptFiles(options)
-        }.getCause
-        assert(exception.getMessage().contains("is not a Parquet file"))
-        val exception2 = intercept[SparkException] {
-          testIgnoreCorruptFilesWithoutSchemaInfer(options)
-        }.getCause
-        assert(exception2.getMessage().contains("is not a Parquet file"))
+        ignoreCorruptFilesError(options)
+      }
+    }
+  }
+
+  test("SPARK-39901: Setting ignoreCorruptFilesErrorClasses") {
+    // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: right classes
+    val rightErrorClasses = "java.lang.RuntimeException:not a Parquet file"
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options, errorClasses) = by match {
+        case "SQLConf" => ("true", Map.empty[String, String], rightErrorClasses)
+        // Explicitly set SQLConf to false but still should ignore corrupt files
+        case "FormatOption" => ("false", Map("ignoreCorruptFiles" -> "true"), rightErrorClasses)
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key -> rightErrorClasses) {
+          ignoreCorruptFilesSuccess(options)
+        }
+      }
+    }
+
+    // ignoreCorruptFiles: true, ignoreCorruptFilesErrorClasses: wrong classes
+    val wrongErrorClasses = "java.lang.EOFException:not a Parquet file"
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options, errorClasses) = by match {
+        case "SQLConf" => ("false", Map.empty[String, String], wrongErrorClasses)
+        // Explicitly set SQLConf to true but still should not ignore corrupt files
+        case "FormatOption" => ("true", Map("ignoreCorruptFiles" -> "false"), wrongErrorClasses)
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
+        ignoreCorruptFilesError(options)
+      }
+    }
+
+    // ignoreCorruptFiles: false, ignoreCorruptFilesErrorClasses: wrong classes
+    Seq(rightErrorClasses, wrongErrorClasses).foreach { errorClasses =>
+      Seq("SQLConf", "FormatOption").foreach { by =>
+        val (sqlConf, options) = by match {
+          case "SQLConf" => ("false", Map.empty[String, String])
+          // Explicitly set SQLConf to true but still should not ignore corrupt files
+          case "FormatOption" => ("true", Map("ignoreCorruptFiles" -> "false"))
+        }
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> sqlConf) {
+          withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key -> errorClasses) {
+            ignoreCorruptFilesError(options)
+          }
+        }
       }
     }
   }

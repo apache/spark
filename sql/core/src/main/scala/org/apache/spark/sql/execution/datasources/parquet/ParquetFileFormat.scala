@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapC
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.{IgnoreCorruptFilesError, IgnoreCorruptFilesUtils, SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -440,7 +440,8 @@ object ParquetFileFormat extends Logging {
   private[parquet] def readParquetFootersInParallel(
       conf: Configuration,
       partFiles: Seq[FileStatus],
-      ignoreCorruptFiles: Boolean): Seq[Footer] = {
+      ignoreCorruptFiles: Boolean,
+      ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError]): Seq[Footer] = {
     ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
@@ -450,7 +451,9 @@ object ParquetFileFormat extends Logging {
           ParquetFooterReader.readFooter(
             conf, currentFile, SKIP_ROW_GROUPS)))
       } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
+        val ignoreFlag = IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+          ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e)
+        if (ignoreFlag) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, currentFile)}", e)
           None
         } else {
@@ -483,7 +486,11 @@ object ParquetFileFormat extends Logging {
     val inferTimestampNTZ = sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sparkSession.sessionState.conf.legacyParquetNanosAsLong
 
-    val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
+    val reader = (files: Seq[FileStatus],
+                  conf: Configuration,
+                  ignoreCorruptFiles: Boolean,
+                  ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError]
+                 ) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
@@ -491,7 +498,7 @@ object ParquetFileFormat extends Logging {
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong)
 
-      readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
+      readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreCorruptFilesErrorClasses)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
 

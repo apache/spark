@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
@@ -156,7 +157,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped missing file", e)
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
-      case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
+      case e @ (_: IOException | _: RuntimeException) if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+        options.ignoreCorruptFiles,
+        options.ignoreCorruptFilesErrorClasses,
+        e.asInstanceOf[Exception]) =>
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
       case NonFatal(e) =>

@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 /**
  * Common functions for parsing CSV files
@@ -196,6 +197,7 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+    val ignoreCorruptFilesErrorClasses = parsedOptions.ignoreCorruptFilesErrorClasses
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     csv.flatMap { lines =>
       try {
@@ -210,7 +212,9 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
           logWarning(log"Skipped missing file: ${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]
         case e: FileNotFoundException if !ignoreMissingFiles => throw e
-        case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        case e @ (_: RuntimeException | _: IOException)
+          if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+            ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e.asInstanceOf[Exception]) =>
           logWarning(log"Skipped the rest of the content in the corrupted file: " +
             log"${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]

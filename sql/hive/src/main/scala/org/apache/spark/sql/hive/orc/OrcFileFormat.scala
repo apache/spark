@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, O
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{IgnoreCorruptFilesUtils, SerializableConfiguration}
 
 /**
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
@@ -71,10 +71,13 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+      val ignoreCorruptFilesErrorClasses = IgnoreCorruptFilesUtils.errorClassesStrToSeq(
+        sparkSession.sessionState.conf.ignoreCorruptFilesErrorClasses)
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
         Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
-        ignoreCorruptFiles
+        ignoreCorruptFiles,
+        ignoreCorruptFilesErrorClasses
       )
     }
   }
@@ -146,6 +149,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val ignoreCorruptFilesErrorClasses = IgnoreCorruptFilesUtils.errorClassesStrToSeq(
+      sparkSession.sessionState.conf.ignoreCorruptFilesErrorClasses)
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
@@ -155,8 +160,11 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
       // using the given physical schema. Instead, we simply return an empty iterator.
-      val isEmptyFile =
-        OrcFileOperator.readSchema(Seq(filePath.toString), Some(conf), ignoreCorruptFiles).isEmpty
+      val isEmptyFile = OrcFileOperator.readSchema(
+        Seq(filePath.toString),
+        Some(conf),
+        ignoreCorruptFiles,
+        ignoreCorruptFilesErrorClasses).isEmpty
       if (isEmptyFile) {
         Iterator.empty
       } else {

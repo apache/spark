@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{IgnoreCorruptFilesError, SerializableConfiguration}
 
 object SchemaMergeUtils extends Logging {
   /**
@@ -37,7 +37,8 @@ object SchemaMergeUtils extends Logging {
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus],
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Seq[IgnoreCorruptFilesError])
+        => Seq[StructType])
       : Option[StructType] = {
     val serializedConf = new SerializableConfiguration(
       sparkSession.sessionState.newHadoopConfWithOptions(parameters))
@@ -64,6 +65,8 @@ object SchemaMergeUtils extends Logging {
 
     val ignoreCorruptFiles =
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
+    val ignoreCorruptFilesErrorClasses =
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFilesErrorClasses
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
@@ -77,7 +80,8 @@ object SchemaMergeUtils extends Logging {
             new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
           }.toSeq
 
-          val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
+          val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles,
+            ignoreCorruptFilesErrorClasses)
 
           if (schemas.isEmpty) {
             Iterator.empty

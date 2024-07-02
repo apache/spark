@@ -24,6 +24,7 @@ import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.util.IgnoreCorruptFilesUtils
 
 class FilePartitionReader[T](
     files: Iterator[PartitionedFile],
@@ -34,6 +35,7 @@ class FilePartitionReader[T](
 
   private def ignoreMissingFiles = options.ignoreMissingFiles
   private def ignoreCorruptFiles = options.ignoreCorruptFiles
+  private def ignoreCorruptFilesErrorClasses = options.ignoreCorruptFilesErrorClasses
 
   override def next(): Boolean = {
     if (currentReader == null) {
@@ -48,7 +50,9 @@ class FilePartitionReader[T](
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file.", e)
             currentReader = null
-          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+          case e @ (_: RuntimeException | _: IOException)
+            if IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+              ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e.asInstanceOf[Exception]) =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null

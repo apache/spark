@@ -1181,6 +1181,19 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val IGNORE_CORRUPT_FILES_ERROR_CLASSES =
+    ConfigBuilder("spark.files.ignoreCorruptFiles.errorClasses")
+      .doc("A comma-separated list of error classes used to determine which exceptions can be " +
+        "ignored, allowing Spark jobs to continue running when encountering corrupted files. " +
+        "You can specify the key message of an exception by adding a colon (:) after the " +
+        "class name, for example: `java.lang.IOException:not a SequenceFile file`. " +
+        s"This configuration is effective only when ${IGNORE_CORRUPT_FILES.key} is " +
+        "set to true. If this configuration is not set, the behavior of Spark handling " +
+        "corrupted files is the same as before.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("")
+
   private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned.")

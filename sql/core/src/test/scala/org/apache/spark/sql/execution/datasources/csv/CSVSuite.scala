@@ -1482,34 +1482,87 @@ abstract class CSVSuite
     }
   }
 
+  protected def ignoreCorruptFilesError(inputFile: File): Unit = {
+    val e = intercept[SparkException] {
+      spark.read.csv(inputFile.toURI.toString).collect()
+    }
+    checkErrorMatchPVals(
+      exception = e,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*${inputFile.getName}.*")
+    )
+    assert(e.getCause.isInstanceOf[EOFException])
+    assert(e.getCause.getMessage === "Unexpected end of input stream")
+    val e2 = intercept[SparkException] {
+      spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+    }
+    checkErrorMatchPVals(
+      exception = e2,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*${inputFile.getName}.*")
+    )
+    assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
+    assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
+  }
+
+  protected def ignoreCorruptFilesSuccess(inputFile: File): Unit = {
+    assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+    assert(spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
+      .isEmpty)
+  }
+
   test("Enabling/disabling ignoreCorruptFiles/ignoreMissingFiles") {
     withCorruptFile(inputFile => {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-        val e = intercept[SparkException] {
-          spark.read.csv(inputFile.toURI.toString).collect()
-        }
-        checkErrorMatchPVals(
-          exception = e,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> s".*${inputFile.getName}.*")
-        )
-        assert(e.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getMessage === "Unexpected end of input stream")
-        val e2 = intercept[SparkException] {
-          spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
-        }
-        checkErrorMatchPVals(
-          exception = e2,
-          errorClass = "FAILED_READ_FILE.NO_HINT",
-          parameters = Map("path" -> s".*${inputFile.getName}.*")
-        )
-        assert(e2.getCause.getCause.getCause.isInstanceOf[EOFException])
-        assert(e2.getCause.getCause.getCause.getMessage === "Unexpected end of input stream")
+        ignoreCorruptFilesError(inputFile)
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
-        assert(spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
-          .isEmpty)
+        ignoreCorruptFilesSuccess(inputFile)
+      }
+    })
+    withTempPath { dir =>
+      val csvPath = new Path(dir.getCanonicalPath, "csv")
+      val fs = csvPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+      sampledTestData.write.csv(csvPath.toString)
+      val df = spark.read.option("multiLine", true).csv(csvPath.toString)
+      fs.delete(csvPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            df.collect()
+          },
+          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> s".*$dir.*")
+        )
+      }
+
+      sampledTestData.write.csv(csvPath.toString)
+      val df2 = spark.read.option("multiLine", true).csv(csvPath.toString)
+      fs.delete(csvPath, true)
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+        assert(df2.collect().isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-39901: Setting ignoreCorruptFilesErrorClasses") {
+    withCorruptFile(inputFile => {
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.EOFException:Unexpected end of input stream") {
+        ignoreCorruptFilesError(inputFile)
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key ->
+          "java.io.RuntimeException:Unexpected end of input stream") {
+          ignoreCorruptFilesError(inputFile)
+        }
+        val errorClasses = "java.io.EOFException:Unexpected end of input stream," +
+          "com.univocity.parsers.common.TextParsingException:Error reading from input"
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES_ERROR_CLASSES.key -> errorClasses) {
+          ignoreCorruptFilesSuccess(inputFile)
+        }
       }
     })
     withTempPath { dir =>

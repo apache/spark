@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{IgnoreCorruptFilesError, IgnoreCorruptFilesUtils, Utils}
 
 private[sql] object AvroUtils extends Logging {
   def inferSchema(
@@ -59,7 +59,8 @@ private[sql] object AvroUtils extends Logging {
     val avroSchema = parsedOptions.schema
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
+          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles,
+          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFilesErrorClasses)
       }
 
     SchemaConverters.toSqlType(
@@ -146,7 +147,8 @@ private[sql] object AvroUtils extends Logging {
       files: Seq[FileStatus],
       conf: Configuration,
       ignoreExtension: Boolean,
-      ignoreCorruptFiles: Boolean): Schema = {
+      ignoreCorruptFiles: Boolean,
+      ignoreCorruptFilesErrorClasses: Seq[IgnoreCorruptFilesError]): Schema = {
     // Schema evolution is not supported yet. Here we only pick first random readable sample file to
     // figure out the schema of the whole dataset.
     val avroReader = files.iterator.map { f =>
@@ -161,7 +163,9 @@ private[sql] object AvroUtils extends Logging {
             Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
           } catch {
             case e: IOException =>
-              if (ignoreCorruptFiles) {
+              val ignoreFlag = IgnoreCorruptFilesUtils.ignoreCorruptFiles(
+                ignoreCorruptFiles, ignoreCorruptFilesErrorClasses, e)
+              if (ignoreFlag) {
                 logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, path)}", e)
                 None
               } else {
