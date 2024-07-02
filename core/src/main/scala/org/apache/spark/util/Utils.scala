@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -3072,15 +3072,14 @@ private[spark] object Utils
    */
   lazy val isG1GC: Boolean = {
     Try {
+      // SPARK-48505: If the initialization probe of `HotSpotDiagnosticMXBean` is successful,
+      // the API of `HotSpotDiagnosticMXBean` can be used directly in subsequent operations,
+      // instead of invoking it through reflection.
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
-        .asInstanceOf[Class[_ <: PlatformManagedObject]]
-      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
+      import com.sun.management.HotSpotDiagnosticMXBean
       val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
-      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
-      val valueMethod = vmOptionClazz.getMethod("getValue")
-
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+        .asInstanceOf[HotSpotDiagnosticMXBean]
+      val useG1GC = hotSpotDiagnosticMXBean.getVMOption("UseG1GC").getValue
       "true".equals(useG1GC)
     }.getOrElse(false)
   }
