@@ -440,6 +440,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
+      // SQLImplicits
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
+
       // Steaming API
       ProblemFilters.exclude[MissingTypesProblem](
         "org.apache.spark.sql.streaming.DataStreamWriter" // Client version extends Logging
