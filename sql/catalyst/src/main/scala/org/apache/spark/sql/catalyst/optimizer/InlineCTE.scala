@@ -163,6 +163,7 @@ case class InlineCTE(
         if (nonInlined.isEmpty) {
           inlined
         } else {
+          // Retain the not-inlined CTE relations in place.
           WithCTE(inlined, nonInlined)
         }
 
