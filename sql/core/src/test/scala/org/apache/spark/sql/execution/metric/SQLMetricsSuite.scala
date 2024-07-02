@@ -837,7 +837,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
-  test("SPARK-34399: Add job commit duration metrics for DataWritingCommand") {
+  test("SPARK-34399: Add job commit duration metrics for DataWritingCommand" +
+    " and SPARK-48397: Data write time metric for DataWritingCommand") {
     withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
       "org.apache.spark.sql.execution.metric.CustomFileCommitProtocol") {
       withTable("t", "t2") {
@@ -852,6 +853,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
         assert(insert.head.metrics(BasicWriteJobStatsTracker.JOB_COMMIT_TIME).value > 0)
         assert(insert.head.metrics(BasicWriteJobStatsTracker.TASK_COMMIT_TIME).value > 0)
+        // SPARK-48397: check data write time metric
+        assert(insert.head.metrics(BasicWriteJobStatsTracker.WRITE_TIME).value > 0)
       }
     }
   }
