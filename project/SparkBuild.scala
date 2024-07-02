@@ -164,7 +164,9 @@ object SparkBuild extends PomBuild {
     val base_source = Source.fromFile(base_style_config)
     val prod_source = Source.fromFile(prod_style_config)
     try {
-      var contents = base_source.getLines.mkString("\n") + prod_source.getLines.mkString("\n")
+      val base_lines = base_source.getLines().toList.dropRight(1)
+      val prod_lines = prod_source.getLines().drop(23)
+      var contents = base_lines.mkString("\n") + "\n" + prod_lines.mkString("\n")
       for ((k, v) <- replacements) {
         require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
         contents = contents.replace(k, v)
