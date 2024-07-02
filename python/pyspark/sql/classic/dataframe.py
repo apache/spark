@@ -1798,7 +1798,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def writeTo(self, table: str) -> DataFrameWriterV2:
         return DataFrameWriterV2(self, table)
 
-    def mergeInto(self, table: str, condition: "ColumnOrName") -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
         return MergeIntoWriter(self, table, condition)
 
     def pandas_api(

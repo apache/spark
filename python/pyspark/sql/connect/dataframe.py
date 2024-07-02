@@ -2188,7 +2188,7 @@ class DataFrame(ParentDataFrame):
 
         return DataFrameWriterV2(self._plan, self._session, table, cb)
 
-    def mergeInto(self, table: str, condition: "ColumnOrName") -> MergeIntoWriter:
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "mergeInto"},
