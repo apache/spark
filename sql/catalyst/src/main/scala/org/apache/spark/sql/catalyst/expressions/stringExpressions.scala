@@ -768,8 +768,7 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
 case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = Invoke(
-    input, "makeValid", SQLConf.get.defaultStringType)
+  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
@@ -2049,14 +2048,17 @@ case class InitCap(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
-    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId)
+    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId, useICU)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId))
+    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): InitCap =
@@ -2842,7 +2844,7 @@ object Decode {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+    _FUNC_(bin, charset) - Decodes the first argument using the second argument character set. If either argument is null, the result will also be null.
 
     _FUNC_(expr, search, result [, search, result ] ... [, default]) - Compares expr
       to each search value in order. If expr is equal to a search value, _FUNC_ returns
@@ -2867,7 +2869,10 @@ object Decode {
       > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
        SQL
   """,
-  since = "3.2.0",
+  since = "1.5.0",
+  note = """
+    _FUNC_(expr, search, result [, search, result ] ... [, default]) is supported since 3.2.0
+  """,
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], replacement: Expression)
@@ -2882,25 +2887,6 @@ case class Decode(params: Seq[Expression], replacement: Expression)
   }
 }
 
-/**
- * Decodes the first argument into a String using the provided character set.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
-       abc
-  """,
-  arguments = """
-    Arguments:
-      * bin - a binary expression to decode
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
-  """,
-  since = "1.5.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class StringDecode(
     bin: Expression,
     charset: Expression,
@@ -3027,6 +3013,9 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
+    if (input.numBytes == 0 || "UTF-8".equalsIgnoreCase(toCharset)) {
+      return input.getBytes
+    }
     if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
       val encoder = try {
         val codingErrorAction = if (legacyErrorAction) {

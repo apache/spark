@@ -1466,6 +1466,7 @@ class PythonUDF(google.protobuf.message.Message):
     EVAL_TYPE_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
+    ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1475,6 +1476,11 @@ class PythonUDF(google.protobuf.message.Message):
     """(Required) The encoded commands of the Python UDF"""
     python_ver: builtins.str
     """(Required) Python version being used in the client."""
+    @property
+    def additional_includes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Additional includes for the Python UDF."""
     def __init__(
         self,
         *,
@@ -1482,6 +1488,7 @@ class PythonUDF(google.protobuf.message.Message):
         eval_type: builtins.int = ...,
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
+        additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["output_type", b"output_type"]
@@ -1489,6 +1496,8 @@ class PythonUDF(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "additional_includes",
+            b"additional_includes",
             "command",
             b"command",
             "eval_type",
