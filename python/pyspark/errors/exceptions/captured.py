@@ -201,7 +201,7 @@ class CapturedException(PySparkException):
                 )
             else:
                 logger = PySparkLogger.get_logger("SQLQueryContextLogger")
-                logger.error(
+                logger.log_error(
                     self._desc,
                     context="SQLQueryContext",
                     error_class=self.getErrorClass(),

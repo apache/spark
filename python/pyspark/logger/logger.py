@@ -16,12 +16,38 @@
 # limitations under the License.
 #
 
+import io
 import logging
 import json
+from typing import Any, Optional, Union
 
 
 class JSONFormatter(logging.Formatter):
-    def format(self, record):
+    """
+    Custom JSON formatter for logging records.
+
+    This formatter converts the log record to a JSON object with the following fields:
+    - timestamp: The time the log record was created.
+    - level: The log level of the record.
+    - name: The name of the logger.
+    - message: The log message.
+    - kwargs: Any additional keyword arguments passed to the logger.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format the specified record as a JSON string.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            The log record to be formatted.
+
+        Returns
+        -------
+        str
+            The formatted log record as a JSON string.
+        """
         log_entry = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
@@ -33,26 +59,92 @@ class JSONFormatter(logging.Formatter):
 
 
 class PySparkLogger(logging.Logger):
-    def __init__(self, name="PySparkLogger", level=logging.INFO, stream=None, filename=None):
+    """
+    Custom logger for PySpark that logs messages in a structured JSON format.
+
+    This logger provides methods for logging messages at different levels (info, warning, error)
+    with additional keyword arguments that are included in the JSON log entry.
+    """
+
+    def __init__(
+        self,
+        name: str = "PySparkLogger",
+        level: int = logging.INFO,
+        stream: Optional[Union[None, io.TextIOWrapper]] = None,
+        filename: Optional[str] = None,
+    ):
         super().__init__(name, level)
         if not self.hasHandlers():
-            if filename:
-                self.handler = logging.FileHandler(filename)
-            else:
-                self.handler = logging.StreamHandler(stream)
+            self.handler = (
+                logging.FileHandler(filename) if filename else logging.StreamHandler(stream)
+            )
             self.handler.setFormatter(JSONFormatter())
             self.addHandler(self.handler)
             self.setLevel(level)
 
     @staticmethod
-    def get_logger(name="PySparkLogger", level=logging.INFO, stream=None, filename=None):
+    def get_logger(
+        name: str = "PySparkLogger",
+        level: int = logging.INFO,
+        stream: Optional[Union[None, io.TextIOWrapper]] = None,
+        filename: Optional[str] = None,
+    ) -> "PySparkLogger":
+        """
+        Get a configured instance of PySparkLogger.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the logger (default is "PySparkLogger").
+        level : int, optional
+            The log level of the logger (default is logging.INFO).
+        stream : Optional[Union[None, io.TextIOWrapper]], optional
+            The stream to which log messages are written (default is None, which uses sys.stderr).
+        filename : Optional[str], optional
+            The name of the file to which log messages are written (default is None).
+
+        Returns
+        -------
+        PySparkLogger
+            A configured instance of PySparkLogger.
+        """
         return PySparkLogger(name, level, stream, filename)
 
-    def log_info(self, message, **kwargs):
+    def log_info(self, message: str, **kwargs: Any) -> None:
+        """
+        Log an info message with additional keyword arguments.
+
+        Parameters
+        ----------
+        message : str
+            The log message.
+        **kwargs
+            Additional keyword arguments to include in the log entry.
+        """
         self.info(message, exc_info=False, extra={"kwargs": kwargs})
 
-    def log_warn(self, message, **kwargs):
+    def log_warn(self, message: str, **kwargs: Any) -> None:
+        """
+        Log a warning message with additional keyword arguments.
+
+        Parameters
+        ----------
+        message : str
+            The log message.
+        **kwargs
+            Additional keyword arguments to include in the log entry.
+        """
         self.warning(message, exc_info=False, extra={"kwargs": kwargs})
 
-    def log_error(self, message, **kwargs):
+    def log_error(self, message: str, **kwargs: Any) -> None:
+        """
+        Log an error message with additional keyword arguments.
+
+        Parameters
+        ----------
+        message : str
+            The log message.
+        **kwargs
+            Additional keyword arguments to include in the log entry.
+        """
         self.error(message, exc_info=False, extra={"kwargs": kwargs})
