@@ -20,6 +20,7 @@ import os
 from typing import (
     Any,
     Callable,
+    Dict,
     Optional,
     List,
     Sequence,
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
         JavaClass,
         JavaGateway,
         JavaObject,
+        JVMView,
     )
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
@@ -70,7 +72,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
+def to_java_array(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -87,6 +89,14 @@ def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> 
     for i in range(0, len(arr)):
         jarray[i] = arr[i]
     return jarray
+
+
+def to_scala_map(jvm: "JVMView", dic: Dict) -> "JavaObject":
+    """
+    Convert a dict into a Scala Map.
+    """
+    assert jvm is not None
+    return jvm.PythonUtils.toScalaMap(dic)
 
 
 def require_test_compiled() -> None:

@@ -57,6 +57,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
     StructType,
@@ -68,7 +69,7 @@ from pyspark.sql.dataframe import (
     DataFrameNaFunctions as ParentDataFrameNaFunctions,
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.utils import get_active_spark_context, toJArray
+from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -431,7 +432,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         int: gateway.jvm.long,
                     }
                     jclass = mapping[type(parameter[0])]
-                return toJArray(gateway, jclass, parameter)
+                return to_java_array(gateway, jclass, parameter)
             else:
                 return parameter
 
@@ -890,7 +891,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def _jmap(self, jm: Dict) -> "JavaObject":
         """Return a JVM Scala Map from a dict"""
-        return _to_scala_map(self.sparkSession._sc, jm)
+        return to_scala_map(self.sparkSession._sc._jvm, jm)
 
     def _jcols(self, *cols: "ColumnOrName") -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names
@@ -1797,6 +1798,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def writeTo(self, table: str) -> DataFrameWriterV2:
         return DataFrameWriterV2(self, table)
 
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        return MergeIntoWriter(self, table, condition)
+
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -1842,14 +1846,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             message_parameters={"member": "queryExecution"},
         )
-
-
-def _to_scala_map(sc: "SparkContext", jm: Dict) -> "JavaObject":
-    """
-    Convert a dict into a JVM Map.
-    """
-    assert sc._jvm is not None
-    return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):
