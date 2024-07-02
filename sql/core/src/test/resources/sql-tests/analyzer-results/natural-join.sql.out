@@ -71,7 +71,26 @@ CreateViewCommand `nt4`, select * from values
 SELECT * FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, v1#x, v2#x]
-+- Project [k#x, v1#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+SELECT * FROM nt1 natural join nt2 where k = "one"
+-- !query analysis
+Project [k#x, v1#x, v2#x]
++- Filter (k#x = one)
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -85,27 +104,6 @@ Project [k#x, v1#x, v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
-
-
--- !query
-SELECT * FROM nt1 natural join nt2 where k = "one"
--- !query analysis
-Project [k#x, v1#x, v2#x]
-+- Filter (k#x = one)
-   +- Project [k#x, v1#x, v2#x]
-      +- Join Inner, (k#x = k#x)
-         :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-         :        +- Project [k#x, v1#x]
-         :           +- SubqueryAlias nt1
-         :              +- LocalRelation [k#x, v1#x]
-         +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias nt2
-                        +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -174,20 +172,19 @@ Aggregate [count(1) AS count(1)#xL]
 SELECT k FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x]
-+- Project [k#x, v1#x, v2#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -195,60 +192,57 @@ SELECT k FROM nt1 natural join nt2 where k = "one"
 -- !query analysis
 Project [k#x]
 +- Filter (k#x = one)
-   +- Project [k#x, v1#x, v2#x]
-      +- Join Inner, (k#x = k#x)
-         :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-         :        +- Project [k#x, v1#x]
-         :           +- SubqueryAlias nt1
-         :              +- LocalRelation [k#x, v1#x]
-         +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias nt2
-                        +- LocalRelation [k#x, v2#x]
+   +- Join Inner, (k#x = k#x)
+      :- SubqueryAlias nt1
+      :  +- View (`nt1`, [k#x, v1#x])
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+      :        +- Project [k#x, v1#x]
+      :           +- SubqueryAlias nt1
+      :              +- LocalRelation [k#x, v1#x]
+      +- SubqueryAlias nt2
+         +- View (`nt2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias nt2
+                     +- LocalRelation [k#x, v2#x]
 
 
 -- !query
 SELECT nt1.* FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, v1#x]
-+- Project [k#x, v1#x, v2#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
 SELECT nt2.* FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, v2#x]
-+- Project [k#x, v1#x, v2#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -299,60 +293,57 @@ Project [k#x]
 SELECT nt1.*, nt2.* FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, v1#x, k#x, v2#x]
-+- Project [k#x, v1#x, v2#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
 SELECT *, nt2.k FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, v1#x, v2#x, k#x]
-+- Project [k#x, v1#x, v2#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
 SELECT nt1.k, nt2.k FROM nt1 natural join nt2
 -- !query analysis
 Project [k#x, k#x]
-+- Project [k#x, v1#x, v2#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x, v1#x])
-      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :        +- Project [k#x, v1#x]
-      :           +- SubqueryAlias nt1
-      :              +- LocalRelation [k#x, v1#x]
-      +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x, v2#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-               +- Project [k#x, v2#x]
-                  +- SubqueryAlias nt2
-                     +- LocalRelation [k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- SubqueryAlias nt1
+   :  +- View (`nt1`, [k#x, v1#x])
+   :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :        +- Project [k#x, v1#x]
+   :           +- SubqueryAlias nt1
+   :              +- LocalRelation [k#x, v1#x]
+   +- SubqueryAlias nt2
+      +- View (`nt2`, [k#x, v2#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+            +- Project [k#x, v2#x]
+               +- SubqueryAlias nt2
+                  +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -403,20 +394,19 @@ SELECT nt1.k, nt2.k FROM nt1 natural join nt2 where k = "one"
 -- !query analysis
 Project [k#x, k#x]
 +- Filter (k#x = one)
-   +- Project [k#x, v1#x, v2#x, k#x]
-      +- Join Inner, (k#x = k#x)
-         :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-         :        +- Project [k#x, v1#x]
-         :           +- SubqueryAlias nt1
-         :              +- LocalRelation [k#x, v1#x]
-         +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias nt2
-                        +- LocalRelation [k#x, v2#x]
+   +- Join Inner, (k#x = k#x)
+      :- SubqueryAlias nt1
+      :  +- View (`nt1`, [k#x, v1#x])
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+      :        +- Project [k#x, v1#x]
+      :           +- SubqueryAlias nt1
+      :              +- LocalRelation [k#x, v1#x]
+      +- SubqueryAlias nt2
+         +- View (`nt2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias nt2
+                     +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -510,56 +500,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SELECT * FROM nt1 natural join nt2 natural join nt3
 -- !query analysis
 Project [k#x, v1#x, v2#x, v3#x]
-+- Project [k#x, v1#x, v2#x, v3#x]
-   +- Join Inner, (k#x = k#x)
-      :- Project [k#x, v1#x, v2#x]
-      :  +- Join Inner, (k#x = k#x)
-      :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x, v1#x])
-      :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :     :        +- Project [k#x, v1#x]
-      :     :           +- SubqueryAlias nt1
-      :     :              +- LocalRelation [k#x, v1#x]
-      :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x, v2#x])
-      :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-      :              +- Project [k#x, v2#x]
-      :                 +- SubqueryAlias nt2
-      :                    +- LocalRelation [k#x, v2#x]
-      +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x, v3#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
-               +- Project [k#x, v3#x]
-                  +- SubqueryAlias nt3
-                     +- LocalRelation [k#x, v3#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias nt1
+   :     :  +- View (`nt1`, [k#x, v1#x])
+   :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :        +- Project [k#x, v1#x]
+   :     :           +- SubqueryAlias nt1
+   :     :              +- LocalRelation [k#x, v1#x]
+   :     +- SubqueryAlias nt2
+   :        +- View (`nt2`, [k#x, v2#x])
+   :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :              +- Project [k#x, v2#x]
+   :                 +- SubqueryAlias nt2
+   :                    +- LocalRelation [k#x, v2#x]
+   +- SubqueryAlias nt3
+      +- View (`nt3`, [k#x, v3#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
+            +- Project [k#x, v3#x]
+               +- SubqueryAlias nt3
+                  +- LocalRelation [k#x, v3#x]
 
 
 -- !query
 SELECT nt1.*, nt2.*, nt3.* FROM nt1 natural join nt2 natural join nt3
 -- !query analysis
 Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]
-+- Project [k#x, v1#x, v2#x, v3#x, k#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- Project [k#x, v1#x, v2#x, k#x]
-      :  +- Join Inner, (k#x = k#x)
-      :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x, v1#x])
-      :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :     :        +- Project [k#x, v1#x]
-      :     :           +- SubqueryAlias nt1
-      :     :              +- LocalRelation [k#x, v1#x]
-      :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x, v2#x])
-      :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-      :              +- Project [k#x, v2#x]
-      :                 +- SubqueryAlias nt2
-      :                    +- LocalRelation [k#x, v2#x]
-      +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x, v3#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
-               +- Project [k#x, v3#x]
-                  +- SubqueryAlias nt3
-                     +- LocalRelation [k#x, v3#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x, k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias nt1
+   :     :  +- View (`nt1`, [k#x, v1#x])
+   :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :        +- Project [k#x, v1#x]
+   :     :           +- SubqueryAlias nt1
+   :     :              +- LocalRelation [k#x, v1#x]
+   :     +- SubqueryAlias nt2
+   :        +- View (`nt2`, [k#x, v2#x])
+   :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :              +- Project [k#x, v2#x]
+   :                 +- SubqueryAlias nt2
+   :                    +- LocalRelation [k#x, v2#x]
+   +- SubqueryAlias nt3
+      +- View (`nt3`, [k#x, v3#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
+            +- Project [k#x, v3#x]
+               +- SubqueryAlias nt3
+                  +- LocalRelation [k#x, v3#x]
 
 
 -- !query
@@ -620,61 +608,59 @@ Project [k#x, v1#x, v2#x, k#x, v3#x]
 SELECT * FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k
 -- !query analysis
 Project [k#x, v1#x, v2#x, k#x, v3#x]
-+- Project [k#x, v1#x, v2#x, k#x, v3#x]
-   +- Join Inner, (k#x = k#x)
-      :- Project [k#x, v1#x, v2#x, k#x]
-      :  +- Join Inner, (k#x = k#x)
-      :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x, v1#x])
-      :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :     :        +- Project [k#x, v1#x]
-      :     :           +- SubqueryAlias nt1
-      :     :              +- LocalRelation [k#x, v1#x]
-      :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x, v2#x])
-      :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-      :              +- Project [k#x, v2#x]
-      :                 +- SubqueryAlias nt2
-      :                    +- LocalRelation [k#x, v2#x]
-      +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x, v3#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
-               +- Project [k#x, v3#x]
-                  +- SubqueryAlias nt3
-                     +- LocalRelation [k#x, v3#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x, k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias nt1
+   :     :  +- View (`nt1`, [k#x, v1#x])
+   :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :        +- Project [k#x, v1#x]
+   :     :           +- SubqueryAlias nt1
+   :     :              +- LocalRelation [k#x, v1#x]
+   :     +- SubqueryAlias nt2
+   :        +- View (`nt2`, [k#x, v2#x])
+   :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :              +- Project [k#x, v2#x]
+   :                 +- SubqueryAlias nt2
+   :                    +- LocalRelation [k#x, v2#x]
+   +- SubqueryAlias nt3
+      +- View (`nt3`, [k#x, v3#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
+            +- Project [k#x, v3#x]
+               +- SubqueryAlias nt3
+                  +- LocalRelation [k#x, v3#x]
 
 
 -- !query
 SELECT nt1.*, nt2.*, nt3.*, nt4.* FROM nt1 natural join nt2 natural join nt3 natural join nt4
 -- !query analysis
 Project [k#x, v1#x, k#x, v2#x, k#x, v3#x, k#x, v4#x]
-+- Project [k#x, v1#x, v2#x, v3#x, v4#x, k#x, k#x, k#x]
-   +- Join Inner, (k#x = k#x)
-      :- Project [k#x, v1#x, v2#x, v3#x, k#x, k#x]
-      :  +- Join Inner, (k#x = k#x)
-      :     :- Project [k#x, v1#x, v2#x, k#x]
-      :     :  +- Join Inner, (k#x = k#x)
-      :     :     :- SubqueryAlias nt1
-      :     :     :  +- View (`nt1`, [k#x, v1#x])
-      :     :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-      :     :     :        +- Project [k#x, v1#x]
-      :     :     :           +- SubqueryAlias nt1
-      :     :     :              +- LocalRelation [k#x, v1#x]
-      :     :     +- SubqueryAlias nt2
-      :     :        +- View (`nt2`, [k#x, v2#x])
-      :     :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-      :     :              +- Project [k#x, v2#x]
-      :     :                 +- SubqueryAlias nt2
-      :     :                    +- LocalRelation [k#x, v2#x]
-      :     +- SubqueryAlias nt3
-      :        +- View (`nt3`, [k#x, v3#x])
-      :           +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
-      :              +- Project [k#x, v3#x]
-      :                 +- SubqueryAlias nt3
-      :                    +- LocalRelation [k#x, v3#x]
-      +- SubqueryAlias nt4
-         +- View (`nt4`, [k#x, v4#x])
-            +- Project [cast(k#x as string) AS k#x, cast(v4#x as int) AS v4#x]
-               +- Project [k#x, v4#x]
-                  +- SubqueryAlias nt4
-                     +- LocalRelation [k#x, v4#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x, v3#x, k#x, k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- Project [k#x, v1#x, v2#x, k#x]
+   :     :  +- Join Inner, (k#x = k#x)
+   :     :     :- SubqueryAlias nt1
+   :     :     :  +- View (`nt1`, [k#x, v1#x])
+   :     :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :     :        +- Project [k#x, v1#x]
+   :     :     :           +- SubqueryAlias nt1
+   :     :     :              +- LocalRelation [k#x, v1#x]
+   :     :     +- SubqueryAlias nt2
+   :     :        +- View (`nt2`, [k#x, v2#x])
+   :     :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :     :              +- Project [k#x, v2#x]
+   :     :                 +- SubqueryAlias nt2
+   :     :                    +- LocalRelation [k#x, v2#x]
+   :     +- SubqueryAlias nt3
+   :        +- View (`nt3`, [k#x, v3#x])
+   :           +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
+   :              +- Project [k#x, v3#x]
+   :                 +- SubqueryAlias nt3
+   :                    +- LocalRelation [k#x, v3#x]
+   +- SubqueryAlias nt4
+      +- View (`nt4`, [k#x, v4#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v4#x as int) AS v4#x]
+            +- Project [k#x, v4#x]
+               +- SubqueryAlias nt4
+                  +- LocalRelation [k#x, v4#x]

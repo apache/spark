@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -73,7 +74,8 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       def getStorageLevel(tableName: String): StorageLevel = {
         val table = spark.table(tableName)
         val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
-        cachedData.cachedRepresentation.cacheBuilder.storageLevel
+        cachedData.cachedRepresentation.fold(CacheManager.inMemoryRelationExtractor, identity).
+          cacheBuilder.storageLevel
       }
       sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $src SELECT 0")
