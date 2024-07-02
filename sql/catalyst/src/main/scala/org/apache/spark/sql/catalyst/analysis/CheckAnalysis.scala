@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -642,6 +643,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               "DECLARE VARIABLE",
               varName,
               c.defaultExpr.originalSQL)
+
+          case call @ Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args)
+              if call.resolved =>
+            val inputTypes = procedure.parameters.map(_.dataType).toSeq
+            ExpectsInputTypes.checkInputDataTypes(args, inputTypes) match {
+              case TypeCheckResult.TypeCheckSuccess =>
+                // OK
+              case mismatch: TypeCheckResult.DataTypeMismatch =>
+                call.dataTypeMismatch("CALL", mismatch)
+              case _ =>
+                SparkException.internalError("Invalid input for procedure")
+            }
 
           case _ => // Falls back to the following checks
         }

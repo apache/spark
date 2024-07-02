@@ -19,14 +19,15 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, UnaryExpression, Unevaluable, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils, RowDeltaUtils, WriteDeltaProjections}
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
@@ -1555,4 +1556,27 @@ case class SetVariable(
   override def child: LogicalPlan = sourceQuery
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
     copy(sourceQuery = newChild)
+}
+
+/**
+ * The logical plan for the CALL command.
+ */
+case class Call(procedure: LogicalPlan, args: Seq[Expression]) extends UnaryCommand {
+  override def output: Seq[Attribute] = procedure.output
+  override def child: LogicalPlan = procedure
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Call =
+    copy(procedure = newChild)
+
+  override def simpleString(maxFields: Int): String = {
+    val name = procedure match {
+      case ResolvedProcedure(catalog, ident, _) =>
+        s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
+      case UnresolvedProcedure(nameParts) =>
+        nameParts.quoted
+    }
+    val outputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val argsString = truncatedString(args, ", ", maxFields)
+    s"Call $outputString $name($argsString)"
+  }
 }

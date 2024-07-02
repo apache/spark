@@ -77,6 +77,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     UnpivotCoercion ::
     WidenSetOperationTypes ::
+    ProcedureArgumentCoercion ::
     new AnsiCombinedTypeCoercionRule(
       CollationTypeCasts ::
       InConversion ::

@@ -840,6 +840,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin)
   }
 
+  def noSuchRoutineError(name: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "ROUTINE_NOT_FOUND",
+      messageParameters = Map("routineName" -> toSQLId(name)))
+  }
+
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_ROUTINE",

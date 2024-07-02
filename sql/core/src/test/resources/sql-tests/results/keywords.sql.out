@@ -32,6 +32,7 @@ BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
+CALL	false
 CALLED	false
 CASCADE	false
 CASE	false

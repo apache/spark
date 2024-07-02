@@ -49,6 +49,7 @@ import org.apache.spark.sql.connector.catalog.{View => _, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -301,6 +302,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
+      ResolveProcedures ::
+      BindProcedures ::
       ResolveTableSpec ::
       ResolveAliases ::
       ResolveSubquery ::
@@ -2560,6 +2563,63 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val aggregator = V2Aggregator(aggFunc, arguments)
       aggregator.toAggregateExpression(u.isDistinct, u.filter)
     }
+  }
+
+  /**
+   * A rule that resolves procedures.
+   */
+  object ResolveProcedures extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
+      case Call(UnresolvedProcedure(name), args) =>
+        val (catalog, ident, procedure) = resolve(name)
+        Call(ResolvedProcedure(catalog, ident, procedure), args)
+    }
+
+    private def resolve(name: Seq[String]): (ProcedureCatalog, Identifier, UnboundProcedure) = {
+      try {
+        val CatalogAndIdentifier(catalog, ident) = expandIdentifier(name)
+        val procedureCatalog = catalog.asProcedureCatalog
+        val procedure = procedureCatalog.loadProcedure(ident)
+        (procedureCatalog, ident, procedure)
+      } catch {
+        case _: NoSuchProcedureException =>
+          throw QueryCompilationErrors.noSuchRoutineError(name)
+      }
+    }
+  }
+
+  /**
+   * A rule that binds procedures to the input types and rearranges arguments as needed.
+   */
+  object BindProcedures extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case Call(ResolvedProcedure(catalog, ident, unbound: UnboundProcedure), args)
+          if args.forall(_.resolved) =>
+        val bound = unbound.bind(toStructType(args))
+        validateParameterModes(bound)
+        val alignedArgs = NamedParametersSupport.defaultRearrange(bound, args)
+        Call(ResolvedProcedure(catalog, ident, bound), alignedArgs)
+    }
+
+    private def toStructType(exprs: Seq[Expression]): StructType = {
+      val fields = exprs.zipWithIndex.map {
+        case (expr, index) =>
+          expr match {
+            case NamedArgumentExpression(name, value) =>
+              StructField(name, value.dataType, value.nullable)
+            case _ =>
+              StructField(s"param$index", expr.dataType, expr.nullable)
+          }
+      }
+      StructType(fields)
+    }
+
+   private def validateParameterModes(procedure: BoundProcedure): Unit = {
+     procedure.parameters.find(_.mode != ProcedureParameter.Mode.IN).foreach { param =>
+       throw SparkException.internalError(s"Unsupported parameter mode: ${param.mode}")
+     }
+   }
   }
 
   /**
