@@ -305,13 +305,4 @@ object StateSourceOptions extends DataSourceOptions {
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
   }
-
-  private def getFirstCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val commitLog = new CommitLog(session,
-      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
-    commitLog.getEarliestBatchId() match {
-      case Some(firstId) => firstId
-      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
-    }
-  }
 }
