@@ -791,11 +791,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   private def fetchColumnFamilySchemas(
       checkpointDir: String,
       operatorId: Int): List[ColumnFamilySchema] = {
-    val hadoopConf = spark.sessionState.newHadoopConf()
-    val stateChkptPath = new Path(checkpointDir, s"state/$operatorId")
-    val stateSchemaPath = new Path(new Path(stateChkptPath, "_metadata"), "schema")
-    val schemaV3File = new StateSchemaV3File(hadoopConf, stateSchemaPath.toString)
-    schemaV3File.getLatest().get._2
+    fetchStateSchemaV3File(checkpointDir, operatorId).getLatest().get._2
   }
 
   private def fetchStateSchemaV3File(

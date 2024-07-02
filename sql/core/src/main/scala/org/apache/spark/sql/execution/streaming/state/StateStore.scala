@@ -288,9 +288,8 @@ sealed trait KeyStateEncoderSpec {
 }
 
 object KeyStateEncoderSpec {
-  def fromJson(m: Map[String, Any]): KeyStateEncoderSpec = {
+  def fromJson(keySchema: StructType, m: Map[String, Any]): KeyStateEncoderSpec = {
     // match on type
-    val keySchema = StructType.fromString(m("keySchema").asInstanceOf[String])
     m("keyStateEncoderType").asInstanceOf[String] match {
       case "NoPrefixKeyStateEncoderSpec" =>
         NoPrefixKeyStateEncoderSpec(keySchema)
@@ -307,8 +306,7 @@ object KeyStateEncoderSpec {
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
   override def jsonValue: JValue = {
-    ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec")) ~
-      ("keySchema" -> JString(keySchema.json))
+    ("keyStateEncoderType" -> JString("NoPrefixKeyStateEncoderSpec"))
   }
 }
 
@@ -321,7 +319,6 @@ case class PrefixKeyScanStateEncoderSpec(
 
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("PrefixKeyScanStateEncoderSpec")) ~
-      ("keySchema" -> JString(keySchema.json)) ~
       ("numColsPrefixKey" -> JInt(numColsPrefixKey))
   }
 }
@@ -336,7 +333,6 @@ case class RangeKeyScanStateEncoderSpec(
 
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
-      ("keySchema" -> JString(keySchema.json)) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
   }
 }

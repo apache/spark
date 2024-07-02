@@ -189,7 +189,7 @@ class IncrementalExecution(
 
   // Planning rule used to record the state schema for the first run and validate state schema
   // changes across query runs.
-  object StateSchemaValidationRuleAndStateMetadata extends SparkPlanPartialRule {
+  object StateSchemaAndOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       // In the case of TransformWithStateExec, we want to collect this StateSchema
       // filepath, and write this path out in the OperatorStateMetadata file
@@ -485,7 +485,7 @@ class IncrementalExecution(
 
       // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaValidationRuleAndStateMetadata.rule
+      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

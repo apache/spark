@@ -108,7 +108,11 @@ case class TransformWithStateExec(
     driverProcessorHandle
   }
 
-  def getNewSchema(): List[ColumnFamilySchema] = {
+  /**
+   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
+   * after init is called.
+   */
+  def getColFamilySchemas(): List[ColumnFamilySchema] = {
     val driverProcessorHandle = getDriverProcessorHandle
     val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
     closeProcessorHandle()
@@ -370,7 +374,7 @@ case class TransformWithStateExec(
 
   override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
     Array[String] = {
-    val newColumnFamilySchemas = getNewSchema()
+    val newColumnFamilySchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaFilePath().toString)
     schemaFile.getLatest() match {
@@ -389,7 +393,39 @@ case class TransformWithStateExec(
   private def validateSchemas(
       oldSchema: List[ColumnFamilySchema],
       newSchema: List[ColumnFamilySchema]): Unit = {
-    // TODO: Implement logic that allows for schema evolution
+    if (oldSchema.size != newSchema.size) {
+      throw new RuntimeException
+    }
+    // turn oldSchema to map
+    val oldSchemaMap = oldSchema.map(schema =>
+      (schema.columnFamilyName, schema)).toMap
+    newSchema.foreach { case newSchema: ColumnFamilySchemaV1 =>
+        val oldSchema = oldSchemaMap.get(newSchema.columnFamilyName)
+        if (oldSchema.isEmpty) {
+            throw new RuntimeException
+        }
+        if (oldSchema.get != newSchema) {
+            throw new RuntimeException
+        }
+      }
+  }
+
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    val stateStoreInfo =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+
+    val operatorPropertiesJson: JValue =
+      ("timeMode" -> JString(timeMode.toString)) ~
+      ("outputMode" -> JString(outputMode.toString))
+
+    val json = compact(render(operatorPropertiesJson))
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
   }
 
   private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
