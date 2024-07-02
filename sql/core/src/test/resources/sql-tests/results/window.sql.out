@@ -1318,11 +1318,12 @@ FROM
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.SparkException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "windowName" : "w"
+    "message" : "Undefined error message parameter for error class: 'MISSING_WINDOW_SPECIFICATION', MessageTemplate: Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'., Parameters: Map(windowName -> w)]"
   }
 }
 
@@ -1337,9 +1338,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "windowName" : "w"
+    "message" : "Undefined error message parameter for error class: 'MISSING_WINDOW_SPECIFICATION', MessageTemplate: Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'., Parameters: Map(windowName -> w)]"
   }
 }
 

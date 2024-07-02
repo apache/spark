@@ -254,6 +254,24 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       Array(ExpectedContext("percent_rank(a) FILTER (WHERE c > 1) OVER ()", 7, 50)))
   }
 
+  test("window specification error") {
+    assertAnalysisErrorClass(
+      inputPlan = CatalystSqlParser.parsePlan(
+        """
+          |WITH sample_data AS (
+          |    SELECT 1 AS a, 10 AS b UNION ALL
+          |    SELECT 2 AS a, 20 AS b
+          |)
+          |SELECT
+          |    AVG(a) OVER (b) AS avg_a
+          |FROM sample_data
+          |GROUP BY a, b;
+          |""".stripMargin),
+      expectedErrorClass = "MISSING_WINDOW_SPECIFICATION",
+      expectedMessageParameters = Map(
+        "windowName" -> "b"))
+  }
+
   test("higher order function with filter predicate") {
     assertAnalysisErrorClass(
       CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
