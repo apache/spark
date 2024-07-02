@@ -48,9 +48,8 @@ package object config {
         "join, reduceByKey, and parallelize when not set by user. " +
         "For distributed shuffle operations like reduceByKey and join, the largest number of " +
         "partitions in a parent RDD. For operations like parallelize with no parent RDDs, " +
-        "it depends on the cluster manager: Local mode: number of cores on the local machine " +
-        "Mesos fine grained mode: 8 Others: total number of cores on all executor nodes or 2, " +
-        "whichever is larger")
+        "it depends on the cluster manager: for example Local mode: number of cores on the " +
+        "local machine")
       .version("0.5.0")
       .intConf
 
