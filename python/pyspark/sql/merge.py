@@ -17,7 +17,7 @@
 import sys
 from typing import Dict, Optional, TYPE_CHECKING
 
-from pyspark.sql import Column
+from pyspark.sql.column import Column
 from pyspark.sql.utils import to_scala_map
 
 if TYPE_CHECKING:
@@ -43,9 +43,7 @@ class MergeIntoWriter:
 
         self._jwriter = df._jdf.mergeInto(table, _to_java_column(condition))
 
-    def whenMatched(
-        self, condition: Optional[Column] = None
-    ) -> "MergeIntoWriter.WhenMatched":
+    def whenMatched(self, condition: Optional[Column] = None) -> "MergeIntoWriter.WhenMatched":
         """
         Initialize a `WhenMatched` action with a condition.
 
