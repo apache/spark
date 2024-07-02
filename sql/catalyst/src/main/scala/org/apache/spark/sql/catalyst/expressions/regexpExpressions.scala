@@ -80,6 +80,8 @@ abstract class StringRegexExpression extends BinaryExpression
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override protected[spark] def expectedCost: Int = 100
 }
 
 // scalastyle:off line.contains.tab line.size.limit
