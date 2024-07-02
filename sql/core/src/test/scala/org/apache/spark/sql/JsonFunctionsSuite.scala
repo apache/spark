@@ -406,6 +406,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
+  test("to_json ISO default - old dates") {
+    withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+
+      val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("1800-01-01 00:00:00.0")))).toDF("a")
+
+      checkAnswer(
+        df.select(to_json($"a")),
+        Row("""{"_1":"1800-01-01T00:00:00.000-07:52:58"}""") :: Nil)
+    }
+  }
+
   test("to_json with option (dateFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Date.valueOf("2015-08-26")))).toDF("a")
     val options = Map("dateFormat" -> "dd/MM/yyyy")

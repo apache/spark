@@ -4975,6 +4975,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUPPORT_SECOND_OFFSET_FORMAT =
+    buildConf("spark.sql.files.supportSecondOffsetFormat")
+      .internal()
+      .doc("When set to true, datetime formatter used for csv, json and xml " +
+        "will support zone offsets that have seconds in it. e.g. LA timezone offset prior to 1883" +
+        "was -07:52:58. When this flag is not set we lose seconds information." )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
   // currently optional because we don't want to break existing users who are using the old config.
   // If this config is set, then we override the deprecated config.
@@ -5933,6 +5943,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
+
+  def supportSecondOffsetFormat: Boolean = getConf(SQLConf.SUPPORT_SECOND_OFFSET_FORMAT)
 
   def disabledJdbcConnectionProviders: String = getConf(
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)

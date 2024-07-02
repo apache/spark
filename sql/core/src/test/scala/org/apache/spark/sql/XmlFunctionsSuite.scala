@@ -166,6 +166,23 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(expected) :: Nil)
   }
 
+  test("to_xml ISO default - old dates") {
+    withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+      val schema = StructType(StructField("a", TimestampType, nullable = false) :: Nil)
+      val data = Seq(Row(java.sql.Timestamp.valueOf("1800-01-01 00:00:00.0")))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        .withColumn("a", struct($"a"))
+
+      val expected =
+        s"""|<ROW>
+            |    <a>1800-01-01T00:00:00.000-07:52:58</a>
+            |</ROW>""".stripMargin
+      checkAnswer(
+        df.select(to_xml($"a")),
+        Row(expected) :: Nil)
+    }
+  }
+
   test("to_xml with option (timestampFormat)") {
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
     val schema = StructType(StructField("a", TimestampType, nullable = false) :: Nil)

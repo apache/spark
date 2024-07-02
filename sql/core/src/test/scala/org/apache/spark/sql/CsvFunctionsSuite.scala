@@ -264,6 +264,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(to_csv($"a")), Row("1") :: Nil)
   }
 
+  test("to_csv ISO default - old dates") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("1800-01-01 00:00:00.0")))).toDF("a")
+
+    checkAnswer(df.select(to_csv($"a")), Row("1800-01-01T00:00:00.000-07:52:58") :: Nil)
+  }
+
   test("to_csv with option (timestampFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava

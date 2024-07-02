@@ -126,7 +126,11 @@ class JSONOptions(
     if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
     } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+      if (SQLConf.get.supportSecondOffsetFormat) {
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXXXX]"
+      } else {
+        s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+      }
     })
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
