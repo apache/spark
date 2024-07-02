@@ -78,7 +78,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 ### DROP COLUMNS
 
 `ALTER TABLE DROP COLUMNS` statement drops mentioned columns from an existing table.
-Note that this statement is only supported with v2 tables.
+Note that this statement is only supported with Delta lake tables.
 
 #### Syntax
 
@@ -101,7 +101,7 @@ ALTER TABLE table_identifier DROP { COLUMN | COLUMNS } [ ( ] col_name [ , ... ] 
 ### RENAME COLUMN
 
 `ALTER TABLE RENAME COLUMN` statement changes the column name of an existing table.
-Note that this statement is only supported with v2 tables.
+Note that this statement is only supported with Delta lake tables.
 
 #### Syntax
 
@@ -150,7 +150,7 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_name alterColumnA
 ### REPLACE COLUMNS
 
 `ALTER TABLE REPLACE COLUMNS` statement removes all existing columns and adds the new set of columns.
-Note that this statement is only supported with v2 tables.
+Note that this statement is only supported with Delta lake tables.
 
 #### Syntax
 
