@@ -227,10 +227,12 @@ case class StreamingSymmetricHashJoinExec(
   private val stateStoreNames =
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
-  override def operatorStateMetadata(): OperatorStateMetadata = {
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
     val info = getStateInfo
     val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    val stateStoreInfo = stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
+    val stateStoreInfo =
+      stateStoreNames.map(StateStoreMetadataV1(_, 0, info.numPartitions)).toArray
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
 
@@ -246,7 +248,8 @@ case class StreamingSymmetricHashJoinExec(
     watermarkUsedForStateCleanup && watermarkHasChanged
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+    Array[String] = {
     var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
@@ -261,6 +264,7 @@ case class StreamingSymmetricHashJoinExec(
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
     }
+    Array.empty
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

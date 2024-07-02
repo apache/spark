@@ -25,6 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{PRE_INIT, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Utils
@@ -48,7 +49,7 @@ object ImplicitGroupingKeyTracker {
  */
 object StatefulProcessorHandleState extends Enumeration {
   type StatefulProcessorHandleState = Value
-  val CREATED, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
+  val CREATED, PRE_INIT, INITIALIZED, DATA_PROCESSED, TIMER_PROCESSED, CLOSED = Value
 }
 
 class QueryInfoImpl(
@@ -312,4 +313,168 @@ class StatefulProcessorHandleImpl(
       throw StateStoreErrors.ttlMustBePositive("update", stateName)
     }
   }
+}
+
+/**
+ * This DriverStatefulProcessorHandleImpl is used within TransformWithExec
+ * on the driver side to collect the columnFamilySchemas before any processing is
+ * actually done. We need this class because we can only collect the schemas after
+ * the StatefulProcessor is initialized.
+ */
+class DriverStatefulProcessorHandleImpl extends StatefulProcessorHandle {
+
+  private[sql] val columnFamilySchemas: util.List[ColumnFamilySchema] =
+    new util.ArrayList[ColumnFamilySchema]()
+
+  private var currState: StatefulProcessorHandleState = PRE_INIT
+
+  def setHandleState(newState: StatefulProcessorHandleState): Unit = {
+    currState = newState
+  }
+
+  def getHandleState: StatefulProcessorHandleState = currState
+
+  private def verifyStateVarOperations(operationType: String): Unit = {
+    if (currState != PRE_INIT) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+        currState.toString)
+    }
+  }
+
+  /**
+   * Function to add the ValueState schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @tparam T - type of state variable
+   * @return - instance of ValueState of type T that can be used to store state persistently
+   */
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
+    val colFamilySchema = ValueStateImpl.columnFamilySchema(stateName, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to add the ValueStateWithTTL schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ValueState of type T that can be used to store state persistently
+   */
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
+    val colFamilySchema = ValueStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to add the ListState schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
+    verifyStateVarOperations("get_list_state")
+    val colFamilySchema = ListStateImpl.columnFamilySchema(stateName, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to add the ListStateWithTTL schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  override def getListState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T] = {
+    verifyStateVarOperations("get_list_state")
+    val colFamilySchema = ListStateImplWithTTL.columnFamilySchema(stateName, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to add the MapState schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc - spark sql encoder for the map key
+   * @param valEncoder - spark sql encoder for the map value
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V]): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
+    val colFamilySchema = MapStateImpl.columnFamilySchema(stateName, userKeyEnc, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /**
+   * Function to add the MapStateWithTTL schema to the list of column family schemas.
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor.
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc - spark sql encoder for the map key
+   * @param valEncoder - SQL encoder for state variable
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V],
+      ttlConfig: TTLConfig): MapState[K, V] = {
+    verifyStateVarOperations("get_map_state")
+    val colFamilySchema = MapStateImplWithTTL.columnFamilySchema(stateName, userKeyEnc, valEncoder)
+    columnFamilySchemas.add(colFamilySchema)
+    null
+  }
+
+  /** Function to return queryInfo for currently running task */
+  override def getQueryInfo(): QueryInfo = {
+    new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
+  }
+
+  /**
+   * Methods that are only included to satisfy the interface.
+   * These methods are no-ops on the driver side
+   */
+  override def registerTimer(expiryTimestampMs: Long): Unit = {}
+
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {}
+
+  override def listTimers(): Iterator[Long] = Iterator.empty
+
+  override def deleteIfExists(stateName: String): Unit = {}
 }

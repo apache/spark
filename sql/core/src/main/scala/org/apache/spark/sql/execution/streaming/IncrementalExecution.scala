@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -187,23 +187,34 @@ class IncrementalExecution(
     }
   }
 
-  object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
-    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
-    }
-  }
-
   // Planning rule used to record the state schema for the first run and validate state schema
   // changes across query runs.
-  object StateSchemaValidationRule extends SparkPlanPartialRule {
+  object StateSchemaValidationRuleAndStateMetadata extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      // In the case of TransformWithStateExec, we want to collect this StateSchema
+      // filepath, and write this path out in the OperatorStateMetadata file
+      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
+        val stateSchemaPaths =
+          stateStoreWriter.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
+        // write out the state schema paths to the metadata file
+        val metadata = stateStoreWriter.operatorStateMetadata(stateSchemaPaths)
+
+        stateStoreWriter match {
+          case tws: TransformWithStateExec =>
+            val metadataPath = OperatorStateMetadataV2.metadataFilePath(new Path(
+              checkpointLocation, tws.getStateInfo.operatorId.toString))
+            val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
+              metadataPath.toString)
+            operatorStateMetadataLog.add(currentBatchId, metadata)
+            tws
+          case _ =>
+            val metadataWriter = new OperatorStateMetadataWriter(new Path(
+              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+            metadataWriter.write(metadata)
+            stateStoreWriter
+        }
       case statefulOp: StatefulOperator if isFirstBatch =>
-        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf)
+        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId)
         statefulOp
     }
   }
@@ -443,11 +454,11 @@ class IncrementalExecution(
               new Path(checkpointLocation).getParent.toString,
               new SerializableConfiguration(hadoopConf))
             val opMetadataList = reader.allOperatorStateMetadata
-            ret = opMetadataList.map { operatorMetadata =>
-              val metadataInfoV1 = operatorMetadata
-                .asInstanceOf[OperatorStateMetadataV1]
-                .operatorInfo
-              metadataInfoV1.operatorId -> metadataInfoV1.operatorName
+            ret = opMetadataList.map {
+              case (OperatorStateMetadataV1(operatorInfo, _), _) =>
+                operatorInfo.operatorId -> operatorInfo.operatorName
+              case (OperatorStateMetadataV2(operatorInfo, _, _), _) =>
+                operatorInfo.operatorId -> operatorInfo.operatorName
             }.toMap
           } catch {
             case e: Exception =>
@@ -482,10 +493,9 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
 
-      // The two rules below don't change the plan but can cause the side effect that
+      // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaValidationRule.rule
-      planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+      planWithStateOpId transform StateSchemaValidationRuleAndStateMetadata.rule
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

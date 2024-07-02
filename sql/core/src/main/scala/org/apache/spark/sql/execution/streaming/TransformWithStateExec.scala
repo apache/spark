@@ -19,7 +19,14 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.jdk.CollectionConverters.CollectionHasAsScala
+
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.JString
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -90,6 +97,33 @@ case class TransformWithStateExec(
     } else {
       false
     }
+  }
+
+  override def operatorStateMetadataVersion: Int = 2
+
+  /**
+   * We initialize this processor handle in the driver to run the init function
+   * and fetch the schemas of the state variables initialized in this processor.
+   * @return a new instance of the driver processor handle
+   */
+  private def getDriverProcessorHandle: DriverStatefulProcessorHandleImpl = {
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    driverProcessorHandle
+  }
+
+  def getNewSchema(): List[ColumnFamilySchema] = {
+    val driverProcessorHandle = getDriverProcessorHandle
+    val columnFamilySchemas = driverProcessorHandle.columnFamilySchemas
+    closeProcessorHandle()
+    columnFamilySchemas.asScala.toList
+  }
+
+  private def closeProcessorHandle(): Unit = {
+    statefulProcessor.close()
+    statefulProcessor.setHandle(null)
   }
 
   /**
@@ -340,11 +374,59 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    // TODO: transformWithState is special because we don't have the schema of the state directly
-    // within the passed args. We need to gather this after running the init function
-    // within the stateful processor on the driver. This also requires a schema format change
-    // when recording this information persistently.
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration, batchId: Long):
+    Array[String] = {
+    val newColumnFamilySchemas = getNewSchema()
+    val schemaFile = new StateSchemaV3File(
+      hadoopConf, stateSchemaFilePath().toString)
+    schemaFile.getLatest() match {
+      case Some((_, oldColumnFamilySchemas)) =>
+        validateSchemas(oldColumnFamilySchemas, newColumnFamilySchemas)
+      case None =>
+    }
+    // Write the new schema to the schema file
+    schemaFile.add(batchId, newColumnFamilySchemas)
+    // purge oldest files
+    // schemaFile.purgeOldest(child.session.sessionState.conf.minBatchesToRetain)
+    Array(schemaFile.getPathFromBatchId(batchId))
+  }
+
+  private def validateSchemas(
+      oldSchema: List[ColumnFamilySchema],
+      newSchema: List[ColumnFamilySchema]): Unit = {
+    // TODO: Implement logic that allows for schema validation and evolution
+  }
+
+  /** Metadata of this stateful operator and its states stores. */
+  override def operatorStateMetadata(
+      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
+    val info = getStateInfo
+    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
+    // stateSchemaFilePath should be populated at this point
+    val stateStoreInfo =
+      Array(StateStoreMetadataV2(
+        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
+
+    val operatorPropertiesJson: JValue =
+      ("timeMode" -> JString(timeMode.toString)) ~
+      ("outputMode" -> JString(outputMode.toString))
+
+    val json = compact(render(operatorPropertiesJson))
+    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
+  }
+
+  private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
+    def stateInfo = getStateInfo
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+    storeName match {
+      case Some(storeName) =>
+        val storeNamePath = new Path(stateCheckpointPath, storeName)
+        new Path(new Path(storeNamePath, "_metadata"), "schema")
+      case None =>
+        new Path(new Path(stateCheckpointPath, "_metadata"), "schema")
+    }
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
