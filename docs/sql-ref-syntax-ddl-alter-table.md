@@ -236,20 +236,30 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
      
 ### SET AND UNSET
 
-#### SET TABLE PROPERTIES
+#### SET PROPERTIES
 
 `ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
 this overrides the old value with the new one.
 
-`ALTER TABLE UNSET` is used to drop the table property. 
+##### Syntax
+
+```sql
+-- Set Properties
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+```
+
+#### UNSET PROPERTIES
+
+`ALTER TABLE UNSET` command is used to drop the table property.
+
+**Note:** If the specified property key does not exist, when you use the v1 command and do not specify `IF EXISTS`,
+it will throw the error-condition `UNSET_NONEXISTENT_PROPERTIES` and finally `failed`,
+however regardless of whether `IF EXISTS` is set or not, the v2 command will ignore it and finally `succeed`.
 
 ##### Syntax
 
 ```sql
--- Set Table Properties 
-ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
-
--- Unset Table Properties
+-- Unset Properties
 ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
 ```
 

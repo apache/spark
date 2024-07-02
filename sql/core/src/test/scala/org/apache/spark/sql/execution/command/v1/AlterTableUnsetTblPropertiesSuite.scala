@@ -62,6 +62,10 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPr
     getTableProperties(tableIdent).getOrElse(key, null)
   }
 
+  /**
+   * When using the v1 command to unset `non-existent` properties, the command will
+   * throw the error-condition `"UNSET_NONEXISTENT_PROPERTIES` and finally `failed`
+   */
   test("alter table unset non-existent properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")

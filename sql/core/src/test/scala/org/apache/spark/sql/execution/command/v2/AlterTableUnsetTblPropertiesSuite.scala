@@ -52,6 +52,10 @@ class AlterTableUnsetTblPropertiesSuite
     getTableMetadata(tableIdent).properties.asScala.toMap.getOrElse(key, null)
   }
 
+  /**
+   * When using the v2 command to unset `non-existent` properties,
+   * the command will ignore `non-existent` properties and finally succeed
+   */
   test("alter table unset non-existent properties") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
@@ -60,8 +64,6 @@ class AlterTableUnsetTblPropertiesSuite
       sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3')")
       checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3"))
 
-      // when using the v2 command, when unsetting `non-existent` properties,
-      // The command will ignore `non-existent` properties and finally succeed
       // property to unset does not exist
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k3', 'k4')")
       checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2"))
