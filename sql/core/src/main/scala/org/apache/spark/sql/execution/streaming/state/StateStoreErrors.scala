@@ -298,6 +298,6 @@ class StateStoreValueRowFormatValidationFailure(errorMsg: String)
     messageParameters = Map("errorMsg" -> errorMsg))
 
 class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
- extends SparkUnsupportedOperationException(
-   errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
-   messageParameters = Map("inputClass" -> inputClass))
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
+    messageParameters = Map("inputClass" -> inputClass))

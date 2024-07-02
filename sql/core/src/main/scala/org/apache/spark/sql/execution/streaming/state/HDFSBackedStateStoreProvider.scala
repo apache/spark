@@ -901,7 +901,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
-      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version" +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
     new HDFSBackedStateStore(endVersion, newMap)
@@ -919,7 +919,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     ReadStateStore = {
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
-      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version" +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
       log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for read-only")
     new HDFSBackedReadStateStore(endVersion, newMap)
