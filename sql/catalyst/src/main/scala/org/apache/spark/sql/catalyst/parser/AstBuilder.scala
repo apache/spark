@@ -143,9 +143,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText != el.multipartIdentifier().getText =>
-          throw SparkException.internalError("Both labels should be same.")
-      case (None, Some(_)) =>
-        throw SparkException.internalError("End label can't exist without begin label.")
+        throw SqlScriptingErrors.labelsMismatch(
+          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+      case (None, Some(el: EndLabelContext)) =>
+        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
       case _ =>
     }
 
