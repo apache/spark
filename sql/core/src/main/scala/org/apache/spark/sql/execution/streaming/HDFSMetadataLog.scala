@@ -338,23 +338,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
     }
   }
 
-  /**
-   * Removes the oldest log files so that we only have the
-   * latest `minEntriesToMaintain` log files.
-   */
-  def purgeOldest(minEntriesToMaintain: Int): Unit = {
-    val batchIds = listBatches.sorted
-    if (batchIds.length > minEntriesToMaintain) {
-      val filesToDelete = batchIds.take(batchIds.length - minEntriesToMaintain)
-      filesToDelete.foreach { batchId =>
-        val path = batchIdToPath(batchId)
-        fileManager.delete(path)
-        if (metadataCacheEnabled) batchCache.remove(batchId)
-        logTrace(s"Removed metadata log file: $path")
-      }
-    }
-  }
-
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
