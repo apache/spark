@@ -328,6 +328,8 @@ case class Not(child: Expression)
       case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
       case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
       case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+      case Not(IsNull(c)) => IsNotNull(c)
+      case Not(IsNotNull(c)) => IsNull(c)
       case other => other
     }
   }
