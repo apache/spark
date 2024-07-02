@@ -19,11 +19,12 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.BlockId
-import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.storage.memory.{ExternalMemoryStore, MemoryStore}
 
 /**
  * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
@@ -50,11 +51,19 @@ private[memory] class StorageMemoryPool(
   }
 
   private var _memoryStore: MemoryStore = _
+  private var _extMemoryStore: ExternalMemoryStore = _
   def memoryStore: MemoryStore = {
     if (_memoryStore == null) {
       throw SparkException.internalError("memory store not initialized yet", category = "MEMORY")
     }
     _memoryStore
+  }
+
+  def extMemoryStore: ExternalMemoryStore = {
+    if (_extMemoryStore == null) {
+      throw new IllegalStateException("memory store not initialized yet")
+    }
+    _extMemoryStore
   }
 
   /**
@@ -65,14 +74,19 @@ private[memory] class StorageMemoryPool(
     _memoryStore = store
   }
 
+  final def setExternalMemoryStore(extMemoryStore: ExternalMemoryStore): Unit = {
+    _extMemoryStore = extMemoryStore
+  }
+
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
+  def acquireMemory(blockId: BlockId, numBytes: Long, conf: SparkConf): Boolean =
+    lock.synchronized {
     val numBytesToFree = math.max(0, numBytes - memoryFree)
-    acquireMemory(blockId, numBytes, numBytesToFree)
+    acquireMemory(blockId, numBytes, numBytesToFree, conf)
   }
 
   /**
@@ -86,12 +100,25 @@ private[memory] class StorageMemoryPool(
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      numBytesToFree: Long): Boolean = lock.synchronized {
+      numBytesToFree: Long,
+      conf: SparkConf): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
     if (numBytesToFree > 0) {
-      memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, memoryMode)
+      if (conf.get(config.STORAGE_MEMORY_EVICT_PREFERENCE) && extMemoryStore != null) {
+        val spaceFreedByEviction = extMemoryStore.evictEntriesToFreeSpace(numBytesToFree)
+        if (spaceFreedByEviction < numBytesToFree) {
+          memoryStore.evictBlocksToFreeSpace(
+            Some(blockId), numBytesToFree - spaceFreedByEviction, memoryMode)
+        }
+      } else {
+        val spaceFreedByEviction = memoryStore.evictBlocksToFreeSpace(
+          Some(blockId), numBytesToFree, memoryMode)
+        if (spaceFreedByEviction < numBytesToFree && extMemoryStore != null) {
+          extMemoryStore.evictEntriesToFreeSpace(numBytesToFree - spaceFreedByEviction)
+        }
+      }
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
     // back into this StorageMemoryPool in order to free memory. Therefore, these variables
@@ -123,15 +150,24 @@ private[memory] class StorageMemoryPool(
    *
    * @return number of bytes to be removed from the pool's capacity.
    */
-  def freeSpaceToShrinkPool(spaceToFree: Long): Long = lock.synchronized {
+  def freeSpaceToShrinkPool(spaceToFree: Long, conf: SparkConf): Long = lock.synchronized {
     val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
-      // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
-      val spaceFreedByEviction =
-        memoryStore.evictBlocksToFreeSpace(None, remainingSpaceToFree, memoryMode)
-      // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
-      // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
+      // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks
+      // or file cache:
+      var spaceFreedByEviction : Long = 0
+      if (conf.get(config.STORAGE_MEMORY_EVICT_PREFERENCE) && _extMemoryStore != null) {
+        spaceFreedByEviction = _extMemoryStore.evictEntriesToFreeSpace(spaceToFree)
+      } else {
+        spaceFreedByEviction = memoryStore.evictBlocksToFreeSpace(None,
+          remainingSpaceToFree, memoryMode)
+      }
+      // For memoryStore, when a block is released, BlockManager.dropFromMemory() calls
+      // releaseMemory(), so we do not need to decrement _memoryUsed here.
+      // For extMemoryStore, when cache entries are evicted, allocator.free() finally
+      // calls releaseMemory(), so we do not need to decrement _memoryUsed here.
+      // However, we do need to decrement the pool size.
       spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
     } else {
       spaceFreedByReleasingUnusedMemory
