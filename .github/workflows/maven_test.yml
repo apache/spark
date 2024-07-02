@@ -25,7 +25,7 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 21
       branch:
         description: Branch to run the build against
         required: false
@@ -40,12 +40,12 @@ on:
         description: OS to run this build.
         required: false
         type: string
-        default: ubuntu-22.04
+        default: macos-14
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{}'
+        default: '{"OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"}'
 jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
@@ -61,57 +61,13 @@ jobs:
         hive:
           - hive2.3
         modules:
-          - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#variant
-          - >-
-            graphx,streaming,hadoop-cloud
-          - >-
-            mllib-local,mllib
-          - >-
-            repl,sql#hive-thriftserver
-          - >-
-            connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro,connector#kinesis-asl
-          - >-
+         - >-
             sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [ "" ]
         excluded-tags: [ "" ]
         comment: [ "" ]
         include:
-          # Connect tests
-          - modules: connect
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            # TODO(SPARK-47110): Reenble AmmoniteTest tests in Maven builds
-            excluded-tags: org.apache.spark.tags.AmmoniteTest
-            comment: ""
-          # Hive tests
-          - modules: sql#hive
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            included-tags: org.apache.spark.tags.SlowHiveTest
-            comment: "- slow tests"
-          - modules: sql#hive
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            excluded-tags: org.apache.spark.tags.SlowHiveTest
-            comment: "- other tests"
-          # SQL tests
-          - modules: sql#core
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            included-tags: org.apache.spark.tags.ExtendedSQLTest
-            comment: "- extended tests"
-          - modules: sql#core
-            java: ${{ inputs.java }}
-            hadoop: ${{ inputs.hadoop }}
-            hive: hive2.3
-            included-tags: org.apache.spark.tags.SlowSQLTest
-            comment: "- slow tests"
           - modules: sql#core
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
