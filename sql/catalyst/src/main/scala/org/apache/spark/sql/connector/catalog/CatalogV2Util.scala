@@ -174,9 +174,9 @@ private[sql] object CatalogV2Util {
    * Apply ClusterBy changes to the partitioning transforms and return the result.
    */
   def applyClusterByChanges(
-    partitioning: Array[Transform],
-    schema: StructType,
-    changes: Seq[TableChange]): Array[Transform] = {
+     partitioning: Array[Transform],
+     schema: StructType,
+     changes: Seq[TableChange]): Array[Transform] = {
 
     val newPartitioning = partitioning.filterNot(_.isInstanceOf[ClusterByTransform]).toBuffer
     changes.foreach {
