@@ -88,18 +88,55 @@ private[spark] object SerDeUtil extends Logging {
     override def hasNext: Boolean = iter.hasNext
 
     override def next(): Array[Byte] = {
+      // Fill the buffer
       while (iter.hasNext && buffer.length < batch) {
         buffer += iter.next()
       }
-      val bytes = pickle.dumps(buffer.toArray)
+      // Pickle the buffer (or a part of it)
+      var bytes: Array[Byte] = null
+      var elementsToDump: Int = buffer.length
+      var done = false
+      while (!done) {
+        // Try pickling; if it fails, adjust the batch size and retry
+        try {
+          bytes = pickle.dumps(
+            if (elementsToDump == buffer.length) {
+              buffer.toArray
+            } else {
+              buffer.take(elementsToDump).toArray
+            }
+          )
+          done = true
+        } catch {
+          // Example: java.lang.IllegalArgumentException: Cannot grow BufferHolder by size
+          // 578595584 because the size after growing exceeds size limitation 2147483632
+          case e: java.lang.IllegalArgumentException =>
+            if (elementsToDump == 1) {
+              // if we can't even pickle a single element, throw the exception
+              throw e;
+            } else {
+              // retry with fewer elements
+              elementsToDump /= 2
+            }
+        }
+      }
+
+      // Pickling succeeded
       val size = bytes.length
-      // let  1M < size < 10M
-      if (size < 1024 * 1024) {
+      // Adjust batch so that 1M < size < 10M by expectation
+      if (size < 1024 * 1024 && elementsToDump == buffer.length) {
         batch *= 2
-      } else if (size > 1024 * 1024 * 10 && batch > 1) {
+      } else if ((size > 1024 * 1024 * 10 || elementsToDump < buffer.length) && batch > 1) {
         batch /= 2
       }
-      buffer.clear()
+
+      if (elementsToDump == buffer.length) {
+        // clear the buffer
+        buffer.clear()
+      } else {
+        // remove the first elementsToDump elements
+        buffer.remove(0, elementsToDump)
+      }
       bytes
     }
   }
