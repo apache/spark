@@ -145,7 +145,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*) ::
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
+        PushDownPredicates,
+        ConstantFolding,
+        BooleanSimplification,
+        PruneFilters) :: Nil
     }
 
     val batches = (
