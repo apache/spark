@@ -56,43 +56,29 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        useVirtualColFamily: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
 
-      useVirtualColumnFamily = useVirtualColFamily
-      if (useVirtualColumnFamily) {
-        // if use virtual column family, then use default col family, no need to create new
-        // TODO how to efficiently guarantee there isn't any value conflict for different key
-        def getNextRandShort: Short = {
-          (scala.util.Random.nextInt(Short.MaxValue - Short.MinValue + 1) + Short.MinValue).toShort
-        }
-        colFamilyToIdMap.putIfAbsent(colFamilyName, getNextRandShort)
-
-      } else {
-        rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+      // TODO how to efficiently guarantee there isn't any value conflict for different key
+      def getNextRandShort: Short = {
+        (scala.util.Random.nextInt(Short.MaxValue - Short.MinValue + 1) + Short.MinValue).toShort
       }
+      colFamilyToIdMap.putIfAbsent(colFamilyName, getNextRandShort)
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
-    // TODO verify with changelog checkpoint
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
 
-      val value = if (useVirtualColumnFamily) {
-        kvEncoder._2.decodeValue(
+      val value = kvEncoder._2.decodeValue(
           rocksDB.get(kvEncoder._1.encodeKey(key,
             colFamilyToIdMap.get(colFamilyName))))
-      } else {
-        kvEncoder._2.decodeValue(
-          rocksDB.get(kvEncoder._1.encodeKey(key), colFamilyName))
-      }
 
       if (!isValidated && value != null && !useColumnFamilies) {
         StateStoreProvider.validateStateRowFormat(
@@ -122,11 +108,8 @@ private[sql] class RocksDBStateStoreProvider
       verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
       "that supports multiple values for a single key.")
 
-      val encodedValues = if (useVirtualColumnFamily) {
+      val encodedValues =
         rocksDB.get(keyEncoder.encodeKey(key, colFamilyToIdMap.get(colFamilyName)))
-      } else {
-        rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
-      }
       valueEncoder.decodeValues(encodedValues)
     }
 
@@ -140,12 +123,10 @@ private[sql] class RocksDBStateStoreProvider
         " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot merge a null value")
-      val (encodedKey, physicalColFamilyName) = if (useVirtualColumnFamily) {
+      val (encodedKey, physicalColFamilyName) =
         (keyEncoder.encodeKey(key, colFamilyToIdMap.get(colFamilyName)),
           StateStore.DEFAULT_COL_FAMILY_NAME)
-      } else {
-        (keyEncoder.encodeKey(key), colFamilyName)
-      }
+
       rocksDB.merge(encodedKey, valueEncoder.encodeValue(value), physicalColFamilyName)
     }
 
@@ -154,52 +135,31 @@ private[sql] class RocksDBStateStoreProvider
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      if (useVirtualColumnFamily) {
-        rocksDB.put(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)),
-          kvEncoder._2.encodeValue(value))
-      } else {
-        rocksDB.put(kvEncoder._1.encodeKey(key),
-          kvEncoder._2.encodeValue(value), colFamilyName)
-      }
+      rocksDB.put(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)),
+        kvEncoder._2.encodeValue(value))
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      if (useVirtualColumnFamily) {
-        rocksDB.remove(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)))
-      } else {
-        rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
-      }
+      rocksDB.remove(kvEncoder._1.encodeKey(key, colFamilyToIdMap.get(colFamilyName)))
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
-      if (useVirtualColumnFamily) {
-        val cfId: Short = colFamilyToIdMap.get(colFamilyName)
-        rocksDB.prefixScan(getIdBytes(cfId)).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
-            kvEncoder._2.decodeValue(kv.value))
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-            StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
-            isValidated = true
-          }
-          rowPair
+
+      val cfId: Short = colFamilyToIdMap.get(colFamilyName)
+      rocksDB.prefixScan(getIdBytes(cfId)).map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
+          kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
+          isValidated = true
         }
-      } else {
-        rocksDB.iterator(colFamilyName).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-            kvEncoder._2.decodeValue(kv.value))
-          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
-            StateStoreProvider.validateStateRowFormat(
-              rowPair.key, keySchema, rowPair.value, valueSchema, storeConf)
-            isValidated = true
-          }
-          rowPair
-        }
+        rowPair
       }
     }
 
@@ -210,22 +170,12 @@ private[sql] class RocksDBStateStoreProvider
         "Prefix scan requires setting prefix key!")
 
       val rowPair = new UnsafeRowPair()
-      if (useVirtualColumnFamily) {
-        val prefix = kvEncoder._1.encodePrefixKey(prefixKey, colFamilyToIdMap.get(colFamilyName))
 
-        rocksDB.prefixScan(prefix).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
-            kvEncoder._2.decodeValue(kv.value))
-          rowPair
-        }
-      } else {
-        val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-
-        rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-            kvEncoder._2.decodeValue(kv.value))
-          rowPair
-        }
+      val prefix = kvEncoder._1.encodePrefixKey(prefixKey, colFamilyToIdMap.get(colFamilyName))
+      rocksDB.prefixScan(prefix).map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
+          kvEncoder._2.decodeValue(kv.value))
+        rowPair
       }
     }
 
@@ -336,9 +286,7 @@ private[sql] class RocksDBStateStoreProvider
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
       verify(useColumnFamilies, "Column families are not supported in this store")
-      val result = if (!useVirtualColumnFamily) {
-        rocksDB.removeColFamilyIfExists(colFamilyName)
-      } else {
+      val result = {
         // TODO more efficient way to do remove col family?
         val idPrefix = getIdBytes(
           colFamilyToIdMap.get(colFamilyName)
@@ -364,9 +312,6 @@ private[sql] class RocksDBStateStoreProvider
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false): Unit = {
-    // TODO should we propagate useVirtualColFamily as a param
-    // TODO how to expose the virtual col family to the users
-    //  - cluster config? operator-wise? stateStore-wise?
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -457,8 +402,6 @@ private[sql] class RocksDBStateStoreProvider
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private val colFamilyToIdMap = new java.util.concurrent.ConcurrentHashMap[String, Short]
-
-  private var useVirtualColumnFamily: Boolean = false
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }

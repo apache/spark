@@ -35,7 +35,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   import testImplicits._
 
   testWithColumnFamilies("RocksDBStateStore",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val input = MemoryStream[Int]
       val conf = Map(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -62,7 +62,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithColumnFamilies("SPARK-36236: query progress contains only the " +
     s"expected RocksDB store custom metrics",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     // fails if any new custom metrics are added to remind the author of API changes
     import testImplicits._
 
@@ -123,7 +123,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { dir =>
@@ -161,7 +161,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
   }
 
   testWithColumnFamilies("SPARK-36519: RocksDB format version can be set by the SQL conf",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
@@ -183,7 +183,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   testWithColumnFamilies("SPARK-37224: numRowsTotal = 0 when " +
     s"trackTotalNumberOfRows is turned off",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled, false) { (_, _) =>
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       withSQLConf(
         (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),

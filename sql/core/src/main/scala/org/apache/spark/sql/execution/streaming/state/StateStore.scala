@@ -131,7 +131,6 @@ trait StateStore extends ReadStateStore {
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
-      useVirtualColFamily: Boolean = false,
       isInternal: Boolean = false): Unit
 
   /**
@@ -342,7 +341,8 @@ trait StateStoreProvider {
    *                         A value not greater than 0 means the operator doesn't activate prefix
    *                         key, and the operator should not call prefixScan method in StateStore.
    * @param useColumnFamilies Whether the underlying state store uses a single or multiple column
-   *                          families
+   *                          families; by default we'll use virtual column family if this parameter
+   *                          is set to true
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    * @param useMultipleValuesPerKey Whether the underlying state store needs to support multiple

@@ -126,7 +126,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
-        useVirtualColFamily: Boolean = false,
         isInternal: Boolean = false): Unit = {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
