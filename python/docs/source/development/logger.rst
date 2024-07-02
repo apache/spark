@@ -19,12 +19,12 @@
 Logging in PySpark
 ==================
 
-.. currentmodule:: pyspark.logging
+.. currentmodule:: pyspark.logger
 
 Introduction
 ============
 
-The :ref:`pyspark.logging</reference/pyspark.logging.rst>` module facilitates structured client-side logging for PySpark users.
+The :ref:`pyspark.logger</reference/pyspark.logger.rst>` module facilitates structured client-side logging for PySpark users.
 
 This module includes a :class:`PySparkLogger` class that provides several methods for logging messages at different levels in a structured JSON format:
 
@@ -57,11 +57,11 @@ Example log entry:
 
 Setting Up
 ==========
-To start using the PySpark logging module, you need to import the :class:`PySparkLogger` from the :ref:`pyspark.logging</reference/pyspark.logging.rst>`.
+To start using the PySpark logging module, you need to import the :class:`PySparkLogger` from the :ref:`pyspark.logger</reference/pyspark.logger.rst>`.
 
 .. code-block:: python
 
-    from pyspark.logging import PySparkLogger
+    from pyspark.logger import PySparkLogger
 
 Usage
 =====
@@ -75,7 +75,7 @@ You can create a logger instance by calling the :meth:`PySparkLogger.get_logger`
 
 Logging Messages
 ----------------
-The logger provides three main methods for logging messages: :meth:`PySparkLogger.log_info`, :meth:`PySparkLogger.log_warn`, and :meth:`PySparkLogger.log_error`.
+The logger provides three main methods for log messages: :meth:`PySparkLogger.log_info`, :meth:`PySparkLogger.log_warn`, and :meth:`PySparkLogger.log_error`.
 
 - **log_info**: Use this method to log informational messages.
   
@@ -106,7 +106,7 @@ Logging to Console
 
 .. code-block:: python
 
-    from pyspark.logging import PySparkLogger
+    from pyspark.logger import PySparkLogger
 
     # Create a logger that logs to console
     logger = PySparkLogger.get_logger("ConsoleLogger")
@@ -136,7 +136,7 @@ To log messages to a file, you can specify a filename when getting the logger:
 
 .. code-block:: python
 
-    from pyspark.logging import PySparkLogger
+    from pyspark.logger import PySparkLogger
 
     # Create a logger that logs to a file
     file_logger = PySparkLogger.get_logger("FileLogger", filename="application.log")

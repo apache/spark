@@ -18,7 +18,7 @@
 """
 PySpark logging
 """
-from pyspark.logging.logger import (  # noqa: F401
+from pyspark.logger.logger import (  # noqa: F401
     PySparkLogger,
 )
 

@@ -17,13 +17,12 @@
 #
 
 import unittest
-import logging
 import json
 from io import StringIO
-from pyspark.logging.logger import PySparkLogger
+from pyspark.logger.logger import PySparkLogger
 
 
-class LoggingTest(unittest.TestCase):
+class LoggerTest(unittest.TestCase):
     def setUp(self):
         self.logger = PySparkLogger.get_logger("TestLogger", stream=StringIO())
 
@@ -60,7 +59,7 @@ class LoggingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.logging.tests.test_logging import *  # noqa: F401
+    from pyspark.logger.tests.test_logger import *  # noqa: F401
 
     try:
         import xmlrunner

@@ -33,17 +33,20 @@ class JSONFormatter(logging.Formatter):
 
 
 class PySparkLogger(logging.Logger):
-    def __init__(self, name="PySparkLogger", level=logging.INFO, stream=None):
+    def __init__(self, name="PySparkLogger", level=logging.INFO, stream=None, filename=None):
         super().__init__(name, level)
         if not self.hasHandlers():
-            self.handler = logging.StreamHandler(stream)
+            if filename:
+                self.handler = logging.FileHandler(filename)
+            else:
+                self.handler = logging.StreamHandler(stream)
             self.handler.setFormatter(JSONFormatter())
             self.addHandler(self.handler)
             self.setLevel(level)
 
     @staticmethod
-    def get_logger(name="PySparkLogger", level=logging.INFO, stream=None):
-        return PySparkLogger(name, level, stream)
+    def get_logger(name="PySparkLogger", level=logging.INFO, stream=None, filename=None):
+        return PySparkLogger(name, level, stream, filename)
 
     def log_info(self, message, **kwargs):
         self.info(message, exc_info=False, extra={"kwargs": kwargs})

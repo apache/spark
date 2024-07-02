@@ -26,6 +26,6 @@ Development
    testing
    debugging
    setting_ide
-   logging
+   logger
    errors
 
