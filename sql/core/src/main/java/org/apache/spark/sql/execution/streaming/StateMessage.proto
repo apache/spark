@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package org.apache.spark.sql.execution.streaming.state;
+
+message StateRequest {
+  int32 version = 1;
+  oneof method {
+    StatefulProcessorCall statefulProcessorCall = 2;
+    StateVariableRequest stateVariableRequest = 3;
+    ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
+  }
+}
+
+message StateResponse {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+}
+
+message StatefulProcessorCall {
+  oneof method {
+    SetHandleState setHandleState = 1;
+    StateCallCommand getValueState = 2;
+    StateCallCommand getListState = 3;
+    StateCallCommand getMapState = 4;
+  }
+}
+
+message StateVariableRequest {
+  oneof method {
+    ValueStateCall valueStateCall = 1;
+    ListStateCall listStateCall = 2;
+  }
+}
+
+message ImplicitGroupingKeyRequest {
+  oneof method {
+    SetImplicitKey setImplicitKey = 1;
+    RemoveImplicitKey removeImplicitKey = 2;
+  }
+}
+
+message StateCallCommand {
+  string stateName = 1;
+  string schema = 2;
+}
+
+message ValueStateCall {
+  oneof method {
+    Exists exists = 1;
+    Get get = 2;
+    Update update = 3;
+    Clear clear = 4;
+  }
+}
+
+message ListStateCall {
+  oneof method {
+    Exists exists = 1;
+    Get get = 2;
+    Clear clear = 3;
+  }
+}
+
+message SetImplicitKey {
+  string key = 1;
+}
+
+message RemoveImplicitKey {
+}
+
+message Exists {
+  string stateName = 1;
+}
+
+message Get {
+  string stateName = 1;
+}
+
+message Update {
+  string stateName = 1;
+  string schema = 2;
+  bytes value = 3;
+}
+
+message Clear {
+  string stateName = 1;
+}
+
+enum HandleState {
+  CREATED = 0;
+  INITIALIZED = 1;
+  DATA_PROCESSED = 2;
+  CLOSED = 3;
+}
+
+message SetHandleState {
+  HandleState state = 1;
+}

@@ -15,14 +15,17 @@
 # limitations under the License.
 #
 import sys
-from typing import List, Union, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
 from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions.builtin import udf
 from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.streaming.state_api_client import StateApiClient, StatefulProcessorHandleState
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
         PandasCogroupedMapFunction,
         ArrowGroupedMapFunction,
         ArrowCogroupedMapFunction,
+        DataFrameLike as PandasDataFrameLike
     )
     from pyspark.sql.group import GroupedData
 
@@ -357,6 +361,55 @@ class PandasGroupedOpsMixin:
             timeoutConf,
         )
         return DataFrame(jdf, self.session)
+
+
+    def transformWithStateInPandas(self, 
+            stateful_processor: StatefulProcessor,
+            outputStructType: Union[StructType, str],
+            outputMode: str,
+            timeMode: str) -> DataFrame:
+        
+        from pyspark.sql import GroupedData
+        from pyspark.sql.functions import pandas_udf
+        assert isinstance(self, GroupedData)
+
+        def transformWithStateUDF(state_api_client: StateApiClient, key: Any,
+                                  inputRows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
+            handle = StatefulProcessorHandle(state_api_client)
+
+            print(f"checking handle state: {state_api_client.handle_state}")
+            if (state_api_client.handle_state == StatefulProcessorHandleState.CREATED):
+                print("initializing stateful processor")
+                stateful_processor.init(handle)
+                print("setting handle state to initialized")
+                state_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
+
+            print(f"handling input rows for key: {key[0]}")
+            state_api_client.set_implicit_key(str(key[0]))
+            result = stateful_processor.handleInputRows(key, inputRows)
+            state_api_client.remove_implicit_key()
+            
+            return result
+        
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
+
+        udf = pandas_udf(
+            transformWithStateUDF,  # type: ignore[call-overload]
+            returnType=outputStructType,
+            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE,
+        )
+        df = self._df
+        udf_column = udf(*[df[col] for col in df.columns])
+        
+        jdf = self._jgd.transformWithStateInPandas(
+            udf_column._jc.expr(),
+            self.session._jsparkSession.parseDataType(outputStructType.json()),
+            outputMode,
+            timeMode,
+        )
+        return DataFrame(jdf, self.session)
+
 
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]

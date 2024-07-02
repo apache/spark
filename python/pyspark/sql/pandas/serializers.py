@@ -19,9 +19,14 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+from enum import Enum
+from itertools import groupby
+import os
+import socket
+from typing import Any
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
-from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer
+from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer, CPickleSerializer, write_with_length
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     to_arrow_type,
@@ -1101,6 +1106,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             This function helps to ensure the requirement for Pandas UDFs - Pandas UDFs require a
             START_ARROW_STREAM before the Arrow stream is sent.
 
+            
             START_ARROW_STREAM should be sent after creating the first record batch so in case of
             an error, it can be sent back to the JVM before the Arrow stream starts.
             """
@@ -1116,3 +1122,86 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         batches_to_write = init_stream_yield_batches(serialize_batches())
 
         return ArrowStreamSerializer.dump_stream(self, batches_to_write, stream)
+
+
+class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
+
+    def __init__(
+            self,
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            arrow_max_records_per_batch):
+        super(
+            TransformWithStateInPandasSerializer,
+            self
+        ).__init__(timezone, safecheck, assign_cols_by_name)
+
+        # self.state_server_port = state_server_port
+
+        # # open client connection to state server socket
+        # self._client_socket = socket.socket()
+        # self._client_socket.connect(("localhost", state_server_port))
+        # sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+        # self.state_serializer = TransformWithStateInPandasStateSerializer(sockfile)
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.key_offsets = None
+
+    # Nothing special here, we need to create the handle and read
+    # data in groups.
+    def load_stream(self, stream):
+        import pyarrow as pa
+        from itertools import tee
+
+        def generate_data_batches(batches):
+            for batch in batches:
+                data_pandas = [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+                key_series = [data_pandas[o] for o in self.key_offsets]
+                batch_key = tuple(s[0] for s in key_series)
+                yield (batch_key, data_pandas)
+
+        print("Generating data batches...")
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        print("Returning data batches...")
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            yield (k, g)
+
+
+    def dump_stream(self, iterator, stream):
+        result = [(b, t) for x in iterator for y, t in x for b in y]    
+        super().dump_stream(result, stream)
+    
+class ImplicitGroupingKeyTracker:
+    def __init__(self) -> None:
+        self._key = None
+
+    def setKey(self, key: Any) -> None:
+        self._key = key
+
+    def getKey(self) -> Any:
+        return self._key
+
+
+class TransformWithStateInPandasStateSerializer:
+
+    def __init__(self, sockfile) -> None:
+        self.sockfile = sockfile
+        self.grouping_key_tracker = ImplicitGroupingKeyTracker()
+
+    def load_stream(self, stream):
+        pass
+
+    def dump_stream(self, iterator, stream):
+        pass
+
+    def send(self, proto_message):
+        write_with_length(proto_message, self.sockfile)
+        self.sockfile.flush()
+
+    def receive(self):
+        return read_int(self.sockfile)
+    
+    def readStr(self):
+        return self.sockfile.readline()

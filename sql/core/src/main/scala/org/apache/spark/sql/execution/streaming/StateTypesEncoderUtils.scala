@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
@@ -57,7 +58,7 @@ class StateTypesEncoder[GK, V](
     keySerializer: Serializer[GK],
     valEncoder: Encoder[V],
     stateName: String,
-    hasTtl: Boolean) {
+    hasTtl: Boolean) extends Logging {
   import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 
   /** Variables reused for conversions between byte array and UnsafeRow */
@@ -98,6 +99,7 @@ class StateTypesEncoder[GK, V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
     val groupingKey = keyOption.get.asInstanceOf[GK]
+    logWarning(s"Serializing grouping key: $groupingKey")
     keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
   }
 

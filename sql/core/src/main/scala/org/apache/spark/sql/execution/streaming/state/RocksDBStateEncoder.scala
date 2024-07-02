@@ -603,17 +603,18 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
 }
 
 /**
- * Supports encoding multiple values per key in RocksDB.
- * A single value is encoded in the format below, where first value is number of bytes
- * in actual encodedUnsafeRow followed by the encoded value itself.
+ * Supports encoding multiple values per key in RocksDB, where value is of type UnsafeRow,
+ *
+ * A single value is encoded in the format below, where first part is number of bytes
+ * in unsafeRow followed by the unsafeRow itself.
  *
  * |---size(bytes)--|--unsafeRowEncodedBytes--|
  *
  * Multiple values are separated by a delimiter character.
  *
- * This encoder supports RocksDB StringAppendOperator merge operator. Values encoded can be
- * merged in RocksDB using merge operation, and all merged values can be read using decodeValues
- * operation.
+ * This encoder supports RocksDB [[org.rocksdb.StringAppendOperator]] merge operator. Values
+ * encoded can be merged in RocksDB via RocksDB merge operation, and all merged values can be
+ * read back using decodeValues method.
  */
 class MultiValuedStateEncoder(valueSchema: StructType)
   extends RocksDBValueStateEncoder with Logging {
