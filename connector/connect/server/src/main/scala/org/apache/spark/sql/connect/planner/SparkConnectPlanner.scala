@@ -1474,6 +1474,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformExpression(exp: proto.Expression): Expression = transformExpression(exp, None)
+
   /**
    * Transforms an input protobuf expression into the Catalyst expression. This is usually not
    * called directly. Typically the planner will traverse the expressions automatically, only
