@@ -150,7 +150,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
       .queues()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace(resource)
+      .resource(resource).serverSideApply()
     testResources += resource
   }
 
@@ -177,7 +177,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     kubernetesTestComponents.kubernetesClient
       .load(new FileInputStream(yamlPath))
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace()
+      .serverSideApply()
     testYAMLPaths += yamlPath
   }
 

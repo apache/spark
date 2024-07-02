@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
+import java.nio.charset.Charset
 import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -27,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.apache.commons.compress.utils.IOUtils
+import org.apache.commons.io.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
@@ -83,7 +84,7 @@ object Utils extends Logging {
     }
     val listener = new ReadyListener()
     val watch = pod
-      .readingInput(System.in)
+      .redirectingInput()
       .writingOutput(out)
       .writingError(System.err)
       .withTTY()
@@ -94,7 +95,7 @@ object Utils extends Logging {
     listener.waitForClose()
     watch.close()
     out.flush()
-    val result = out.toString()
+    val result = out.toString(Charset.defaultCharset())
     result
   }
 
