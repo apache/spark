@@ -144,6 +144,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
     }
 
+  override def getDriverLogUrls: Option[Map[String, String]] = {
+    val logUrlHandler = new ExecutorLogUrlHandler(conf.get(UI.CUSTOM_DRIVER_LOG_URL))
+    getDriverAttributes.map(attr => logUrlHandler.applyPattern(Map.empty, attr)).filter(_.nonEmpty)
+  }
+
   class DriverEndpoint extends IsolatedThreadSafeRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
