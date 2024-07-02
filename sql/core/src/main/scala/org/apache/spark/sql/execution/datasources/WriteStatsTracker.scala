@@ -28,6 +28,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 trait WriteTaskStats extends Serializable
 
 
+trait PartitionTaskStats extends Serializable {
+  def numFiles: Int
+  def numBytes: Long
+  def numRows: Long
+}
+
 /**
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
@@ -48,6 +54,19 @@ trait WriteTaskStatsTracker {
    * @param filePath Path of the file into which future rows will be written.
    */
   def newFile(filePath: String): Unit
+
+  /**
+   * Process the fact that a new file for a partition is about to be written.
+   *
+   * NOTE: This is an extension to the original [[newFile()]] that adds support for
+   * reporting statistics about partitions.
+   *
+   * @param filePath Path of the file into which future rows will be written.
+   * @param partition Identifier for the partition
+   */
+  def newFile(filePath: String, partition: Option[InternalRow]): Unit = {
+    newFile(filePath)
+  }
 
   /**
    * Process the fact that a file is finished to be written and closed.
@@ -106,4 +125,30 @@ trait WriteJobStatsTracker extends Serializable {
    * The framework will make sure to call this with the right arguments.
    */
   def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit
+
+  /**
+   * Process the given collection of stats computed during this job.
+   * E.g. aggregate them, write them to memory / disk, issue warnings, whatever.
+   *
+   * NOTE: This is an extension to the original [[processStats()]] that adds support for
+   * reporting statistics about partitions.
+   *
+   * @param stats         One [[WriteTaskStats]] object from each successful write task.
+   * @param jobCommitTime Time of committing the job.
+   * @param partitionsMap A map of [[InternalRow]] to a partition subpath
+   * @note The type of @param `stats` is too generic. These classes should probably be parametrized:
+   *       WriteTaskStatsTracker[S <: WriteTaskStats]
+   *       WriteJobStatsTracker[S <: WriteTaskStats, T <: WriteTaskStatsTracker[S]]
+   *       and this would then be:
+   *       def processStats(stats: Seq[S]): Unit
+   *       but then we wouldn't be able to have a Seq[WriteJobStatsTracker] due to type
+   *       co-/contra-variance considerations. Instead, you may feel free to just cast `stats`
+   *       to the expected derived type when implementing this method in a derived class.
+   *       The framework will make sure to call this with the right arguments.
+   */
+  def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long,
+                   partitionsMap: Map[InternalRow, String] = Map.empty): Unit = {
+    processStats(stats, jobCommitTime)
+  }
+
 }
