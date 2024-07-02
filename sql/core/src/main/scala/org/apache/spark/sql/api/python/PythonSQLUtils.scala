@@ -73,18 +73,23 @@ private[sql] object PythonSQLUtils extends Logging {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
-  private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
+  private def listAllSQLConfigs(): Seq[(String, String, String, String, Set[String])] = {
     val conf = new SQLConf()
     conf.getAllDefinedConfs
   }
 
   def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
-    // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    listAllSQLConfigs().filterNot(p => SQLConf.isStaticConfigKey(p._1)).toArray
+    listAllSQLConfigs()
+    .filterNot(p => SQLConf.isStaticConfigKey(p._1))
+    .map(c => (c._1, c._2, c._3, c._4))
+    .toArray
   }
 
   def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
-    listAllSQLConfigs().filter(p => SQLConf.isStaticConfigKey(p._1)).toArray
+    listAllSQLConfigs()
+    .filter(p => SQLConf.isStaticConfigKey(p._1))
+    .map(c => (c._1, c._2, c._3, c._4))
+    .toArray
   }
 
   def isTimestampNTZPreferred: Boolean =

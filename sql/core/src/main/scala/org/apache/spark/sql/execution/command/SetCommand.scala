@@ -139,8 +139,8 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
-          case (key, defaultValue, doc, version) =>
+        sparkSession.sessionState.conf.getAllDefinedConfs.sortBy(_._1).map {
+          case (key, defaultValue, doc, version, _) =>
             Row(
               key,
               Option(defaultValue).getOrElse("<undefined>"),

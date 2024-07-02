@@ -68,6 +68,8 @@ The followings are best practices of naming configs for some common cases:
  * @param doc the documentation for the configuration
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to users.
+ * @param documentationGroups groups that are used to organize related configs for display in our
+ *    documentation.
  * @param version the spark version when the configuration was released.
  * @tparam T the value type
  */
@@ -80,6 +82,7 @@ private[spark] abstract class ConfigEntry[T] (
     val stringConverter: T => String,
     val doc: String,
     val isPublic: Boolean,
+    val documentationGroups: Set[String],
     val version: String) {
 
   import ConfigEntry._
@@ -120,6 +123,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    documentationGroups: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -130,6 +134,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter,
     doc,
     isPublic,
+    documentationGroups,
     version
   ) {
 
@@ -152,6 +157,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    documentationGroups: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -162,6 +168,7 @@ private class ConfigEntryWithDefaultFunction[T] (
     stringConverter,
     doc,
     isPublic,
+    documentationGroups,
     version
   ) {
 
@@ -184,6 +191,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    documentationGroups: Set[String],
     version: String)
   extends ConfigEntry(
     key,
@@ -194,6 +202,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter,
     doc,
     isPublic,
+    documentationGroups,
     version
   ) {
 
@@ -220,6 +229,7 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean,
+    documentationGroups: Set[String],
     version: String)
   extends ConfigEntry[Option[T]](
     key,
@@ -230,6 +240,7 @@ private[spark] class OptionalConfigEntry[T](
     v => v.map(rawStringConverter).orNull,
     doc,
     isPublic,
+    documentationGroups,
     version
   ) {
 
@@ -250,6 +261,7 @@ private[spark] class FallbackConfigEntry[T] (
     alternatives: List[String],
     doc: String,
     isPublic: Boolean,
+    documentationGroups: Set[String],
     version: String,
     val fallback: ConfigEntry[T])
   extends ConfigEntry[T](
@@ -261,6 +273,7 @@ private[spark] class FallbackConfigEntry[T] (
     fallback.stringConverter,
     doc,
     isPublic,
+    documentationGroups,
     version
   ) {
 
