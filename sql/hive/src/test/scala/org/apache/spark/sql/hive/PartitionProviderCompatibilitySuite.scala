@@ -348,7 +348,8 @@ class PartitionProviderCompatibilitySuite
 
   /**
    * Runs a test against a multi-level partitioned table, then validates that the custom locations
-   * were respected by the output writer.
+   * were respected by the output writer for insert into,
+   * or locations are updated for INSERT OVERWRITE.
    *
    * The initial partitioning structure is:
    *   /P1=0/P2=0  -- custom location a
@@ -356,7 +357,7 @@ class PartitionProviderCompatibilitySuite
    *   /P1=1/P2=0  -- custom location c
    *   /P1=1/P2=1  -- default location
    */
-  private def testCustomLocations(testFn: => Unit): Unit = {
+  private def testCustomLocations(testFn: => Unit, overwrite: Boolean = false): Unit = {
     val base = Utils.createTempDir(namePrefix = "base")
     val a = Utils.createTempDir(namePrefix = "a")
     val b = Utils.createTempDir(namePrefix = "b")
@@ -381,16 +382,31 @@ class PartitionProviderCompatibilitySuite
       val numC = spark.sql("select * from test where P1=1 and P2=0").count()
       Utils.deleteRecursively(a)
       spark.sql("refresh table test")
-      assert(spark.sql("select * from test where P1=0 and P2=0").count() == 0)
-      assert(spark.sql("select * from test").count() == initialCount - numA)
+      if (overwrite) {
+        assert(spark.sql("select * from test where P1=0 and P2=0").count() == numA)
+        assert(spark.sql("select * from test").count() == initialCount)
+      } else {
+        assert(spark.sql("select * from test where P1=0 and P2=0").count() == 0)
+        assert(spark.sql("select * from test").count() == initialCount - numA)
+      }
       Utils.deleteRecursively(b)
       spark.sql("refresh table test")
-      assert(spark.sql("select * from test where P1=0 and P2=1").count() == 0)
-      assert(spark.sql("select * from test").count() == initialCount - numA - numB)
+      if (overwrite) {
+        assert(spark.sql("select * from test where P1=0 and P2=1").count() == numB)
+        assert(spark.sql("select * from test").count() == initialCount)
+      } else {
+        assert(spark.sql("select * from test where P1=0 and P2=1").count() == 0)
+        assert(spark.sql("select * from test").count() == initialCount - numA - numB)
+      }
       Utils.deleteRecursively(c)
       spark.sql("refresh table test")
-      assert(spark.sql("select * from test where P1=1 and P2=0").count() == 0)
-      assert(spark.sql("select * from test").count() == initialCount - numA - numB - numC)
+      if (overwrite) {
+        assert(spark.sql("select * from test where P1=1 and P2=0").count() == numC)
+        assert(spark.sql("select * from test").count() == initialCount)
+      } else {
+        assert(spark.sql("select * from test where P1=1 and P2=0").count() == 0)
+        assert(spark.sql("select * from test").count() == initialCount - numA - numB - numC)
+      }
     } finally {
       Utils.deleteRecursively(base)
       Utils.deleteRecursively(a)
@@ -450,7 +466,7 @@ class PartitionProviderCompatibilitySuite
   }
 
   test("overwrite partial dynamic partitions") {
-    testCustomLocations {
+    testCustomLocations({
       spark.sql("insert overwrite table test partition (P1=0, P2) select id, id from range(10)")
       assert(spark.sql("select * from test").count() == 10)
       assert(spark.sql("show partitions test").count() == 12)
@@ -469,22 +485,22 @@ class PartitionProviderCompatibilitySuite
       spark.sql("insert overwrite table test partition (P1=3, P2) select id, id from range(100)")
       assert(spark.sql("select * from test").count() == 102)
       assert(spark.sql("show partitions test").count() == 102)
-    }
+    }, true)
   }
 
   test("overwrite fully dynamic partitions") {
-    testCustomLocations {
+    testCustomLocations({
       spark.sql("insert overwrite table test partition (P1, P2) select id, id, id from range(10)")
       assert(spark.sql("select * from test").count() == 10)
       assert(spark.sql("show partitions test").count() == 10)
       spark.sql("insert overwrite table test partition (P1, P2) select id, id, id from range(5)")
       assert(spark.sql("select * from test").count() == 5)
       assert(spark.sql("show partitions test").count() == 5)
-    }
+    }, true)
   }
 
   test("overwrite static partition") {
-    testCustomLocations {
+    testCustomLocations({
       spark.sql("insert overwrite table test partition (P1=0, P2=0) select id from range(10)")
       assert(spark.sql("select * from test").count() == 10)
       assert(spark.sql("show partitions test").count() == 4)
@@ -497,7 +513,7 @@ class PartitionProviderCompatibilitySuite
       spark.sql("insert overwrite table test partition (P1=1, P2=2) select id from range(5)")
       assert(spark.sql("select * from test").count() == 15)
       assert(spark.sql("show partitions test").count() == 5)
-    }
+    }, true)
   }
 
   test("append data with DataFrameWriter") {

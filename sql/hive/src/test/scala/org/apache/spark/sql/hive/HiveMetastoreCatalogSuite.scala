@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -454,4 +459,37 @@ class DataSourceWithHiveMetastoreCatalogSuite
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
     }
   }
+
+  test("SPARK-46714 overwrite a partition with custom location") {
+    Seq("static", "dynamic").foreach(partitionMode => {
+      withSQLConf("spark.sql.sources.partitionOverwriteMode" -> partitionMode) {
+        withTable("t1") {
+          Seq((0, "p1"), (1, "p2"), (2, "p3")).toDF("id", "p")
+            .write.partitionBy("p").saveAsTable("t1")
+          checkAnswer(spark.table("t1").sort("id"), Seq(Row(0, "p1"), Row(1, "p2"), Row(2, "p3")))
+
+          sql("alter table t1 partition (p='p3') set location 'mockFile:///somepath1'")
+          sql("insert overwrite table t1 partition(p) select 22, 'p3'")
+          checkAnswer(spark.table("t1").where("p='p3'"), Seq(Row(22, "p3")))
+        }
+      }
+    })
+  }
+}
+
+class MockCustomFileSystem extends RawLocalFileSystem {
+  override def initialize(uri: URI, conf: Configuration): Unit = {
+    super.initialize(uri, conf)
+  }
+
+  override def getUri: URI = MockCustomFileSystem.MOCK_NAME
+
+  override def delete(path: Path, recursive: Boolean): Boolean = {
+    checkPath(path)
+    true
+  }
+}
+
+object MockCustomFileSystem {
+  val MOCK_NAME = URI.create("mockFile:///")
 }
