@@ -32,7 +32,14 @@ private[sql] object SqlApiConfHelper {
   val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
-  val DEFAULT_COLLATION: String = "spark.sql.session.collation.default"
+  val DEFAULT_COLLATION_KEY: String = "spark.sql.session.collation.default"
+  val USE_V1_SOURCE_LIST_KEY: String = "spark.sql.sources.useV1SourceList"
+  val BINARY_OUTPUT_STYLE_KEY: String = "spark.sql.binaryOutputStyle"
+  val SUPPORT_QUOTED_REGEX_COLUMN_NAME_KEY: String = "spark.sql.parser.quotedRegexColumnNames"
+  val CODEGEN_FALLBACK_KEY: String = "spark.sql.codegen.fallback"
+  val DATAFRAME_RETAIN_GROUP_COLUMNS_KEY: String = "spark.sql.retainGroupColumns"
+  val ENFORCE_RESERVED_KEYWORDS_KEY: String = "spark.sql.ansi.enforceReservedKeywords"
+  val WHOLESTAGE_CODEGEN_ENABLED_KEY: String = "spark.sql.codegen.wholeStage"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

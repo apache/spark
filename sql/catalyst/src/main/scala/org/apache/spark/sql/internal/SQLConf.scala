@@ -767,7 +767,7 @@ object SQLConf {
       .createWithDefault(Utils.isTesting)
 
   val DEFAULT_COLLATION =
-    buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+    buildConf(SqlApiConfHelper.DEFAULT_COLLATION_KEY)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")

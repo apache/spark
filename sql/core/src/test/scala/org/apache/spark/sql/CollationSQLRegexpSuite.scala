@@ -87,7 +87,7 @@ class CollationSQLRegexpSuite
   test("Like simplification should work with collated strings (for default collation)") {
     val tableNameBinary = "T_BINARY"
     withTable(tableNameBinary) {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UTF8_BINARY") {
         sql(s"CREATE TABLE IF NOT EXISTS $tableNameBinary(c STRING) using PARQUET")
         sql(s"INSERT INTO $tableNameBinary(c) VALUES('ABC')")
         checkAnswer(sql(s"select c like 'ab%' FROM $tableNameBinary"), Row(false))
@@ -99,7 +99,7 @@ class CollationSQLRegexpSuite
     }
     val tableNameLcase = "T_LCASE"
     withTable(tableNameLcase) {
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_LCASE") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION_KEY -> "UTF8_LCASE") {
         sql(s"CREATE TABLE IF NOT EXISTS $tableNameLcase(c STRING) using PARQUET")
         sql(s"INSERT INTO $tableNameLcase(c) VALUES('ABC')")
         checkAnswer(sql(s"select c like 'ab%' FROM $tableNameLcase"), Row(true))
