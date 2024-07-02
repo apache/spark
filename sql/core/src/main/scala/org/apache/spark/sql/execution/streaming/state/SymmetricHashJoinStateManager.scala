@@ -87,7 +87,8 @@ class SymmetricHashJoinStateManager(
     partitionId: Int,
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
-    useStateStoreCoordinator: Boolean = true) extends Logging {
+    useStateStoreCoordinator: Boolean = true,
+    snapshotStartVersion: Option[Long] = None) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -480,6 +481,8 @@ class SymmetricHashJoinStateManager(
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = if (useStateStoreCoordinator) {
+        assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
+          "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
@@ -489,7 +492,16 @@ class SymmetricHashJoinStateManager(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           useColumnFamilies = false, storeConf, hadoopConf,
           useMultipleValuesPerKey = false)
-        stateStoreProvider.getStore(stateInfo.get.storeVersion)
+        if (snapshotStartVersion.isDefined) {
+          if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
+            throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+              stateStoreProvider.getClass.toString)
+          }
+          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+            .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
+        } else {
+          stateStoreProvider.getStore(stateInfo.get.storeVersion)
+        }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
       store

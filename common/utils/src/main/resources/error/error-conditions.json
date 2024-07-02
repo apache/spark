@@ -236,6 +236,11 @@
           "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
         ]
       },
+      "CANNOT_READ_MISSING_SNAPSHOT_FILE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
       "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
@@ -249,6 +254,11 @@
       "CANNOT_READ_STREAMING_STATE_FILE" : {
         "message" : [
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
+        "message" : [
+          "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
         ]
       },
       "UNCATEGORIZED" : {
@@ -3798,6 +3808,13 @@
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.SupportsFineGrainedReplay.",
+      "Therefore, it does not support option snapshotStartBatchId in state data source."
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [

@@ -439,6 +439,39 @@ object StateStoreProvider {
 }
 
 /**
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read fine
+ * grained state data which is replayed from a specific snapshot version. It is used by the
+ * snapshotStartBatchId option in state data source.
+ */
+trait SupportsFineGrainedReplay {
+
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   * Only implement this if there is read-only optimization for the state store.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
+    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
+  }
+}
+
+/**
  * Unique identifier for a provider, used to identify when providers can be reused.
  * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
  * instance is not reused across query restarts.

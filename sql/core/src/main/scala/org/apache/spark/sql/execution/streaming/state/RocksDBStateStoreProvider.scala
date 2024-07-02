@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
-  extends StateStoreProvider with Logging with Closeable {
+  extends StateStoreProvider with Logging with Closeable
+  with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
   class RocksDBStateStore(lastVersion: Long) extends StateStore {
@@ -366,6 +367,30 @@ private[sql] class RocksDBStateStoreProvider
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
+  }
+
+  /**
+   * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
+   * If snapshot for snapshotVersion does not exist, an error will be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   * @return [[StateStore]]
+   */
+  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+    try {
+      if (snapshotVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
+      }
+      if (endVersion < snapshotVersion) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
+      }
+      rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+      new RocksDBStateStore(endVersion)
+    }
+    catch {
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
   }
 }
 

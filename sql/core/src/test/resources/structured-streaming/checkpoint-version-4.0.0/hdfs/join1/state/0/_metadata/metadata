@@ -1,0 +1,2 @@
+v1
+{"operatorInfo":{"operatorId":0,"operatorName":"symmetricHashJoin"},"stateStoreInfo":[{"storeName":"left-keyToNumValues","numColsPrefixKey":0,"numPartitions":5},{"storeName":"left-keyWithIndexToValue","numColsPrefixKey":0,"numPartitions":5},{"storeName":"right-keyToNumValues","numColsPrefixKey":0,"numPartitions":5},{"storeName":"right-keyWithIndexToValue","numColsPrefixKey":0,"numPartitions":5}]}
