@@ -83,6 +83,9 @@ object SparkConnectServerUtils {
     if (isDebug) {
       builder.redirectError(Redirect.INHERIT)
       builder.redirectOutput(Redirect.INHERIT)
+    } else {
+      builder.redirectError(Redirect.DISCARD)
+      builder.redirectOutput(Redirect.DISCARD)
     }
 
     val process = builder.start()
