@@ -35,7 +35,8 @@ private[kafka010] class KafkaRelation(
     failOnDataLoss: Boolean,
     includeHeaders: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
-    endingOffsets: KafkaOffsetRangeLimit)
+    endingOffsets: KafkaOffsetRangeLimit,
+    locationAssigner: KafkaPartitionLocationAssigner)
   extends BaseRelation with TableScan with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
@@ -61,7 +62,8 @@ private[kafka010] class KafkaRelation(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
       sourceOptions,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      driverGroupIdPrefix = s"$uniqueGroupId-driver",
+      locationAssigner)
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Seq[KafkaOffsetRange] = try {

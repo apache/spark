@@ -30,7 +30,8 @@ private[kafka010] class KafkaBatch(
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit,
-    includeHeaders: Boolean)
+    includeHeaders: Boolean,
+    partitionLocationAssigner: KafkaPartitionLocationAssigner)
   extends Batch with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
@@ -52,7 +53,8 @@ private[kafka010] class KafkaBatch(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
       sourceOptions,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+      driverGroupIdPrefix = s"$uniqueGroupId-driver",
+      partitionLocationAssigner)
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Seq[KafkaOffsetRange] = try {

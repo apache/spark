@@ -26,10 +26,8 @@ import scala.util.control.NonFatal
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTimestamp}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{NUM_RETRY, OFFSETS, TOPIC_PARTITION_OFFSET}
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
@@ -52,7 +50,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     consumerStrategy: ConsumerStrategy,
     override val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String) extends KafkaOffsetReader with Logging {
+    driverGroupIdPrefix: String,
+    partitionLocationAssigner: KafkaPartitionLocationAssigner)
+    extends KafkaOffsetReader with Logging {
 
   /**
    * [[UninterruptibleThreadRunner]] ensures that all
@@ -100,6 +100,28 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+
+  private def userSpecifiedLocationPreferences(executors: Array[ExecutorDescription])
+      : Map[TopicPartition, Array[String]] = {
+    val topics = fetchTopicPartitions()
+      .map(_.topic())
+      .toSet
+
+    val partitionDescrs = uninterruptibleThreadRunner.runUninterruptibly {
+      topics
+        .flatMap { (topicName: String) =>
+          consumer.partitionsFor(topicName).asScala
+        }
+      }
+      .map(partInfo => PartitionDescription.fromPartitionInfo(partInfo))
+      .toArray
+      .sortBy(descr => (descr.topic, descr.partition))
+
+    partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
+      .map {
+        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.host))
+      }
+  }
 
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
@@ -472,24 +494,12 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         }
       }.toArray.toImmutableArraySeq
     } else {
-      offsetRangesBase
+      val execs = getSortedExecutorList
+      rangeCalculator.getLocatedRanges(
+        offsetRangesBase,
+        execs.map(_.host),
+        userSpecifiedLocationPreferences(execs))
     }
-  }
-
-  private def getSortedExecutorList(): Array[String] = {
-    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-      if (a.host == b.host) {
-        a.executorId > b.executorId
-      } else {
-        a.host > b.host
-      }
-    }
-
-    val bm = SparkEnv.get.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
   }
 
   override def getOffsetRangesFromResolvedOffsets(
@@ -552,7 +562,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList().toImmutableArraySeq)
+    val execs = getSortedExecutorList
+    rangeCalculator.getRanges(ranges, execs.map(_.id), userSpecifiedLocationPreferences(execs))
   }
 
   private def partitionsAssignedToConsumer(

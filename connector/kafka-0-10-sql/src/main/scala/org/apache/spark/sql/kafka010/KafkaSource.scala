@@ -21,11 +21,9 @@ import java.{util => ju}
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{ERROR, FROM_OFFSET, OFFSETS, TIP, TOPIC_PARTITIONS, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -332,7 +330,7 @@ private[kafka010] class KafkaSource(
         .map(converter.toInternalRowWithoutHeaders)
     }
 
-    logInfo(log"GetBatch generating RDD of offset range: " +
+    logWarning(log"GetBatch generating RDD of offset range: " +
       log"${MDC(TOPIC_PARTITIONS, offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))}")
 
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema, isStreaming = true)
@@ -404,20 +402,4 @@ private[kafka010] class KafkaSource(
   override def prepareForTriggerAvailableNow(): Unit = {
     allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
   }
-}
-
-/** Companion object for the [[KafkaSource]]. */
-private[kafka010] object KafkaSource {
-  def getSortedExecutorList(sc: SparkContext): Array[String] = {
-    val bm = sc.env.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
-  }
-
-  private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-    if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
-  }
-
 }
