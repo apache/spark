@@ -176,7 +176,13 @@ object SQLExecution extends Logging {
             shuffleIds.foreach { shuffleId =>
               queryExecution.shuffleCleanupMode match {
                 case RemoveShuffleFiles =>
-                  SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+                  // Do not unregister the shuffle on MapOutputTracker here to trigger stage retry.
+                  // Otherwise, downstream tasks will fail with MetadataFetchFailedException.
+                  if (sc.isLocal) {
+                    SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+                  } else {
+                    sc.shuffleDriverComponents.removeShuffle(shuffleId, false)
+                  }
                 case SkipMigration =>
                   SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
                 case _ => // this should not happen
