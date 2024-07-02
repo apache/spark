@@ -68,6 +68,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.Executor.TASK_THREAD_NAME_PREFIX
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
@@ -119,6 +120,9 @@ private[spark] object Utils
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  /** Thread name used in YARN cluster mode to run user's main method in ApplicationMaster. */
+  val DRIVER_USER_THREAD_NAME = "Driver"
 
   private val weakStringInterner = Interners.newWeakInterner[String]()
 
@@ -2015,27 +2019,38 @@ private[spark] object Utils
     }
   }
 
+  private val threadInfoOrdering = Ordering.fromLessThan {
+    (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
+      def priority(ti: ThreadInfo): Int = ti.getThreadName match {
+        case name if name.contains(TASK_THREAD_NAME_PREFIX) => 3
+        case DRIVER_USER_THREAD_NAME => 2
+        case "main" => 1
+        case _ => 0
+      }
+
+      val v1 = priority(threadTrace1)
+      val v2 = priority(threadTrace2)
+      if (v1 == v2) {
+        val name1 = threadTrace1.getThreadName.toLowerCase(Locale.ROOT)
+        val name2 = threadTrace2.getThreadName.toLowerCase(Locale.ROOT)
+        val nameCmpRes = name1.compareTo(name2)
+        if (nameCmpRes == 0) {
+          threadTrace1.getThreadId < threadTrace2.getThreadId
+        } else {
+          nameCmpRes < 0
+        }
+      } else {
+        v1 > v2
+      }
+    }
+  }
+
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
   def getThreadDump(): Array[ThreadStackTrace] = {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
-    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortWith { case (threadTrace1, threadTrace2) =>
-        val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
-        val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
-        if (v1 == v2) {
-          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
-          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
-          val nameCmpRes = name1.compareTo(name2)
-          if (nameCmpRes == 0) {
-            threadTrace1.getThreadId < threadTrace2.getThreadId
-          } else {
-            nameCmpRes < 0
-          }
-        } else {
-          v1 > v2
-        }
-    }.map(threadInfoToThreadStackTrace)
+    ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+      .sorted(threadInfoOrdering).map(threadInfoToThreadStackTrace)
   }
 
   /** Return a heap dump. Used to capture dumps for the web UI */

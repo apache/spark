@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ThreadInfo
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -38,6 +39,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.Mockito.doReturn
+import org.scalatest.PrivateMethodTester
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
@@ -47,7 +51,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
-class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMethodTester {
 
   test("timeConversion") {
     // Test -1
@@ -1076,6 +1080,38 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("ThreadInfoOrdering") {
+    val mainT = mock[ThreadInfo]
+    doReturn("main").when(mainT).toString
+    doReturn("main").when(mainT).getThreadName
+    doReturn(1L).when(mainT).getThreadId
+
+    val driverT = mock[ThreadInfo]
+    doReturn("Driver").when(driverT).toString
+    doReturn("Driver").when(driverT).getThreadName
+    doReturn(2L).when(driverT).getThreadId
+
+    val task1T = mock[ThreadInfo]
+    doReturn(11L).when(task1T).getThreadId
+    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+      .when(task1T).getThreadName
+    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+      .when(task1T).toString
+
+    val task2T = mock[ThreadInfo]
+    doReturn(22L).when(task2T).getThreadId
+    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+      .when(task2T).getThreadName
+    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+      .when(task2T).toString
+
+    val threadInfoOrderingMethod =
+      PrivateMethod[Ordering[ThreadInfo]](Symbol("threadInfoOrdering"))
+    val sorted = Seq(mainT, driverT, task1T, task2T)
+      .sorted(Utils.invokePrivate(threadInfoOrderingMethod()))
+    assert(sorted === Seq(task1T, task2T, driverT, mainT))
   }
 
   test("redact sensitive information") {
