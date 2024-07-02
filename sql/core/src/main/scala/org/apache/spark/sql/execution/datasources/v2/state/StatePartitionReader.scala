@@ -145,6 +145,10 @@ class StatePartitionReader(
   }
 }
 
+/**
+ * An implementation of [[PartitionReader]] for the readChangeFeed mode of State Data Source.
+ * It reads the change of state over batches of a particular partition.
+ */
 class StateStoreChangeDataPartitionReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
