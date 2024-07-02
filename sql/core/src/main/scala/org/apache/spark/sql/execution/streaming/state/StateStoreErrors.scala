@@ -111,12 +111,6 @@ object StateStoreErrors {
     new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
   }
 
-  def cannotPerformOperationWithInvalidTimeMode(
-      operationType: String,
-      timeMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeMode = {
-    new StatefulProcessorCannotPerformOperationWithInvalidTimeMode(operationType, timeMode)
-  }
-
   def cannotPerformOperationWithInvalidHandleState(
       operationType: String,
       handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
@@ -176,14 +170,6 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
-  )
-
-class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
-    operationType: String,
-    timeMode: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE",
-    messageParameters = Map("operationType" -> operationType, "timeMode" -> timeMode)
   )
 
 class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
