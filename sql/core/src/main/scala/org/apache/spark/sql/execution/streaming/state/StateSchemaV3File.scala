@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
-import org.apache.spark.sql.internal.SQLConf
 
 object StateSchemaV3File {
   val COLUMN_FAMILY_SCHEMA_VERSION = 1
@@ -38,6 +37,12 @@ object StateSchemaV3File {
  * The StateSchemaV3File is used to write the schema of multiple column families.
  * Right now, this is primarily used for the TransformWithState operator, which supports
  * multiple column families to keep the data for multiple state variables.
+ * This class is different than other HDFSMetadataLog files in that the files are written
+ * to a directory with the batchId as the directory name, and the metadata is written to
+ * a file with a random UUID as the name.
+ * If a query fails after we have written the new State Schema file, and we restart with
+ * a different schema, we want to make sure that we don't read the old schema file with
+ * the same batch, so we create a new one.
  * @param hadoopConf Hadoop configuration that is used to read / write metadata files.
  * @param path Path to the directory that will be used for writing metadata.
  * @param metadataCacheEnabled Whether to cache the batches' metadata in memory.
