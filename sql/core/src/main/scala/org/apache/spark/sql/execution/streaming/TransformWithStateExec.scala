@@ -409,24 +409,6 @@ case class TransformWithStateExec(
     }
   }
 
-  /** Metadata of this stateful operator and its states stores. */
-  override def operatorStateMetadata(
-      stateSchemaPaths: Array[String] = Array.empty): OperatorStateMetadata = {
-    val info = getStateInfo
-    val operatorInfo = OperatorInfoV1(info.operatorId, shortName)
-    // stateSchemaFilePath should be populated at this point
-    val stateStoreInfo =
-      Array(StateStoreMetadataV2(
-        StateStoreId.DEFAULT_STORE_NAME, 0, info.numPartitions, stateSchemaPaths.head))
-
-    val operatorPropertiesJson: JValue =
-      ("timeMode" -> JString(timeMode.toString)) ~
-      ("outputMode" -> JString(outputMode.toString))
-
-    val json = compact(render(operatorPropertiesJson))
-    OperatorStateMetadataV2(operatorInfo, stateStoreInfo, json)
-  }
-
   private def stateSchemaFilePath(storeName: Option[String] = None): Path = {
     def stateInfo = getStateInfo
     val stateCheckpointPath =
