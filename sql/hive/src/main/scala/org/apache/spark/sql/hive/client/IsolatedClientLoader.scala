@@ -242,8 +242,7 @@ private[hive] class IsolatedClientLoader(
           // In Java 9, the boot classloader can see few JDK classes. The intended parent
           // classloader for delegation is now the platform classloader.
           // See http://java9.wtf/class-loading/
-          val platformCL = classOf[ClassLoader].getMethod("getPlatformClassLoader")
-            .invoke(null).asInstanceOf[ClassLoader]
+          val platformCL = ClassLoader.getPlatformClassLoader
           // Check to make sure that the root classloader does not know about Hive.
           assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
           platformCL
