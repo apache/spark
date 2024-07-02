@@ -2356,6 +2356,32 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
+   * Create a [[Cast]] (with try semantics) expression for ':::' syntax.
+   */
+  override def visitTryCastByColon(ctx: TryCastByColonContext): Expression = withOrigin(ctx) {
+    // This is identical to `visitCastByColon`, except for using `EvalMode.TRY`.
+    val rawDataType = typedVisit[DataType](ctx.dataType())
+    ctx.dataType() match {
+      case context: PrimitiveDataTypeContext =>
+        val typeCtx = context.`type`()
+        if (typeCtx.start.getType == STRING) {
+          typeCtx.children.asScala.toSeq match {
+            case Seq(_, cctx: CollateClauseContext) =>
+              throw QueryParsingErrors.dataTypeUnsupportedError(
+                rawDataType.typeName,
+                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
+            case _ =>
+          }
+        }
+      case _ =>
+    }
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
+    val cast = Cast(expression(ctx.primaryExpression), dataType, evalMode = EvalMode.TRY)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast
+  }
+
+  /**
    * Create a [[CreateStruct]] expression.
    */
   override def visitStruct(ctx: StructContext): Expression = withOrigin(ctx) {
