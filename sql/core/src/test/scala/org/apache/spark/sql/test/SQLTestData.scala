@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 private[sql] trait SQLTestData { self =>
   protected def spark: SparkSession
 
-  // Helper object to import SQL implicits without a concrete SQLContext
+  // Helper object to import SQL implicits without a concrete SparkSession
   private object internalImplicits extends SQLImplicits {
     protected override def session: SparkSession = self.spark
   }
@@ -41,7 +41,7 @@ private[sql] trait SQLTestData { self =>
   import internalImplicits._
   import SQLTestData._
 
-  // Note: all test data should be lazy because the SQLContext is not set up yet.
+  // Note: all test data should be lazy because the SparkSession is not set up yet.
 
   protected lazy val emptyTestData: DataFrame = {
     val df = spark.sparkContext.parallelize(
