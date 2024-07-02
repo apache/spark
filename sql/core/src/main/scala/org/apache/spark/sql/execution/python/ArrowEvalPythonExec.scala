@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * Grouped a iterator into batches.
@@ -125,7 +126,8 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
+      val arrowOutputTypes = outputTypes.map(ArrowUtils.toArrowOutputSchema)
+      assert(arrowOutputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
         s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
       batch.rowIterator.asScala
     }
