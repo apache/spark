@@ -529,7 +529,6 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     val (funInfos, toSkip) = extractRelevantExpressions()
 
     for (f <- funInfos.filter(f => !toSkip.contains(f.getName))) {
-      println("checking - " + f.getName)
       val cl = Utils.classForName(f.getClassName)
       val headConstructor = cl.getConstructors
         .zip(cl.getConstructors.map(c => c.getParameters.length)).minBy(a => a._2)._1
@@ -539,8 +538,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
 
       withTable("tbl", "tbl_lcase") {
 
-        val utf8_df = generateTableData(expr.inputTypes.take(1), Utf8Binary)
-        val utf8_lcase_df = generateTableData(expr.inputTypes.take(1), Utf8BinaryLcase)
+        val utf8_df = generateTableData(expr.inputTypes.take(2), Utf8Binary)
+        val utf8_lcase_df = generateTableData(expr.inputTypes.take(2), Utf8BinaryLcase)
 
         val utf8BinaryResult = try {
           val df = utf8_df.selectExpr(transformExpressionToString(expr, Utf8Binary))
