@@ -23,13 +23,12 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, SparkEnv, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
@@ -279,16 +278,6 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
-/**
- * An exception thrown when an invalid UnsafeRow is detected in state store.
- */
-class InvalidUnsafeRowException(error: String)
-  extends RuntimeException("The streaming query failed by state format invalidation. " +
-    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
-    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
-    "among restart. For the first case, you can try to restart the application without " +
-    s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
-
 sealed trait KeyStateEncoderSpec
 
 case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
@@ -397,6 +386,12 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
+    if (!classOf[StateStoreProvider].isAssignableFrom(providerClass)) {
+      throw new SparkException(
+        errorClass = "STATE_STORE_INVALID_PROVIDER",
+        messageParameters = Map("inputClass" -> providerClassName),
+        cause = null)
+    }
     providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
@@ -429,14 +424,51 @@ object StateStoreProvider {
       conf: StateStoreConf): Unit = {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
-      validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+      validationError.foreach { error =>
+        throw StateStoreErrors.keyRowFormatValidationFailure(error)
+      }
 
       if (conf.formatValidationCheckValue) {
         val validationError =
           UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
-        validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+        validationError.foreach { error =>
+          throw StateStoreErrors.valueRowFormatValidationFailure(error)
+        }
       }
     }
+  }
+}
+
+/**
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read fine
+ * grained state data which is replayed from a specific snapshot version. It is used by the
+ * snapshotStartBatchId option in state data source.
+ */
+trait SupportsFineGrainedReplay {
+
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   * Only implement this if there is read-only optimization for the state store.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
+    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
   }
 }
 
@@ -524,9 +556,6 @@ object StateStore extends Logging {
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
-
-  @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
 
   private val maintenanceThreadPoolLock = new Object
 
@@ -650,15 +679,6 @@ object StateStore extends Logging {
     storeProvider.getStore(version)
   }
 
-  private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
-    if (!UnsafeRowUtils.isBinaryStable(schema)) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
-        messageParameters = Map("schema" -> schema.json)
-      )
-    }
-  }
-
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -670,40 +690,6 @@ object StateStore extends Logging {
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
-
-      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
-        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
-          // SPARK-47776: collation introduces the concept of binary (in)equality, which means
-          // in some collation we no longer be able to just compare the binary format of two
-          // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
-          // same in case insensitive collation.
-          // State store is basically key-value storage, and the most provider implementations
-          // rely on the fact that all the columns in the key schema support binary equality.
-          // We need to disallow using binary inequality column in the key schema, before we
-          // could support this in majority of state store providers (or high-level of state
-          // store.)
-          disallowBinaryInequalityColumn(keySchema)
-
-          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
-          // regardless of configuration, we check compatibility to at least write schema file
-          // if necessary
-          // if the format validation for value schema is disabled, we also disable the schema
-          // compatibility checker for value schema as well.
-          val ret = Try(
-            checker.check(keySchema, valueSchema,
-              ignoreValueSchema = !storeConf.formatValidationCheckValue)
-          ).toEither.fold(Some(_), _ => None)
-          if (storeConf.stateSchemaCheckEnabled) {
-            ret
-          } else {
-            None
-          }
-        })
-
-        if (result.isDefined) {
-          throw result.get
-        }
-      }
 
       // SPARK-42567 - Track load time for state store provider and log warning if takes longer
       // than 2s.

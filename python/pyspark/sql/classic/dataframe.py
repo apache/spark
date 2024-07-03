@@ -57,6 +57,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.column import Column
 from pyspark.sql.classic.column import _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import (
     StructType,
@@ -68,7 +69,7 @@ from pyspark.sql.dataframe import (
     DataFrameNaFunctions as ParentDataFrameNaFunctions,
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
-from pyspark.sql.utils import get_active_spark_context, toJArray
+from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -94,6 +95,7 @@ if TYPE_CHECKING:
     from pyspark.sql.session import SparkSession
     from pyspark.sql.group import GroupedData
     from pyspark.sql.observation import Observation
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
@@ -430,7 +432,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                         int: gateway.jvm.long,
                     }
                     jclass = mapping[type(parameter[0])]
-                return toJArray(gateway, jclass, parameter)
+                return to_java_array(gateway, jclass, parameter)
             else:
                 return parameter
 
@@ -889,7 +891,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
 
     def _jmap(self, jm: Dict) -> "JavaObject":
         """Return a JVM Scala Map from a dict"""
-        return _to_scala_map(self.sparkSession._sc, jm)
+        return to_scala_map(self.sparkSession._sc._jvm, jm)
 
     def _jcols(self, *cols: "ColumnOrName") -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names
@@ -1220,28 +1222,34 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sparkSession)
 
-    def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
+    def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
 
-        if subset is None:
+        if not subset:
             jdf = self._jdf.dropDuplicates()
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            jdf = self._jdf.dropDuplicates(self._jseq(subset[0]))
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
-    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
-            raise PySparkTypeError(
-                error_class="NOT_LIST_OR_TUPLE",
-                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
-            )
+    drop_duplicates = dropDuplicates
 
-        if subset is None:
+    def dropDuplicatesWithinWatermark(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
+        # Acceptable args should be str, ... or a single List[str]
+        # So if subset length is 1, it can be either single str, or a list of str
+        # if subset length is greater than 1, it must be a sequence of str
+        if len(subset) > 1:
+            assert all(isinstance(c, str) for c in subset)
+
+        if not subset:
             jdf = self._jdf.dropDuplicatesWithinWatermark()
+        elif len(subset) == 1 and isinstance(subset[0], list):
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset[0]))
         else:
             jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
@@ -1787,11 +1795,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         return self.groupBy(*cols)
 
-    def drop_duplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
-        return self.dropDuplicates(subset)
-
     def writeTo(self, table: str) -> DataFrameWriterV2:
         return DataFrameWriterV2(self, table)
+
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        return MergeIntoWriter(self, table, condition)
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -1832,13 +1840,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def toPandas(self) -> "PandasDataFrameLike":
         return PandasConversionMixin.toPandas(self)
 
-
-def _to_scala_map(sc: "SparkContext", jm: Dict) -> "JavaObject":
-    """
-    Convert a dict into a JVM Map.
-    """
-    assert sc._jvm is not None
-    return sc._jvm.PythonUtils.toScalaMap(jm)
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        raise PySparkValueError(
+            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            message_parameters={"member": "queryExecution"},
+        )
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

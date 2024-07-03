@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -71,7 +73,11 @@ class RocksDB(
     loggingId: String = "",
     useColumnFamilies: Boolean = false) extends Logging {
 
-  case class RocksDBSnapshot(checkpointDir: File, version: Long, numKeys: Long) {
+  case class RocksDBSnapshot(
+      checkpointDir: File,
+      version: Long,
+      numKeys: Long,
+      capturedFileMappings: RocksDBFileMappings) {
     def close(): Unit = {
       silentDeleteRecursively(checkpointDir, s"Free up local checkpoint of snapshot $version")
     }
@@ -79,6 +85,7 @@ class RocksDB(
 
   @volatile private var latestSnapshot: Option[RocksDBSnapshot] = None
   @volatile private var lastSnapshotVersion = 0L
+  private val oldSnapshots = new ListBuffer[RocksDBSnapshot]
 
   RocksDBLoader.loadLibrary()
 
@@ -173,6 +180,9 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
+        // deep copy is needed to avoid race condition
+        // between maintenance and task threads
+        fileManager.copyFileMapping()
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
@@ -181,7 +191,6 @@ class RocksDB(
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
           lastSnapshotVersion = 0L
-          latestSnapshot = None
         }
         openDB()
 
@@ -216,6 +225,80 @@ class RocksDB(
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
+  }
+
+  /**
+   * Load from the start snapshot version and apply all the changelog records to reach the
+   * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
+   * and possibly restart the native RocksDB instance.
+   *
+   * @param snapshotVersion version of the snapshot to start with
+   * @param endVersion end version
+   * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
+   *         Note that the instance will be read-only since this method is only used in State Data
+   *         Source.
+   */
+  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
+    acquire(LoadStore)
+    recordedMetrics = None
+    logInfo(
+      log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+      log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    try {
+      replayFromCheckpoint(snapshotVersion, endVersion)
+
+      logInfo(
+        log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+        log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    } catch {
+      case t: Throwable =>
+        loadedVersion = -1  // invalidate loaded data
+        throw t
+    }
+    this
+  }
+
+  /**
+   * Load from the start checkpoint version and apply all the changelog records to reach the
+   * end version.
+   * If the start version does not exist, it will throw an exception.
+   *
+   * @param snapshotVersion start checkpoint version
+   * @param endVersion end version
+   */
+  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+    closeDB()
+    val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion, workingDir)
+    loadedVersion = snapshotVersion
+
+    // reset last snapshot version
+    if (lastSnapshotVersion > snapshotVersion) {
+      // discard any newer snapshots
+      lastSnapshotVersion = 0L
+      latestSnapshot = None
+    }
+    openDB()
+
+    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+      // we don't track the total number of rows - discard the number being track
+      -1L
+    } else if (metadata.numKeys < 0) {
+      // we track the total number of rows, but the snapshot doesn't have tracking number
+      // need to count keys now
+      countKeys()
+    } else {
+      metadata.numKeys
+    }
+    if (loadedVersion != endVersion) replayChangelog(endVersion)
+    // After changelog replay the numKeysOnWritingVersion will be updated to
+    // the correct number of keys in the loaded version.
+    numKeysOnLoadedVersion = numKeysOnWritingVersion
+    fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+
+    if (conf.resetStatsOnLoad) {
+      nativeStats.reset
+    }
   }
 
   /**
@@ -437,10 +520,17 @@ class RocksDB(
           // inside the uploadSnapshot() called below.
           // If changelog checkpointing is enabled, snapshot will be uploaded asynchronously
           // during state store maintenance.
-          latestSnapshot.foreach(_.close())
-          latestSnapshot = Some(
-            RocksDBSnapshot(checkpointDir, newVersion, numKeysOnWritingVersion))
-          lastSnapshotVersion = newVersion
+          synchronized {
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot.get
+            }
+            latestSnapshot = Some(
+              RocksDBSnapshot(checkpointDir,
+                newVersion,
+                numKeysOnWritingVersion,
+                fileManager.captureFileMapReference()))
+            lastSnapshotVersion = newVersion
+          }
         }
       }
 
@@ -492,16 +582,23 @@ class RocksDB(
   }
 
   private def uploadSnapshot(): Unit = {
+    var oldSnapshotsImmutable: List[RocksDBSnapshot] = Nil
     val localCheckpoint = synchronized {
       val checkpoint = latestSnapshot
       latestSnapshot = None
+
+      // Convert mutable list buffer to immutable to prevent
+      // race condition with commit where old snapshot is added
+      oldSnapshotsImmutable = oldSnapshots.toList
+      oldSnapshots.clear()
+
       checkpoint
     }
     localCheckpoint match {
-      case Some(RocksDBSnapshot(localDir, version, numKeys)) =>
+      case Some(RocksDBSnapshot(localDir, version, numKeys, capturedFileMappings)) =>
         try {
           val uploadTime = timeTakenMs {
-            fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+            fileManager.saveCheckpointToDfs(localDir, version, numKeys, capturedFileMappings)
             fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
           }
           logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
@@ -509,6 +606,12 @@ class RocksDB(
             log" time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms")
         } finally {
           localCheckpoint.foreach(_.close())
+
+          // Clean up old latestSnapshots
+          for (snapshot <- oldSnapshotsImmutable) {
+            snapshot.close()
+          }
+
         }
       case _ =>
     }
@@ -530,20 +633,7 @@ class RocksDB(
 
   def doMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
-      // There is race to update latestSnapshot between load(), commit()
-      // and uploadSnapshot().
-      // The load method will reset latestSnapshot to discard any snapshots taken
-      // from newer versions (when a old version is reloaded).
-      // commit() method deletes the existing snapshot while creating a new snapshot.
-      // In order to ensure that the snapshot being uploaded would not be modified
-      // concurrently, we need to synchronize the snapshot access between task thread
-      // and maintenance thread.
-      acquire(StoreMaintenance)
-      try {
-        uploadSnapshot()
-      } finally {
-        release(StoreMaintenance)
-      }
+      uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(conf.minVersionsToRetain)

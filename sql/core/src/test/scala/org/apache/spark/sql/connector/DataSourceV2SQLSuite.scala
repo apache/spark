@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
@@ -814,14 +814,10 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          // TODO assign a error-classes name
-          checkError(
-            exception = intercept[SparkException] {
-              insertNullValueAndCheck()
-            },
-            errorClass = null,
-            parameters = Map.empty
-          )
+          val exception = intercept[SparkRuntimeException] {
+            insertNullValueAndCheck()
+          }
+          assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
         }
     }
   }
@@ -1740,6 +1736,16 @@ class DataSourceV2SQLSuiteV1Filter
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
       sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
+    }
+  }
+
+  test("SPARK-48709: varchar resolution mismatch for DataSourceV2 CTAS") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
+      withTable("testcat.ns.t1", "testcat.ns.t2") {
+        sql("CREATE TABLE testcat.ns.t1 (d1 string, d2 varchar(200)) USING parquet")
+        sql("CREATE TABLE testcat.ns.t2 USING foo as select * from testcat.ns.t1")
+      }
     }
   }
 
@@ -3485,6 +3491,30 @@ class DataSourceV2SQLSuiteV1Filter
       assert(table.properties.get(TableCatalog.PROP_OWNER) === testOwner)
     } finally {
       CURRENT_USER.remove()
+    }
+  }
+
+  test("SPARK-48286: Add new column with default value which is not foldable") {
+    val foldableExpressions = Seq("1", "2 + 1")
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+        val exception = intercept[AnalysisException] {
+          // Rand function is not foldable
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
+        }
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
+        assert(exception.messageParameters("colName") == "`col2`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+        assert(exception.messageParameters("statement") == "ALTER TABLE")
+      }
+      foldableExpressions.foreach(expr => {
+        withTable("tab") {
+          spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT $expr")
+        }
+      })
     }
   }
 

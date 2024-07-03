@@ -50,7 +50,6 @@ from pyspark.pandas.utils import (
     spark_column_equals,
     verify_temp_column_name,
 )
-from pyspark.sql.utils import get_column_class
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -259,12 +258,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         """
         from pyspark.pandas.series import Series
 
-        Column = get_column_class()
         if rows_sel is None:
             return None, None, None
         elif isinstance(rows_sel, Series):
             return self._select_rows_by_series(rows_sel)
-        elif isinstance(rows_sel, Column):
+        elif isinstance(rows_sel, PySparkColumn):
             return self._select_rows_by_spark_column(rows_sel)
         elif isinstance(rows_sel, slice):
             if rows_sel == slice(None):
@@ -306,7 +304,6 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         """
         from pyspark.pandas.series import Series
 
-        Column = get_column_class()
         if cols_sel is None:
             column_labels = self._internal.column_labels
             data_spark_columns = self._internal.data_spark_columns
@@ -314,7 +311,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             return column_labels, data_spark_columns, data_fields, False, None
         elif isinstance(cols_sel, Series):
             return self._select_cols_by_series(cols_sel, missing_keys)
-        elif isinstance(cols_sel, Column):
+        elif isinstance(cols_sel, PySparkColumn):
             return self._select_cols_by_spark_column(cols_sel, missing_keys)
         elif isinstance(cols_sel, slice):
             if cols_sel == slice(None):
@@ -579,7 +576,6 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series, first_series
 
-        Column = get_column_class()
         if self._is_series:
             if (
                 isinstance(key, Series)
@@ -639,7 +635,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
                 )
 
-            if isinstance(value, (Series, Column)):
+            if isinstance(value, (Series, PySparkColumn)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError(
                         "No axis named {} for object type {}".format(key, type(value).__name__)
@@ -724,7 +720,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
                 )
 
-            if isinstance(value, (Series, Column)):
+            if isinstance(value, (Series, PySparkColumn)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError("Incompatible indexer with Series")
                 if len(data_spark_columns) > 1:
@@ -1125,9 +1121,8 @@ class LocIndexer(LocIndexerLike):
                     )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    Column = get_column_class()
                     cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(scol, F.lit(value).cast(dt), Column.__gt__)
+                        compare(scol, F.lit(value).cast(dt), PySparkColumn.__gt__)
                     )
                 conds.append(cond)
             if stop is not None:
@@ -1140,9 +1135,8 @@ class LocIndexer(LocIndexerLike):
                     )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    Column = get_column_class()
                     cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(scol, F.lit(value).cast(dt), Column.__lt__)
+                        compare(scol, F.lit(value).cast(dt), PySparkColumn.__lt__)
                     )
                 conds.append(cond)
 
@@ -1300,12 +1294,11 @@ class LocIndexer(LocIndexerLike):
     ]:
         from pyspark.pandas.series import Series
 
-        Column = get_column_class()
         if all(isinstance(key, Series) for key in cols_sel):
             column_labels = [key._column_label for key in cols_sel]
             data_spark_columns = [key.spark.column for key in cols_sel]
             data_fields = [key._internal.data_fields[0] for key in cols_sel]
-        elif all(isinstance(key, Column) for key in cols_sel):
+        elif all(isinstance(key, PySparkColumn) for key in cols_sel):
             column_labels = [
                 (self._internal.spark_frame.select(col).columns[0],) for col in cols_sel
             ]
@@ -1804,8 +1797,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        Column = get_column_class()
-        if not isinstance(value, Column) and is_list_like(value):
+        if not isinstance(value, PySparkColumn) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):
                 raise ValueError("setting an array element with a sequence.")
@@ -1841,8 +1833,15 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.indexing
+    from pandas.util.version import Version
 
     os.chdir(os.environ["SPARK_HOME"])
+
+    if Version(np.__version__) >= Version("2"):
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        # `legacy="1.25"` only available in `nump>=2`
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
 
     globs = pyspark.pandas.indexing.__dict__.copy()
     globs["ps"] = pyspark.pandas

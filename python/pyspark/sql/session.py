@@ -67,6 +67,7 @@ from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeEr
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+    import pyarrow as pa
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -1256,7 +1257,7 @@ class SparkSession(SparkConversionMixin):
             spark = builder.getOrCreate()
         return spark
 
-    @overload
+    @overload  # type: ignore[override]
     def createDataFrame(
         self,
         data: Iterable["RowLike"],
@@ -1319,6 +1320,10 @@ class SparkSession(SparkConversionMixin):
         ...
 
     @overload
+    def createDataFrame(self, data: "pa.Table", samplingRatio: Optional[float] = ...) -> DataFrame:
+        ...
+
+    @overload
     def createDataFrame(
         self,
         data: "PandasDataFrameLike",
@@ -1327,28 +1332,40 @@ class SparkSession(SparkConversionMixin):
     ) -> DataFrame:
         ...
 
+    @overload
+    def createDataFrame(
+        self,
+        data: "pa.Table",
+        schema: Union[StructType, str],
+        verifySchema: bool = ...,
+    ) -> DataFrame:
+        ...
+
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike", "pa.Table"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
     ) -> DataFrame:
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`
-        or a :class:`numpy.ndarray`.
+        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`,
+        a :class:`numpy.ndarray`, or a :class:`pyarrow.Table`.
 
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.0.0
+            Supports :class:`pyarrow.Table`.
+
         Parameters
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
-            :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
+            :class:`pandas.DataFrame`, :class:`numpy.ndarray`, or :class:`pyarrow.Table`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None. The data type string format equals to
@@ -1374,10 +1391,10 @@ class SparkSession(SparkConversionMixin):
             :class:`RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
-            When the input is :class:`pandas.DataFrame` and
-            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
-            effective. It follows Arrow type coercion. This option is not supported with
-            Spark Connect.
+            When the input is :class:`pyarrow.Table` or when the input class is
+            :class:`pandas.DataFrame` and `spark.sql.execution.arrow.pyspark.enabled` is enabled,
+            this option is not effective. It follows Arrow type coercion. This option is not
+            supported with Spark Connect.
 
             .. versionadded:: 2.1.0
 
@@ -1477,6 +1494,22 @@ class SparkSession(SparkConversionMixin):
         +---+---+
         |  1|  2|
         +---+---+
+
+        Create a DataFrame from a PyArrow Table.
+
+        >>> spark.createDataFrame(df.toArrow()).show()  # doctest: +SKIP
+        +-----+---+
+        | name|age|
+        +-----+---+
+        |Alice|  1|
+        +-----+---+
+        >>> table = pyarrow.table({'0': [1], '1': [2]})  # doctest: +SKIP
+        >>> spark.createDataFrame(table).collect()  # doctest: +SKIP
+        +---+---+
+        |  0|  1|
+        +---+---+
+        |  1|  2|
+        +---+---+
         """
         SparkSession._activeSession = self
         assert self._jvm is not None
@@ -1506,6 +1539,13 @@ class SparkSession(SparkConversionMixin):
             has_numpy = True
         except Exception:
             has_numpy = False
+
+        try:
+            import pyarrow as pa
+
+            has_pyarrow = True
+        except Exception:
+            has_pyarrow = False
 
         if has_numpy and isinstance(data, np.ndarray):
             # `data` of numpy.ndarray type will be converted to a pandas DataFrame,
@@ -1537,6 +1577,11 @@ class SparkSession(SparkConversionMixin):
 
         if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
+            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+                data, schema, samplingRatio, verifySchema
+            )
+        if has_pyarrow and isinstance(data, pa.Table):
+            # Create a DataFrame from PyArrow Table.
             return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )

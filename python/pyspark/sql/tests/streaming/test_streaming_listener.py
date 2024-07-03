@@ -592,6 +592,23 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         self.assertEqual(sink.numOutputRows, -1)
         self.assertEqual(sink.metrics, {})
 
+    def test_spark_property_in_listener(self):
+        # SPARK-48560: Make StreamingQueryListener.spark settable
+        class TestListener(StreamingQueryListener):
+            def __init__(self, session):
+                self.spark = session
+
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+        self.assertEqual(TestListener(self.spark).spark, self.spark)
+
 
 if __name__ == "__main__":
     import unittest

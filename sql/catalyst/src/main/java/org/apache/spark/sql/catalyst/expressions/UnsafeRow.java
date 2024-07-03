@@ -21,12 +21,14 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
@@ -155,6 +157,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
+    if (baseObject instanceof byte[] bytes) {
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
+      if (offsetInByteArray < 0 || sizeInBytes < 0 ||
+          bytes.length < offsetInByteArray + sizeInBytes) {
+        throw new SparkIllegalArgumentException(
+          "INTERNAL_ERROR",
+          Map.of("message", "Invalid byte array backed UnsafeRow: byte array length=" +
+            bytes.length + ", offset=" + offsetInByteArray + ", byte size=" + sizeInBytes)
+        );
+      }
+    }
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;

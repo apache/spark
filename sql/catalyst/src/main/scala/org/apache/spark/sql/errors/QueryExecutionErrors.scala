@@ -211,6 +211,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
+  def invalidUTF8StringError(str: UTF8String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_UTF8_STRING",
+      messageParameters = Map(
+        "str" -> str.getBytes.map(byte => f"\\x$byte%02X").mkString
+      )
+    )
+  }
+
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
@@ -2741,6 +2750,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "charset" -> charset))
   }
 
+  def malformedCharacterCoding(functionName: String, charset: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_CHARACTER_CODING",
+      messageParameters = Map(
+        "function" -> toSQLId(functionName),
+        "charset" -> charset))
+  }
+
   def invalidWriterCommitMessageError(details: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_WRITER_COMMIT_MESSAGE",
@@ -2772,5 +2789,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "emittedRowEventTime" -> emittedRowEventTime.toString
       )
     )
+  }
+
+  def notNullAssertViolation(walkedTypePath: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NOT_NULL_ASSERT_VIOLATION",
+      messageParameters = Map(
+        "walkedTypePath" -> walkedTypePath
+      )
+    )
+  }
+
+  def invalidDatetimeUnitError(
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> s"'$invalidValue'"))
   }
 }

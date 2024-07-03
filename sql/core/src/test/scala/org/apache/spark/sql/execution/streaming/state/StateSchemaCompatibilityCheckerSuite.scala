@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -65,12 +67,12 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
 
   private val keySchemaWithCollation = new StructType()
     .add(StructField("key1", IntegerType, nullable = true))
-    .add(StructField("key2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("key2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("key3", structSchema, nullable = true))
 
   private val valueSchemaWithCollation = new StructType()
     .add(StructField("value1", IntegerType, nullable = true))
-    .add(StructField("value2", StringType("UTF8_BINARY_LCASE"), nullable = true))
+    .add(StructField("value2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("value3", structSchema, nullable = true))
 
   // Checks on adding/removing (nested) field.
@@ -253,9 +255,9 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
 
   test("SPARK-47776: checking for compatibility with collation change in key") {
     verifyException(keySchema, valueSchema, keySchemaWithCollation, valueSchema,
-      ignoreValueSchema = false)
+      ignoreValueSchema = false, keyCollationChecks = true)
     verifyException(keySchemaWithCollation, valueSchema, keySchema, valueSchema,
-      ignoreValueSchema = false)
+      ignoreValueSchema = false, keyCollationChecks = true)
   }
 
   test("SPARK-47776: checking for compatibility with collation change in value") {
@@ -287,47 +289,47 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     StructType(newFields)
   }
 
-  private def runSchemaChecker(
-      dir: String,
-      queryId: UUID,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean): Unit = {
-    // in fact, Spark doesn't support online state schema change, so need to check
-    // schema only once for each running of JVM
-    val providerId = StateStoreProviderId(
-      StateStoreId(dir, opId, partitionId), queryId)
-
-    new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-      .check(newKeySchema, newValueSchema, ignoreValueSchema = ignoreValueSchema)
-  }
-
   private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
       newKeySchema: StructType,
       newValueSchema: StructType,
-      ignoreValueSchema: Boolean = false): Unit = {
+      ignoreValueSchema: Boolean = false,
+      keyCollationChecks: Boolean = false): Unit = {
     val dir = newDir()
-    val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
 
-    val e = intercept[StateSchemaNotCompatible] {
-      runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
-        ignoreValueSchema = ignoreValueSchema)
+    val result = Try(
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+        oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+    ).toEither.fold(Some(_), _ => None)
+
+    val ex = if (result.isDefined) {
+      result.get.asInstanceOf[SparkUnsupportedOperationException]
+    } else {
+      intercept[SparkUnsupportedOperationException] {
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+          newKeySchema, newValueSchema, spark.sessionState, extraOptions)
+      }
     }
 
-    assert(e.getMessage.contains("Provided schema doesn't match to the schema for existing state!"))
-    assert(e.getMessage.contains(newKeySchema.toString()))
-    assert(e.getMessage.contains(oldKeySchema.toString()))
-
-    if (ignoreValueSchema) {
-      assert(!e.getMessage.contains(newValueSchema.toString()))
-      assert(!e.getMessage.contains(oldValueSchema.toString()))
+    // collation checks are also performed in this path. so we need to check for them explicitly.
+    if (keyCollationChecks) {
+      assert(ex.getMessage.contains("Binary inequality column is not supported"))
+      assert(ex.getErrorClass === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
     } else {
-      assert(e.getMessage.contains(newValueSchema.toString()))
-      assert(e.getMessage.contains(oldValueSchema.toString()))
+      if (ignoreValueSchema) {
+        // if value schema is ignored, the mismatch has to be on the key schema
+        assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
+      } else {
+        assert(ex.getErrorClass === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+          ex.getErrorClass === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+      }
+      assert(ex.getMessage.contains("does not match existing"))
     }
   }
 
@@ -338,10 +340,16 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       newValueSchema: StructType,
       ignoreValueSchema: Boolean = false): Unit = {
     val dir = newDir()
-    val queryId = UUID.randomUUID()
-    runSchemaChecker(dir, queryId, oldKeySchema, oldValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
-    runSchemaChecker(dir, queryId, newKeySchema, newValueSchema,
-      ignoreValueSchema = ignoreValueSchema)
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
+
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+      oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+      newKeySchema, newValueSchema, spark.sessionState, extraOptions)
   }
 }

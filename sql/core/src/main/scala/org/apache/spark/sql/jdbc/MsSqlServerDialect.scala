@@ -34,7 +34,7 @@ import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private case class MsSqlServerDialect() extends JdbcDialect {
+private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 

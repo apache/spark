@@ -38,8 +38,8 @@ import org.apache.spark.sql.types._
     Examples:
       > SET spark.sql.collation.enabled=true;
       spark.sql.collation.enabled	true
-      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_BINARY_LCASE);
-      UTF8_BINARY_LCASE
+      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
+      UTF8_LCASE
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
   """,
