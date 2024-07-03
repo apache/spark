@@ -139,7 +139,8 @@ def records_to_arrow_batches(
                     messageParameters={
                         "type": type(result).__name__,
                         "name": data_source.name(),
-                        "supported_types": "tuple, list, `pyspark.sql.types.Row`, pyarrow RecordBatch",
+                        "supported_types": "tuple, list, `pyspark.sql.types.Row`,"
+                        " pyarrow RecordBatch",
                     },
                 )
 

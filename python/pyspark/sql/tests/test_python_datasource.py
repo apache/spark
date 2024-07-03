@@ -402,16 +402,6 @@ class BasePythonDataSourceTestsMixin:
                 keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
                 values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
                 schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
-
-            def __init__(self, schema, options):
-                self.schema: str = schema
-                self.options = options
-
-            def read(self, partition):
-                # Create Arrow Record Batch
-                keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
-                values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
-                schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
                 record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
                 yield record_batch
 
@@ -433,15 +423,16 @@ class BasePythonDataSourceTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema mismatch in the "
-            "result from 'read' method\. Expected: 1 columns, Found: 2 columns",
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema"
+            " mismatch in the result from 'read' method\\. Expected: 1 columns, Found: 2 columns",
         ):
             self.spark.read.format("arrowbatch").schema("dummy int").load().show()
 
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema mismatch in the "
-            "result from 'read' method\. Expected: \['key', 'dummy'\] columns, Found: \['key', 'value'\] columns",
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema mismatch"
+            " in the result from 'read' method\\. Expected: \\['key', 'dummy'\\] columns, Found:"
+            " \\['key', 'value'\\] columns",
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
 
