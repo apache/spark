@@ -151,7 +151,7 @@ case class InlineCTE(
             if (!inlineDecision) {
               Seq(newDef)
             } else {
-              Seq()
+              Nil
             }
           } else if (keepDanglingRelations) {
             Seq(refInfo.cteDef)
