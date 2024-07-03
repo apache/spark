@@ -123,7 +123,7 @@ case class TransformWithStateInPandasExec(
           groupingKeyExprEncoder, timeMode)
         val runner = new TransformWithStateInPandasPythonRunner(
           chainedFunc,
-          PythonEvalType.SQL_TRANSFORM_WITH_STATE,
+          PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
           Array(argOffsets),
           DataTypeUtils.fromAttributes(dedupAttributes),
           processorHandle,
