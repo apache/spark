@@ -136,7 +136,7 @@ private[hive] case class HiveGenericUDF(
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.foreach {
-      case (child, idx) => evaluator.setArg(idx, child.eval(input))
+      case (child, idx) => evaluator.setFuncArg(idx, () => child.eval(input))
     }
     evaluator.evaluate()
   }
@@ -154,14 +154,18 @@ private[hive] case class HiveGenericUDF(
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
     val evals = children.map(_.genCode(ctx))
 
+    val funcArg = ctx.freshName("funcArg")
+    val finalEval = ctx.freshName("finalEval")
     val setValues = evals.zipWithIndex.map {
       case (eval, i) =>
         s"""
-           |if (${eval.isNull}) {
-           |  $refEvaluator.setArg($i, null);
-           |} else {
-           |  $refEvaluator.setArg($i, ${eval.value});
-           |}
+           |final Object $finalEval = ${eval.isNull} ? null: ${eval.value};
+           |scala.Function0<Object> $funcArg = new scala.Function0<Object>() {
+           |    public Object apply() {
+           |      return $finalEval;
+           |    }
+           |  };
+           |$refEvaluator.setFuncArg($i, $funcArg);
            |""".stripMargin
     }
 
