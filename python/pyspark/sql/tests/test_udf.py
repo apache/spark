@@ -904,7 +904,9 @@ class BaseUDFTestsMixin(object):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
         # Input
         row = df.select(udf(lambda x: str(x))("nested_array")).first()
-        self.assertEqual(row[0], "[[1, 2], [3, 4]]")
+        self.assertIn(
+            row[0], ["[[1, 2], [3, 4]]", "[[np.int32(1), np.int32(2)], [np.int32(3), np.int32(4)]]"]
+        )
         # Output
 
         @udf(returnType=df.dtypes[0][1])

@@ -284,10 +284,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalogTable.storage
     }
 
+    val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
     try {
       catalog.alterTable(
         catalogTable.copy(
-          properties = properties, schema = schema, owner = owner, comment = comment,
+          properties = finalProperties, schema = schema, owner = owner, comment = comment,
           storage = storage))
     } catch {
       case _: NoSuchTableException =>
