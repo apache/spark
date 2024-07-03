@@ -435,7 +435,7 @@ class Profile:
             )
 
         if result is not None:
-            return render(result)  # type:ignore[arg-type, misc]
+            return render(result)  # type:ignore[arg-type]
 
     def clear(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
         """
