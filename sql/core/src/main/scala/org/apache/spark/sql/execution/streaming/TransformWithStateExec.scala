@@ -394,8 +394,8 @@ case class TransformWithStateExec(
       newSchemas.get(oldSchema.columnFamilyName).foreach {
         case newSchema: ColumnFamilySchemaV1 =>
           StateSchemaCompatibilityChecker.check(
-            (oldSchema.keySchema, oldSchema.valueEncoder),
-            (newSchema.keySchema, newSchema.valueEncoder),
+            (oldSchema.keySchema, oldSchema.valueSchema),
+            (newSchema.keySchema, newSchema.valueSchema),
             ignoreValueSchema = false
           )
       }

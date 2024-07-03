@@ -30,10 +30,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
 
-object StateSchemaV3File {
-  val COLUMN_FAMILY_SCHEMA_VERSION = 1
-}
-
 /**
  * The StateSchemaV3File is used to write the schema of multiple column families.
  * Right now, this is primarily used for the TransformWithState operator, which supports
@@ -66,20 +62,11 @@ class StateSchemaV3File(
     val version = lines.next().trim
     validateVersion(version, VERSION)
 
-    val columnFamilySchemaVersion = lines.next().trim
-
-    columnFamilySchemaVersion match {
-      case "v1" => lines.map(ColumnFamilySchemaV1.fromJson).toList
-      case _ =>
-        throw new IllegalStateException(
-          s"Unsupported column family schema version: $columnFamilySchemaVersion")
-    }
+    lines.map(ColumnFamilySchemaV1.fromJson).toList
   }
 
   def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
     out.write(s"v${VERSION}".getBytes(UTF_8))
-    out.write('\n')
-    out.write(s"v${StateSchemaV3File.COLUMN_FAMILY_SCHEMA_VERSION}".getBytes(UTF_8))
     out.write('\n')
     out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
   }

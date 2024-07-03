@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.KEY_ROW_SCHEMA
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
@@ -796,9 +796,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema = List(ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
+          VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false,
-          Encoders.scalaLong.schema,
           None
         ))
 
@@ -823,9 +822,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema0 = List(ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
+          VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false,
-          Encoders.scalaLong.schema,
           None
         ))
 
@@ -833,17 +831,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ColumnFamilySchemaV1(
             "countState",
             KEY_ROW_SCHEMA,
+            VALUE_ROW_SCHEMA,
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.scalaLong.schema,
             None
           ),
           ColumnFamilySchemaV1(
             "mostRecent",
             KEY_ROW_SCHEMA,
+            VALUE_ROW_SCHEMA,
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.STRING.schema,
             None
           )
         )

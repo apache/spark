@@ -44,16 +44,15 @@ sealed trait ColumnFamilySchema extends Serializable {
 case class ColumnFamilySchemaV1(
     columnFamilyName: String,
     keySchema: StructType,
+    valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    multipleValuesPerKey: Boolean,
-    valueEncoder: StructType,
     userKeyEncoder: Option[StructType] = None) extends ColumnFamilySchema {
   def jsonValue: JValue = {
     ("columnFamilyName" -> JString(columnFamilyName)) ~
       ("keySchema" -> JString(keySchema.json)) ~
+      ("valueSchema" -> JString(valueSchema.json)) ~
       ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
-      ("multipleValuesPerKey" -> JBool(multipleValuesPerKey)) ~
-      ("valueEncoder" -> JString(valueEncoder.json))
+      ("userKeyEncoder" -> userKeyEncoder.map(s => JString(s.json)).getOrElse(JNothing))
   }
 
   def json: String = {
@@ -73,13 +72,13 @@ object ColumnFamilySchemaV1 {
     assert(colFamilyMap.isInstanceOf[Map[_, _]],
       s"Expected Map but got ${colFamilyMap.getClass}")
     val keySchema = StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String])
+    val valueSchema = StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String])
     new ColumnFamilySchemaV1(
       colFamilyMap("columnFamilyName").asInstanceOf[String],
       keySchema,
+      valueSchema,
       KeyStateEncoderSpec.fromJson(keySchema, colFamilyMap("keyStateEncoderSpec")
         .asInstanceOf[Map[String, Any]]),
-      colFamilyMap("multipleValuesPerKey").asInstanceOf[Boolean],
-      StructType.fromString(colFamilyMap("valueEncoder").asInstanceOf[String]),
       colFamilyMap.get("userKeyEncoder").map(_.asInstanceOf[String]).map(StructType.fromString)
     )
   }
