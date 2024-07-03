@@ -266,8 +266,8 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums = withReadLock {
-    _externalAccums
+  private[spark] def externalAccums: Seq[AccumulatorV2[_, _]] = withReadLock {
+    _externalAccums.toSeq
   }
 
   private val (readLock, writeLock) = {
