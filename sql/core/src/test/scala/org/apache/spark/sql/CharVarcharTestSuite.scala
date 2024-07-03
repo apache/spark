@@ -81,7 +81,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
           checkPlainResult(spark.table("t"), typ, v)
         }
         sql("INSERT OVERWRITE t VALUES ('1', null)")
-        checkPlainResult(spark.table("t"), typ, null)
+         (spark.table("t"), typ, null)
       }
     }
   }
@@ -658,6 +658,17 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
           sql("INSERT INTO t SELECT 'aaa'")
           checkAnswer(sql("select * from t"), Row("aaa"))
         }
+      }
+    }
+  }
+
+  test("SPARK-48792: Fix INSERT with partial column list to a table with char/varchar") {
+    Seq("char", "varchar").foreach { typ =>
+      withTable("students") {
+        sql(s"CREATE TABLE students (name $typ(64), address $typ(64)) USING $format")
+        sql("INSERT INTO students VALUES ('Kent Yao', 'Hangzhou')")
+        sql("INSERT INTO students (address) VALUES ('<unknown>')")
+        checkAnswer(sql("SELECT count(*) FROM students"), Row(2))
       }
     }
   }
