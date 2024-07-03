@@ -223,12 +223,6 @@ trait FileFormat {
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
     FileFormat.BASE_METADATA_EXTRACTORS
-
-  /**
-   * Returns whether the file format supports filter push down
-   * for non utf8 binary collated columns.
-   */
-  def supportsCollationPushDown: Boolean = false
 }
 
 object FileFormat {

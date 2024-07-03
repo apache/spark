@@ -5474,8 +5474,8 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch first value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if first value is null then look for first non-null value.
+    ignorenulls : bool
+        if first value is null then look for first non-null value. ``False``` by default.
 
     Returns
     -------
@@ -5747,8 +5747,8 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch last value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if last value is null then look for non-null value.
+    ignorenulls : bool
+        if last value is null then look for non-null value. ``False``` by default.
 
     Returns
     -------
@@ -14098,10 +14098,13 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     Notes
     -----
     The position is not zero based, but 1 based index.
+    If extraction is a string, :meth:`element_at` treats it as a literal string,
+    while :meth:`try_element_at` treats it as a column name.
 
     See Also
     --------
     :meth:`get`
+    :meth:`try_element_at`
 
     Examples
     --------
@@ -14148,6 +14151,17 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     +-------------------+
     |               NULL|
     +-------------------+
+
+    Example 5: Getting a value from a map using a literal string as the key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
+    >>> df.select(sf.element_at(df.data, 'b')).show()
+    +-------------------+
+    |element_at(data, b)|
+    +-------------------+
+    |                2.0|
+    +-------------------+
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
@@ -14171,6 +14185,17 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
         name of column containing array or map
     extraction :
         index to check for in array or key to check for in map
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index.
+    If extraction is a string, :meth:`try_element_at` treats it as a column name,
+    while :meth:`element_at` treats it as a literal string.
+
+    See Also
+    --------
+    :meth:`get`
+    :meth:`element_at`
 
     Examples
     --------
@@ -14227,6 +14252,17 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     |try_element_at(data, c)|
     +-----------------------+
     |                   NULL|
+    +-----------------------+
+
+    Example 6: Getting a value from a map using a column name as the key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
+    >>> df.select(sf.try_element_at(df.data, 'b')).show()
+    +-----------------------+
+    |try_element_at(data, b)|
+    +-----------------------+
+    |                    1.0|
     +-----------------------+
     """
     return _invoke_function_over_columns("try_element_at", col, extraction)
