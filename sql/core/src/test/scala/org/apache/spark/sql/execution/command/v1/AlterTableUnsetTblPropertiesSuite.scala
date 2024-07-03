@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
@@ -60,33 +58,6 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPr
 
   override def getTblPropertyValue(tableIdent: TableIdentifier, key: String): String = {
     getTableProperties(tableIdent).getOrElse(key, null)
-  }
-
-  /**
-   * When using the v1 command to unset `non-existent` properties, the command will
-   * throw the error-condition `"UNSET_NONEXISTENT_PROPERTIES` and finally `failed`
-   */
-  test("alter table unset non-existent properties") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
-      val tableIdent = TableIdentifier("tbl", Some("ns"), Some(catalog))
-
-      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('k1' = 'v1', 'k2' = 'v2', 'k3' = 'v3')")
-      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2", "k3" -> "v3"))
-
-      // property to unset does not exist
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('k3', 'k4')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map("properties" -> "`k4`", "table" -> toSQLId(tableIdent.nameParts))
-      )
-
-      // property to unset does not exist, but "IF EXISTS" is specified
-      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('k3', 'k4')")
-      checkTblProps(tableIdent, Map("k1" -> "v1", "k2" -> "v2"))
-    }
   }
 }
 

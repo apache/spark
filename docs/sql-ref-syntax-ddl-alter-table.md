@@ -252,9 +252,7 @@ ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 `ALTER TABLE UNSET` command is used to drop the table property.
 
-**Note:** If the specified property key does not exist, when you use the v1 command and do not specify `IF EXISTS`,
-it will throw the error-condition `UNSET_NONEXISTENT_PROPERTIES` and finally `failed`,
-however regardless of whether `IF EXISTS` is set or not, the v2 command will ignore it and finally `succeed`.
+**Note:** If the specified property key does not exist, whether specify `IF EXISTS` or not, the command will ignore it and finally succeed.
 
 ##### Syntax
 
