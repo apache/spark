@@ -439,7 +439,7 @@ private[sql] class RocksDBStateStoreProvider
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
   }
-  
+
   /**
    * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
    * If snapshot for snapshotVersion does not exist, an error will be thrown.

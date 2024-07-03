@@ -23,8 +23,7 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import scala.jdk.CollectionConverters._
+import scala.collection.mutable.ListBuffer
 import scala.ref.WeakReference
 import scala.util.Try
 
