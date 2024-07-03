@@ -977,6 +977,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         store.createColFamilyIfAbsent(cfName,
           keySchema, valueSchema, keyEncoder)
 
+        // remove non-exist col family will return false
+        assert(!store.removeColFamilyIfExists("non-existence"))
+
         // put some test data into state store
         val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
           -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
@@ -998,8 +1001,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
           errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
           sqlState = Some("42802"),
-          // TODO how to throw error with iterator?
-          parameters = Map("operationType" -> "prefixScan", "colFamilyName" -> cfName)
+          parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
         )
       }
     }

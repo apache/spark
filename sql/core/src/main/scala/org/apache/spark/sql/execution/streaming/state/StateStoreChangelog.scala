@@ -90,13 +90,9 @@ abstract class StateStoreChangelogWriter(
 
   def put(key: Array[Byte], value: Array[Byte]): Unit
 
-  def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit
-
   def delete(key: Array[Byte]): Unit
 
-  def delete(key: Array[Byte], colFamilyName: String): Unit
-
-  def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit
+  def merge(key: Array[Byte], value: Array[Byte]): Unit
 
   def abort(): Unit = {
     try {
@@ -144,11 +140,6 @@ class StateStoreChangelogWriterV1(
     size += 1
   }
 
-  override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    throw StateStoreErrors.unsupportedOperationException(
-      operationName = "Put", entity = "changelog writer v1")
-  }
-
   override def delete(key: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.size)
@@ -158,12 +149,7 @@ class StateStoreChangelogWriterV1(
     size += 1
   }
 
-  override def delete(key: Array[Byte], colFamilyName: String): Unit = {
-    throw StateStoreErrors.unsupportedOperationException(
-      operationName = "Delete", entity = "changelog writer v1")
-  }
-
-  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+  override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
     throw new UnsupportedOperationException("Operation not supported with state " +
       "changelog writer v1")
   }
@@ -202,38 +188,25 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
-    throw StateStoreErrors.unsupportedOperationException(
-      operationName = "Put", entity = "changelog writer v2")
-  }
-
-  override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    writePutOrMergeRecord(key, value, colFamilyName, RecordType.PUT_RECORD)
+    writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
   }
 
   override def delete(key: Array[Byte]): Unit = {
-    throw StateStoreErrors.unsupportedOperationException(
-      operationName = "Delete", entity = "changelog writer v2")
-  }
-
-  override def delete(key: Array[Byte], colFamilyName: String): Unit = {
     assert(compressedStream != null)
     compressedStream.write(RecordType.getRecordTypeAsByte(RecordType.DELETE_RECORD))
     compressedStream.writeInt(key.size)
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
-    compressedStream.writeInt(colFamilyName.getBytes.size)
-    compressedStream.write(colFamilyName.getBytes)
     size += 1
   }
 
-  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
-    writePutOrMergeRecord(key, value, colFamilyName, RecordType.MERGE_RECORD)
+  override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
+    writePutOrMergeRecord(key, value, RecordType.MERGE_RECORD)
   }
 
   private def writePutOrMergeRecord(key: Array[Byte],
       value: Array[Byte],
-      colFamilyName: String,
       recordType: RecordType): Unit = {
     assert(recordType == RecordType.PUT_RECORD || recordType == RecordType.MERGE_RECORD)
     assert(compressedStream != null)
@@ -242,8 +215,6 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
-    compressedStream.writeInt(colFamilyName.getBytes.size)
-    compressedStream.write(colFamilyName.getBytes)
     size += 1
   }
 
@@ -274,7 +245,7 @@ abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
     compressionCodec: CompressionCodec)
-  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte], String)] with Logging {
+  extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -291,7 +262,7 @@ abstract class StateStoreChangelogReader(
 
   def close(): Unit = { if (input != null) input.close() }
 
-  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String)
+  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte])
 }
 
 /**
@@ -307,7 +278,7 @@ class StateStoreChangelogReaderV1(
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
 
-  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
+  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
     // A -1 key size mean end of file.
     if (keySize == -1) {
@@ -323,12 +294,12 @@ class StateStoreChangelogReaderV1(
       val valueSize = input.readInt()
       if (valueSize < 0) {
         // A deletion record
-        (RecordType.DELETE_RECORD, keyBuffer, null, StateStore.DEFAULT_COL_FAMILY_NAME)
+        (RecordType.DELETE_RECORD, keyBuffer, null)
       } else {
         val valueBuffer = new Array[Byte](valueSize)
         ByteStreams.readFully(input, valueBuffer, 0, valueSize)
         // A put record.
-        (RecordType.PUT_RECORD, keyBuffer, valueBuffer, StateStore.DEFAULT_COL_FAMILY_NAME)
+        (RecordType.PUT_RECORD, keyBuffer, valueBuffer)
       }
     }
   }
@@ -354,7 +325,7 @@ class StateStoreChangelogReaderV2(
     blockBuffer
   }
 
-  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String) = {
+  override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
     // A EOF_RECORD means end of file.
     if (recordType == RecordType.EOF_RECORD) {
@@ -365,24 +336,18 @@ class StateStoreChangelogReaderV2(
         case RecordType.PUT_RECORD =>
           val keyBuffer = parseBuffer(input)
           val valueBuffer = parseBuffer(input)
-          val colFamilyNameBuffer = parseBuffer(input)
-          (RecordType.PUT_RECORD, keyBuffer, valueBuffer,
-            colFamilyNameBuffer.map(_.toChar).mkString)
+          (RecordType.PUT_RECORD, keyBuffer, valueBuffer)
 
         case RecordType.DELETE_RECORD =>
           val keyBuffer = parseBuffer(input)
           val valueSize = input.readInt()
           assert(valueSize == -1)
-          val colFamilyNameBuffer = parseBuffer(input)
-          (RecordType.DELETE_RECORD, keyBuffer, null,
-            colFamilyNameBuffer.map(_.toChar).mkString)
+          (RecordType.DELETE_RECORD, keyBuffer, null)
 
         case RecordType.MERGE_RECORD =>
           val keyBuffer = parseBuffer(input)
           val valueBuffer = parseBuffer(input)
-          val colFamilyNameBuffer = parseBuffer(input)
-          (RecordType.MERGE_RECORD, keyBuffer, valueBuffer,
-            colFamilyNameBuffer.map(_.toChar).mkString)
+          (RecordType.MERGE_RECORD, keyBuffer, valueBuffer)
 
         case _ =>
           throw new IOException("Failed to process unknown record type")

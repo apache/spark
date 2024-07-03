@@ -130,6 +130,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
     incrementMetric("numValueStateVars")
+    println("I am inside getValueState, after inc metric: " + metrics.get("numValueStateVars"))
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }

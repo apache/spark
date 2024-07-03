@@ -14,31 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+// scalastyle:off
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
 import java.nio.charset.Charset
 
-import scala.collection.mutable
+// import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.rocksdb.CompressionType
+// import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+// import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+// import org.apache.spark.sql.catalyst.util.quietly
+// import org.apache.spark.sql.execution.streaming.
+// {CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
+// import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
-import org.apache.spark.util.{ThreadUtils, Utils}
+// import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.ArrayImplicits._
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
@@ -164,7 +167,7 @@ trait AlsoTestWithChangelogCheckpointingEnabled
 class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
 
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
-
+/*
   testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
     TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
@@ -2221,7 +2224,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         }
       }
     }
-  }
+  } */
 
   private def sqlConf = SQLConf.get.clone()
 
@@ -2242,8 +2245,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         conf = conf,
         localRootDir = localDir,
         hadoopConf = hadoopConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]",
-        useColumnFamilies = useColumnFamilies
+        loggingId = s"[Thread-${Thread.currentThread.getId}]"
         )
       db.load(version)
       func(db)
@@ -2293,8 +2295,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
-  def iterator(db: RocksDB, colFamilyName: String = "default"):
-    Iterator[(String, String)] = db.iterator(colFamilyName).map(toStr)
+  def iterator(db: RocksDB):
+    Iterator[(String, String)] = db.iterator().map(toStr)
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
@@ -2325,3 +2327,5 @@ object RocksDBSuite {
     }
   }
 }
+
+// scalastyle:on

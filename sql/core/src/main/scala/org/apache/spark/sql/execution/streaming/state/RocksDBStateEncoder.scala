@@ -30,12 +30,9 @@ import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
-  def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
-  // TODO try change less of the API for key encoder?
-  def encodePrefixKey(prefixKey: UnsafeRow, colFamilyId: Short): Array[Byte]
-  def encodeKey(row: UnsafeRow): Array[Byte]
-  def encodeKey(row: UnsafeRow, colFamilyId: Short): Array[Byte]
-  def decodeKey(keyBytes: Array[Byte], hasVirtualColFamilyPrefix: Boolean = false): UnsafeRow
+  def encodePrefixKey(prefixKey: UnsafeRow, vcfId: Option[Short]): Array[Byte]
+  def encodeKey(row: UnsafeRow, vcfId: Option[Short]): Array[Byte]
+  def decodeKey(keyBytes: Array[Byte], hasVcfPrefix: Boolean = false): UnsafeRow
 }
 
 sealed trait RocksDBValueStateEncoder {
@@ -150,10 +147,8 @@ class PrefixKeyScanStateEncoder(
   // Reusable objects
   private val joinedRowOnKey = new JoinedRow()
 
-  private def encodeKeyWithColFamilyPrefix(
-      row: UnsafeRow,
-      hasVirtualColFamilyPrefix: Boolean,
-      colFamilyId: Short = 0): Array[Byte] = {
+  override def encodeKey(row: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
+    val hasVirtualColFamilyPrefix: Boolean = vcfId.isDefined
     val prefixKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
     val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
     val offSetForColFamilyPrefix =
@@ -162,7 +157,7 @@ class PrefixKeyScanStateEncoder(
     val encodedBytes = new Array[Byte](prefixKeyEncoded.length +
       remainingEncoded.length + 4 + offSetForColFamilyPrefix)
     if (hasVirtualColFamilyPrefix) {
-      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
+      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
     }
 
     Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
@@ -180,19 +175,11 @@ class PrefixKeyScanStateEncoder(
     encodedBytes
   }
 
-  override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    encodeKeyWithColFamilyPrefix(row, false)
-  }
-
-  override def encodeKey(row: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    encodeKeyWithColFamilyPrefix(row, true, colFamilyId)
-  }
-
-  private def decodeKeyWithColFamilyPrefix(
+  override def decodeKey(
       keyBytes: Array[Byte],
-      hasVirtualColFamilyPrefix: Boolean): UnsafeRow = {
+      hasVcfPrefix: Boolean = false): UnsafeRow = {
     val offSetForColFamilyPrefix =
-      if (hasVirtualColFamilyPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
+      if (hasVcfPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
     val prefixKeyEncodedLen = Platform.getInt(
       keyBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix)
     val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
@@ -218,20 +205,13 @@ class PrefixKeyScanStateEncoder(
     restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
   }
 
-  override def decodeKey(
-      keyBytes: Array[Byte],
-      hasVirtualColFamilyPrefix: Boolean = false): UnsafeRow = {
-    decodeKeyWithColFamilyPrefix(keyBytes, hasVirtualColFamilyPrefix)
-  }
-
   private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
     prefixKeyProjection(key)
   }
 
-  private def encodePrefixKeyWithColFamilyPrefix(
-    prefixKey: UnsafeRow,
-    hasVirtualColFamilyPrefix: Boolean = false,
-    colFamilyId: Short = 0): Array[Byte] = {
+  override def encodePrefixKey(prefixKey: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
+    val hasVirtualColFamilyPrefix = vcfId.isDefined
+
     val offSetForColFamilyPrefix =
       if (hasVirtualColFamilyPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
 
@@ -239,7 +219,7 @@ class PrefixKeyScanStateEncoder(
     val prefix = new Array[Byte](
       prefixKeyEncoded.length + 4 + offSetForColFamilyPrefix)
     if (hasVirtualColFamilyPrefix) {
-      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
+      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
     }
     Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
       prefixKeyEncoded.length)
@@ -247,14 +227,6 @@ class PrefixKeyScanStateEncoder(
       Platform.BYTE_ARRAY_OFFSET + 4 + offSetForColFamilyPrefix,
       prefixKeyEncoded.length)
     prefix
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    encodePrefixKeyWithColFamilyPrefix(prefixKey)
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    encodePrefixKeyWithColFamilyPrefix(prefixKey, true, colFamilyId)
   }
 
   override def supportPrefixKeyScan: Boolean = true
@@ -550,10 +522,8 @@ class RangeKeyScanStateEncoder(
     writer.getRow()
   }
 
-  private def encodeKeyWithColFamilyPrefix(
-      row: UnsafeRow,
-      hasVirtualColFamilyPrefix: Boolean = false,
-      colFamilyId: Short = 0): Array[Byte] = {
+  override def encodeKey(row: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
+    val hasVirtualColFamilyPrefix: Boolean = vcfId.isDefined
     // This prefix key has the columns specified by orderingOrdinals
     val prefixKey = extractPrefixKey(row)
     val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
@@ -567,7 +537,7 @@ class RangeKeyScanStateEncoder(
         remainingEncoded.length + 4 + offSetForColFamilyPrefix)
 
       if (hasVirtualColFamilyPrefix) {
-        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
+        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
       }
 
       Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
@@ -588,7 +558,7 @@ class RangeKeyScanStateEncoder(
       val encodedBytes = new Array[Byte](
         rangeScanKeyEncoded.length + 4 + offSetForColFamilyPrefix)
       if (hasVirtualColFamilyPrefix) {
-        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
+        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
       }
 
       Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
@@ -601,19 +571,11 @@ class RangeKeyScanStateEncoder(
     result
   }
 
-  override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    encodeKeyWithColFamilyPrefix(row, false)
-  }
-
-  override def encodeKey(row: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    encodeKeyWithColFamilyPrefix(row, true, colFamilyId)
-  }
-
-  private def decodeKeyWithColFamilyPrefix(
+  override def decodeKey(
       keyBytes: Array[Byte],
-      hasVirtualColFamilyPrefix: Boolean): UnsafeRow = {
+      hasVcfPrefix: Boolean = false): UnsafeRow = {
     val offSetForColFamilyPrefix =
-      if (hasVirtualColFamilyPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
+      if (hasVcfPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
 
     val prefixKeyEncodedLen = Platform.getInt(
       keyBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix)
@@ -633,7 +595,7 @@ class RangeKeyScanStateEncoder(
       val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
       Platform.copyMemory(keyBytes,
         Platform.BYTE_ARRAY_OFFSET + 4 + offSetForColFamilyPrefix +
-        prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+          prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
         remainingKeyEncodedLen)
 
       val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
@@ -649,16 +611,8 @@ class RangeKeyScanStateEncoder(
     }
   }
 
-  override def decodeKey(
-      keyBytes: Array[Byte],
-      hasVirtualColFamilyPrefix: Boolean = false): UnsafeRow = {
-    decodeKeyWithColFamilyPrefix(keyBytes, hasVirtualColFamilyPrefix)
-  }
-
-  private def encodePrefixKeyWithColFamilyPrefix(
-      prefixKey: UnsafeRow,
-      hasVirtualColFamilyPrefix: Boolean = false,
-      colFamilyId: Short = 0): Array[Byte] = {
+  override def encodePrefixKey(prefixKey: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
+    val hasVirtualColFamilyPrefix: Boolean = vcfId.isDefined
     val offSetForColFamilyPrefix =
       if (hasVirtualColFamilyPrefix) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
 
@@ -666,21 +620,13 @@ class RangeKeyScanStateEncoder(
     val prefix = new Array[Byte](rangeScanKeyEncoded.length + 4 + offSetForColFamilyPrefix)
 
     if (hasVirtualColFamilyPrefix) {
-      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
+      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
     }
     Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
       rangeScanKeyEncoded.length)
     Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
       prefix, Platform.BYTE_ARRAY_OFFSET + 4 + offSetForColFamilyPrefix, rangeScanKeyEncoded.length)
     prefix
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    encodePrefixKeyWithColFamilyPrefix(prefixKey, false)
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    encodePrefixKeyWithColFamilyPrefix(prefixKey, true, colFamilyId)
   }
 
   override def supportPrefixKeyScan: Boolean = true
@@ -706,23 +652,25 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
   // Reusable objects
   private val keyRow = new UnsafeRow(keySchema.size)
 
-  override def encodeKey(row: UnsafeRow): Array[Byte] = encodeUnsafeRow(row)
+  override def encodeKey(row: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
+    if (!vcfId.isDefined) {
+      encodeUnsafeRow(row)
+    } else {
+      val bytesToEncode = row.getBytes
+      val encodedBytes = new Array[Byte](bytesToEncode.length +
+        STATE_ENCODING_NUM_VERSION_BYTES + VIRTUAL_COL_FAMILY_PREFIX_BYTES)
 
-  override def encodeKey(row: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    val bytesToEncode = row.getBytes
-    val encodedBytes = new Array[Byte](bytesToEncode.length +
-      STATE_ENCODING_NUM_VERSION_BYTES + VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-
-    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, colFamilyId)
-    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET + VIRTUAL_COL_FAMILY_PREFIX_BYTES,
-      STATE_ENCODING_VERSION)
-    // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
-    Platform.copyMemory(
-      bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES +
-        VIRTUAL_COL_FAMILY_PREFIX_BYTES,
-      bytesToEncode.length)
-    encodedBytes
+      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
+      Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET + VIRTUAL_COL_FAMILY_PREFIX_BYTES,
+        STATE_ENCODING_VERSION)
+      // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
+      Platform.copyMemory(
+        bytesToEncode, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES +
+          VIRTUAL_COL_FAMILY_PREFIX_BYTES,
+        bytesToEncode.length)
+      encodedBytes
+    }
   }
 
   /**
@@ -732,8 +680,8 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
    */
   override def decodeKey(
       keyBytes: Array[Byte],
-      hasVirtualColFamilyPrefix: Boolean = false): UnsafeRow = {
-    if (hasVirtualColFamilyPrefix) {
+      hasVcfPrefix: Boolean = false): UnsafeRow = {
+    if (hasVcfPrefix) {
       if (keyBytes != null) {
         // Platform.BYTE_ARRAY_OFFSET is the recommended way refer to the 1st offset. See Platform.
         keyRow.pointTo(
@@ -750,13 +698,8 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
 
   override def supportPrefixKeyScan: Boolean = false
 
-  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+  override def encodePrefixKey(prefixKey: UnsafeRow, vcfId: Option[Short]): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow, colFamilyId: Short): Array[Byte] = {
-    throw new IllegalArgumentException("This encoder doesn't support prefix key encoding" +
-      "with column family Id!")
   }
 }
 
