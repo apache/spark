@@ -39,14 +39,13 @@ def _build_merge_action(
     condition: Optional[Column] = None,
     assignments: Optional[Dict[str, Column]] = None,
 ) -> proto.MergeAction:
-    proto_assignments = (
-        None
-        if assignments is None
-        else [
+    if assignments is None:
+        proto_assignments = None
+    else:
+        proto_assignments = [
             proto.MergeAction.Assignment(key=expr(k).to_plan(client), value=v.to_plan(client))
             for k, v in assignments.items()
         ]
-    )
     return proto.MergeAction(
         action_type=action_type,
         condition=None if condition is None else condition.to_plan(client),
