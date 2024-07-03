@@ -258,7 +258,7 @@ ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
 
 ```sql
 -- Unset Properties
-ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
+ALTER TABLE table_identifier UNSET TBLPROPERTIES ( key1, key2, ... )
 ```
 
 #### SET SERDE
