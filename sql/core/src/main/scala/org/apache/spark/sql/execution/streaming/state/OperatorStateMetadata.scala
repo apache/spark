@@ -47,7 +47,7 @@ case class StateStoreMetadataV2(
     numColsPrefixKey: Int,
     numPartitions: Int,
     stateSchemaFilePath: String)
-  extends StateStoreMetadata
+  extends StateStoreMetadata with Serializable
 
 object StateStoreMetadataV2 {
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)
@@ -60,14 +60,14 @@ object StateStoreMetadataV2 {
 /**
  * Information about a stateful operator.
  */
-trait OperatorInfo {
+trait OperatorInfo extends Serializable {
   def operatorId: Long
   def operatorName: String
 }
 
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
-trait OperatorStateMetadata {
+trait OperatorStateMetadata extends Serializable {
   def version: Int
 
   def operatorInfo: OperatorInfo
