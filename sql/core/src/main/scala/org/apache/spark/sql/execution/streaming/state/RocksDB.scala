@@ -234,6 +234,80 @@ class RocksDB(
   }
 
   /**
+   * Load from the start snapshot version and apply all the changelog records to reach the
+   * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
+   * and possibly restart the native RocksDB instance.
+   *
+   * @param snapshotVersion version of the snapshot to start with
+   * @param endVersion end version
+   * @return A RocksDB instance loaded with the state endVersion replayed from snapshotVersion.
+   *         Note that the instance will be read-only since this method is only used in State Data
+   *         Source.
+   */
+  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
+    acquire(LoadStore)
+    recordedMetrics = None
+    logInfo(
+      log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+      log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    try {
+      replayFromCheckpoint(snapshotVersion, endVersion)
+
+      logInfo(
+        log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
+        log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
+    } catch {
+      case t: Throwable =>
+        loadedVersion = -1  // invalidate loaded data
+        throw t
+    }
+    this
+  }
+
+  /**
+   * Load from the start checkpoint version and apply all the changelog records to reach the
+   * end version.
+   * If the start version does not exist, it will throw an exception.
+   *
+   * @param snapshotVersion start checkpoint version
+   * @param endVersion end version
+   */
+  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+    closeDB()
+    val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion, workingDir)
+    loadedVersion = snapshotVersion
+
+    // reset last snapshot version
+    if (lastSnapshotVersion > snapshotVersion) {
+      // discard any newer snapshots
+      lastSnapshotVersion = 0L
+      latestSnapshot = None
+    }
+    openDB()
+
+    numKeysOnWritingVersion = if (!conf.trackTotalNumberOfRows) {
+      // we don't track the total number of rows - discard the number being track
+      -1L
+    } else if (metadata.numKeys < 0) {
+      // we track the total number of rows, but the snapshot doesn't have tracking number
+      // need to count keys now
+      countKeys()
+    } else {
+      metadata.numKeys
+    }
+    if (loadedVersion != endVersion) replayChangelog(endVersion)
+    // After changelog replay the numKeysOnWritingVersion will be updated to
+    // the correct number of keys in the loaded version.
+    numKeysOnLoadedVersion = numKeysOnWritingVersion
+    fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+
+    if (conf.resetStatsOnLoad) {
+      nativeStats.reset
+    }
+  }
+
+  /**
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(endVersion: Long): Unit = {

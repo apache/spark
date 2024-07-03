@@ -4595,6 +4595,25 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
+   * Parse a [[AlterTableClusterBy]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 CLUSTER BY (a.b.c)
+   *   ALTER TABLE table1 CLUSTER BY NONE
+   * }}}
+   */
+  override def visitAlterClusterBy(ctx: AlterClusterByContext): LogicalPlan = withOrigin(ctx) {
+    val table = createUnresolvedTable(ctx.identifierReference, "ALTER TABLE ... CLUSTER BY")
+    if (ctx.NONE() != null) {
+      AlterTableClusterBy(table, None)
+    } else {
+      assert(ctx.clusterBySpec() != null)
+      AlterTableClusterBy(table, Some(visitClusterBySpec(ctx.clusterBySpec())))
+    }
+  }
+
+  /**
    * Parse [[SetViewProperties]] or [[SetTableProperties]] commands.
    *
    * For example:
