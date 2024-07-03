@@ -1359,48 +1359,6 @@ class DDLParserSuite extends AnalysisTest {
         None))
   }
 
-  test("alter table: drop column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = false))
-
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = true))
-  }
-
-  test("alter table: drop multiple columns") {
-    val sql = "ALTER TABLE table_name DROP COLUMN x, y, a.b.c"
-    Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = false))
-    }
-
-    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
-    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = true))
-    }
-  }
-
   test("alter table: hive style change column") {
     val sql1 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT"
     val sql2 = "ALTER TABLE table_name CHANGE COLUMN a.b.c c INT COMMENT 'new_comment'"
