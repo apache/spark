@@ -237,6 +237,8 @@ object CheckConnectJvmClientCompatibility {
       // SparkSession#implicits
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#implicits._sqlContext"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession#implicits.session"),
 
       // SparkSession#Builder
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -287,6 +289,7 @@ object CheckConnectJvmClientCompatibility {
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
       // Artifact Manager
       ProblemFilters.exclude[MissingClassProblem](
