@@ -228,14 +228,15 @@ class FileStreamSource(
     }
 
     // need to ensure that if maxCachedFiles is set to 0 that the next batch will be forced to
-    // list files again for the next batch
+    // list files again 
     if (unselectedFiles != null && unselectedFiles.nonEmpty && maxCachedFiles > 0) {
       logTrace(s"Taking first $maxCachedFiles unread files.")
       unreadFiles = unselectedFiles.take(maxCachedFiles)
       logTrace(s"${unreadFiles.size} unread files are available for further batches.")
     } else {
       unreadFiles = null
-      logTrace(s"No unread file is available for further batches or maxCachedFiles has been set to 0 to disable caching.")
+      logTrace(s"No unread file is available for further batches or maxCachedFiles has been set " +
+        s" to 0 to disable caching.")
     }
 
     batchFiles.foreach { case NewFileEntry(p, _, timestamp) =>
