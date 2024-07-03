@@ -1634,7 +1634,7 @@ class XmlSuite
         field("time2", TimestampType),
         field("time3", TimestampType),
         field("time4", TimestampType),
-        field("time5", TimestampType),
+        field("time5", TimestampType)
       )
 
     val df = spark.read
@@ -1657,7 +1657,7 @@ class XmlSuite
             field("time2", StringType),
             field("time3", StringType),
             field("time4", StringType),
-            field("time5", StringType),
+            field("time5", StringType)
           )
         val df2 = spark.read
           .option("rowTag", "book")
