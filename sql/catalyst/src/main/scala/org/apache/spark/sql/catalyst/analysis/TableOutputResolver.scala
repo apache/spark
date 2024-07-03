@@ -242,25 +242,25 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           case a: Alias => a.withName(expectedName)
           case other => other
         }
-        val replacedExpectedCol = expectedCol.withDataType {
+        val actualExpectedCol = expectedCol.withDataType {
           CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
         }
-        (matchedCol.dataType, replacedExpectedCol.dataType) match {
+        (matchedCol.dataType, actualExpectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
-              tableName, matchedCol, matchedType, replacedExpectedCol, expectedType,
+              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
-              tableName, matchedCol, matchedType, replacedExpectedCol, expectedType,
+              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
-              tableName, matchedCol, matchedType, replacedExpectedCol, expectedType,
+              tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
               byName = true, conf, addError, newColPath)
           case _ =>
             checkField(
-              tableName, replacedExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
+              tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
         }
       }
     }
@@ -287,32 +287,32 @@ object TableOutputResolver extends SQLConfHelper with Logging {
   private def resolveColumnsByPosition(
       tableName: String,
       inputCols: Seq[NamedExpression],
-      expected: Seq[Attribute],
+      expectedCols: Seq[Attribute],
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String] = Nil): Seq[NamedExpression] = {
-    val expectedCols = expected.map { attr =>
+    val actualExpectedCols = expectedCols.map { attr =>
       attr.withDataType { CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType) }
     }
-    if (inputCols.size > expectedCols.size) {
-      val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
+    if (inputCols.size > actualExpectedCols.size) {
+      val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
-          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
           tableName, colPath.quoted, extraColsStr
         )
       }
-    } else if (inputCols.size < expectedCols.size) {
-      val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
+    } else if (inputCols.size < actualExpectedCols.size) {
+      val missingColsStr = actualExpectedCols.takeRight(actualExpectedCols.size - inputCols.size)
         .map(col => toSQLId(col.name))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
-          expectedCols.map(_.name), inputCols.map(_.toAttribute))
+          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
       } else {
         throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
           tableName, colPath.quoted, missingColsStr
@@ -320,7 +320,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     }
 
-    inputCols.zip(expectedCols).flatMap { case (inputCol, expectedCol) =>
+    inputCols.zip(actualExpectedCols).flatMap { case (inputCol, expectedCol) =>
       val newColPath = colPath :+ expectedCol.name
       (inputCol.dataType, expectedCol.dataType) match {
         case (inputType: StructType, expectedType: StructType) =>

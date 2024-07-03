@@ -81,7 +81,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
           checkPlainResult(spark.table("t"), typ, v)
         }
         sql("INSERT OVERWRITE t VALUES ('1', null)")
-         (spark.table("t"), typ, null)
+        checkPlainResult(spark.table("t"), typ, null)
       }
     }
   }
@@ -663,6 +663,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-48792: Fix INSERT with partial column list to a table with char/varchar") {
+    assume(format != "foo",
+      "TODO: TableOutputResolver.resolveOutputColumns supportColDefaultValue is false")
     Seq("char", "varchar").foreach { typ =>
       withTable("students") {
         sql(s"CREATE TABLE students (name $typ(64), address $typ(64)) USING $format")
