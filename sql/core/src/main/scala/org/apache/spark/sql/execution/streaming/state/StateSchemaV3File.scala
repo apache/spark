@@ -40,12 +40,10 @@ object StateSchemaV3File {
  * multiple column families to keep the data for multiple state variables.
  * @param hadoopConf Hadoop configuration that is used to read / write metadata files.
  * @param path Path to the directory that will be used for writing metadata.
- * @param metadataCacheEnabled Whether to cache the batches' metadata in memory.
  */
 class StateSchemaV3File(
     hadoopConf: Configuration,
-    path: String,
-    metadataCacheEnabled: Boolean = false) {
+    path: String) {
 
   val VERSION = 3
 
