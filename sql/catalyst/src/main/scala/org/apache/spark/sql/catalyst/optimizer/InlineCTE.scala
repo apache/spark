@@ -156,7 +156,7 @@ case class InlineCTE(
           } else if (keepDanglingRelations) {
             Seq(refInfo.cteDef)
           } else {
-            Seq()
+            Nil
           }
         }
         val inlined = inlineCTE(child, cteMap)
