@@ -60,6 +60,7 @@ license: |
 - Since Spark 4.0, By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.legacy.viewSchemaCompensation` to `false`.
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable thsi feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
+- Since Spark 4.0, The Connector of MariaDB JDBC datasource has been upgraded to the `3.4` series. One of the most typical changes is that the connection strings only accept `jdbc:mariadb` protocol. If you want to continue to use `jdbc:mysql` protocol, you need to set the `permitMysqlScheme` option. For more details, please refer to: [Upgrade from MariaDB Connector/J 2.7 to 3.4](https://mariadb.com/docs/server/connect/programming-languages/java/upgrade/).
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
