@@ -38,13 +38,11 @@ class StateApiClient:
             state_server_port: int) -> None:
         self._client_socket = socket.socket()
         self._client_socket.connect(("localhost", state_server_port))
-        self.sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE",
-                                                                               65536)))
+        self.sockfile = self._client_socket.makefile("rwb",
+                                                     int(os.environ.get("SPARK_BUFFER_SIZE",65536)))
         print(f"client is ready - connection established")
         self.handle_state = StatefulProcessorHandleState.CREATED
         self.utf8_deserializer = UTF8Deserializer()
-        # place holder, will remove when actual implementation is done
-        # self.setHandleState(StatefulProcessorHandleState.CLOSED)
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         print(f"setting handle state to: {state}")
@@ -54,11 +52,40 @@ class StateApiClient:
         message = stateMessage.StateRequest(statefulProcessorCall=handle_call)
 
         self._send_proto_message(message)
-        status = read_int(self.sockfile)
 
+        response_message = self._receive_proto_message()
+        status = response_message.statusCode
         if (status == 0):
             self.handle_state = state
+        else:
+            raise Exception(f"Error setting handle state: {response_message.errorMessage}")
         print(f"setHandleState status= {status}")
+
+    def set_implicit_key(self, key: str) -> None:
+        print(f"setting implicit key: {key}")
+        set_implicit_key = stateMessage.SetImplicitKey(key=key)
+        request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
+        message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
+
+        self._send_proto_message(message)
+        response_message = self._receive_proto_message()
+        status = response_message.statusCode
+        print(f"setImplicitKey status= {status}")
+        if (status != 0):
+            raise Exception(f"Error setting implicit key: {response_message.errorMessage}")
+
+    def remove_implicit_key(self) -> None:
+        print(f"removing implicit key")
+        remove_implicit_key = stateMessage.RemoveImplicitKey()
+        request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
+        message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
+
+        self._send_proto_message(message)
+        response_message = self._receive_proto_message()
+        status = response_message.statusCode
+        print(f"removeImplicitKey status= {status}")
+        if (status != 0):
+            raise Exception(f"Error removing implicit key: {response_message.errorMessage}")
 
     def get_value_state(self, state_name: str, schema: Union[StructType, str]) -> None:
         if isinstance(schema, str):
@@ -70,87 +97,14 @@ class StateApiClient:
         state_call_command.stateName = state_name
         state_call_command.schema = schema.json()
         call = stateMessage.StatefulProcessorCall(getValueState=state_call_command)
-
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
         self._send_proto_message(message)
-        status = read_int(self.sockfile)
+        response_message = self._receive_proto_message()
+        status = response_message.statusCode
+        if (status != 0):
+            raise Exception(f"Error initializing value state: {response_message.errorMessage}")
         print(f"getValueState status= {status}")
-
-    def value_state_exists(self, state_name: str) -> bool:
-        print(f"checking value state exists: {state_name}")
-        exists_call = stateMessage.Exists(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(exists=exists_call)
-        state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
-        message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"valueStateExists status= {status}")
-        if (status == 0):
-            return True
-        else:
-            return False
-
-    def value_state_get(self, state_name: str) -> Any:
-        print(f"getting value state: {state_name}")
-        get_call = stateMessage.Get(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(get=get_call)
-        state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
-        message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"valueStateGet status= {status}")
-        if (status == 0):
-            return self.utf8_deserializer.loads(self.sockfile)
-        else:
-            return None
-
-    def value_state_update(self, state_name: str, schema: Union[StructType, str], value: str) -> None:
-        if isinstance(schema, str):
-            schema = cast(StructType, _parse_datatype_string(schema))
-        print(f"updating value state: {state_name}")
-        byteStr = value.encode('utf-8')
-        update_call = stateMessage.Update(stateName=state_name, schema=schema.json(), value=byteStr)
-        value_state_call = stateMessage.ValueStateCall(update=update_call)
-        state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
-        message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"valueStateUpdate status= {status}")
-
-    def value_state_clear(self, state_name: str) -> None:
-        print(f"clearing value state: {state_name}")
-        clear_call = stateMessage.Clear(stateName=state_name)
-        value_state_call = stateMessage.ValueStateCall(clear=clear_call)
-        state_variable_request = stateMessage.StateVariableRequest(valueStateCall=value_state_call)
-        message = stateMessage.StateRequest(stateVariableRequest=state_variable_request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"valueStateClear status= {status}")
-
-    def set_implicit_key(self, key: str) -> None:
-        print(f"setting implicit key: {key}")
-        set_implicit_key = stateMessage.SetImplicitKey(key=key)
-        request = stateMessage.ImplicitGroupingKeyRequest(setImplicitKey=set_implicit_key)
-        message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"setImplicitKey status= {status}")
-
-    def remove_implicit_key(self) -> None:
-        print(f"removing implicit key")
-        remove_implicit_key = stateMessage.RemoveImplicitKey()
-        request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
-        message = stateMessage.StateRequest(implicitGroupingKeyRequest=request)
-
-        self._send_proto_message(message)
-        status = read_int(self.sockfile)
-        print(f"removeImplicitKey status= {status}")
 
     def _get_proto_state(self,
                          state: StatefulProcessorHandleState) -> stateMessage.HandleState.ValueType:
@@ -170,3 +124,18 @@ class StateApiClient:
         write_int(len(serialized_msg), self.sockfile)
         self.sockfile.write(serialized_msg)
         self.sockfile.flush()
+
+    def _receive_proto_message(self) -> stateMessage.StateResponse:
+        serialized_msg = self._receive_str()
+        print(f"received response message -- len = {len(serialized_msg)} {str(serialized_msg)}")
+        # proto3 will not serialize the message if the value is default, in this case 0
+        if (len(serialized_msg) == 0):
+            return stateMessage.StateResponse(statusCode=0)
+        message = stateMessage.StateResponse()
+        message.ParseFromString(serialized_msg.encode('utf-8'))
+        print(f"received response message -- status = {str(message.statusCode)},"
+              f" message = {message.errorMessage}")
+        return message
+
+    def _receive_str(self) -> str:
+        return self.utf8_deserializer.loads(self.sockfile)

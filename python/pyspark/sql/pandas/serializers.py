@@ -1106,7 +1106,6 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             This function helps to ensure the requirement for Pandas UDFs - Pandas UDFs require a
             START_ARROW_STREAM before the Arrow stream is sent.
 
-            
             START_ARROW_STREAM should be sent after creating the first record batch so in case of
             an error, it can be sent back to the JVM before the Arrow stream starts.
             """
@@ -1140,10 +1139,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         # self.state_server_port = state_server_port
 
         # # open client connection to state server socket
-        # self._client_socket = socket.socket()
-        # self._client_socket.connect(("localhost", state_server_port))
-        # sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
-        # self.state_serializer = TransformWithStateInPandasStateSerializer(sockfile)
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
 
@@ -1182,26 +1177,3 @@ class ImplicitGroupingKeyTracker:
 
     def getKey(self) -> Any:
         return self._key
-
-
-class TransformWithStateInPandasStateSerializer:
-
-    def __init__(self, sockfile) -> None:
-        self.sockfile = sockfile
-        self.grouping_key_tracker = ImplicitGroupingKeyTracker()
-
-    def load_stream(self, stream):
-        pass
-
-    def dump_stream(self, iterator, stream):
-        pass
-
-    def send(self, proto_message):
-        write_with_length(proto_message, self.sockfile)
-        self.sockfile.flush()
-
-    def receive(self):
-        return read_int(self.sockfile)
-    
-    def readStr(self):
-        return self.sockfile.readline()

@@ -28,7 +28,6 @@ message StatefulProcessorCall {
 message StateVariableRequest {
   oneof method {
     ValueStateCall valueStateCall = 1;
-    ListStateCall listStateCall = 2;
   }
 }
 
@@ -45,19 +44,12 @@ message StateCallCommand {
 }
 
 message ValueStateCall {
+  string stateName = 1;
   oneof method {
-    Exists exists = 1;
-    Get get = 2;
-    Update update = 3;
-    Clear clear = 4;
-  }
-}
-
-message ListStateCall {
-  oneof method {
-    Exists exists = 1;
-    Get get = 2;
-    Clear clear = 3;
+    Exists exists = 2;
+    Get get = 3;
+    ValueStateUpdate valueStateUpdate = 4;
+    Clear clear = 5;
   }
 }
 
@@ -69,21 +61,17 @@ message RemoveImplicitKey {
 }
 
 message Exists {
-  string stateName = 1;
 }
 
 message Get {
-  string stateName = 1;
 }
 
-message Update {
-  string stateName = 1;
-  string schema = 2;
-  bytes value = 3;
+message ValueStateUpdate {
+  string schema = 1;
+  bytes value = 2;
 }
 
 message Clear {
-  string stateName = 1;
 }
 
 enum HandleState {
