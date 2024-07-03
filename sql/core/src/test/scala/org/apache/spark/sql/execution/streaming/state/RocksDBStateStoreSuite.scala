@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -918,6 +918,178 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  /* Column family related tests */
+  testWithColumnFamilies("column family creation with invalid names",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    tryWithProviderResource(
+      newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      Seq("default", "", " ", "    ", " default", " default ").foreach { colFamilyName =>
+        val ex = intercept[SparkUnsupportedOperationException] {
+          store.createColFamilyIfAbsent(colFamilyName,
+            keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
+        }
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+            parameters = Map(
+              "operationName" -> "create_col_family",
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies(s"column family creation with reserved chars",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    tryWithProviderResource(
+      newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
+        val ex = intercept[SparkUnsupportedOperationException] {
+          store.createColFamilyIfAbsent(colFamilyName,
+            keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema))
+        }
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+            parameters = Map(
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies(s"operations on absent column family",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    tryWithProviderResource(
+      newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      val colFamilyName = "test"
+
+      verifyStoreOperationUnsupported("put", colFamiliesEnabled, colFamilyName) {
+        store.put(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove", colFamiliesEnabled, colFamilyName) {
+        store.remove(dataToKeyRow("a", 1), colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get", colFamiliesEnabled, colFamilyName) {
+        store.get(dataToKeyRow("a", 1), colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
+        store.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
+        store.merge(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
+        store.prefixScan(dataToKeyRow("a", 1), colFamilyName)
+      }
+    }
+  }
+
+  // TODO SPARK-48796 after restart state id will not be the same
+  ignore(s"get, put, iterator, commit, load with multiple column families") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
+      def get(store: StateStore, col1: String, col2: Int, colFamilyName: String): UnsafeRow = {
+        store.get(dataToKeyRow(col1, col2), colFamilyName)
+      }
+
+      def iterator(store: StateStore, colFamilyName: String): Seq[((String, Int), Int)] = {
+        store.iterator(colFamilyName).toSeq.map {
+          case unsafePair =>
+            (keyRowToData(unsafePair.key), valueRowToData(unsafePair.value))
+        }
+      }
+
+      def put(store: StateStore, key: (String, Int), value: Int, colFamilyName: String): Unit = {
+        store.put(dataToKeyRow(key._1, key._2), dataToValueRow(value), colFamilyName)
+      }
+
+      var store = provider.getStore(0)
+
+      val colFamily1: String = "abc"
+      val colFamily2: String = "xyz"
+      store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+      store.createColFamilyIfAbsent(colFamily2, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema))
+
+      assert(get(store, "a", 1, colFamily1) === null)
+      assert(iterator(store, colFamily1).isEmpty)
+      put(store, ("a", 1), 1, colFamily1)
+      assert(valueRowToData(get(store, "a", 1, colFamily1)) === 1)
+
+      assert(get(store, "a", 1, colFamily2) === null)
+      assert(iterator(store, colFamily2).isEmpty)
+      put(store, ("a", 1), 1, colFamily2)
+      assert(valueRowToData(get(store, "a", 1, colFamily2)) === 1)
+
+      store.commit()
+
+      // reload version 0
+      store = provider.getStore(0)
+      assert(get(store, "a", 1, colFamily1) === null)
+      assert(iterator(store, colFamily1).isEmpty)
+
+      store = provider.getStore(1)
+      // version 1 data recovered correctly
+      assert(valueRowToData(get(store, "a", 1, colFamily1)) == 1)
+      assert(iterator(store, colFamily1).toSet === Set((("a", 1), 1)))
+      // make changes but do not commit version 2
+      put(store, ("b", 1), 2, colFamily1)
+      assert(valueRowToData(get(store, "b", 1, colFamily1)) === 2)
+      assert(iterator(store, colFamily1).toSet === Set((("a", 1), 1), (("b", 1), 2)))
+      // version 1 data recovered correctly
+      assert(valueRowToData(get(store, "a", 1, colFamily2))== 1)
+      assert(iterator(store, colFamily2).toSet === Set((("a", 1), 1)))
+      // make changes but do not commit version 2
+      put(store, ("b", 1), 2, colFamily2)
+      assert(valueRowToData(get(store, "b", 1, colFamily2))=== 2)
+      assert(iterator(store, colFamily2).toSet === Set((("a", 1), 1), (("b", 1), 2)))
+
+      store.commit()
+    }
+  }
+
   Seq(
     NoPrefixKeyStateEncoderSpec(keySchema), PrefixKeyScanStateEncoderSpec(keySchema, 1)
   ).foreach { keyEncoder =>
@@ -930,8 +1102,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
           val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
           if (colFamiliesEnabled) {
-            store.createColFamilyIfAbsent(cfName,
-              keySchema, valueSchema, keyEncoder)
+            store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
           }
 
           var timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
@@ -974,8 +1145,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val store = provider.getStore(0)
 
         val cfName = "testColFamily"
-        store.createColFamilyIfAbsent(cfName,
-          keySchema, valueSchema, keyEncoder)
+        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
 
         // remove non-exist col family will return false
         assert(!store.removeColFamilyIfExists("non-existence"))
@@ -1004,6 +1174,38 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
         )
       }
+    }
+  }
+
+  private def verifyStoreOperationUnsupported(
+      operationName: String,
+      colFamiliesEnabled: Boolean,
+      colFamilyName: String)
+    (testFn: => Unit): Unit = {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      testFn
+    }
+
+    if (!colFamiliesEnabled) {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        parameters = Map(
+          "operationType" -> operationName,
+          "colFamilyName" -> colFamilyName
+        ),
+        matchPVals = true
+      )
     }
   }
 
