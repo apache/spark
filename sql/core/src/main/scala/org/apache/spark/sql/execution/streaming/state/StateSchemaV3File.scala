@@ -24,11 +24,11 @@ import java.util.UUID
 import scala.io.{Source => IOSource}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.HDFSMetadataLog
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
 
 object StateSchemaV3File {
   val COLUMN_FAMILY_SCHEMA_VERSION = 1
@@ -45,21 +45,20 @@ object StateSchemaV3File {
 class StateSchemaV3File(
     hadoopConf: Configuration,
     path: String,
-    metadataCacheEnabled: Boolean = false)
-  extends HDFSMetadataLog[List[ColumnFamilySchema]](hadoopConf, path, metadataCacheEnabled) {
+    metadataCacheEnabled: Boolean = false) {
 
   val VERSION = 3
 
-  def this(sparkSession: SparkSession, path: String) = {
-    this(
-      sparkSession.sessionState.newHadoopConf(),
-      path,
-      metadataCacheEnabled = sparkSession.sessionState.conf.getConf(
-        SQLConf.STREAMING_METADATA_CACHE_ENABLED)
-    )
+  val metadataPath = new Path(path)
+
+  protected val fileManager: CheckpointFileManager =
+    CheckpointFileManager.create(metadataPath, hadoopConf)
+
+  if (!fileManager.exists(metadataPath)) {
+    fileManager.mkdirs(metadataPath)
   }
 
-  override def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+  def deserialize(in: InputStream): List[ColumnFamilySchema] = {
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
 
     if (!lines.hasNext) {
@@ -79,7 +78,7 @@ class StateSchemaV3File(
     }
   }
 
-  override def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
+  def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
     out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
     out.write(s"v${StateSchemaV3File.COLUMN_FAMILY_SCHEMA_VERSION}".getBytes(UTF_8))
@@ -99,19 +98,27 @@ class StateSchemaV3File(
     deserialize(fileManager.open(schemaFilePath))
   }
 
-  override def add(batchId: Long, metadata: List[ColumnFamilySchema]): Boolean = {
-    throw new UnsupportedOperationException("StateSchemaFile does not support add operation." +
-      "Please use addWithUUID instead.")
+  protected def write(
+      batchMetadataFile: Path,
+      fn: OutputStream => Unit): Unit = {
+    // Only write metadata when the batch has not yet been written
+    val output = fileManager.createAtomic(batchMetadataFile, overwriteIfPossible = false)
+    try {
+      fn(output)
+      output.close()
+    } catch {
+      case e: FileAlreadyExistsException =>
+        output.cancel()
+        // If next batch file already exists, then another concurrently running query has
+        // written it.
+        throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
+      case e: Throwable =>
+        output.cancel()
+        throw e
+    }
   }
 
-  override def get(batchId: Long): Option[List[ColumnFamilySchema]] = {
-    throw new UnsupportedOperationException("StateSchemaFile does not support get operation." +
-      "Please use getWithPath instead.")
-  }
-
-  override def getLatest(): Option[(Long, List[ColumnFamilySchema])] = {
-    throw new UnsupportedOperationException(
-      "StateSchemaFile does not support getLatest operation." +
-        "Please use getWithpath instead.")
+  protected def batchIdToPath(batchId: Long): Path = {
+    new Path(metadataPath, batchId.toString)
   }
 }

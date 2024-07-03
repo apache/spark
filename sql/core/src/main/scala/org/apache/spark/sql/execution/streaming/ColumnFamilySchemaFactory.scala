@@ -32,6 +32,7 @@ object ColumnFamilySchemaFactory {
     }
   }
 }
+
 trait ColumnFamilySchemaFactory {
   def getValueStateSchema[T](
       stateName: String,

@@ -110,7 +110,7 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
+  private def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
     val driverProcessorHandle = getDriverProcessorHandle
     val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
     closeProcessorHandle()
@@ -391,13 +391,13 @@ case class TransformWithStateExec(
       oldSchemas: List[ColumnFamilySchema],
       newSchemas: Map[String, ColumnFamilySchema]): Unit = {
     oldSchemas.foreach { case oldSchema: ColumnFamilySchemaV1 =>
-      newSchemas.get(oldSchema.columnFamilyName).foreach { newSchema =>
-        if (oldSchema != newSchema) {
-          throw StateStoreErrors.stateStoreColumnFamilyMismatch(
-            newSchema.columnFamilyName,
-            oldSchema.json,
-            newSchema.json)
-        }
+      newSchemas.get(oldSchema.columnFamilyName).foreach {
+        case newSchema: ColumnFamilySchemaV1 =>
+          StateSchemaCompatibilityChecker.check(
+            (oldSchema.keySchema, oldSchema.valueEncoder),
+            (newSchema.keySchema, newSchema.valueEncoder),
+            ignoreValueSchema = false
+          )
       }
     }
   }

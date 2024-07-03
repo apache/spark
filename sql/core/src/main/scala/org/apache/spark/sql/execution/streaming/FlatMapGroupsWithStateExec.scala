@@ -190,8 +190,9 @@ trait FlatMapGroupsWithStateExecBase
   }
 
   override def validateAndMaybeEvolveStateSchema(
-      hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
-    Array[String] = {
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
   }
