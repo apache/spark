@@ -125,12 +125,12 @@ public class TaskMemoryManager {
   /**
    * Peak off heap memory usage by this task.
    */
-  private long peakTaskOffHeapMemory = 0L;
+  private long peakOffHeapMemory = 0L;
 
   /**
    * Peak on heap memory usage by this task.
    */
-  private long peakTaskOnHeapMemory = 0L;
+  private long peakOnHeapMemory = 0L;
 
   /**
    * Construct a new TaskMemoryManager.
@@ -214,10 +214,10 @@ public class TaskMemoryManager {
       }
 
       if (mode == MemoryMode.OFF_HEAP) {
-        peakTaskOffHeapMemory = Math.max(peakTaskOffHeapMemory,
+        peakOffHeapMemory = Math.max(peakOffHeapMemory,
           memoryManager.getOffHeapExecutionMemoryUsageForTask(taskAttemptId));
       } else {
-        peakTaskOnHeapMemory = Math.max(peakTaskOnHeapMemory,
+        peakOnHeapMemory = Math.max(peakOnHeapMemory,
           memoryManager.getOnHeapExecutionMemoryUsageForTask(taskAttemptId));
       }
       return got;
@@ -531,13 +531,13 @@ public class TaskMemoryManager {
    *
    */
   public long getPeakOnHeapExecutionMemory() {
-    return peakTaskOnHeapMemory;
+    return peakOnHeapMemory;
   }
 
   /**
    * Returns peak task-level on-heap memory usage in bytes.
    */
   public long getPeakOffHeapExecutionMemory() {
-    return peakTaskOffHeapMemory;
+    return peakOffHeapMemory;
   }
 }
