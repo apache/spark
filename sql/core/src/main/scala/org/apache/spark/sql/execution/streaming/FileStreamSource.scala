@@ -228,7 +228,7 @@ class FileStreamSource(
     }
 
     // need to ensure that if maxCachedFiles is set to 0 that the next batch will be forced to
-    // list files again 
+    // list files again
     if (unselectedFiles != null && unselectedFiles.nonEmpty && maxCachedFiles > 0) {
       logTrace(s"Taking first $maxCachedFiles unread files.")
       unreadFiles = unselectedFiles.take(maxCachedFiles)
