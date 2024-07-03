@@ -64,19 +64,18 @@ class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
     override val isInternal: Boolean)
-  extends LeafStatementExec
-  with WithOrigin {
+  extends LeafStatementExec with WithOrigin {
 
   /**
-   * Whether this statement had to be executed during the interpretation phase.
+   * Whether this statement has been executed during the interpretation phase.
    * Example: Statements in conditions of If/Else, While, etc.
    */
-  var consumed = false
+  var isExecuted = false
 
   /**
    * Reset execution of the current node.
    */
-  override def reset(): Unit = consumed = false
+  override def reset(): Unit = isExecuted = false
 
   /**
    * Get the SQL query text corresponding to this statement.
