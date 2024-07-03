@@ -48,6 +48,9 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
+ * @param hadoopConf Hadoop configuration that is used to read / write metadata files.
+ * @param path Path to the directory that will be used for writing metadata.
+ * @param metadataCacheEnabled Whether to cache the batches' metadata in memory.
  */
 class HDFSMetadataLog[T <: AnyRef : ClassTag](
     hadoopConf: Configuration,
