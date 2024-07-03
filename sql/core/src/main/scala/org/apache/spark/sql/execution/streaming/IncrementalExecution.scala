@@ -193,27 +193,23 @@ class IncrementalExecution(
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       // In the case of TransformWithStateExec, we want to collect this StateSchema
       // filepath, and write this path out in the OperatorStateMetadata file
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        val stateSchemaVersion = stateStoreWriter match {
+      case statefulOp: StatefulOperator if isFirstBatch =>
+        val stateSchemaVersion = statefulOp match {
           case _: TransformWithStateExec => sparkSession.sessionState.conf.
             getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _ => 2
         }
-        val stateSchemaPaths =
-          stateStoreWriter.validateAndMaybeEvolveStateSchema(
-            hadoopConf,
-            currentBatchId,
-            stateSchemaVersion)
+        val stateSchemaPaths = statefulOp.
+          validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
         // write out the state schema paths to the metadata file
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        // TODO: Populate metadata with stateSchemaPaths if metadata version is v2
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
-      case statefulOp: StatefulOperator if isFirstBatch =>
-        statefulOp.
-          validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion = 2)
+        statefulOp match {
+          case stateStoreWriter: StateStoreWriter =>
+            val metadata = stateStoreWriter.operatorStateMetadata()
+            // TODO: Populate metadata with stateSchemaPaths if metadata version is v2
+            val metadataWriter = new OperatorStateMetadataWriter(new Path(
+              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+            metadataWriter.write(metadata)
+        }
         statefulOp
     }
   }
