@@ -60,6 +60,9 @@ mypy-protobuf==3.3.0
 googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
 
+# Debug for Spark and Spark Connect
+graphviz==0.20.3
+
 # TorchDistributor dependencies
 torch
 torchvision

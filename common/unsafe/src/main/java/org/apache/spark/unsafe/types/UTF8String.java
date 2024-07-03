@@ -23,6 +23,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.Function;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -30,6 +32,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.ibm.icu.lang.UCharacter;
 
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
@@ -57,6 +60,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private Object base;
   private long offset;
   private int numBytes;
+  private volatile int numChars = -1;
 
   public Object getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
@@ -101,6 +105,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
+  public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
+
 
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
@@ -250,6 +256,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of code points in it.
    */
   public int numChars() {
+    if (numChars == -1) numChars = getNumChars();
+    return numChars;
+  }
+
+  /**
+   * Private helper method to calculate the number of code points in the UTF-8 string. Counting
+   * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
+   * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   */
+  private int getNumChars() {
     int len = 0;
     for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
       len += 1;
@@ -403,6 +419,105 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Code point iteration over a UTF8String can be done using one of two modes:
+   * 1. CODE_POINT_ITERATOR_ASSUME_VALID: The caller ensures that the UTF8String is valid and does
+   *    not contain any invalid UTF-8 byte sequences. In this case, the code point iterator will
+   *    return the code points in the current string one by one, as integers. If an invalid code
+   *    point is found within the string during iteration, an exception will be thrown. This mode
+   *    is more dangerous, but faster - since no scan is needed prior to beginning iteration.
+   * 2. CODE_POINT_ITERATOR_MAKE_VALID: The caller does not ensure that the UTF8String is valid,
+   *    but instead expects the code point iterator to first check whether the current UTF8String
+   *    is valid, then perform the invalid byte sequence replacement using `makeValid`, and finally
+   *    begin the code point iteration over the resulting valid UTF8String. However, the original
+   *    UTF8String stays unchanged. This mode is safer, but slower - due to initial validation.
+   * The default mode is CODE_POINT_ITERATOR_ASSUME_VALID.
+   */
+  public enum CodePointIteratorType {
+    CODE_POINT_ITERATOR_ASSUME_VALID, // USE ONLY WITH VALID STRINGS
+    CODE_POINT_ITERATOR_MAKE_VALID
+  }
+
+  /**
+   * Returns a code point iterator for this UTF8String.
+   */
+  public Iterator<Integer> codePointIterator() {
+    return codePointIterator(CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID);
+  }
+
+  public Iterator<Integer> codePointIterator(CodePointIteratorType iteratorMode) {
+    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID && !isValid()) {
+      return makeValid().codePointIterator();
+    }
+    return new CodePointIterator();
+  }
+
+  /**
+   * Code point iterator implementation for the UTF8String class. The iterator will return code
+   * points in the current string one by one, as integers. However, the code point iterator is only
+   * guaranteed to work if the current UTF8String does not contain any invalid UTF-8 byte sequences.
+   * If the current string contains any invalid UTF-8 byte sequences, exceptions will be thrown.
+   */
+  private class CodePointIterator implements Iterator<Integer> {
+    // Byte index used to iterate over the current UTF8String.
+    private int byteIndex = 0;
+
+    @Override
+    public boolean hasNext() {
+      return byteIndex < numBytes;
+    }
+
+    @Override
+    public Integer next() {
+      if (!hasNext()) {
+        throw new IndexOutOfBoundsException();
+      }
+      int codePoint = codePointFrom(byteIndex);
+      byteIndex += numBytesForFirstByte(getByte(byteIndex));
+      return codePoint;
+    }
+  }
+
+  /**
+   * Reverse version of the code point iterator for this UTF8String, returns code points in the
+   * current string one by one, as integers, in reverse order. The logic is similar to the above.
+   */
+
+  public Iterator<Integer> reverseCodePointIterator() {
+    return reverseCodePointIterator(CodePointIteratorType.CODE_POINT_ITERATOR_ASSUME_VALID);
+  }
+
+  public Iterator<Integer> reverseCodePointIterator(CodePointIteratorType iteratorMode) {
+    if (iteratorMode == CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID && !isValid()) {
+      return makeValid().reverseCodePointIterator();
+    }
+    return new ReverseCodePointIterator();
+  }
+
+  private class ReverseCodePointIterator implements Iterator<Integer> {
+    private int byteIndex = numBytes - 1;
+
+    @Override
+    public boolean hasNext() {
+      return byteIndex >= 0;
+    }
+
+    @Override
+    public Integer next() {
+      if (!hasNext()) {
+        throw new IndexOutOfBoundsException();
+      }
+      while (byteIndex > 0 && isContinuationByte(getByte(byteIndex))) {
+        --byteIndex;
+      }
+      return codePointFrom(byteIndex--);
+    }
+
+    private boolean isContinuationByte(byte b) {
+      return (b & 0xC0) == 0x80;
+    }
+  }
+
+  /**
    * Returns a substring of this.
    * @param start the position of first code point
    * @param until the position after last code point, exclusive.
@@ -474,10 +589,53 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Returns the byte at position `i`.
+   * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
-  public byte getByte(int i) {
-    return Platform.getByte(base, offset + i);
+  public byte getByte(int byteIndex) {
+    return Platform.getByte(base, offset + byteIndex);
+  }
+
+  /**
+   * Returns the code point at (char) position `charIndex`. If char index is invalid, throws
+   * exception. Note that this method is not efficient as it needs to traverse the UTF-8 string.
+   * If `byteIndex` of the first byte in the code point is known, use `codePointFrom` instead.
+   */
+  public int getChar(int charIndex) {
+    if (charIndex < 0 || charIndex >= numChars()) {
+      throw new IndexOutOfBoundsException();
+    }
+    int charCount = 0, byteCount = 0;
+    while (charCount < charIndex) {
+      byteCount += numBytesForFirstByte(getByte(byteCount));
+      charCount += 1;
+    }
+    return codePointFrom(byteCount);
+  }
+
+  /**
+   * Returns the code point starting from the byte at position `byteIndex`.
+   * If byte index is invalid, throws exception.
+   */
+  public int codePointFrom(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
+      throw new IndexOutOfBoundsException();
+    }
+    byte b = getByte(byteIndex);
+    int numBytes = numBytesForFirstByte(b);
+    return switch (numBytes) {
+      case 1 ->
+        b & 0x7F;
+      case 2 ->
+        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
+      case 3 ->
+        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
+        (getByte(byteIndex + 2) & 0x3F);
+      case 4 ->
+        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
+        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
+      default ->
+        throw new IllegalStateException("Error in UTF-8 code point");
+    };
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -496,24 +654,30 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Method for ASCII character conversion using a functional interface for chars.
+   */
+
+  private UTF8String convertAscii(Function<Character, Character> charConverter) {
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+        bytes[i] = (byte) charConverter.apply((char) getByte(i)).charValue();
+    }
+    return fromBytes(bytes);
+  }
+
+  /**
    * Returns the upper case of this string
    */
   public UTF8String toUpperCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - do char level uppercase conversion in case of chars in ASCII range
-    for (int i = 0; i < numBytes; i++) {
-      if (getByte(i) < 0) {
-        // non-ASCII
-        return toUpperCaseSlow();
-      }
-    }
-    byte[] bytes = new byte[numBytes];
-    for (int i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toUpperCase(getByte(i));
-    }
-    return fromBytes(bytes);
+
+    return isFullAscii() ? toUpperCaseAscii() : toUpperCaseSlow();
+  }
+
+  public UTF8String toUpperCaseAscii() {
+    return convertAscii(Character::toUpperCase);
   }
 
   private UTF8String toUpperCaseSlow() {
@@ -544,33 +708,40 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(toString().toLowerCase());
   }
 
-  private UTF8String toLowerCaseAscii() {
-    final var bytes = new byte[numBytes];
-    for (var i = 0; i < numBytes; i++) {
-      bytes[i] = (byte) Character.toLowerCase(getByte(i));
-    }
-    return fromBytes(bytes);
+  public UTF8String toLowerCaseAscii() {
+    return convertAscii(Character::toLowerCase);
   }
 
   /**
-   * Returns the title case of this string, that could be used as title.
+   * Returns the title case of this string, that could be used as title. There are essentially two
+   * different version of this method - one using the JVM case mapping rules, and the other using
+   * the ICU case mapping rules. ASCII implementation is the same for both, but please refer to the
+   * respective methods for the slow (non-ASCII) implementation for more details on the differences.
    */
   public UTF8String toTitleCase() {
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // Optimization - in case of ASCII chars we can skip copying the data to and from StringBuilder
-    byte prev = ' ', curr;
-    for (int i = 0; i < numBytes; i++) {
-      curr = getByte(i);
-      if (prev == ' ' && curr < 0) {
-        // non-ASCII
-        return toTitleCaseSlow();
-      }
-      prev = curr;
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlow();
+  }
+
+  public UTF8String toTitleCaseICU() {
+    if (numBytes == 0) {
+      return EMPTY_UTF8;
     }
+
+    return isFullAscii() ? toTitleCaseAscii() : toTitleCaseSlowICU();
+  }
+
+  /*
+   * Fast path to return the title case of this string, given that all characters are ASCII.
+   * This implementation essentially works for all collations currently supported in Spark.
+   * This method is more efficient, because it skips copying the data to and from StringBuilder.
+   */
+  private UTF8String toTitleCaseAscii() {
     byte[] bytes = new byte[numBytes];
-    prev = ' ';
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
       curr = getByte(i);
       if (prev == ' ') {
@@ -583,6 +754,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /*
+   * Slow path to return the title case of this string, according to JVM case mapping rules.
+   * This is considered the "old" behaviour for UTF8_BINARY collation, and is not recommended.
+   * To use this, set the spark.sql.ICU_CASE_MAPPINGS_ENABLED configuration to `false`.
+   */
   private UTF8String toTitleCaseSlow() {
     StringBuilder sb = new StringBuilder();
     String s = toString();
@@ -591,6 +767,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 1; i < s.length(); i++) {
       if (sb.charAt(i - 1) == ' ') {
         sb.setCharAt(i, Character.toTitleCase(sb.charAt(i)));
+      }
+    }
+    return fromString(sb.toString());
+  }
+
+  /*
+   * Slow path to return the title case of this string, according to ICU case mapping rules.
+   * This is considered the "new" behaviour for UTF8_BINARY collation, and is recommended.
+   * This is used by default, since spark.sql.ICU_CASE_MAPPINGS_ENABLED is set to `true`.
+   */
+  private UTF8String toTitleCaseSlowICU() {
+    StringBuilder sb = new StringBuilder();
+    String s = toString();
+    sb.append(s);
+    sb.setCharAt(0, (char) UCharacter.toTitleCase(sb.charAt(0)));
+    for (int i = 1; i < s.length(); i++) {
+      if (sb.charAt(i - 1) == ' ') {
+        sb.setCharAt(i, (char) UCharacter.toTitleCase(sb.charAt(i)));
       }
     }
     return fromString(sb.toString());
@@ -1864,4 +2058,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     in.read((byte[]) base);
   }
 
+  /**
+   * Convert a long value to its binary format stripping leading zeros.
+   */
+  public static UTF8String toBinaryString(long val) {
+    int zeros = Long.numberOfLeadingZeros(val);
+    if (zeros == Long.SIZE) {
+      return UTF8String.ZERO_UTF8;
+    } else {
+      int length = Long.SIZE - zeros;
+      byte[] bytes = new byte[length];
+      do {
+        bytes[--length] = (byte) ((val & 0x1) == 1 ? '1': '0');
+        val >>>= 1;
+      } while (length > 0);
+      return fromBytes(bytes);
+    }
+  }
 }

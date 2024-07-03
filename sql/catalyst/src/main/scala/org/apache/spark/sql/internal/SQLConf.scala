@@ -535,8 +535,7 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
-        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .version("2.3.0")
       .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
@@ -782,7 +781,8 @@ object SQLConf {
           }
         },
         "DEFAULT_COLLATION",
-        _ => Map())
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
 
   val ICU_CASE_MAPPINGS_ENABLED =

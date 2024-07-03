@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -694,6 +694,188 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
+}
+
+/**
+ * A function that checks if a UTF8 string is valid.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns true if `str` is a valid UTF-8 string, otherwise returns false.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       true
+      > SELECT _FUNC_(x'61');
+       true
+      > SELECT _FUNC_(x'80');
+       false
+      > SELECT _FUNC_(x'61C262');
+       false
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
+
+  override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+
+  override def nodeName: String = "is_valid_utf8"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): IsValidUTF8 = {
+    copy(input = newChild)
+  }
+
+}
+
+/**
+ * A function that converts an invalid UTF8 string to a valid UTF8 string by replacing invalid
+ * UTF-8 byte sequences with the Unicode replacement character (U+FFFD), according to the UNICODE
+ * standard rules (Section 3.9, Paragraph D86, Table 3-7). Valid strings remain unchanged.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
+    "otherwise returns a new string whose invalid UTF8 byte sequences are replaced using the " +
+    "UNICODE replacement character U+FFFD.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
+      > SELECT _FUNC_(x'61');
+       a
+      > SELECT _FUNC_(x'80');
+       �
+      > SELECT _FUNC_(x'61C262');
+       a�b
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
+
+  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+
+  override def nodeName: String = "make_valid_utf8"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): MakeValidUTF8 = {
+    copy(input = newChild)
+  }
+
+}
+
+/**
+ * A function that validates a UTF8 string, throwing an exception if the string is invalid.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
+    "otherwise throws an exception.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
+      > SELECT _FUNC_(x'61');
+       a
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    input.dataType,
+    "validateUTF8String",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+
+  override def nodeName: String = "validate_utf8"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): ValidateUTF8 = {
+    copy(input = newChild)
+  }
+
+}
+
+/**
+ * A function that tries to validate a UTF8 string, returning NULL if the string is invalid.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the original string if `str` is a valid UTF-8 string, " +
+    "otherwise returns NULL.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       Spark
+      > SELECT _FUNC_(x'61');
+       a
+      > SELECT _FUNC_(x'80');
+       NULL
+      > SELECT _FUNC_(x'61C262');
+       NULL
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+// scalastyle:on
+case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
+  with UnaryLike[Expression] with NullIntolerant {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    input.dataType,
+    "tryValidateUTF8String",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+
+  override def nodeName: String = "try_validate_utf8"
+
+  override def nullable: Boolean = true
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): TryValidateUTF8 = {
+    copy(input = newChild)
+  }
+
 }
 
 /**
@@ -1866,14 +2048,17 @@ case class InitCap(child: Expression)
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
+  // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
+  private final lazy val useICU = SQLConf.get.getConf(SQLConf.ICU_CASE_MAPPINGS_ENABLED)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
   override def dataType: DataType = child.dataType
 
   override def nullSafeEval(string: Any): Any = {
-    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId)
+    CollationSupport.InitCap.exec(string.asInstanceOf[UTF8String], collationId, useICU)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId))
+    defineCodeGen(ctx, ev, str => CollationSupport.InitCap.genCode(str, collationId, useICU))
   }
 
   override protected def withNewChildInternal(newChild: Expression): InitCap =
@@ -2659,7 +2844,7 @@ object Decode {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+    _FUNC_(bin, charset) - Decodes the first argument using the second argument character set. If either argument is null, the result will also be null.
 
     _FUNC_(expr, search, result [, search, result ] ... [, default]) - Compares expr
       to each search value in order. If expr is equal to a search value, _FUNC_ returns
@@ -2684,7 +2869,10 @@ object Decode {
       > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
        SQL
   """,
-  since = "3.2.0",
+  since = "1.5.0",
+  note = """
+    _FUNC_(expr, search, result [, search, result ] ... [, default]) is supported since 3.2.0
+  """,
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], replacement: Expression)
@@ -2699,25 +2887,6 @@ case class Decode(params: Seq[Expression], replacement: Expression)
   }
 }
 
-/**
- * Decodes the first argument into a String using the provided character set.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set. If either argument is null, the result will also be null.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
-       abc
-  """,
-  arguments = """
-    Arguments:
-      * bin - a binary expression to decode
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
-  """,
-  since = "1.5.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class StringDecode(
     bin: Expression,
     charset: Expression,
@@ -2844,6 +3013,9 @@ object Encode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): Array[Byte] = {
     val toCharset = charset.toString
+    if (input.numBytes == 0 || "UTF-8".equalsIgnoreCase(toCharset)) {
+      return input.getBytes
+    }
     if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
       val encoder = try {
         val codingErrorAction = if (legacyErrorAction) {

@@ -118,9 +118,14 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
 
-def continue_maybe(prompt):
+def continue_maybe(prompt, cherry=False):
     result = bold_input("%s (y/N): " % prompt)
     if result.lower() != "y":
+        if cherry:
+            try:
+                run_cmd("git cherry-pick --abort")
+            except Exception:
+                print_error("Unable to abort and get back to the state before cherry-pick")
         fail("Okay, exiting")
 
 
@@ -234,9 +239,9 @@ def cherry_pick(pr_num, merge_hash, default_branch):
         run_cmd("git cherry-pick -sx %s" % merge_hash)
     except Exception as e:
         msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
-        continue_maybe(msg)
+        continue_maybe(msg, True)
         msg = "Okay, please fix any conflicts and finish the cherry-pick. Finished?"
-        continue_maybe(msg)
+        continue_maybe(msg, True)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
