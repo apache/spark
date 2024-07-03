@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, UnresolvedWithCTERelations, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -280,34 +280,10 @@ class CTESubstitution(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
-        cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
-          if (alwaysInline) {
-            d.child
-          } else {
-            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-          }
-        }.getOrElse(u)
+        UnresolvedWithCTERelations(u, alwaysInline, cteRelations)
 
-      // Unresolved identifier clause can point to CTE definition
-      // We evaluate it if expression is resolved, and lookup session variables if not
-      // and then try to substitute CTE with that name
       case p: PlanWithUnresolvedIdentifier =>
-        val identExpr = if (!p.identifierExpr.resolved
-          && p.identifierExpr.isInstanceOf[UnresolvedAttribute]) {
-          val u = p.identifierExpr.asInstanceOf[UnresolvedAttribute]
-
-          lookupVariable(u.nameParts) match {
-            case Some(v) => v
-            case None => p.identifierExpr
-          }
-        }
-        else {
-          p.identifierExpr
-        }
-
-        substituteCTE(p.planBuilder.apply(
-          ResolveIdentifierClause.evalIdentifierExpr(identExpr)), alwaysInline, cteRelations)
+        UnresolvedWithCTERelations(p, alwaysInline, cteRelations)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

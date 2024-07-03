@@ -281,12 +281,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
+      new ResolveReferences(catalogManager) ::
+      new ResolveIdentifierClause(earlyBatches) ::
+      ResolveCTERelations ::
       ResolveRelations ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
-      new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
       ResolveLateralColumnAliasReference ::
@@ -322,7 +324,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
