@@ -168,7 +168,7 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
-    val newFiles = if (unreadFiles != null) {
+    val newFiles = if (unreadFiles != null && unreadFiles.nonEmpty) {
       logDebug(s"Reading from unread files - ${unreadFiles.size} files are available.")
       unreadFiles
     } else {
