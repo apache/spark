@@ -360,6 +360,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * string (after possible replacement) must be evaluated first by calling `getIsValid`.
    */
   private byte[] makeValidBytes() {
+    assert(numBytesValid > 0);
     byte[] bytes = new byte[numBytesValid];
     int byteIndex = 0, byteIndexValid = 0;
     while (byteIndex < numBytes) {
@@ -492,9 +493,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         ++byteCount;
       }
       byteIndex += codePointLen;
-    }
-    if (byteCount < 0) {
-      throw new IllegalStateException("Error in UTF-8 byte count");
     }
     setNumBytesValid(byteCount);
     return isValid ? UTF8StringValidity.IS_VALID : UTF8StringValidity.NOT_VALID;
