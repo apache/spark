@@ -38,6 +38,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
@@ -5982,6 +5983,41 @@ class DataFrame:
         >>> df.writeTo(                              # doctest: +SKIP
         ...     "catalog.db.table"
         ... ).partitionedBy("col").createOrReplace()
+        """
+        ...
+
+    @dispatch_df_method
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        """
+        Merges a set of updates, insertions, and deletions based on a source table into
+        a target table.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        table : str
+            Target table name to merge into.
+        condition : :class:`Column`
+            The condition that determines whether a row in the target table matches one in the
+            source DataFrame.
+
+        Returns
+        -------
+        :class:`MergeIntoWriter`
+            MergeIntoWriter to use further to specify how to merge the source DataFrame
+            into the target table.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import expr
+        >>> source = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
+        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        ...     .whenMatched().update({ "name": source.name })
+        ...     .whenNotMatched().insertAll()
+        ...     .whenNotMatchedBySource().delete()
+        ...     .merge())
         """
         ...
 
