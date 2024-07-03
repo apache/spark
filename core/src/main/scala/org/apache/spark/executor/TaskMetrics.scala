@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 import scala.jdk.CollectionConverters._
@@ -264,12 +264,37 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums = _externalAccums.asScala
+  private[spark] def externalAccums = withReadLock {
+    _externalAccums
+  }
 
-  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    _externalAccums.add(a)
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
+
+  private def withReadLock[B](fn: => B): B = {
+    readLock.lock()
+    try {
+      fn
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  private def withWriteLock[B](fn: => B): B = {
+    writeLock.lock()
+    try {
+      fn
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = withWriteLock {
+    _externalAccums += a
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
@@ -340,7 +365,7 @@ private[spark] object TaskMetrics extends Logging {
         externalAccums.add(tmpAcc)
       }
     }
-    tm._externalAccums.addAll(externalAccums)
+    tm._externalAccums ++= externalAccums.asScala
     tm
   }
 }
