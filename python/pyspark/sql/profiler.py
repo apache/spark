@@ -399,7 +399,9 @@ class Profile:
             The profiler type to clear results for, which can be either "perf" or "memory".
         renderer : str or callable, optional
             The renderer to use. If not specified, the default renderer will be "flameprof"
-            for "perf" profiler. For "memory" profiler, the default renderer is not provided.
+            for the "perf" profiler, which returns an :class:`IPython.display.HTML` object in
+            an IPython environment to draw the figure; otherwise, it returns the SVG source string.
+            For the "memory" profiler, no default renderer is provided.
 
             If a callable is provided, it should take a `pstats.Stats` object for "perf" profiler,
             and `CodeMapDict` for "memory" profiler, and return the rendered result.
