@@ -34,7 +34,7 @@ import org.apache.spark.tags.DockerTest
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.3-alpine
  *     ./build/sbt -Pdocker-integration-tests
- *     "testOnly org.apache.spark.sql.jdbc.PostgreSQLQueryTestSuite"
+ *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgreSQLQueryTestSuite"
  * }}}
  */
 @DockerTest

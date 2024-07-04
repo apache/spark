@@ -41,7 +41,7 @@ import org.apache.spark.tags.DockerTest
  * 4. Start docker: sudo service docker start
  *    - Optionally, docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 5. Run Spark integration tests for Oracle with: ./build/sbt -Pdocker-integration-tests
- *    "testOnly org.apache.spark.sql.jdbc.v2.OracleNamespaceSuite"
+ *    "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.v2.OracleNamespaceSuite"
  *
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git

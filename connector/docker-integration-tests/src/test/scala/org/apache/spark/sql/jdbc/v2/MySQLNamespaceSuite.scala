@@ -31,7 +31,8 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., mysql:8.3.0):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
- *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLNamespaceSuite"
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *v2*MySQLNamespaceSuite"
  * }}}
  */
 @DockerTest
