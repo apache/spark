@@ -818,6 +818,16 @@ class SparkSession:
     clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
     def stop(self) -> None:
+        """
+        Release the current session and close the GRPC connection to the Spark Connect server.
+        Reset the active session so that calls to getOrCreate() creates a new session.
+        If the session was created in local mode, the Spark Connect server running locally is also
+        terminated.
+
+        This API is best-effort and idempotent, i.e., if any of the operations fail, the API will
+        not produce an error. Stopping an already stopped session is a no-op.
+        """
+
         # Whereas the regular PySpark session immediately terminates the Spark Context
         # itself, meaning that stopping all Spark sessions, this will only stop this one session
         # on the server.
@@ -859,8 +869,6 @@ class SparkSession:
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
-
-    stop.__doc__ = PySparkSession.stop.__doc__
 
     @property
     def is_stopped(self) -> bool:
