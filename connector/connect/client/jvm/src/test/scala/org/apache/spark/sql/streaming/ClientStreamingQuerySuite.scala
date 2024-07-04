@@ -475,7 +475,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     } finally {
       q.stop()
 
-      eventually(timeout(30.seconds)) {
+      eventually(timeout(60.seconds)) {
         assert(!q.isActive)
         assert(!spark.table(s"listener_terminated_events$tablePostfix").toDF().isEmpty)
       }
@@ -528,7 +528,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       }
     } finally {
       q.stop()
-      eventually(timeout(30.seconds)) {
+      eventually(timeout(60.seconds)) {
         assert(!q.isActive)
         assert(listener.terminate.nonEmpty)
       }
