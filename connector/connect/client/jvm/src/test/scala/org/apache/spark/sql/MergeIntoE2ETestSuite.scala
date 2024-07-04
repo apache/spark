@@ -19,9 +19,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class MergeIntoE2ETestSuite
-    extends ConnectFunSuite
-    with RemoteSparkSession {
+class MergeIntoE2ETestSuite extends ConnectFunSuite with RemoteSparkSession {
 
   lazy val session: SparkSession = spark
 
@@ -32,10 +30,7 @@ class MergeIntoE2ETestSuite
       "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog")
   }
 
-  private val sourceRows = Seq(
-    (1, 100, "hr"),
-    (2, 200, "finance"),
-    (3, 300, "hr"))
+  private val sourceRows = Seq((1, 100, "hr"), (2, 200, "finance"), (3, 300, "hr"))
 
   private def withSourceView(f: String => Unit): Unit = {
     import session.implicits._
@@ -74,7 +69,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (1, 100, 'hr'), (2, 200, 'finance')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenMatched($"$source.pk" === 2)
           .delete()
@@ -95,7 +91,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (1, 100, 'hr'), (2, 200, 'mgr')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenMatched()
           .updateAll()
@@ -114,7 +111,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (1, 100, 'hr'), (2, 200, 'finance')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenMatched()
           .delete()
@@ -133,7 +131,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (1, 100, 'hr'), (2, 200, 'finance')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenMatched($"$source.pk" === 1)
           .update(Map("salary" -> lit(999999)))
@@ -152,7 +151,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (1, 100, 'hr'), (2, 200, 'finance')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenMatched($"$source.pk" === 1)
           .delete()
@@ -171,7 +171,8 @@ class MergeIntoE2ETestSuite
     withSourceView { source =>
       withTargetTable { target =>
         spark.sql(s"INSERT INTO $target VALUES (9, 99, 'eng')")
-        spark.table("source")
+        spark
+          .table("source")
           .mergeInto(target, $"$source.pk" === $"$target.pk")
           .whenNotMatched()
           .insertAll()
