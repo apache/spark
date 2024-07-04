@@ -128,9 +128,10 @@ class StatefulSetPodsAllocator(
 
       // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources
+      val preResources = resolvedExecutorSpec.executorPreKubernetesResources
       // We'll let PVCs be handled by the statefulset. Note user is responsible for
       // cleaning up PVCs. Future work: integrate with KEP1847 once stabilized.
-      val dynamicVolumeClaims = resources.filter(_.getKind == "PersistentVolumeClaim")
+      val dynamicVolumeClaims = preResources.filter(_.getKind == "PersistentVolumeClaim")
         .map(_.asInstanceOf[PersistentVolumeClaim])
       // Remove the dynamic volumes from our pod
       val dynamicVolumeClaimNames: Set[String] = dynamicVolumeClaims.map(_.getMetadata().getName())

@@ -778,7 +778,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(
         executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")))
+        Seq(persistentVolumeClaim("pvc-0", "gp2", "200Gi")),Seq.empty)
     })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -874,7 +874,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
         KubernetesExecutorSpec(
           executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")),Seq.empty)
       })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -943,7 +943,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
         KubernetesExecutorSpec(
           executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
-          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")),Seq.empty)
       })
 
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
@@ -969,6 +969,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
-        k8sConf.resourceProfileId.toInt), Seq.empty)
+        k8sConf.resourceProfileId.toInt), Seq.empty,Seq.empty)
   }
 }
