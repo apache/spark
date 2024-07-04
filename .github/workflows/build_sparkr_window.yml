@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: "Build / SparkR-only (master, 4.4.0, windows-2019)"
+name: "Build / SparkR-only (master, 4.4.0, windows-2022)"
 
 on:
   schedule:
@@ -25,7 +25,7 @@ on:
 jobs:
   build:
     name: "Build module: sparkr"
-    runs-on: windows-2019
+    runs-on: windows-2022
     timeout-minutes: 300
     if: github.repository == 'apache/spark'
     steps:

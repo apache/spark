@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, FunctionSignature, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -51,11 +51,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[sql] object QueryCompilationErrors extends QueryErrorsBase with CompilationErrors {
 
-  def unexpectedRequiredParameterInFunctionSignature(
-      functionName: String, functionSignature: FunctionSignature) : Throwable = {
-    val errorMessage = s"Function $functionName has an unexpected required argument for" +
-      s" the provided function signature $functionSignature. All required arguments should" +
-      " come before optional arguments."
+  def unexpectedRequiredParameter(
+      routineName: String, parameters: Seq[InputParameter]): Throwable = {
+    val errorMessage = s"Routine ${toSQLId(routineName)} has an unexpected required argument for" +
+      s" the provided routine signature ${parameters.mkString("[", ", ", "]")}." +
+      s" All required arguments should come before optional arguments."
     SparkException.internalError(errorMessage)
   }
 
@@ -67,42 +67,42 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def positionalAndNamedArgumentDoubleReference(
-      functionName: String, parameterName: String) : Throwable = {
+      routineName: String, parameterName: String): Throwable = {
     val errorClass =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     new AnalysisException(
       errorClass = errorClass,
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName))
     )
   }
 
   def doubleNamedArgumentReference(
-      functionName: String, parameterName: String): Throwable = {
+      routineName: String, parameterName: String): Throwable = {
     val errorClass =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE"
     new AnalysisException(
       errorClass = errorClass,
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName))
     )
   }
 
   def requiredParameterNotFound(
-      functionName: String, parameterName: String, index: Int) : Throwable = {
+      routineName: String, parameterName: String, index: Int) : Throwable = {
     new AnalysisException(
       errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName),
         "index" -> index.toString)
     )
   }
 
   def unrecognizedParameterName(
-      functionName: String, argumentName: String, candidates: Seq[String]): Throwable = {
+      routineName: String, argumentName: String, candidates: Seq[String]): Throwable = {
     import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 
     val inputs = candidates.map(candidate => Seq(candidate))
@@ -111,19 +111,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "argumentName" -> toSQLId(argumentName),
         "proposal" -> recommendations.mkString(" "))
     )
   }
 
   def unexpectedPositionalArgument(
-      functionName: String,
+      routineName: String,
       precedingNamedArgument: String): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(precedingNamedArgument))
     )
   }
@@ -173,6 +173,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "parameter" -> toSQLId(parameter),
         "functionName" -> toSQLId(funcName)))
+  }
+
+  def nullDataSourceOption(option: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NULL_DATA_SOURCE_OPTION",
+      messageParameters = Map("option" -> option)
+    )
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
@@ -3316,7 +3323,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1319",
+      errorClass = "INVALID_JOIN_TYPE_FOR_JOINWITH",
       messageParameters = Map("joinType" -> joinType.sql))
   }
 
@@ -4081,6 +4088,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
       messageParameters = Map()
+    )
+  }
+
+  def avroNotLoadedSqlFunctionsUnusable(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "AVRO_NOT_LOADED_SQL_FUNCTIONS_UNUSABLE",
+      messageParameters = Map("functionName" -> functionName)
     )
   }
 }

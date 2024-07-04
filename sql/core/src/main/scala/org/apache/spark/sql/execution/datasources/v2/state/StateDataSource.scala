@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
@@ -37,6 +38,7 @@ import org.apache.spark.sql.execution.streaming.state.{StateSchemaCompatibilityC
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
@@ -46,6 +48,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
+  private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
+
   override def shortName(): String = "statestore"
 
   override def getTable(
@@ -54,7 +58,17 @@ class StateDataSource extends TableProvider with DataSourceRegister {
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    new StateTable(session, schema, sourceOptions, stateConf)
+    // Read the operator metadata once to see if we can find the information for prefix scan
+    // encoder used in session window aggregation queries.
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      sourceOptions.stateCheckpointLocation.getParent.toString, serializedHadoopConf)
+      .stateMetadata.toArray
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == sourceOptions.operatorId &&
+        entry.stateStoreName == sourceOptions.storeName
+    }
+
+    new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -116,12 +130,16 @@ case class StateSourceOptions(
     batchId: Long,
     operatorId: Int,
     storeName: String,
-    joinSide: JoinSideValues) {
+    joinSide: JoinSideValues,
+    snapshotStartBatchId: Option[Long],
+    snapshotPartitionId: Option[Int]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide)"
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
+      s"snapshotStartBatchId=${snapshotStartBatchId.getOrElse("None")}, " +
+      s"snapshotPartitionId=${snapshotPartitionId.getOrElse("None")})"
   }
 }
 
@@ -131,6 +149,8 @@ object StateSourceOptions extends DataSourceOptions {
   val OPERATOR_ID = newOption("operatorId")
   val STORE_NAME = newOption("storeName")
   val JOIN_SIDE = newOption("joinSide")
+  val SNAPSHOT_START_BATCH_ID = newOption("snapshotStartBatchId")
+  val SNAPSHOT_PARTITION_ID = newOption("snapshotPartitionId")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -190,7 +210,30 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
-    StateSourceOptions(resolvedCpLocation, batchId, operatorId, storeName, joinSide)
+    val snapshotStartBatchId = Option(options.get(SNAPSHOT_START_BATCH_ID)).map(_.toLong)
+    if (snapshotStartBatchId.exists(_ < 0)) {
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
+    } else if (snapshotStartBatchId.exists(_ > batchId)) {
+      throw StateDataSourceErrors.invalidOptionValue(
+        SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to $batchId")
+    }
+
+    val snapshotPartitionId = Option(options.get(SNAPSHOT_PARTITION_ID)).map(_.toInt)
+    if (snapshotPartitionId.exists(_ < 0)) {
+      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
+    }
+
+    // both snapshotPartitionId and snapshotStartBatchId are required at the same time, because
+    // each partition may have different checkpoint status
+    if (snapshotPartitionId.isDefined && snapshotStartBatchId.isEmpty) {
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID)
+    } else if (snapshotPartitionId.isEmpty && snapshotStartBatchId.isDefined) {
+      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
+    }
+
+    StateSourceOptions(
+      resolvedCpLocation, batchId, operatorId, storeName,
+      joinSide, snapshotStartBatchId, snapshotPartitionId)
   }
 
   private def resolvedCheckpointLocation(

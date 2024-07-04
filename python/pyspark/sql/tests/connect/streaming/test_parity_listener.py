@@ -23,6 +23,7 @@ from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListene
 from pyspark.sql.streaming.listener import StreamingQueryListener
 from pyspark.sql.functions import count, lit
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import eventually
 
 
 # Listeners that has spark commands in callback handler functions
@@ -160,8 +161,12 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             self.assertTrue(slow_query.id in [str(e.progress.id) for e in listener.progress])
             self.assertTrue(fast_query.id in [str(e.progress.id) for e in listener.progress])
 
-            self.assertTrue(slow_query.id in [str(e.id) for e in listener.terminated])
-            self.assertTrue(fast_query.id in [str(e.id) for e in listener.terminated])
+            eventually(timeout=20, catch_assertions=True)(
+                lambda: self.assertTrue(slow_query.id in [str(e.id) for e in listener.terminated])
+            )()
+            eventually(timeout=20, catch_assertions=True)(
+                lambda: self.assertTrue(fast_query.id in [str(e.id) for e in listener.terminated])
+            )()
 
         finally:
             for listener in self.spark.streams._sqlb._listener_bus:

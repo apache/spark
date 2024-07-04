@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -70,6 +72,10 @@ trait StatefulOperator extends SparkPlan {
       throw new IllegalStateException("State location not present for execution")
     }
   }
+
+  // Function used to record state schema for the first time and validate it against proposed
+  // schema changes in the future. Runs as part of a planning rule on the driver.
+  def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit
 }
 
 /**
@@ -424,6 +430,11 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -485,6 +496,11 @@ case class StateStoreSaveExec(
 
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, stateManager.getStateValueSchema, session.sessionState)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -690,6 +706,11 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -771,6 +792,11 @@ case class SessionWindowStateStoreSaveExec(
 
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      stateManager.getStateKeySchema, stateManager.getStateValueSchema, session.sessionState)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -1079,6 +1105,11 @@ case class StreamingDeduplicateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
+  }
 }
 
 object StreamingDeduplicateExec {
@@ -1149,6 +1180,11 @@ case class StreamingDeduplicateWithinWatermarkExec(
   }
 
   override def shortName: String = "dedupeWithinWatermark"
+
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      keyExpressions.toStructType, schemaForValueRow, session.sessionState, extraOptionOnStateStore)
+  }
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)

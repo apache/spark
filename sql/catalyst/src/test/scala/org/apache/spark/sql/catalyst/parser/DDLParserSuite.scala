@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -233,6 +234,23 @@ class DDLParserSuite extends AnalysisTest {
         testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
       }
     }
+  }
+
+ test("alter table cluster by") {
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CLUSTER BY (`a.b`, c.d, none)"),
+      AlterTableClusterBy(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
+        Some(ClusterBySpec(Seq(
+          FieldReference(Seq("a.b")),
+          FieldReference(Seq("c", "d")),
+          FieldReference(Seq("none")))))))
+
+    comparePlans(
+      parsePlan("ALTER TABLE table_name CLUSTER BY NONE"),
+      AlterTableClusterBy(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
+        None))
   }
 
   test("create/replace table - with comment") {
@@ -1075,19 +1093,11 @@ class DDLParserSuite extends AnalysisTest {
         ifExists = true))
   }
 
-  // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter table: alter table properties") {
-    val sql1_table = "ALTER TABLE table_name SET TBLPROPERTIES ('test' = 'test', " +
-        "'comment' = 'new_comment')"
     val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
-    comparePlans(
-      parsePlan(sql1_table),
-      SetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET TBLPROPERTIES", true),
-        Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(
       parsePlan(sql2_table),
       UnsetTableProperties(

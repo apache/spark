@@ -16,7 +16,7 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -30,7 +30,9 @@ __all__ = [
     "DataSource",
     "DataSourceReader",
     "DataSourceStreamReader",
+    "SimpleDataSourceStreamReader",
     "DataSourceWriter",
+    "DataSourceStreamWriter",
     "DataSourceRegistration",
     "InputPartition",
     "SimpleDataSourceStreamReader",
@@ -331,7 +333,7 @@ class DataSourceReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -446,7 +448,7 @@ class DataSourceStreamReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -627,7 +629,7 @@ class DataSourceWriter(ABC):
         """
         ...
 
-    def commit(self, messages: List["WriterCommitMessage"]) -> None:
+    def commit(self, messages: List[Optional["WriterCommitMessage"]]) -> None:
         """
         Commits this writing job with a list of commit messages.
 
@@ -639,11 +641,11 @@ class DataSourceWriter(ABC):
         Parameters
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
-            A list of commit messages.
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         """
         ...
 
-    def abort(self, messages: List["WriterCommitMessage"]) -> None:
+    def abort(self, messages: List[Optional["WriterCommitMessage"]]) -> None:
         """
         Aborts this writing job due to task failures.
 
@@ -655,7 +657,7 @@ class DataSourceWriter(ABC):
         Parameters
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
-            A list of commit messages.
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         """
         ...
 
@@ -692,7 +694,7 @@ class DataSourceStreamWriter(ABC):
         """
         ...
 
-    def commit(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+    def commit(self, messages: List[Optional["WriterCommitMessage"]], batchId: int) -> None:
         """
         Commits this microbatch with a list of commit messages.
 
@@ -703,15 +705,15 @@ class DataSourceStreamWriter(ABC):
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
-            A list of commit messages.
+        messages : list of :class:`WriterCommitMessage`\\s
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.
         """
         ...
 
-    def abort(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+    def abort(self, messages: List[Optional["WriterCommitMessage"]], batchId: int) -> None:
         """
         Aborts this microbatch due to task failures.
 
@@ -722,8 +724,8 @@ class DataSourceStreamWriter(ABC):
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
-            A list of commit messages.
+        messages : list of :class:`WriterCommitMessage`\\s
+            A list of commit messages. If a write task fails, the commit message will be `None`.
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.
