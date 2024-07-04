@@ -188,7 +188,7 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
-  private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
+  private def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
       .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted
@@ -197,7 +197,7 @@ class StateMetadataPartitionReader(
     }
   }
 
-  private[state] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
+  private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
       require(operatorStateMetadata.version == 1)
       val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]
