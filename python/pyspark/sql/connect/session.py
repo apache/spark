@@ -22,6 +22,7 @@ check_dependencies(__name__)
 import threading
 import os
 import warnings
+import grpc
 from collections.abc import Sized
 import functools
 from threading import RLock
@@ -827,8 +828,16 @@ class SparkSession:
         # other remote clients being used from other users.
         with SparkSession._lock:
             if not self.is_stopped and self.release_session_on_close:
-                self.client.release_session()
-            self.client.close()
+                try:
+                    self.client.release_session()
+                except Exception as e:
+                    warnings.warn(f"session.stop(): Session could not be released. Error: ${e}")
+
+            try:
+                self.client.close()
+            except Exception as e:
+                warnings.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
             if self is getattr(SparkSession._active_session, "session", None):
@@ -840,7 +849,13 @@ class SparkSession:
                 # meaning that you can stop local mode, and restart the Spark Connect
                 # client with a different remote address.
                 if PySparkSession._activeSession is not None:
-                    PySparkSession._activeSession.stop()
+                    try:
+                        PySparkSession._activeSession.stop()
+                    except Exception as e:
+                        warnings.warn(
+                            "session.stop(): Local Spark Connect Server could not be stopped. "
+                            f"Error: ${e}"
+                        )
                 del os.environ["SPARK_LOCAL_REMOTE"]
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
