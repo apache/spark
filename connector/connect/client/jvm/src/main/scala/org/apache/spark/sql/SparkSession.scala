@@ -706,16 +706,28 @@ class SparkSession private[sql] (
   def stop(): Unit = close()
 
   /**
-   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
-   * throw an exception if there are still open [[SparkResult]]s.
+   * Close the [[SparkSession]].
+   *
+   * Release the current session and close the GRPC connection to the server. The API will
+   * not error if any of these operations fail. Closing a closed session is a no-op.
+   *
+   * Close the allocator. Fail if there are still open [[SparkResult]]s.
    *
    * @since 3.4.0
    */
   override def close(): Unit = {
     if (releaseSessionOnClose) {
-      client.releaseSession()
+      try {
+        client.releaseSession()
+      } catch {
+        case e: Exception => logWarning("session.stop: Failed to release session", e)
+      }
     }
-    client.shutdown()
+    try {
+      client.shutdown()
+    } catch {
+      case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
+    }
     allocator.close()
     SparkSession.onSessionClose(this)
   }
