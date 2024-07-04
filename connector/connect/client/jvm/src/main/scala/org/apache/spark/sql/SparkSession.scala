@@ -84,6 +84,10 @@ class SparkSession private[sql] (
 
   private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String) = {
+    client.hijackServerSideSessionIdForTesting(suffix)
+  }
+
   /**
    * Runtime configuration interface for Spark.
    *
