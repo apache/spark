@@ -1274,7 +1274,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("url_decode exception") {
+  test("SPARK-48806: url_decode exception") {
     val e = intercept[SparkIllegalArgumentException] {
       sql("select url_decode('https%3A%2F%2spark.apache.org')").collect()
     }
