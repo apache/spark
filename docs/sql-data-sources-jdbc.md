@@ -57,7 +57,9 @@ logging into the data sources.
     <td><code>url</code></td>
     <td>(none)</td>
     <td>
-      The JDBC URL of the form <code>jdbc:subprotocol:subname</code> to connect to. The source-specific connection properties may be specified in the URL. e.g., <code>jdbc:postgresql://localhost/test?user=fred&password=secret</code>
+      The JDBC URL of the form <code>jdbc:subprotocol:subname</code> to connect to. The source-specific connection
+      properties may be specified in the URL. e.g., <code>jdbc:postgresql://localhost/test?user=fred&password=secret</code>.
+      Note that when the database is MariaDB, `mariadb` subprotocol does not apply, please use `mysql` subprotocol.
     </td>
     <td>read/write</td>
   </tr>
