@@ -253,6 +253,9 @@ class UnivocityParser(
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
+    case _: BinaryType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options)(_.getBytes)
+
     case CalendarIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         IntervalUtils.safeStringToInterval(UTF8String.fromString(datum))
