@@ -5193,7 +5193,7 @@ object SQLConf {
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
 class SQLConf extends Serializable with Logging with SqlApiConf {
-  import org.apache.spark.sql.internal.SQLConf._
+  import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
