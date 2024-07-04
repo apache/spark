@@ -29,6 +29,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -212,7 +213,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assertCached(table("refreshTable"))
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -224,7 +225,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("REFRESH TABLE refreshTable")
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 
@@ -240,7 +241,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
-      table("src").collect())
+      table("src").collect().toImmutableArraySeq)
     // Cache the table.
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
@@ -252,7 +253,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assertCached(table("refreshTable"))
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -264,7 +265,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql(s"REFRESH ${tempPath.toString}")
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 
@@ -334,9 +335,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         options = Map.empty)(sparkSession = spark)
 
       val plan = LogicalRelation(relation, tableMeta)
-      spark.sharedState.cacheManager.cacheQuery(Dataset.ofRows(spark, plan))
+      val df = Dataset.ofRows(spark, plan)
+      spark.sharedState.cacheManager.cacheQuery(df)
 
-      assert(spark.sharedState.cacheManager.lookupCachedData(plan).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(df).isDefined)
 
       val sameCatalog = new CatalogFileIndex(spark, tableMeta, 0)
       val sameRelation = HadoopFsRelation(
@@ -346,9 +348,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         bucketSpec = None,
         fileFormat = new ParquetFileFormat(),
         options = Map.empty)(sparkSession = spark)
-      val samePlan = LogicalRelation(sameRelation, tableMeta)
+      val samePlanDf = Dataset.ofRows(spark, LogicalRelation(sameRelation, tableMeta))
 
-      assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined)
+      assert(spark.sharedState.cacheManager.lookupCachedData(samePlanDf).isDefined)
     }
   }
 

@@ -28,8 +28,10 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, SessionWindowStat
 import org.apache.spark.sql.functions.{count, session_window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamingSessionWindowDistributionSuite extends StreamTest
   with StatefulOpClusteredDistributionTestHelper with Logging {
 

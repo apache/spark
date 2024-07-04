@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.env
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.mutable.StringBuilder
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.resource.{ExecutorResourceRequest, TaskResourceRequest}
@@ -77,15 +77,16 @@ private[ui] class EnvironmentPage(
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true,
       headerClasses = headerClasses)
+    val emptyProperties = collection.Seq.empty[(String, String)]
     val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true,
-      headerClasses = headerClasses)
+      Utils.redact(conf, Option(appEnv.hadoopProperties).getOrElse(emptyProperties).sorted),
+      fixedWidth = true, headerClasses = headerClasses)
     val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true,
       headerClasses = headerClasses)
     val metricsPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
-      Utils.redact(conf, appEnv.metricsProperties.sorted), fixedWidth = true,
-      headerClasses = headerClasses)
+      Utils.redact(conf, Option(appEnv.metricsProperties).getOrElse(emptyProperties).sorted),
+      fixedWidth = true, headerClasses = headerClasses)
     val classpathEntriesTable = UIUtils.listingTable(
       classPathHeader, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true,
       headerClasses = headerClasses)

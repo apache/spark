@@ -55,10 +55,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("Not expected type - replaceNullWithFalse") {
-    val e = intercept[AnalysisException] {
-      testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
-    }.getMessage
-    assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
+      },
+      errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      parameters = Map("sqlExpr" -> "\"NULL\"", "filter" -> "\"NULL\"", "type" -> "\"INT\"")
+    )
   }
 
   test("replace null in branches of If") {
@@ -497,7 +500,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         mergeCondition = expr,
         matchedActions,
         notMatchedActions,
-        notMatchedBySourceActions)
+        notMatchedBySourceActions,
+        withSchemaEvolution = false)
     }
     val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
     val optimizedPlan = Optimize.execute(originalPlan)
@@ -519,7 +523,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         mergeCondition = expr,
         matchedActions,
         notMatchedActions,
-        Seq.empty)
+        notMatchedBySourceActions = Seq.empty,
+        withSchemaEvolution = false)
     }
     val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
     val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)

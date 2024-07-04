@@ -25,12 +25,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
-import org.junit.AfterClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 public class TransportFrameDecoderSuite {
@@ -38,7 +40,7 @@ public class TransportFrameDecoderSuite {
   private static final Logger logger = LoggerFactory.getLogger(TransportFrameDecoderSuite.class);
   private static Random RND = new Random();
 
-  @AfterClass
+  @AfterAll
   public static void cleanup() {
     RND = null;
   }
@@ -246,7 +248,7 @@ public class TransportFrameDecoderSuite {
       ByteBuf data) throws Exception {
     try {
       decoder.channelInactive(ctx);
-      assertTrue("There shouldn't be dangling references to the data.", data.release());
+      assertTrue(data.release(), "There shouldn't be dangling references to the data.");
     } finally {
       release(data);
     }

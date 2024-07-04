@@ -371,4 +371,32 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-43095: Avoid Once strategy's idempotence is broken for batch: Infer Filters") {
+    val x = testRelation.as("x")
+    val y = testRelation.as("y")
+    val z = testRelation.as("z")
+
+    // Removes EqualNullSafe when constructing candidate constraints
+    comparePlans(
+      InferFiltersFromConstraints(x.select($"x.a", $"x.a".as("xa"))
+        .where($"xa" <=> $"x.a" && $"xa" === $"x.a").analyze),
+      x.select($"x.a", $"x.a".as("xa"))
+        .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
+
+    // Once strategy's idempotence is not broken
+    val originalQuery =
+      x.join(y, condition = Some($"x.a" === $"y.a"))
+        .select($"x.a", $"x.a".as("xa")).as("xy")
+        .join(z, condition = Some($"xy.a" === $"z.a")).analyze
+
+    val correctAnswer =
+      x.where($"a".isNotNull).join(y.where($"a".isNotNull), condition = Some($"x.a" === $"y.a"))
+        .select($"x.a", $"x.a".as("xa")).as("xy")
+        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a")).analyze
+
+    val optimizedQuery = InferFiltersFromConstraints(originalQuery)
+    comparePlans(optimizedQuery, correctAnswer)
+    comparePlans(InferFiltersFromConstraints(optimizedQuery), correctAnswer)
+  }
 }

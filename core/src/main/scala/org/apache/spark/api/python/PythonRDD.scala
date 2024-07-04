@@ -22,9 +22,9 @@ import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -34,15 +34,18 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat 
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 
 private[spark] class PythonRDD(
@@ -51,6 +54,8 @@ private[spark] class PythonRDD(
     preservePartitioning: Boolean,
     isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -61,7 +66,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func)
+    val runner = PythonRunner(func, jobArtifactUUID)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 
@@ -80,7 +85,11 @@ private[spark] trait PythonFunction {
   def pythonExec: String
   def pythonVer: String
   def broadcastVars: JList[Broadcast[PythonBroadcast]]
-  def accumulator: PythonAccumulatorV2
+  def accumulator: PythonAccumulator
+}
+
+private[spark] object PythonFunction {
+  type PythonAccumulator = CollectionAccumulator[Array[Byte]]
 }
 
 /**
@@ -93,7 +102,7 @@ private[spark] case class SimplePythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2) extends PythonFunction {
+    accumulator: PythonAccumulator) extends PythonFunction {
 
   def this(
       command: Array[Byte],
@@ -102,8 +111,9 @@ private[spark] case class SimplePythonFunction(
       pythonExec: String,
       pythonVer: String,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
-      accumulator: PythonAccumulatorV2) = {
-    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+      accumulator: PythonAccumulator) = {
+    this(command.toImmutableArraySeq,
+      envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
   }
 }
 
@@ -135,7 +145,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
 private[spark] object PythonRDD extends Logging {
 
   // remember the broadcasts sent to each worker
-  private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
+  private val workerBroadcasts = new mutable.WeakHashMap[PythonWorker, mutable.Set[Long]]()
 
   // Authentication helper used when serving iterator data.
   private lazy val authHelper = {
@@ -143,7 +153,7 @@ private[spark] object PythonRDD extends Logging {
     new SocketAuthHelper(conf)
   }
 
-  def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
+  def getWorkerBroadcasts(worker: PythonWorker): mutable.Set[Long] = {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
@@ -177,7 +187,7 @@ private[spark] object PythonRDD extends Logging {
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
       sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala.toSeq)
-    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
+    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions.toImmutableArraySeq: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
   }
@@ -298,7 +308,11 @@ private[spark] object PythonRDD extends Logging {
     new PythonBroadcast(path)
   }
 
-  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Unit = {
+  /**
+   * Writes the next element of the iterator `iter` to `dataOut`. Returns true if any data was
+   * written to the stream. Returns false if no data was written as the iterator has been exhausted.
+   */
+  def writeNextElementToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Boolean = {
 
     def write(obj: Any): Unit = obj match {
       case null =>
@@ -316,8 +330,18 @@ private[spark] object PythonRDD extends Logging {
       case other =>
         throw new SparkException("Unexpected element type " + other.getClass)
     }
+    if (iter.hasNext) {
+      write(iter.next())
+      true
+    } else {
+      false
+    }
+  }
 
-    iter.foreach(write)
+  def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream): Unit = {
+    while (writeNextElementToStream(iter, dataOut)) {
+      // Nothing.
+    }
   }
 
   /**
@@ -485,9 +509,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream): Unit = {
-    val bytes = str.getBytes(StandardCharsets.UTF_8)
-    dataOut.writeInt(bytes.length)
-    dataOut.write(bytes)
+    PythonWorkerUtils.writeUTF(str, dataOut)
   }
 
   /**
@@ -712,7 +734,8 @@ private[spark] class PythonAccumulatorV2(
   private def openSocket(): Socket = synchronized {
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
-      logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
+      logInfo(log"Connected to AccumulatorServer at host: ${MDC(HOST, serverHost)}" +
+        log" port: ${MDC(PORT, serverPort)}")
       // send the secret just for the initial authentication when opening a new connection
       socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
     }

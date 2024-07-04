@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.hadoop.fs.FileStatus
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
 
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
@@ -90,8 +90,6 @@ class FileStreamSinkLog(
     _retentionMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
-  private implicit val formats = Serialization.formats(NoTypeHints)
-
   protected override val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
@@ -105,7 +103,7 @@ class FileStreamSinkLog(
 
   val retentionMs: Long = _retentionMs match {
     case Some(retention) =>
-      logInfo(s"Retention is set to $retention ms")
+      logInfo(log"Retention is set to ${MDC(TIME_UNITS, retention)} ms")
       retention
 
     case _ => Long.MaxValue

@@ -1,5 +1,6 @@
 -- A test suite for scalar subquery in predicate context
 
+--ONLY_IF spark
 CREATE OR REPLACE TEMPORARY VIEW p AS VALUES (1, 1) AS T(pk, pv);
 CREATE OR REPLACE TEMPORARY VIEW c AS VALUES (1, 1) AS T(ck, cv);
 
@@ -280,6 +281,98 @@ HAVING   max(t1b) <= (SELECT   max(t2b)
                       WHERE    t2c = t1c
                       GROUP BY t2c);
 
+-- SPARK-44549: window function in the correlated subquery.
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT MAX(tmp.s) FROM (
+             SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d = t1.t1d) as tmp);
+
+-- Same as above but with LIMIT/ORDER BY instead of MAX
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d = t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
+
+-- SPARK-44549: window function in the correlated subquery with non-equi predicate.
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT MAX(tmp.s) FROM (
+             SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d <= t1.t1d) as tmp);
+
+-- Same as above but with LIMIT/ORDER BY
+SELECT 1
+FROM t1
+WHERE t1b < (SELECT SUM(t2b) OVER (partition by t2c order by t2d) as s
+               FROM t2 WHERE t2.t2d <= t1.t1d
+             ORDER BY s DESC
+             LIMIT 1);
+
+-- SPARK-44549: window function in the correlated subquery over joins.
+SELECT t1b
+FROM t1
+WHERE t1b > (SELECT MAX(tmp.s) FROM (
+             SELECT RANK() OVER (partition by t3c, t2b order by t3c) as s
+               FROM t2, t3 where t2.t2c = t3.t3c AND t2.t2a = t1.t1a) as tmp);
+
+-- SPARK-44549: window function in the correlated subquery over aggregation.
+SELECT t1b
+FROM t1
+WHERE t1b > (SELECT MAX(tmp.s) FROM (
+             SELECT RANK() OVER (partition by t3c, t3d order by t3c) as s
+               FROM (SELECT t3b, t3c, max(t3d) as t3d FROM t3 GROUP BY t3b, t3c) as g) as tmp)
+ORDER BY t1b;
+
+
+-- SPARK-44549: correlation in window function itself is not supported yet.
+SELECT 1
+FROM t1
+WHERE t1b = (SELECT MAX(tmp.s) FROM (
+             SELECT SUM(t2c) OVER (partition by t2c order by t1.t1d + t2d) as s
+               FROM t2) as tmp);
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2b < t1b
+              ORDER BY t2d LIMIT 1);
+
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery, non-equi-predicate
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t2c = t1c
+              ORDER BY t2c LIMIT 1);
+
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1);
+
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT MAX(t2c)
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY min(t2c) LIMIT 1);
+
+SELECT t1a, t1b
+FROM   t1
+WHERE  t1c = (SELECT DISTINCT t2c
+              FROM   t2
+              WHERE  t1b < t1d
+              ORDER BY t2c LIMIT 1);
+
 -- Set operations in correlation path
 
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
@@ -398,3 +491,30 @@ HAVING t0a <
   FROM   t2
   WHERE  t2b <= t0b)
 );
+
+-- SPARK-43760: the result of the subquery can be NULL.
+select *
+from range(1, 3) t1
+where (select t2.id c
+       from range (1, 2) t2 where t1.id = t2.id
+      ) is not null;
+
+-- Correlated references in join predicates
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a = t0a AND t2b = t1b))
+);
+
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+   FROM   t1 JOIN t2 ON (t1a < t0a AND t2b >= t1b))
+);
+
+SELECT * FROM t0 WHERE t0a <
+(SELECT sum(t1c) FROM
+  (SELECT t1c
+  FROM  t1 LEFT JOIN t2 ON (t1a = t0a AND t2b = t0b))
+);
+

@@ -38,7 +38,6 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 class LogisticRegressionTest(SparkSessionTestCase):
     def test_binomial_logistic_regression_with_bound(self):
-
         df = self.spark.createDataFrame(
             [
                 (1.0, 1.0, Vectors.dense(0.0, 5.0)),
@@ -60,7 +59,6 @@ class LogisticRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.isclose(model.intercept, 0.0, atol=1e-4))
 
     def test_multinomial_logistic_regression_with_bound(self):
-
         data_path = "data/mllib/sample_multiclass_classification_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
 
@@ -83,10 +81,43 @@ class LogisticRegressionTest(SparkSessionTestCase):
             np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1e-4)
         )
 
+    def test_logistic_regression_with_threshold(self):
+        df = self.spark.createDataFrame(
+            [
+                (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+            ],
+            ["label", "weight", "features"],
+        )
+
+        lor = LogisticRegression(weightCol="weight")
+        model = lor.fit(df)
+
+        # status changes 1
+        for t in [0.0, 0.1, 0.2, 0.5, 1.0]:
+            model.setThreshold(t).transform(df)
+
+        # status changes 2
+        [model.setThreshold(t).predict(Vectors.dense(0.0, 5.0)) for t in [0.0, 0.1, 0.2, 0.5, 1.0]]
+
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(0.0).transform(df).collect()],
+            [1.0, 1.0, 1.0, 1.0],
+        )
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(0.5).transform(df).collect()],
+            [0.0, 1.0, 1.0, 0.0],
+        )
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(1.0).transform(df).collect()],
+            [0.0, 0.0, 0.0, 0.0],
+        )
+
 
 class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
     def test_raw_and_probability_prediction(self):
-
         data_path = "data/mllib/sample_multiclass_classification_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
 
@@ -340,7 +371,6 @@ class ALSTest(SparkSessionTestCase):
 
 class GeneralizedLinearRegressionTest(SparkSessionTestCase):
     def test_tweedie_distribution(self):
-
         df = self.spark.createDataFrame(
             [
                 (1.0, Vectors.dense(0.0, 0.0)),
@@ -361,7 +391,6 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1e-4))
 
     def test_offset(self):
-
         df = self.spark.createDataFrame(
             [
                 (0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
@@ -382,7 +411,6 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
 
 class LinearRegressionTest(SparkSessionTestCase):
     def test_linear_regression_with_huber_loss(self):
-
         data_path = "data/mllib/sample_linear_regression_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
 

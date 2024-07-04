@@ -20,8 +20,6 @@
 Transform and apply a function
 ==============================
 
-.. NOTE: the images are stored at https://github.com/koalas/issues/1443. Feel free to edit and/or add.
-
 .. currentmodule:: pyspark.pandas
 
 There are many APIs that allow users to apply a function against pandas-on-Spark DataFrame such as

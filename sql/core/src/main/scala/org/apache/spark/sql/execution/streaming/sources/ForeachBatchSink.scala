@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.LogicalRDD
@@ -31,11 +34,40 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
       isStreaming = false)
     implicit val enc = encoder
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
-    batchWriter(ds, batchId)
+    // SPARK-47329 - for stateful queries that perform multiple operations on the dataframe, it is
+    // highly recommended to persist the dataframe to prevent state stores from reloading
+    // state multiple times in each batch. We cannot however always call `persist` on the dataframe
+    // here since we do not know in advance whether multiple operations(actions) will be performed
+    // on the dataframe or not. There are side effects to `persist` that could be detrimental to the
+    // overall performance of the system such as increased cache memory usage,
+    // possible disk writes (with the default storage level) and unwanted cache block eviction.
+    // It is therefore the responsibility of the user to call `persist` on the dataframe if they
+    // know that multiple operations (actions) will be performed on the dataframe within
+    // the foreachbatch UDF (user defined function).
+    callBatchWriter(ds, batchId)
   }
 
   override def toString(): String = "ForeachBatchSink"
+
+  private def callBatchWriter(ds: Dataset[T], batchId: Long): Unit = {
+    try {
+      batchWriter(ds, batchId)
+    } catch {
+      // The user code can throw any type of exception.
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        throw ForeachBatchUserFuncException(e)
+    }
+  }
 }
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in ForeachBatch sink.
+ */
+private[sql] case class ForeachBatchUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)
 
 /**
  * Interface that is meant to be extended by Python classes via Py4J.

@@ -95,9 +95,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "rand(5)"
+    "expr" : "\"rand(5)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -116,11 +117,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "1",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -139,9 +141,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2303",
+  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "name" : "b"
+    "colName" : "`b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -160,11 +163,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "0",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -206,9 +210,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "count(1)"
+    "expr" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",

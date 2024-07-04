@@ -21,14 +21,15 @@ import java.io.IOException
 import java.net.URI
 import java.util.ServiceLoader
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.util.Utils
 
@@ -149,6 +150,7 @@ class EventLogFileCompactor(
     val logWriter = new CompactedEventLogFileWriter(lastIndexEventLogPath, "dummy", None,
       lastIndexEventLogPath.getParent.toUri, sparkConf, hadoopConf)
 
+    val startTime = System.currentTimeMillis()
     logWriter.start()
     eventLogFiles.foreach { file =>
       EventFilter.applyFilterToFile(fs, filters, file.getPath,
@@ -158,6 +160,9 @@ class EventLogFileCompactor(
       )
     }
     logWriter.stop()
+    val duration = System.currentTimeMillis() - startTime
+    logInfo(log"Finished rewriting eventLog files to ${MDC(LogKeys.PATH, logWriter.logPath)}" +
+      log" took ${MDC(LogKeys.TOTAL_TIME, duration)} ms.")
 
     logWriter.logPath
   }
@@ -171,7 +176,7 @@ class EventLogFileCompactor(
         case _: IOException =>
       }
       if (!deleted) {
-        logWarning(s"Failed to remove ${file.getPath} / skip removing.")
+        logWarning(log"Failed to remove ${MDC(LogKeys.PATH, file.getPath)} / skip removing.")
       }
     }
   }

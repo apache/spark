@@ -395,10 +395,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX",
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
   "sqlState" : "42000",
   "messageParameters" : {
-    "inputString" : "PARTITION specification is incomplete: `d`"
+    "partKey" : "`d`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -536,6 +536,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]
 
@@ -560,6 +561,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]
 

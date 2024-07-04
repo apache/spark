@@ -21,13 +21,13 @@ import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
-import collection.JavaConverters._
-import org.apache.commons.lang3.exception.ExceptionUtils
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, StructsToJson}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -81,6 +81,90 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       expected)
   }
 
+  test("SPARK-42782: Hive compatibility check for get_json_object") {
+    val book0 = "{\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\"" +
+      ",\"category\":\"reference\",\"price\":8.95}"
+    val backet0 = "[1,2,{\"b\":\"y\",\"a\":\"x\"}]"
+    val backet = "[" + backet0 + ",[3,4],[5,6]]"
+    val backetFlat = backet0.substring(0, backet0.length() - 1) + ",3,4,5,6]"
+
+    val book = "[" + book0 + ",{\"author\":\"Herman Melville\",\"title\":\"Moby Dick\"," +
+      "\"category\":\"fiction\",\"price\":8.99" +
+      ",\"isbn\":\"0-553-21311-3\"},{\"author\":\"J. R. R. Tolkien\"" +
+      ",\"title\":\"The Lord of the Rings\",\"category\":\"fiction\"" +
+      ",\"reader\":[{\"age\":25,\"name\":\"bob\"},{\"age\":26,\"name\":\"jack\"}]" +
+      ",\"price\":22.99,\"isbn\":\"0-395-19395-8\"}]"
+
+    val json = "{\"store\":{\"fruit\":[{\"weight\":8,\"type\":\"apple\"}," +
+      "{\"weight\":9,\"type\":\"pear\"}],\"basket\":" + backet + ",\"book\":" + book +
+      ",\"bicycle\":{\"price\":19.95,\"color\":\"red\"}}" +
+      ",\"email\":\"amy@only_for_json_udf_test.net\"" +
+      ",\"owner\":\"amy\",\"zip code\":\"94025\",\"fb:testid\":\"1234\"}"
+
+    // Basic test
+    runTest(json, "$.owner", "amy")
+    runTest(json, "$.store.bicycle", "{\"price\":19.95,\"color\":\"red\"}")
+    runTest(json, "$.store.book", book)
+    runTest(json, "$.store.book[0]", book0)
+    runTest(json, "$.store.book[*]", book)
+    runTest(json, "$.store.book[0].category", "reference")
+    runTest(json, "$.store.book[*].category", "[\"reference\",\"fiction\",\"fiction\"]")
+    runTest(json, "$.store.book[*].reader[0].age", "25")
+    runTest(json, "$.store.book[*].reader[*].age", "[25,26]")
+    runTest(json, "$.store.basket[0][1]", "2")
+    runTest(json, "$.store.basket[*]", backet)
+    runTest(json, "$.store.basket[*][0]", "[1,3,5]")
+    runTest(json, "$.store.basket[0][*]", backet0)
+    runTest(json, "$.store.basket[*][*]", backetFlat)
+    runTest(json, "$.store.basket[0][2].b", "y")
+    runTest(json, "$.store.basket[0][*].b", "[\"y\"]")
+    runTest(json, "$.non_exist_key", null)
+    runTest(json, "$.store.book[10]", null)
+    runTest(json, "$.store.book[0].non_exist_key", null)
+    runTest(json, "$.store.basket[*].non_exist_key", null)
+    runTest(json, "$.store.basket[0][*].non_exist_key", null)
+    runTest(json, "$.store.basket[*][*].non_exist_key", null)
+    runTest(json, "$.zip code", "94025")
+    runTest(json, "$.fb:testid", "1234")
+    runTest("{\"a\":\"b\nc\"}", "$.a", "b\nc")
+
+    // Test root array
+    runTest("[1,2,3]", "$[0]", "1")
+    runTest("[1,2,3]", "$.[0]", null) // Not supported
+    runTest("[1,2,3]", "$.[1]", null) // Not supported
+    runTest("[1,2,3]", "$[1]", "2")
+
+    runTest("[1,2,3]", "$[3]", null)
+    runTest("[1,2,3]", "$.[*]", null) // Not supported
+    runTest("[1,2,3]", "$[*]", "[1,2,3]")
+    runTest("[1,2,3]", "$", "[1,2,3]")
+    runTest("[{\"k1\":\"v1\"},{\"k2\":\"v2\"},{\"k3\":\"v3\"}]", "$[2]", "{\"k3\":\"v3\"}")
+    runTest("[{\"k1\":\"v1\"},{\"k2\":\"v2\"},{\"k3\":\"v3\"}]", "$[2].k3", "v3")
+    runTest("[{\"k1\":[{\"k11\":[1,2,3]}]}]", "$[0].k1[0].k11[1]", "2")
+    runTest("[{\"k1\":[{\"k11\":[1,2,3]}]}]", "$[0].k1[0].k11", "[1,2,3]")
+    runTest("[{\"k1\":[{\"k11\":[1,2,3]}]}]", "$[0].k1[0]", "{\"k11\":[1,2,3]}")
+    runTest("[{\"k1\":[{\"k11\":[1,2,3]}]}]", "$[0].k1", "[{\"k11\":[1,2,3]}]")
+    runTest("[{\"k1\":[{\"k11\":[1,2,3]}]}]", "$[0]", "{\"k1\":[{\"k11\":[1,2,3]}]}")
+    runTest("[[1,2,3],[4,5,6],[7,8,9]]", "$[1]", "[4,5,6]")
+    runTest("[[1,2,3],[4,5,6],[7,8,9]]", "$[1][0]", "4")
+    runTest("[\"a\",\"b\"]", "$[1]", "b")
+    runTest("[[\"a\",\"b\"]]", "$[0][1]", "b")
+
+    runTest("[1,2,3]", "[0]", null)
+    runTest("[1,2,3]", "$0", null)
+    runTest("[1,2,3]", "0", null)
+    runTest("[1,2,3]", "$.", null)
+
+    runTest("[1,2,3]", "$", "[1,2,3]")
+    runTest("{\"a\":4}", "$", "{\"a\":4}")
+
+    def runTest(json: String, path: String, exp: String): Unit = {
+      checkAnswer(
+        Seq(json).toDF().selectExpr(s"get_json_object(value, '$path')"),
+        Row(exp))
+    }
+  }
+
   test("json_tuple select") {
     val df: DataFrame = tuples.toDF("key", "jstring")
     val expected =
@@ -109,7 +193,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"json_tuple(a, 1)\"",
         "funcName" -> "`json_tuple`"
-      )
+      ),
+      context =
+        ExpectedContext(fragment = "json_tuple", callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -562,7 +648,9 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.INVALID_JSON_MAP_KEY_TYPE",
       parameters = Map(
         "schema" -> "\"MAP<STRUCT<f: INT>, STRING>\"",
-        "sqlExpr" -> "\"entries\""))
+        "sqlExpr" -> "\"entries\""),
+      context =
+        ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -747,19 +835,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val exception1 = intercept[SparkException] {
-        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      checkError(
+        exception = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+        },
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "badRecord" -> "[null,null,{\"a\" 1, \"b\": 11}]",
+          "failFastMode" -> "FAILFAST")
+      )
 
-      val exception2 = intercept[SparkException] {
-        df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
-          .collect()
-      }.getMessage
-      assert(exception2.contains(
-        "from_json() doesn't support the DROPMALFORMED mode. " +
-          "Acceptable modes are PERMISSIVE and FAILFAST."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1099",
+        parameters = Map(
+          "funcName" -> "from_json",
+          "mode" -> "DROPMALFORMED",
+          "permissiveMode" -> "PERMISSIVE",
+          "failFastMode" -> "FAILFAST"))
     }
   }
 
@@ -776,14 +871,19 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val exception = intercept[SparkException] {
+      val ex = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
       }
 
-      assert(exception.getMessage.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
       checkError(
-        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        exception = ex,
+        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map(
+          "badRecord" -> "[null,11,{\"a\": \"1\", \"b\": 11}]",
+          "failFastMode" -> "FAILFAST")
+      )
+      checkError(
+        exception = ex.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "CANNOT_PARSE_JSON_FIELD",
         parameters = Map(
           "fieldName" -> toSQLValue("a", StringType),
@@ -844,7 +944,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
         .withColumn("result", json_tuple($"json", "test"))
         .select($"result")
-        .as[String].head.length
+        .as[String].head().length
       assert(json_tuple_result === len)
     }
   }
@@ -862,7 +962,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           .select(from_json($"json", $"schema", options)).collect()
       },
       errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
-      parameters = Map("inputSchema" -> "\"schema\"")
+      parameters = Map("inputSchema" -> "\"schema\""),
+      context = ExpectedContext(fragment = "from_json", getCurrentClassCallSitePattern)
     )
   }
 
@@ -926,16 +1027,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       .add("c2", ArrayType(new StructType().add("c3", LongType).add("c4", StringType)))
     val df1 = Seq("""{"c2": [19], "c1": 123456}""").toDF("c0")
     checkAnswer(df1.select(from_json($"c0", st)), Row(Row(123456, null)))
-    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
-    checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
 
+    val df2 = Seq("""{"data": {"c2": [19], "c1": 123456}}""").toDF("c0")
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
-      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
-      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+      checkAnswer(
+        df2.select(from_json($"c0", new StructType().add("data", st))),
+        Row(Row(Row(123456, null)))
+      )
+    }
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(df2.select(from_json($"c0", new StructType().add("data", st))), Row(Row(null)))
     }
 
+    val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(Array(Row(123456, null))))
+    }
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
-      val df3 = Seq("""[{"c2": [19], "c1": 123456}]""").toDF("c0")
       checkAnswer(df3.select(from_json($"c0", ArrayType(st))), Row(null))
     }
 
@@ -1024,14 +1132,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         )
       )
 
-    // Value "a" cannot be parsed as an integer,
-    // the error cascades to "c2", thus making its value null.
+    // Value "a" cannot be parsed as an integer, c2 value is null.
     val df = Seq("""[{"c1": [{"c2": ["a"]}]}]""").toDF("c0")
 
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       checkAnswer(
         df.select(from_json($"c0", ArrayType(st))),
-        Row(Array(Row(null)))
+        Row(Array(Row(Seq(Row(null)))))
       )
     }
 
@@ -1053,22 +1160,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-33286: from_json - combined error messages") {
     val df = Seq("""{"a":1}""").toDF("json")
     val invalidJsonSchema = """{"fields": [{"a":123}], "type": "struct"}"""
-    val invalidJsonSchemaReason = "Failed to convert the JSON string '{\"a\":123}' to a field."
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkIllegalArgumentException] {
         df.select(from_json($"json", invalidJsonSchema, Map.empty[String, String])).collect()
       },
-      errorClass = "INVALID_SCHEMA.PARSE_ERROR",
-      parameters = Map(
-        "inputSchema" -> "\"{\"fields\": [{\"a\":123}], \"type\": \"struct\"}\"",
-        "reason" -> invalidJsonSchemaReason
-      )
-    )
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> """{"a":123}"""))
 
     val invalidDataType = "MAP<INT, cow>"
     val invalidDataTypeReason = "Unrecognized token 'MAP': " +
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n " +
-      "at [Source: (String)\"MAP<INT, cow>\"; line: 1, column: 4]"
+      "at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
+      "line: 1, column: 4]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidDataType, Map.empty[String, String])).collect()
@@ -1083,7 +1186,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val invalidTableSchema = "x INT, a cow"
     val invalidTableSchemaReason = "Unrecognized token 'x': " +
       "was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n" +
-      " at [Source: (String)\"x INT, a cow\"; line: 1, column: 2]"
+      " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); " +
+      "line: 1, column: 2]"
     checkError(
       exception = intercept[AnalysisException] {
         df.select(from_json($"json", invalidTableSchema, Map.empty[String, String])).collect()
@@ -1105,17 +1209,25 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         val badRec = """{"a" 1, "b": 11}"""
         val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
 
-        val exception1 = intercept[SparkException] {
-          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
-        }.getMessage
-        assert(exception1.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        checkError(
+          exception = intercept[SparkException] {
+            df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[null,null]",
+            "failFastMode" -> "FAILFAST")
+        )
 
-        val exception2 = intercept[SparkException] {
-          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
-        }.getMessage
-        assert(exception2.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        checkError(
+          exception = intercept[SparkException] {
+            df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[null,null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
     }
   }
@@ -1129,17 +1241,25 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         val badRec = """{"a" 1, "b": 11}"""
         val df = Seq(s"""[$badRec, {"a": 2, "b": 12}]""").toDS()
 
-        val exception1 = intercept[SparkException] {
-          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
-        }.getMessage
-        assert(exception1.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        checkError(
+          exception = intercept[SparkException] {
+            df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[null]",
+            "failFastMode" -> "FAILFAST")
+        )
 
-        val exception2 = intercept[SparkException] {
-          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
-        }.getMessage
-        assert(exception2.contains(
-          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+        checkError(
+          exception = intercept[SparkException] {
+            df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map(
+            "badRecord" -> "[null]",
+            "failFastMode" -> "FAILFAST")
+        )
       }
     }
   }
@@ -1162,7 +1282,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
-    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
       (YearMonthIntervalType(), """{"key":"INTERVAL '1-2' YEAR TO MONTH"}""", Period.of(1, 2, 0)),
       (YearMonthIntervalType(YEAR), """{"key":"INTERVAL '1' YEAR"}""", Period.of(1, 0, 0)),
@@ -1186,7 +1306,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-35983: from_json/to_json for map types where value types are day-time intervals") {
-    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF()
     Seq(
       (DayTimeIntervalType(), """{"key":"INTERVAL '1 02:03:04' DAY TO SECOND"}""",
         Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
@@ -1228,7 +1348,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36491: Make from_json/to_json to handle timestamp_ntz type properly") {
     val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
-    val df = Seq(localDT).toDF
+    val df = Seq(localDT).toDF()
     val toJsonDF = df.select(to_json(map(lit("key"), $"value")) as "json")
     checkAnswer(toJsonDF, Row("""{"key":"2021-08-12T15:16:23.000"}"""))
     val fromJsonDF = toJsonDF
@@ -1254,5 +1374,53 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         "type" -> "\"JAVA.LANG.INTEGER\""
       )
     )
+  }
+
+  test("json_array_length function") {
+    val df = Seq(null, "[]", "[1, 2, 3]", "{\"key\": 1}", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(0), Row(3), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_array_length(a)"), expected)
+    checkAnswer(df.select(json_array_length($"a")), expected)
+  }
+
+  test("json_object_keys function") {
+    val df = Seq(null, "{}", "{\"key1\":1, \"key2\": 2}", "[1, 2, 3]", "invalid json")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(Seq.empty),
+      Row(Seq("key1", "key2")), Row(null), Row(null))
+
+    checkAnswer(df.selectExpr("json_object_keys(a)"), expected)
+    checkAnswer(df.select(json_object_keys($"a")), expected)
+  }
+
+  test("function get_json_object - Codegen Support") {
+    withTempView("GetJsonObjectTable") {
+      val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")
+      data.createOrReplaceTempView("GetJsonObjectTable")
+      val df = sql("SELECT key, get_json_object(jstring, '$.f1') FROM GetJsonObjectTable")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.isInstanceOf[WholeStageCodegenExec])
+      checkAnswer(df, Seq(Row("1", "value1")))
+    }
+  }
+
+  test("function get_json_object - path is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(a, null)")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
+  }
+
+  test("function get_json_object - json is null") {
+    val data = Seq(("""{"name": "alice", "age": 5}""", "")).toDF("a", "b")
+    val df = data.selectExpr("get_json_object(null, '$.name')")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.isInstanceOf[WholeStageCodegenExec])
+    checkAnswer(df, Row(null))
   }
 }

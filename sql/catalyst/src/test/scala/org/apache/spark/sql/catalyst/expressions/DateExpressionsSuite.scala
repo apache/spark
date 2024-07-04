@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -75,33 +75,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       case _: TimestampNTZType =>
         LocalDateTime.parse(s.replace(" ", "T"))
-    }
-  }
-
-  test("datetime function current_date") {
-    val d0 = DateTimeUtils.currentDate(UTC)
-    val cd = CurrentDate(UTC_OPT).eval(EmptyRow).asInstanceOf[Int]
-    val d1 = DateTimeUtils.currentDate(UTC)
-    assert(d0 <= cd && cd <= d1 && d1 - d0 <= 1)
-
-    val cdjst = CurrentDate(JST_OPT).eval(EmptyRow).asInstanceOf[Int]
-    val cdpst = CurrentDate(PST_OPT).eval(EmptyRow).asInstanceOf[Int]
-    assert(cdpst <= cd && cd <= cdjst)
-  }
-
-  test("datetime function current_timestamp") {
-    val ct = DateTimeUtils.toJavaTimestamp(CurrentTimestamp().eval(EmptyRow).asInstanceOf[Long])
-    val t1 = System.currentTimeMillis()
-    assert(math.abs(t1 - ct.getTime) < 5000)
-  }
-
-  test("datetime function localtimestamp") {
-    // Verify with multiple outstanding time zones which has no daylight saving time.
-    Seq("UTC", "Africa/Dakar", "Asia/Hong_Kong").foreach { zid =>
-      val zoneId = DateTimeUtils.getZoneId(zid)
-      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
-      val t1 = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
-      assert(math.abs(t1 - ct) < 1000000)
     }
   }
 
@@ -285,6 +258,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
+  test("MonthName") {
+    checkEvaluation(MonthName(Literal.create(null, DateType)), null)
+    checkEvaluation(MonthName(Literal(d)), "Apr")
+    checkEvaluation(MonthName(Cast(Literal(date), DateType, UTC_OPT)), "Apr")
+    checkEvaluation(MonthName(Cast(Literal(ts), DateType, UTC_OPT)), "Nov")
+    checkEvaluation(MonthName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "May")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("2017-01-27 13:10:15")))), "Jan")
+    checkEvaluation(MonthName(Literal(new Date(toMillis("1582-12-15 13:10:15")))), "Dec")
+    checkConsistencyBetweenInterpretedAndCodegen(MonthName, DateType)
+  }
+
+  test("DayName") {
+    checkEvaluation(DayName(Literal.create(null, DateType)), null)
+    checkEvaluation(DayName(Literal(d)), "Wed")
+    checkEvaluation(DayName(Cast(Literal(date), DateType, UTC_OPT)), "Wed")
+    checkEvaluation(DayName(Cast(Literal(ts), DateType, UTC_OPT)), "Fri")
+    checkEvaluation(DayName(Cast(Literal("2011-05-06"), DateType, UTC_OPT)), "Fri")
+    checkEvaluation(DayName(Cast(Literal(LocalDate.parse("2017-05-27")), DateType, UTC_OPT)), "Sat")
+    checkEvaluation(DayName(Cast(Literal(LocalDate.parse("1582-10-15")), DateType, UTC_OPT)), "Fri")
+    checkConsistencyBetweenInterpretedAndCodegen(DayName, DateType)
+  }
+
   test("DateFormat") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
       withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
@@ -439,9 +434,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
-      checkExceptionInExpression[IllegalArgumentException](
+      checkErrorInExpression[SparkIllegalArgumentException](
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
-        "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date")
+        "_LEGACY_ERROR_TEMP_2000",
+        Map("message" ->
+          "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 
     withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {
@@ -959,11 +957,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), tz.toZoneId)))
-            val t1 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            val t2 = UnixTimestamp(
-              CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(
               UnixTimestamp(
                 Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId),
@@ -1030,11 +1023,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3), timeZoneId),
               MICROSECONDS.toSeconds(DateTimeUtils.daysToMicros(
                 DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24")), zid)))
-            val t1 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-            val t2 = ToUnixTimestamp(
-              CurrentTimestamp(), Literal(fmt1)).eval().asInstanceOf[Long]
-            assert(t2 - t1 <= 1)
             checkEvaluation(ToUnixTimestamp(
               Literal.create(null, DateType), Literal.create(null, StringType), timeZoneId), null)
             checkEvaluation(
@@ -1505,7 +1493,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
       if (!Set("E", "F", "q", "Q").contains(c)) {
-        checkExceptionInExpression[T](DateFormatClass(CurrentTimestamp(), Literal(c)), c)
         checkExceptionInExpression[T](FromUnixTime(Literal(0L), Literal(c)), c)
       }
     }
@@ -1515,7 +1502,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq('q', 'Q', 'e', 'c', 'A', 'n', 'N', 'p').foreach { l =>
-      checkException[IllegalArgumentException](l.toString)
+      checkException[SparkIllegalArgumentException](l.toString)
     }
   }
 
@@ -1961,6 +1948,102 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-42635: timestampadd near daylight saving transition") {
+    // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
+    // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
+    val skippedTime = 1300010400000000L
+    // In America/Los_Angeles timezone, both timestamp range `[repeatedTime - MICROS_PER_HOUR,
+    // repeatedTime)` and `[repeatedTime, repeatedTime + MICROS_PER_HOUR)` map to
+    // [2011-11-06 01:00:00, 2011-11-06 02:00:00).
+    // The next second of 2011-11-06 01:59:59 (pre-transition) jumps back to 2011-11-06 01:00:00.
+    val repeatedTime = 1320570000000000L
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> LA.getId) {
+      // Adding one day is **not** equivalent to adding <unit>_PER_DAY time units, because not every
+      // day has 24 hours: 2011-03-13 has 23 hours, 2011-11-06 has 25 hours.
+
+      // timestampadd(DAY, 1, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1), Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime)
+      // timestampadd(HOUR, 24, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(24),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR)
+      // timestampadd(HOUR, 23, 2011-03-12 03:00:00) = 2011-03-13 03:00:00
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(23),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime)
+      // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 04:00:00
+      checkEvaluation(
+        TimestampAdd(
+          "SECOND", Literal(SECONDS_PER_DAY.toInt),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR)
+      // timestampadd(SECOND, SECONDS_PER_DAY, 2011-03-12 03:00:00) = 2011-03-13 03:59:59
+      checkEvaluation(
+        TimestampAdd(
+          "SECOND", Literal(SECONDS_PER_DAY.toInt - 1),
+          Literal(skippedTime - 23 * MICROS_PER_HOUR, TimestampType)),
+        skippedTime + MICROS_PER_HOUR - MICROS_PER_SECOND)
+
+      // timestampadd(DAY, 1, 2011-11-05 02:00:00) = 2011-11-06 02:00:00
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime + MICROS_PER_HOUR)
+      // timestampadd(DAY, 1, 2011-11-05 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(1),
+          Literal(repeatedTime - 25 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(DAY, -1, 2011-11-07 01:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd("DAY", Literal(-1),
+          Literal(repeatedTime + 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime)
+      // timestampadd(MONTH, 1, 2011-10-06 01:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd(
+          "MONTH", Literal(1),
+          Literal(repeatedTime - MICROS_PER_HOUR - 31 * MICROS_PER_DAY, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(MONTH, -1, 2011-12-06 01:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd(
+          "MONTH", Literal(-1),
+          Literal(repeatedTime + 30 * MICROS_PER_DAY, TimestampType)),
+        repeatedTime)
+      // timestampadd(HOUR, 23, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (pre-transition)
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(23),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime - MICROS_PER_HOUR)
+      // timestampadd(HOUR, 24, 2011-11-05 02:00:00) = 2011-11-06 01:00:00 (post-transition)
+      checkEvaluation(
+        TimestampAdd("HOUR", Literal(24),
+          Literal(repeatedTime - 24 * MICROS_PER_HOUR, TimestampType)),
+        repeatedTime)
+    }
+  }
+
+  test("SPARK-42635: timestampadd unit conversion overflow") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("DAY",
+        Literal(106751992),
+        Literal(0L, TimestampType)),
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 106751992 DAY to TIMESTAMP '1970-01-01 00:00:00'"))
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
+        Literal(1431655764),
+        Literal(0L, TimestampType)),
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          "add 1431655764 QUARTER to TIMESTAMP '1970-01-01 00:00:00'"))
+    }
+  }
+
   test("SPARK-38284: difference between two timestamps in units") {
     // Check case-insensitivity
     checkEvaluation(
@@ -2016,5 +2099,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimestampType, TimestampType)
       }
     }
+  }
+
+  test("datetime function CurrentDate and localtimestamp are Unevaluable") {
+    checkError(exception = intercept[SparkException] { CurrentDate(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: current_date(Some(UTC))"))
+
+    checkError(exception = intercept[SparkException] { LocalTimestamp(UTC_OPT).eval(EmptyRow) },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: localtimestamp(Some(UTC))"))
   }
 }

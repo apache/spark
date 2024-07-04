@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
@@ -30,9 +31,12 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
@@ -75,7 +79,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }
@@ -192,7 +196,7 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }
@@ -204,13 +208,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
       DataTypeMismatch(
@@ -245,6 +244,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   override def nullable: Boolean = false
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     var i = 0
@@ -321,6 +322,8 @@ case class MapFromArrays(left: Expression, right: Expression)
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
 
+  override def stateful: Boolean = true
+
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
@@ -351,7 +354,7 @@ case class MapFromArrays(left: Expression, right: Expression)
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "NamePlaceholder"
   override def toString: String = prettyName
 }
@@ -375,9 +378,12 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _) => Seq(e, u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType.isInstanceOf[StringType] =>
+        Seq(e, u)
+      case (a: Alias, _) => Seq(Literal(a.name), a)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
+      case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
     })
   }
@@ -460,16 +466,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "2n (n > 0)",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
       )
     } else {
-      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
+      val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType.isInstanceOf[StringType])
       if (invalidNames.nonEmpty) {
         DataTypeMismatch(
           errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
@@ -571,15 +572,18 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     this(child, Literal(","), Literal(":"))
   }
 
+  override def stateful: Boolean = true
+
   override def first: Expression = text
   override def second: Expression = pairDelim
   override def third: Expression = keyValueDelim
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override def dataType: DataType = MapType(StringType, StringType)
+  override def dataType: DataType = MapType(first.dataType, first.dataType)
 
-  private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
 
   override def nullSafeEval(
       inputString: Any,
@@ -633,10 +637,10 @@ trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
 
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "StructFieldsOperation.dataType should not be called.")
 
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "StructFieldsOperation.nullable should not be called.")
 
   /**
@@ -702,7 +706,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(structExpr),
           "inputType" -> toSQLType(structExpr.dataType))
@@ -737,7 +741,7 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
     }
     val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
     val existingFieldExprs: Seq[(StructField, Expression)] =
-      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }
+      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }.toImmutableArraySeq
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
   }
 

@@ -28,9 +28,11 @@ import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.MergedBlockMetaSuccess;
@@ -51,7 +53,8 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
-  private static final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportResponseHandler.class);
 
   private final Channel channel;
 
@@ -108,7 +111,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   private void failOutstandingRequests(Throwable cause) {
     for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
       try {
-        entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
+        entry.getValue().onFailure(entry.getKey().chunkIndex(), cause);
       } catch (Exception e) {
         logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
       }
@@ -143,7 +146,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
-        numOutstandingRequests(), remoteAddress);
+        MDC.of(LogKeys.COUNT$.MODULE$, numOutstandingRequests()),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
       failOutstandingRequests(new IOException("Connection from " + remoteAddress + " closed"));
     }
   }
@@ -153,42 +157,45 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
-        numOutstandingRequests(), remoteAddress);
+        MDC.of(LogKeys.COUNT$.MODULE$, numOutstandingRequests()),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
       failOutstandingRequests(cause);
     }
   }
 
   @Override
   public void handle(ResponseMessage message) throws Exception {
-    if (message instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
+    if (message instanceof ChunkFetchSuccess resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
-          resp.streamChunkId, getRemoteAddress(channel));
+          MDC.of(LogKeys.STREAM_CHUNK_ID$.MODULE$, resp.streamChunkId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
+        listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
         resp.body().release();
       }
-    } else if (message instanceof ChunkFetchFailure) {
-      ChunkFetchFailure resp = (ChunkFetchFailure) message;
+    } else if (message instanceof ChunkFetchFailure resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} ({}) since it is not outstanding",
-          resp.streamChunkId, getRemoteAddress(channel), resp.errorString);
+          MDC.of(LogKeys.STREAM_CHUNK_ID$.MODULE$, resp.streamChunkId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)),
+          MDC.of(LogKeys.ERROR$.MODULE$, resp.errorString));
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onFailure(resp.streamChunkId.chunkIndex, new ChunkFetchFailureException(
+        listener.onFailure(resp.streamChunkId.chunkIndex(), new ChunkFetchFailureException(
           "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
-    } else if (message instanceof RpcResponse) {
-      RpcResponse resp = (RpcResponse) message;
+    } else if (message instanceof RpcResponse resp) {
       RpcResponseCallback listener = (RpcResponseCallback) outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
-          resp.requestId, getRemoteAddress(channel), resp.body().size());
+          MDC.of(LogKeys.REQUEST_ID$.MODULE$, resp.requestId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)),
+          MDC.of(LogKeys.RESPONSE_BODY_SIZE$.MODULE$, resp.body().size()));
         resp.body().release();
       } else {
         outstandingRpcs.remove(resp.requestId);
@@ -198,25 +205,27 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           resp.body().release();
         }
       }
-    } else if (message instanceof RpcFailure) {
-      RpcFailure resp = (RpcFailure) message;
+    } else if (message instanceof RpcFailure resp) {
       BaseResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
-          resp.requestId, getRemoteAddress(channel), resp.errorString);
+          MDC.of(LogKeys.REQUEST_ID$.MODULE$, resp.requestId),
+          MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)),
+          MDC.of(LogKeys.ERROR$.MODULE$, resp.errorString));
       } else {
         outstandingRpcs.remove(resp.requestId);
         listener.onFailure(new RuntimeException(resp.errorString));
       }
-    } else if (message instanceof MergedBlockMetaSuccess) {
-      MergedBlockMetaSuccess resp = (MergedBlockMetaSuccess) message;
+    } else if (message instanceof MergedBlockMetaSuccess resp) {
       try {
         MergedBlockMetaResponseCallback listener =
           (MergedBlockMetaResponseCallback) outstandingRpcs.get(resp.requestId);
         if (listener == null) {
-          logger.warn(
-            "Ignoring response for MergedBlockMetaRequest {} from {} ({} bytes) since it is not"
-              + " outstanding", resp.requestId, getRemoteAddress(channel), resp.body().size());
+          logger.warn("Ignoring response for MergedBlockMetaRequest {} from {} ({} bytes) since "
+            + "it is not outstanding",
+            MDC.of(LogKeys.REQUEST_ID$.MODULE$, resp.requestId),
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)),
+            MDC.of(LogKeys.RESPONSE_BODY_SIZE$.MODULE$, resp.body().size()));
         } else {
           outstandingRpcs.remove(resp.requestId);
           listener.onSuccess(resp.getNumChunks(), resp.body());
@@ -224,8 +233,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       } finally {
         resp.body().release();
       }
-    } else if (message instanceof StreamResponse) {
-      StreamResponse resp = (StreamResponse) message;
+    } else if (message instanceof StreamResponse resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
@@ -251,8 +259,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       } else {
         logger.error("Could not find callback for StreamResponse.");
       }
-    } else if (message instanceof StreamFailure) {
-      StreamFailure resp = (StreamFailure) message;
+    } else if (message instanceof StreamFailure resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
@@ -262,7 +269,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           logger.warn("Error in stream failure handler.", ioe);
         }
       } else {
-        logger.warn("Stream failure with unknown callback: {}", resp.error);
+        logger.warn("Stream failure with unknown callback: {}",
+          MDC.of(LogKeys.ERROR$.MODULE$, resp.error));
       }
     } else {
       throw new IllegalStateException("Unknown response type: " + message.type());

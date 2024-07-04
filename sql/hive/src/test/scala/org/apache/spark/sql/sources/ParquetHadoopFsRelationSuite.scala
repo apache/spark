@@ -26,6 +26,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -199,7 +200,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "UNCOMPRESSED") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.UNCOMPRESSED.name) {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/table1"
         val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")

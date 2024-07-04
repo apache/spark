@@ -29,7 +29,7 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure;
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockTransferor} will delegate the exception to this handler only when
- * - remaining retries < max retries
+ * - remaining retries  &lt; max retries
  * - exception is an IOException
  *
  * @since 3.1.0
@@ -87,9 +87,9 @@ public interface ErrorHandler {
 
       // If the block is too late or the invalid block push or the attempt is not the latest one,
       // there is no need to retry it
-      return !(t instanceof BlockPushNonFatalFailure &&
+      return !(t instanceof BlockPushNonFatalFailure blockPushNonFatalFailure &&
         BlockPushNonFatalFailure
-          .shouldNotRetryErrorCode(((BlockPushNonFatalFailure) t).getReturnCode()));
+          .shouldNotRetryErrorCode(blockPushNonFatalFailure.getReturnCode()));
     }
 
     @Override

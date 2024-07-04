@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}

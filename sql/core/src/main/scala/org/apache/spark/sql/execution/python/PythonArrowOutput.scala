@@ -17,16 +17,15 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataInputStream
-import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, PythonWorker, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
@@ -46,16 +45,16 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
   protected def newReaderIterator(
       stream: DataInputStream,
-      writerThread: WriterThread,
+      writer: Writer,
       startTime: Long,
       env: SparkEnv,
-      worker: Socket,
+      worker: PythonWorker,
       pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT] = {
 
     new ReaderIterator(
-      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
 
       private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
         s"stdin reader for $pythonExec", 0, Long.MaxValue)
@@ -80,8 +79,8 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
       }
 
       protected override def read(): OUT = {
-        if (writerThread.exception.isDefined) {
-          throw writerThread.exception.get
+        if (writer.exception.isDefined) {
+          throw writer.exception.get
         }
         try {
           if (reader != null && batchLoaded) {

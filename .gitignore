@@ -50,6 +50,7 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
+docs/_generated/
 docs/_site/
 docs/api
 docs/.local_ruby_bundle
@@ -73,6 +74,7 @@ python/.eggs/
 python/coverage.xml
 python/deps
 python/docs/_site/
+python/docs/source/development/errors.rst
 python/docs/source/reference/**/api/
 python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
@@ -117,6 +119,6 @@ spark-warehouse/
 node_modules
 
 # For Antlr
-sql/catalyst/gen/
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
+sql/api/gen/
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

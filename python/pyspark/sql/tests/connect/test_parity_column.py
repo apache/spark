@@ -17,26 +17,11 @@
 
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
-
-if should_test_connect:
-    from pyspark import sql
-    from pyspark.sql.connect.column import Column
-
-    # This is a hack to make the Column instance comparison works in `ColumnTestsMixin`.
-    # e.g., `isinstance(col, pyspark.sql.Column)`.
-    sql.Column = Column
-
 from pyspark.sql.tests.test_column import ColumnTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42017): Different error type AnalysisException vs SparkConnectAnalysisException
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_access_column(self):
-        super().test_access_column()
-
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
         super().test_validate_column_types()

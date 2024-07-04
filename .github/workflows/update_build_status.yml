@@ -26,13 +26,13 @@ on:
 jobs:
   update:
     name: Update build status
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       actions: read
       checks: write
     steps:
       - name: "Update build status"
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

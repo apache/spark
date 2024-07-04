@@ -16,6 +16,8 @@
     under the License.
 
 
+.. _user_guide.options:
+
 ====================
 Options and settings
 ====================
@@ -169,17 +171,17 @@ This index type should be avoided when the data is large. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([0, 1, 2], dtype='int64')
+    Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> from pyspark.sql import functions as F, Window
+    >>> from pyspark.sql import functions as sf, Window
     >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
-    >>> sequential_index = F.row_number().over(
-    ...    Window.orderBy(F.monotonically_increasing_id().asc())) - 1
+    >>> sequential_index = sf.row_number().over(
+    ...    Window.orderBy(sf.monotonically_increasing_id().asc())) - 1
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
     [0, 1, 2]
 
@@ -195,7 +197,7 @@ index has to be used. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([0, 1, 2], dtype='int64')
+    Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
@@ -219,16 +221,16 @@ have any penalty compared to other index types. See the example below:
     >>> psdf = ps.range(3)
     >>> ps.reset_option('compute.default_index_type')
     >>> psdf.index
-    Int64Index([25769803776, 60129542144, 94489280512], dtype='int64')
+    Index([25769803776, 60129542144, 94489280512], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> from pyspark.sql import functions as F
+    >>> from pyspark.sql import functions as sf
     >>> import pyspark.pandas as ps
     >>> spark_df = ps.range(3).to_spark()
-    >>> spark_df.select(F.monotonically_increasing_id()) \
+    >>> spark_df.select(sf.monotonically_increasing_id()) \
     ...     .rdd.map(lambda r: r[0]).collect()
     [25769803776, 60129542144, 94489280512]
 
@@ -302,6 +304,8 @@ compute.isin_limit              80                      'compute.isin_limit' set
                                                         'Column.isin(list)'. If the length of the ‘list’ is
                                                         above the limit, broadcast join is used instead for
                                                         better performance.
+compute.pandas_fallback         False                   'compute.pandas_fallback' sets whether or not to
+                                                        fallback automatically to Pandas' implementation.
 plotting.max_rows               1000                    'plotting.max_rows' sets the visual limit on top-n-
                                                         based plots such as `plot.bar` and `plot.pie`. If it
                                                         is set to 1000, the first 1000 data points will be

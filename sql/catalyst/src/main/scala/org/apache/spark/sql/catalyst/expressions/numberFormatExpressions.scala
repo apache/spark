@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
-import org.apache.spark.sql.types.{AbstractDataType, DataType, Decimal, DecimalType, StringType}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
@@ -46,7 +49,8 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
     DecimalType.USER_DEFAULT
   }
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -86,6 +90,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         |if (!${ev.isNull}) {
         |  ${ev.value} = $builder.parse(${eval.value});
+        |  ${ev.isNull} = ${ev.isNull} || (${ev.value} == null);
         |}
       """.stripMargin)
   }
@@ -181,12 +186,13 @@ case class TryToNumber(left: Expression, right: Expression)
 }
 
 /**
- * A function that converts decimal values to strings, returning NULL if the decimal value fails to
+ * A function that converts decimal/datetime values to strings, returning NULL if the value fails to
  * match the format string.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
+    _FUNC_(expr, format) - Convert `expr` to a string based on the `format`.
       Throws an exception if the conversion fails. The format can consist of the following
       characters, case insensitive:
         '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
@@ -206,6 +212,11 @@ case class TryToNumber(left: Expression, right: Expression)
         'PR': Only allowed at the end of the format string; specifies that the result string will be
           wrapped by angle brackets if the input value is negative.
           ('<1>').
+      If `expr` is a datetime, `format` shall be a valid datetime pattern, see <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>.
+      If `expr` is a binary, it is converted to a string in one of the formats:
+        'base64': a base 64 string.
+        'hex': a string in the hexadecimal format.
+        'utf-8': the input binary is decoded to UTF-8 string.
   """,
   examples = """
     Examples:
@@ -219,9 +230,48 @@ case class TryToNumber(left: Expression, right: Expression)
        $78.12
       > SELECT _FUNC_(-12454.8, '99G999D9S');
        12,454.8-
+      > SELECT _FUNC_(date'2016-04-08', 'y');
+       2016
+      > SELECT _FUNC_(x'537061726b2053514c', 'base64');
+       U3BhcmsgU1FM
+      > SELECT _FUNC_(x'537061726b2053514c', 'hex');
+       537061726B2053514C
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
   """,
   since = "3.4.0",
   group = "string_funcs")
+// scalastyle:on line.size.limit
+object ToCharacterBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      val (inputExpr, format) = (expressions(0), expressions(1))
+      inputExpr.dataType match {
+        case _: DatetimeType => DateFormatClass(inputExpr, format)
+        case _: BinaryType =>
+          if (!(format.dataType.isInstanceOf[StringType] && format.foldable)) {
+            throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "format",
+              format.dataType)
+          }
+          val fmt = format.eval()
+          if (fmt == null) {
+            throw QueryCompilationErrors.nullArgumentError(funcName, "format")
+          }
+          fmt.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT).trim match {
+            case "base64" => Base64(inputExpr)
+            case "hex" => Hex(inputExpr)
+            case "utf-8" => new Decode(Seq(inputExpr, format))
+            case invalid => throw QueryCompilationErrors.binaryFormatError(funcName, invalid)
+          }
+        case _ => ToCharacter(inputExpr, format)
+      }
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+  }
+}
+
 case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
   private lazy val numberFormatter = {
@@ -233,8 +283,8 @@ case class ToCharacter(left: Expression, right: Expression)
     }
   }
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringType)
+  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringTypeAnyCollation)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {

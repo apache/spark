@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The write files spec holds all information of [[V1WriteCommand]] if its provider is
@@ -57,6 +58,14 @@ case class WriteFiles(
     copy(child = newChild)
 }
 
+trait WriteFilesExecBase extends UnaryExecNode {
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw SparkException.internalError(s"$nodeName does not support doExecute")
+  }
+}
+
 /**
  * Responsible for writing files.
  */
@@ -66,16 +75,14 @@ case class WriteFilesExec(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     options: Map[String, String],
-    staticPartitions: TablePartitionSpec) extends UnaryExecNode {
-  override def output: Seq[Attribute] = Seq.empty
-
+    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
   override protected def doExecuteWrite(
       writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
     val rdd = child.execute()
     // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
     // partition rdd to make sure we at least set up one write task to write the metadata.
     val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-      session.sparkContext.parallelize(Array.empty[InternalRow], 1)
+      session.sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
     } else {
       rdd
     }
@@ -102,10 +109,6 @@ case class WriteFilesExec(
 
       Iterator(ret)
     }
-  }
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    throw SparkException.internalError(s"$nodeName does not support doExecute")
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(child)

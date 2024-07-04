@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 import os
+import signal
 import sys
 import tempfile
 import threading
@@ -186,16 +187,13 @@ class WorkerTests(ReusedPySparkTestCase):
 
 
 class WorkerReuseTest(PySparkTestCase):
+    @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
-        def check_reuse_worker_of_parallelize_range():
-            rdd = self.sc.parallelize(range(20), 8)
-            previous_pids = rdd.map(lambda x: os.getpid()).collect()
-            current_pids = rdd.map(lambda x: os.getpid()).collect()
-            for pid in current_pids:
-                self.assertTrue(pid in previous_pids)
-            return True
-
-        eventually(check_reuse_worker_of_parallelize_range, catch_assertions=True)
+        rdd = self.sc.parallelize(range(20), 8)
+        previous_pids = rdd.map(lambda x: os.getpid()).collect()
+        current_pids = rdd.map(lambda x: os.getpid()).collect()
+        for pid in current_pids:
+            self.assertTrue(pid in previous_pids)
 
 
 @unittest.skipIf(
@@ -233,6 +231,7 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
         _conf.set("spark.python.worker.faulthandler.enabled", "true")
         return _conf
 
+    @unittest.skipIf(sys.version_info > (3, 12), "SPARK-46130: Flaky with Python 3.12")
     def test_python_segfault(self):
         try:
 
@@ -256,6 +255,21 @@ class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
         _conf = super(WorkerSegfaultNonDaemonTest, cls).conf()
         _conf.set("spark.python.use.daemon", "false")
         return _conf
+
+
+class WorkerPoolCrashTest(PySparkTestCase):
+    def test_worker_crash(self):
+        # SPARK-47565: Kill a worker that is currently idling
+        rdd = self.sc.parallelize(range(20), 4)
+        # first ensure that workers are reused
+        worker_pids1 = set(rdd.map(lambda x: os.getpid()).collect())
+        worker_pids2 = set(rdd.map(lambda x: os.getpid()).collect())
+        self.assertEqual(worker_pids1, worker_pids2)
+        for pid in list(worker_pids1)[1:]:  # kill all workers except for one
+            os.kill(pid, signal.SIGTERM)
+        # give things a moment to settle
+        time.sleep(5)
+        rdd.map(lambda x: os.getpid()).collect()
 
 
 if __name__ == "__main__":

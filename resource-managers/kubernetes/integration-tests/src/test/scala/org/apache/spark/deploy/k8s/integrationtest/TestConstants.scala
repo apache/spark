@@ -18,7 +18,6 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 object TestConstants {
   val BACKEND_MINIKUBE = "minikube"
-  val BACKEND_DOCKER_FOR_DESKTOP = "docker-for-desktop"
   val BACKEND_DOCKER_DESKTOP = "docker-desktop"
   val BACKEND_CLOUD = "cloud"
 

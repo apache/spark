@@ -24,8 +24,8 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.SECONDS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 
 object DateTime extends Enumeration {
   type DateTime = Value

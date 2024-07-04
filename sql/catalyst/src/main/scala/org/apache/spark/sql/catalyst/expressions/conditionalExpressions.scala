@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -56,6 +57,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = predicate :: Nil
 
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): If = {
+    copy(predicate = alwaysEvaluatedInputs.head)
+  }
+
   override def branchGroups: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
 
   final override val nodePatterns : Seq[TreePattern] = Seq(IF)
@@ -65,7 +70,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BooleanType),
           "inputSql" -> toSQLExpr(predicate),
           "inputType" -> toSQLType(predicate.dataType)
@@ -165,8 +170,15 @@ case class CaseWhen(
 
   final override val nodePatterns : Seq[TreePattern] = Seq(CASE_WHEN)
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    super.legacyWithNewChildren(newChildren)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CaseWhen = {
+    if (newChildren.length % 2 == 0) {
+      copy(branches = newChildren.grouped(2).map { case Seq(a, b) => (a, b) }.toSeq)
+    } else {
+      copy(
+        branches = newChildren.dropRight(1).grouped(2).map { case Seq(a, b) => (a, b) }.toSeq,
+        elseValue = newChildren.lastOption)
+    }
+  }
 
   // both then and else expressions should be considered.
   @transient
@@ -189,7 +201,7 @@ case class CaseWhen(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> (index + 1).toString,
+            "paramIndex" -> ordinalNumber(index),
             "requiredType" -> toSQLType(BooleanType),
             "inputSql" -> toSQLExpr(branches(index)._1),
             "inputType" -> toSQLType(branches(index)._1.dataType)
@@ -212,6 +224,10 @@ case class CaseWhen(
    * We should only return the first condition expression as it will always get accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): CaseWhen = {
+    withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = {
     // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
@@ -403,7 +419,7 @@ object CaseKeyWhen {
     val cases = branches.grouped(2).flatMap {
       case Seq(cond, value) => Some((EqualTo(key, cond), value))
       case Seq(value) => None
-    }.toArray.toSeq  // force materialization to make the seq serializable
+    }.toArray.toImmutableArraySeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 != 0) Some(branches.last) else None
     CaseWhen(cases, elseValue)
   }

@@ -37,8 +37,8 @@ from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
-from pyspark.rdd import RDD
-from pyspark.context import SparkContext
+from pyspark.core.rdd import RDD
+from pyspark.core.context import SparkContext
 from pyspark.mllib.linalg import Vector
 
 if TYPE_CHECKING:
@@ -117,13 +117,13 @@ class LinearModel:
         self._coeff = _convert_to_vector(weights)
         self._intercept = float(intercept)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def weights(self) -> Vector:
         """Weights computed for every feature."""
         return self._coeff
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def intercept(self) -> float:
         """Intercept computed for this model."""

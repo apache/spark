@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.HashMap
 import scala.concurrent.Future
 
 import io.fabric8.kubernetes.api.model.Pod
@@ -31,6 +32,8 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.internal.LogKeys.{COUNT, HOST_PORT, TOTAL}
+import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
@@ -39,6 +42,7 @@ import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInf
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -224,7 +228,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // If decommissioning is triggered by the executor the K8s cluster manager has already
     // picked the pod to evict so we don't need to update the labels.
     if (!triggeredByExecutor) {
-      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1))
+      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1).toImmutableArraySeq)
     }
     super.decommissionExecutors(executorsAndDecomInfo, adjustTargetNumExecutors,
       triggeredByExecutor)
@@ -253,9 +257,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
 
-        if (!running.list().getItems().isEmpty()) {
-          logInfo(s"Forcefully deleting ${running.list().getItems().size()} pods " +
-            s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
+        if (!running.list().getItems.isEmpty) {
+          logInfo(log"Forcefully deleting ${MDC(COUNT, running.list().getItems.size())} pods " +
+            log"(out of ${MDC(TOTAL, executorIds.size)}) that are still running after graceful " +
+            log"shutdown period.")
           running.delete()
         }
       }
@@ -294,10 +299,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+
+    protected val execIDRequester = new HashMap[RpcAddress, String]
+
     private def generateExecID(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case x: GenerateExecID =>
         val newId = execId.incrementAndGet().toString
         context.reply(newId)
+        val executorAddress = context.senderAddress
+        execIDRequester(executorAddress) = newId
         // Generally this should complete quickly but safer to not block in-case we're in the
         // middle of an etcd fail over or otherwise slower writes.
         val labelTask = new Runnable() {
@@ -340,7 +350,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
               disableExecutor(id)
           }
         case _ =>
-          logInfo(s"No executor found for ${rpcAddress}")
+          val newExecId = execIDRequester.get(rpcAddress)
+          newExecId match {
+            case Some(id) =>
+              execIDRequester -= rpcAddress
+              // Expected, executors re-establish a connection with an ID
+            case _ =>
+              logInfo(log"No executor found for ${MDC(HOST_PORT, rpcAddress)}")
+          }
       }
     }
   }

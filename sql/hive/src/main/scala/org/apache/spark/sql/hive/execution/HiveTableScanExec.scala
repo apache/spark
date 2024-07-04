@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
@@ -159,7 +159,7 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues.toSeq)
+        val row = new GenericInternalRow(castedValues.toArray)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }

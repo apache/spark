@@ -22,7 +22,7 @@ import java.awt.color.ColorSpace
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.sql.Row

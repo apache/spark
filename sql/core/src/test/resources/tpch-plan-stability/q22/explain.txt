@@ -26,7 +26,7 @@ Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
 
 (3) Filter [codegen id : 2]
 Input [3]: [c_custkey#1, c_phone#2, c_acctbal#3]
-Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(14,4)) > Subquery scalar-subquery#4, [id=#5]))
+Condition : ((isnotnull(c_acctbal#3) AND substring(c_phone#2, 1, 2) IN (13,31,23,29,30,18,17)) AND (cast(c_acctbal#3 as decimal(14,4)) > ReusedSubquery Subquery scalar-subquery#4, [id=#5]))
 
 (4) Scan parquet spark_catalog.default.orders
 Output [1]: [o_custkey#6]
@@ -79,7 +79,9 @@ Arguments: [cntrycode#7 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
+Subquery:1 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#4, [id=#5]
+
+Subquery:2 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
 * HashAggregate (20)
 +- Exchange (19)
    +- * HashAggregate (18)

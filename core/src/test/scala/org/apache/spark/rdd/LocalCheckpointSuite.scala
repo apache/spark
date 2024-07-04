@@ -70,7 +70,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     filteredRdd.localCheckpoint()
     assert(filteredRdd.checkpointData.isDefined)
     assert(!filteredRdd.checkpointData.get.isCheckpointed)
-    assert(!filteredRdd.checkpointData.get.checkpointRDD.isDefined)
+    assert(filteredRdd.checkpointData.get.checkpointRDD.isEmpty)
     assert(filteredRdd.getStorageLevel === LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
 
     // After an action, the lineage is truncated
@@ -159,7 +159,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   test("missing checkpoint block fails with informative message") {
     val rdd = newRdd.localCheckpoint()
-    val numPartitions = rdd.partitions.size
+    val numPartitions = rdd.partitions.length
     val partitionIndices = rdd.partitions.map(_.index)
     val bmm = sc.env.blockManager.master
 
@@ -236,7 +236,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
       targetStorageLevel: StorageLevel): Unit = {
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
-    val rdd1 = rdd.map { i => i + "1" }
+    val rdd1 = rdd.map { i => i.toString + "1" }
     val rdd2 = rdd1.map { i => i + "2" }
     val rdd3 = rdd2.map { i => i + "3" }
     val rddDependencies = rdd.dependencies

@@ -46,7 +46,6 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
-    conf.set("orc.compression", "snappy")
 
     val sparkSession = SparkSession.builder()
       .master("local[1]")
@@ -80,15 +79,21 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     spark.read.format(HIVE_ORC_FORMAT).load(dirORC).createOrReplaceTempView("hiveOrcTable")
   }
 
+  private def getExpr(dataType: DataType = IntegerType): String = dataType match {
+    case ByteType => "cast(value % 128 as byte)"
+    case ShortType => "cast(value % 32768 as short)"
+    case _ => s"cast(value % ${Int.MaxValue} as ${dataType.sql})"
+  }
+
   def numericScanBenchmark(values: Int, dataType: DataType): Unit = {
     val benchmark = new Benchmark(s"SQL Single ${dataType.sql} Column Scan", values, output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
+        prepareTable(dir, spark.sql(s"SELECT ${getExpr(dataType)} id FROM t1"))
 
         benchmark.addCase("Hive built-in ORC") { _ =>
           spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
@@ -115,11 +120,11 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
-          spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
+          spark.sql(s"SELECT ${getExpr()} AS c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("Hive built-in ORC") { _ =>
           spark.sql("SELECT sum(c1), sum(length(c2)) FROM hiveOrcTable").noop()
@@ -146,9 +151,10 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
+        prepareTable(dir,
+          spark.sql(s"SELECT value % 2 AS p, ${getExpr()} AS id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - Hive built-in ORC") { _ =>
           spark.sql("SELECT sum(id) FROM hiveOrcTable").noop()
@@ -269,8 +275,8 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
       withTempTable("t1", "nativeOrcTable", "hiveOrcTable") {
         import spark.implicits._
         val middle = width / 2
-        val selectExpr = (1 to width).map(i => s"value as c$i")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        val selectExpr = (1 to width).map(i => s"${getExpr()} as c$i")
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
@@ -302,7 +308,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
         import spark.implicits._
         val selectExprCore = (1 to width).map(i => s"'f$i', value").mkString(",")
         val selectExpr = Seq(s"named_struct($selectExprCore) as c1")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
@@ -341,7 +347,7 @@ object OrcReadBenchmark extends SqlBasedBenchmark {
           .map(_ => s"$structExpr").mkString(",")
         val selectExpr = Seq(s"array($arrayExprElements) as c1")
         print(s"select expression is $selectExpr\n")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))

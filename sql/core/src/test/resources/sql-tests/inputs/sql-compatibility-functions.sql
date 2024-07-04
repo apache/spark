@@ -22,3 +22,6 @@ SELECT string(1, 2);
 -- SPARK-21555: RuntimeReplaceable used in group by
 CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st);
 SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value");
+
+-- aggregate function inside NULLIF
+SELECT nullif(SUM(id), 0) from range(5);

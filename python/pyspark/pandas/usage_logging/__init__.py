@@ -29,7 +29,6 @@ from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.indexes.category import CategoricalIndex
 from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
-from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
 from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.pandas.missing.groupby import (
@@ -89,8 +88,6 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         Series,
         Index,
         MultiIndex,
-        Int64Index,
-        Float64Index,
         CategoricalIndex,
         DatetimeIndex,
         DataFrameGroupBy,

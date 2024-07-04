@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -39,7 +40,6 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
    */
   private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
     e.isInstanceOf[AggregateExpression] ||
-      PythonUDF.isGroupedAggPandasUDF(e) ||
       agg.groupingExpressions.exists(_.semanticEquals(e))
   }
 
@@ -263,7 +263,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               "Expected udfs have the same evalType but got different evalTypes: " +
               evalTypes.mkString(","))
           }
@@ -271,10 +271,11 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
           val evaluation = evalType match {
             case PythonEvalType.SQL_BATCHED_UDF =>
               BatchEvalPython(validUdfs, resultAttrs, child)
-            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
+            case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+                 | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new IllegalStateException("Unexpected UDF evalType")
+              throw SparkException.internalError("Unexpected UDF evalType")
           }
 
           attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)
@@ -286,7 +287,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
       udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach { udf =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
@@ -301,6 +302,26 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
         Project(plan.output, newPlan)
       } else {
         newPlan
+      }
+    }
+  }
+}
+
+/**
+ * Extracts PythonUDTFs from operators, rewriting the query plan so that UDTFs can be evaluated.
+ */
+object ExtractPythonUDTFs extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    // A correlated subquery will be rewritten into join later, and will go through this rule
+    // eventually. Here we skip subquery, as Python UDTFs only need to be extracted once.
+    case s: Subquery if s.correlated => plan
+
+    case _ => plan.transformUpWithPruning(_.containsPattern(GENERATE)) {
+      case g @ Generate(func: PythonUDTF, _, _, _, _, child) => func.evalType match {
+        case PythonEvalType.SQL_TABLE_UDF =>
+          BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
+        case PythonEvalType.SQL_ARROW_TABLE_UDF =>
+          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
       }
     }
   }

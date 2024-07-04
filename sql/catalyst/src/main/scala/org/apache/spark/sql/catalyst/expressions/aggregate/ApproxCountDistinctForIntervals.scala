@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.types.PhysicalNumericType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
@@ -84,7 +85,7 @@ case class ApproxCountDistinctForIntervals(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "endpointsExpression",
+          "inputName" -> toSQLId("endpointsExpression"),
           "inputType" -> toSQLType(endpointsExpression.dataType)))
     } else {
       endpointsExpression.dataType match {
@@ -103,7 +104,7 @@ case class ApproxCountDistinctForIntervals(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> s"ARRAY OF $requiredElemTypes",
               "inputSql" -> toSQLExpr(endpointsExpression),
               "inputType" -> toSQLType(inputType)))
@@ -139,7 +140,8 @@ case class ApproxCountDistinctForIntervals(
       // convert the value into a double value for searching in the double array
       val doubleValue = child.dataType match {
         case n: NumericType =>
-          n.numeric.toDouble(value.asInstanceOf[n.InternalType])
+          PhysicalNumericType.numeric(n)
+            .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
         case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>

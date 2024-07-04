@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
-import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -37,11 +37,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /** A helper object for writing FileFormat data out to a location. */
@@ -155,10 +154,9 @@ object FileFormatWriter extends Logging {
     }
 
     // the sort order doesn't matter
-    // Use the output ordering from the original plan before adding the empty2null projection.
     val actualOrdering = writeFilesOpt.map(_.child)
       .getOrElse(materializeAdaptiveSparkPlan(plan))
-      .outputOrdering.map(_.child)
+      .outputOrdering
     val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
 
     SQLExecution.checkSQLExecutionId(sparkSession)
@@ -207,13 +205,8 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
-    val hasEmpty2Null = plan.exists(p => V1WritesUtils.hasEmptyToNull(p.expressions))
-    val empty2NullPlan = if (hasEmpty2Null) {
-      plan
-    } else {
-      val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
-      if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
-    }
+    val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
+    val empty2NullPlan = if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
 
     writeAndCommit(job, description, committer) {
       val (planToExecute, concurrentOutputWriterSpec) = if (orderingMatched) {
@@ -237,7 +230,7 @@ object FileFormatWriter extends Logging {
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
       // partition rdd to make sure we at least set up one write task to write the metadata.
       val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-        sparkSession.sparkContext.parallelize(Array.empty[InternalRow], 1)
+        sparkSession.sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
       } else {
         rdd
       }
@@ -277,17 +270,20 @@ object FileFormatWriter extends Logging {
       val ret = f
       val commitMsgs = ret.map(_.commitMsg)
 
-      logInfo(s"Start to commit write Job ${description.uuid}.")
-      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
-      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
+      logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
+      val (_, duration) = Utils
+        .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
+      logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
-      processStats(description.statsTrackers, ret.map(_.summary.stats), duration)
-      logInfo(s"Finished processing stats for write job ${description.uuid}.")
+      processStats(
+        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
+      logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
-      logError(s"Aborting job ${description.uuid}.", cause)
+      logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
       committer.abortJob(job)
       throw cause
     }
@@ -403,28 +399,17 @@ object FileFormatWriter extends Logging {
         }
       }
 
-    try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out and commit the task.
-        dataWriter.writeWithIterator(iterator)
-        dataWriter.commit()
-      })(catchBlock = {
-        // If there is an error, abort the task
-        dataWriter.abort()
-        logError(s"Job $jobId aborted.")
-      }, finallyBlock = {
-        dataWriter.close()
-      })
-    } catch {
-      case e: FetchFailedException =>
-        throw e
-      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
-        // If any output file to write already exists, it does not make sense to re-run this task.
-        // We throw the exception and let Executor throw ExceptionFailure to abort the job.
-        throw new TaskOutputFileAlreadyExistException(f)
-      case t: Throwable =>
-        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(description.path, t)
-    }
+    Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+      // Execute the task to write rows out and commit the task.
+      dataWriter.writeWithIterator(iterator)
+      dataWriter.commit()
+    })(catchBlock = {
+      // If there is an error, abort the task
+      dataWriter.abort()
+      logError(log"Job ${MDC(JOB_ID, jobId)} aborted.")
+    }, finallyBlock = {
+      dataWriter.close()
+    })
   }
 
   /**

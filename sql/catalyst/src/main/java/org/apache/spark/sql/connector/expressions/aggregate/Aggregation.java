@@ -28,16 +28,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
  * @since 3.2.0
  */
 @Evolving
-public final class Aggregation implements Serializable {
-  private final AggregateFunc[] aggregateExpressions;
-  private final Expression[] groupByExpressions;
-
-  public Aggregation(AggregateFunc[] aggregateExpressions, Expression[] groupByExpressions) {
-    this.aggregateExpressions = aggregateExpressions;
-    this.groupByExpressions = groupByExpressions;
-  }
-
-  public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
-
-  public Expression[] groupByExpressions() { return groupByExpressions; }
+public record Aggregation(
+    AggregateFunc[] aggregateExpressions,
+    Expression[] groupByExpressions) implements Serializable {
 }

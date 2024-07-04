@@ -19,9 +19,9 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 

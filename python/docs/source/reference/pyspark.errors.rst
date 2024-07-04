@@ -28,20 +28,37 @@ Classes
 .. autosummary::
     :toctree: api/
 
-    PySparkException
     AnalysisException
-    ParseException
+    ArithmeticException
+    ArrayIndexOutOfBoundsException
+    DateTimeException
     IllegalArgumentException
-    StreamingQueryException
-    QueryExecutionException
+    NumberFormatException
+    ParseException
+    PySparkAssertionError
+    PySparkAttributeError
+    PySparkException
+    PySparkKeyError
+    PySparkNotImplementedError
+    PySparkPicklingError
+    PySparkRuntimeError
+    PySparkTypeError
+    PySparkValueError
+    PySparkImportError
+    PySparkIndexError
     PythonException
-    UnknownException
+    QueryContext
+    QueryContextType
+    QueryExecutionException
+    RetriesExceeded
+    SessionNotSameException
+    SparkRuntimeException
     SparkUpgradeException
-    SparkConnectAnalysisException
-    SparkConnectException
-    SparkConnectGrpcException
-    SparkConnectParseException
-    SparkConnectTempTableAlreadyExistsException
+    SparkNoSuchElementException
+    StreamingQueryException
+    TempTableAlreadyExistsException
+    UnknownException
+    UnsupportedOperationException
 
 
 Methods
@@ -53,5 +70,7 @@ Methods
     :toctree: api/
 
     PySparkException.getErrorClass
+    PySparkException.getMessage
     PySparkException.getMessageParameters
+    PySparkException.getQueryContext
     PySparkException.getSqlState

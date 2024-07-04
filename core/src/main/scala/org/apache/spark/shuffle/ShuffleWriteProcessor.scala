@@ -17,9 +17,9 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{Partition, ShuffleDependency, SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
 
 /**
@@ -38,15 +38,14 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
 
   /**
    * The write process for particular partition, it controls the life circle of [[ShuffleWriter]]
-   * get from [[ShuffleManager]] and triggers rdd compute, finally return the [[MapStatus]] for
-   * this task.
+   * get from [[ShuffleManager]] finally return the [[MapStatus]] for this task.
    */
   def write(
-      rdd: RDD[_],
+      inputs: Iterator[_],
       dep: ShuffleDependency[_, _, _],
       mapId: Long,
-      context: TaskContext,
-      partition: Partition): MapStatus = {
+      mapIndex: Int,
+      context: TaskContext): MapStatus = {
     var writer: ShuffleWriter[Any, Any] = null
     try {
       val manager = SparkEnv.get.shuffleManager
@@ -55,8 +54,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         mapId,
         context,
         createMetricsReporter(context))
-      writer.write(
-        rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      writer.write(inputs.asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       val mapStatus = writer.stop(success = true)
       if (mapStatus.isDefined) {
         // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
@@ -75,12 +73,14 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         if (!dep.shuffleMergeFinalized) {
           manager.shuffleBlockResolver match {
             case resolver: IndexShuffleBlockResolver =>
-              logInfo(s"Shuffle merge enabled with ${dep.getMergerLocs.size} merger locations " +
-                s" for stage ${context.stageId()} with shuffle ID ${dep.shuffleId}")
+              logInfo(log"Shuffle merge enabled with" +
+                log" ${MDC(NUM_MERGER_LOCATIONS, dep.getMergerLocs.size)} merger locations" +
+                log" for stage ${MDC(STAGE_ID, context.stageId())}" +
+                log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
               logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
               new ShuffleBlockPusher(SparkEnv.get.conf)
-                .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, partition.index)
+                .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, mapIndex)
             case _ =>
           }
         }

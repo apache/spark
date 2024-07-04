@@ -47,7 +47,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       t: String,
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
-    checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
+    checkPartitions(t,
+      specs.map(_.map { case (k, v) => (k, v.toString) }.toMap): _*)
     val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
@@ -155,7 +156,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-33990: don not return data from dropped partition") {
+  test("SPARK-33990: do not return data from dropped partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
@@ -235,7 +236,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         checkCachedRelation("v1", Seq(Row(0, 0), Row(3, 3)))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
@@ -280,6 +281,24 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
         checkPartitions(t, Map("dt" -> "8"))
         sql(s"ALTER TABLE $t DROP PARTITION (dt = 8)")
+        checkPartitions(t)
+      }
+    }
+  }
+
+  test("SPARK-42480: drop partition when dropPartitionByName enabled") {
+    withSQLConf(SQLConf.HIVE_METASTORE_DROP_PARTITION_BY_NAME.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (region STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION (region='=reg1') LOCATION 'loc1'")
+        checkPartitions(t, Map("region" -> "=reg1"))
+        sql(s"ALTER TABLE $t PARTITION (region='=reg1') RENAME TO PARTITION (region='=%reg1')")
+        checkPartitions(t, Map("region" -> "=%reg1"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='=%reg1')")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION (region='reg?2') LOCATION 'loc2'")
+        checkPartitions(t, Map("region" -> "reg?2"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='reg?2')")
         checkPartitions(t)
       }
     }

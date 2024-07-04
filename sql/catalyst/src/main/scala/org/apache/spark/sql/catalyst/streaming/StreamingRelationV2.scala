@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableProvider}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsMetadataColumns, Table, TableProvider}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // We have to pack in the V1 data source as a shim, for the case when a source implements
@@ -35,14 +36,34 @@ case class StreamingRelationV2(
     sourceName: String,
     table: Table,
     extraOptions: CaseInsensitiveStringMap,
-    output: Seq[Attribute],
+    output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan])
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override lazy val resolved = v1Relation.forall(_.resolved)
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
+
+  import DataSourceV2Implicits._
+
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+    case _ =>
+      Nil
+  }
+
+  def withMetadataColumns(): StreamingRelationV2 = {
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      StreamingRelationV2(source, sourceName, table, extraOptions,
+        output ++ newMetadata, catalog, identifier, v1Relation)
+    } else {
+      this
+    }
+  }
 
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(conf.defaultSizeInBytes)

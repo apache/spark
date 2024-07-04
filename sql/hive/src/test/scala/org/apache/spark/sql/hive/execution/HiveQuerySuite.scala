@@ -24,7 +24,6 @@ import java.sql.Timestamp
 
 import scala.util.Try
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
@@ -74,14 +73,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(
       body: => Unit,
-      message: String,
+      operation: String,
       expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> message),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> operation),
       context = expectedContext)
   }
 
@@ -160,28 +159,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
-
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
 
   createQueryTest("! operator",
     """
@@ -392,7 +369,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
     withTable("test_partition", "ptest") {
-      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE test_partition (a STRING) USING HIVE PARTITIONED BY (b BIGINT, c STRING)")
       sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
       val analyzedPlan = sql(
@@ -785,21 +762,19 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-5383 alias for udfs with multi output columns") {
     assert(
       sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
-        .collect()
-        .size == 5)
+        .collect().length == 5)
 
     assert(
       sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
-        .collect()
-        .size == 5)
+        .collect().length == 5)
   }
 
   test("SPARK-5367: resolve star expression in udf") {
-    assert(sql("select concat(*) from src limit 5").collect().size == 5)
-    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select concat(*) from src limit 5").collect().length == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().length == 5)
     if (!conf.ansiEnabled) {
-      assert(sql("select array(*) from src limit 5").collect().size == 5)
-      assert(sql("select array(key, *) from src limit 5").collect().size == 5)
+      assert(sql("select array(*) from src limit 5").collect().length == 5)
+      assert(sql("select array(key, *) from src limit 5").collect().length == 5)
     }
   }
 
@@ -829,15 +804,17 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command") {
-    sql("CREATE TABLE alter1(a INT, b INT)")
+    sql("CREATE TABLE alter1(a INT, b INT) USING HIVE")
     checkError(
       exception = intercept[AnalysisException] {
         sql(
           """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
             |WITH serdeproperties('s1'='9')""".stripMargin)
       },
-      errorClass = null,
-      parameters = Map.empty)
+      errorClass = "_LEGACY_ERROR_TEMP_3065",
+      parameters = Map(
+        "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+        "msg" -> "at least one column must be specified for the table"))
     sql("DROP TABLE alter1")
   }
 
@@ -881,7 +858,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
         |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
       """.stripMargin)
-    assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
+    assert(sql("DESCRIBE FUNCTION udtf_count2").count() > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 
@@ -947,7 +924,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(sql(s"list archive ${zipFile.getAbsolutePath}").count() === 1)
       assert(sql(s"list archives ${zipFile.getAbsolutePath} nonexistence").count() === 1)
       assert(sql(s"list archives ${zipFile.getAbsolutePath} " +
-        s"${jarFile.getAbsolutePath}").count === 2)
+        s"${jarFile.getAbsolutePath}").count() === 2)
     }
   }
 
@@ -991,7 +968,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         filter(_.getString(0).contains(s"${xzFile.getAbsolutePath}")).count() > 0)
       assert(sql(s"list archive ${bz2File.getAbsolutePath}").count() === 1)
       assert(sql(s"list archives ${bz2File.getAbsolutePath} " +
-        s"${xzFile.getAbsolutePath}").count === 2)
+        s"${xzFile.getAbsolutePath}").count() === 2)
     }
   }
 
@@ -1011,7 +988,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"""ADD FILES "${file3.getAbsolutePath}" ${file4.getAbsoluteFile}""")
       val listFiles = sql(s"LIST FILES ${file1.getAbsolutePath} " +
         s"'${file2.getAbsolutePath}' '${file3.getAbsolutePath}' ${file4.getAbsolutePath}")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(file2.getName.replace(" ", "%20"))).count() === 1)
@@ -1047,7 +1024,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD JARS ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
       val listFiles = sql(s"LIST JARS '${jarFile1.getAbsolutePath}' " +
         s"${jarFile2.getAbsolutePath} ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile1.getName.replace(" ", "%20"))).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
@@ -1083,7 +1060,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVES ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
       val listFiles = sql(s"LIST ARCHIVES ${jarFile1.getAbsolutePath} " +
         s"'${jarFile2.getAbsolutePath}' ${jarFile3.getAbsolutePath} '${jarFile4.getAbsolutePath}'")
-      assert(listFiles.count === 4)
+      assert(listFiles.count() === 4)
       assert(listFiles.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile2.getName.replace(" ", "%20"))).count() === 1)
@@ -1109,7 +1086,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val listFiles = sql("LIST FILES " +
         s"""'${file1.getAbsolutePath}' ${file2.getAbsolutePath} "${file3.getAbsolutePath}"""")
 
-      assert(listFiles.count === 3)
+      assert(listFiles.count() === 3)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(file2.getName)).count() === 1)
       assert(listFiles.filter(
@@ -1135,7 +1112,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val listArchives = sql(s"LIST ARCHIVES '${jarFile1.getAbsolutePath}' " +
         s"""${jarFile2.getAbsolutePath} "${jarFile3.getAbsolutePath}"""")
 
-      assert(listArchives.count === 3)
+      assert(listArchives.count() === 3)
       assert(listArchives.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listArchives.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
       assert(listArchives.filter(
@@ -1160,7 +1137,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD JAR '${jarFile6.getAbsolutePath}'")
       val listJars = sql(s"LIST JARS '${jarFile4.getAbsolutePath}' " +
         s"""${jarFile5.getAbsolutePath} "${jarFile6.getAbsolutePath}"""")
-      assert(listJars.count === 3)
+      assert(listJars.count() === 3)
       assert(listJars.filter(_.getString(0).contains(jarFile4.getName)).count() === 1)
       assert(listJars.filter(_.getString(0).contains(jarFile5.getName)).count() === 1)
       assert(listJars.filter(
@@ -1231,51 +1208,52 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-5592: get java.net.URISyntaxException when dynamic partitioning") {
-    sql("""
-      |create table sc as select *
-      |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
-      |union all
-      |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
+    withSQLConf("hive.exec.dynamic.partition" -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      sql(
+        """
+          |create table sc as select *
+          |from (select '2011-01-11', '2011-01-11+14:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
+          |union all
+          |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
     """.stripMargin)
-    sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
-    sql("set hive.exec.dynamic.partition=true")
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("insert overwrite table sc_part partition(ts) select * from sc")
-    sql("drop table sc_part")
+      sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
+      sql("insert overwrite table sc_part partition(ts) select * from sc")
+      sql("drop table sc_part")
+    }
   }
 
   test("Partition spec validation") {
-    sql("DROP TABLE IF EXISTS dp_test")
-    sql("CREATE TABLE dp_test(key INT, value STRING) PARTITIONED BY (dp INT, sp INT)")
-    sql("SET hive.exec.dynamic.partition.mode=strict")
-
-    // Should throw when using strict dynamic partition mode without any static partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
-      parameters = Map(
-        "tableName" -> "`spark_catalog`.`default`.`dp_test`",
-        "targetColumns" -> "4",
-        "insertedColumns" -> "3",
-        "staticPartCols" -> "0"))
-
-    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
-
-    // Should throw when a static partition appears after a dynamic partition
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(
-          """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
-            |SELECT key, value, key % 5 FROM src""".stripMargin)
-      },
-      errorClass = null,
-      parameters = Map.empty)
+    withTable("dp_test") {
+      sql("CREATE TABLE dp_test(key INT, value STRING) USING HIVE PARTITIONED BY (dp INT, sp INT)")
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "strict") {
+        // Should throw when using strict dynamic partition mode without any static partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`spark_catalog`.`default`.`dp_test`",
+            "tableColumns" -> "`key`, `value`, `dp`, `sp`",
+            "dataColumns" -> "`key`, `value`, `(key % 5)`"))
+      }
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // Should throw when a static partition appears after a dynamic partition
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
+                |SELECT key, value, key % 5 FROM src""".stripMargin)
+          },
+          errorClass = "_LEGACY_ERROR_TEMP_3079",
+          parameters = Map.empty)
+      }
+    }
   }
 
   test("SPARK-3414 regression: should store analyzed logical plan when creating a temporary view") {
@@ -1316,21 +1294,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-3810: PreprocessTableInsertion dynamic partitioning support") {
-    val analyzedPlan = {
-      loadTestTable("srcpart")
-      sql("DROP TABLE IF EXISTS withparts")
-      sql("CREATE TABLE withparts LIKE srcpart")
-      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      val analyzedPlan = {
+        loadTestTable("srcpart")
+        sql("DROP TABLE IF EXISTS withparts")
+        sql("CREATE TABLE withparts LIKE srcpart")
 
-      sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
-        .queryExecution.analyzed
-    }
+        sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
+        sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
+          .queryExecution.analyzed
+      }
 
-    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
-      analyzedPlan.collect {
-        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
-      }.sum
+      assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
+        analyzedPlan.collect {
+          case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+        }.sum
+      }
     }
   }
 
@@ -1641,12 +1620,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("udf_radians") {
     withSQLConf("hive.fetch.task.conversion" -> "more") {
       val result = sql("select radians(57.2958) FROM src tablesample (1 rows)").collect()
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-        assertResult(Array(Row(1.0000003575641672))) (result)
-      } else {
-        assertResult(Array(Row(1.000000357564167))) (result)
-      }
-
+      assertResult(Array(Row(1.0000003575641672))) (result)
       assertResult(Array(Row(2.4999991485811655))) {
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }
@@ -1656,10 +1630,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     withTable("t") {
-      // hive-catalog-core has some transitive dependencies which dont exist on maven central
-      // and hence cannot be found in the test environment or are non-jar (.pom) which cause
-      // failures in tests. Use transitive=false as it should be good enough to test the Ivy
-      // support in Hive ADD JAR
+      // Use transitive=false as it should be good enough to test the Ivy support
+      // in Hive ADD JAR
       sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
         "?transitive=false")
       sql(

@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
@@ -47,7 +48,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   private lazy val confFiles: Seq[File] = {
     val dir = new File(confDir.get)
     if (dir.isDirectory) {
-      dir.listFiles.filter(_.isFile).toSeq
+      dir.listFiles.filter(_.isFile).toImmutableArraySeq
     } else {
       Nil
     }
@@ -101,6 +102,14 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         .build()
 
       SparkPod(podWithConf, containerWithMount)
+    }
+  }
+
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    if (hasHadoopConf) {
+      Map(HADOOP_CONFIG_MAP_NAME -> existingConfMap.getOrElse(newConfigMapName))
+    } else {
+      Map.empty
     }
   }
 

@@ -19,16 +19,17 @@ package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ESTIMATOR_PARAM_MAP, TRAIN_VALIDATION_SPLIT_METRIC, TRAIN_VALIDATION_SPLIT_METRICS}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
@@ -37,6 +38,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -167,12 +169,14 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.unpersist()
     validationDataset.unpersist()
 
-    instr.logInfo(s"Train validation split metrics: ${metrics.toSeq}")
+    instr.logInfo(log"Train validation split metrics: ${MDC(
+      TRAIN_VALIDATION_SPLIT_METRICS, metrics.mkString("[", ", ", "]"))}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best train validation split metric: $bestMetric.")
+    instr.logInfo(log"Best set of parameters:\n${MDC(ESTIMATOR_PARAM_MAP, epm(bestIndex))}")
+    instr.logInfo(log"Best train validation split metric: " +
+      log"${MDC(TRAIN_VALIDATION_SPLIT_METRIC, bestMetric)}.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))
@@ -362,7 +366,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~
+      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString

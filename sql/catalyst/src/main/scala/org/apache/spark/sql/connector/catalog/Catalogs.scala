@@ -53,7 +53,7 @@ private[sql] object Catalogs {
       _pluginClassName
     } catch {
       case _: NoSuchElementException =>
-        throw QueryExecutionErrors.catalogPluginClassNotFoundError(name)
+        throw QueryExecutionErrors.catalogNotFoundError(name)
     }
     val loader = Utils.getContextOrSparkClassLoader
     try {

@@ -19,10 +19,11 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.ml.linalg import SparseVector
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class UDTOpsTest(OpsTestBase):
+class UDTOpsTestsMixin:
     @property
     def pser(self):
         sparse_values = {0: 0.1, 1: 1.1}
@@ -173,6 +174,14 @@ class UDTOpsTest(OpsTestBase):
         self.assertRaisesRegex(
             TypeError, ">= can not be applied to", lambda: self.psser >= self.psser
         )
+
+
+class UDTOpsTests(
+    UDTOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

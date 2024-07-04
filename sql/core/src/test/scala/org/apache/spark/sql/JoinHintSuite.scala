@@ -489,9 +489,15 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         assertShuffleHashJoin(
           sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil)), BuildLeft)
         assertShuffleHashJoin(
-          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil, "left")), BuildRight)
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil, "left")), BuildLeft)
         assertShuffleHashJoin(
           sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1, t2)" :: Nil, "right")), BuildLeft)
+
+        // Determine build side based on hint
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil, "left")), BuildLeft)
+        assertShuffleHashJoin(
+          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t2)" :: Nil, "right")), BuildRight)
 
         // Shuffle-hash hint prioritized over shuffle-replicate-nl hint
         assertShuffleHashJoin(
@@ -507,8 +513,6 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
           BuildLeft)
 
         // Shuffle-hash hint specified but not doable
-        assertBroadcastHashJoin(
-          sql(equiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil, "left")), BuildRight)
         assertBroadcastNLJoin(
           sql(nonEquiJoinQueryWithHint("SHUFFLE_HASH(t1)" :: Nil)), BuildLeft)
       }
@@ -577,24 +581,24 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
       Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
       val df1 = sql("SELECT /*+ shuffle_replicate_nl(t1) */ * from t1 join t2 ON t1.key = t2.key")
       val df2 = sql("SELECT * from t1 join t2 ON t1.key = t2.key")
-      assert(df1.collect().size == df2.collect().size)
+      assert(df1.collect().length == df2.collect().length)
 
       val df3 = sql("SELECT /*+ shuffle_replicate_nl(t1) */ * from t1 join t2")
       val df4 = sql("SELECT * from t1 join t2")
-      assert(df3.collect().size == df4.collect().size)
+      assert(df3.collect().length == df4.collect().length)
 
       val df5 = sql("SELECT /*+ shuffle_replicate_nl(t1) */ * from t1 join t2 ON t1.key < t2.key")
       val df6 = sql("SELECT * from t1 join t2 ON t1.key < t2.key")
-      assert(df5.collect().size == df6.collect().size)
+      assert(df5.collect().length == df6.collect().length)
 
       val df7 = sql("SELECT /*+ shuffle_replicate_nl(t1) */ * from t1 join t2 ON t1.key < 2")
       val df8 = sql("SELECT * from t1 join t2 ON t1.key < 2")
-      assert(df7.collect().size == df8.collect().size)
+      assert(df7.collect().length == df8.collect().length)
 
 
       val df9 = sql("SELECT /*+ shuffle_replicate_nl(t1) */ * from t1 join t2 ON t2.key < 2")
       val df10 = sql("SELECT * from t1 join t2 ON t2.key < 2")
-      assert(df9.collect().size == df10.collect().size)
+      assert(df9.collect().length == df10.collect().length)
     }
   }
 
@@ -606,13 +610,25 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         withLogAppender(hintAppender, level = Some(Level.WARN)) {
           assertShuffleMergeJoin(
             df1.hint("BROADCAST").join(df2, $"a1" === $"b1", joinType))
+        }
+
+        val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("is not supported in the query:"))
+        assert(logs.size === 1)
+        logs.foreach(log =>
+          assert(log.contains(s"build left for ${joinType.split("_").mkString(" ")} join.")))
+      }
+
+      Seq("left_semi", "left_anti").foreach { joinType =>
+        val hintAppender = new LogAppender(s"join hint build side check for $joinType")
+        withLogAppender(hintAppender, level = Some(Level.WARN)) {
           assertShuffleMergeJoin(
             df1.hint("SHUFFLE_HASH").join(df2, $"a1" === $"b1", joinType))
         }
 
         val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
           .filter(_.contains("is not supported in the query:"))
-        assert(logs.size === 2)
+        assert(logs.size === 1)
         logs.foreach(log =>
           assert(log.contains(s"build left for ${joinType.split("_").mkString(" ")} join.")))
       }
@@ -622,8 +638,6 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         withLogAppender(hintAppender, level = Some(Level.WARN)) {
           assertBroadcastHashJoin(
             df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType), BuildRight)
-          assertShuffleHashJoin(
-            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
         }
 
         val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
@@ -636,12 +650,10 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         withLogAppender(hintAppender, level = Some(Level.WARN)) {
           assertShuffleMergeJoin(
             df1.join(df2.hint("BROADCAST"), $"a1" === $"b1", joinType))
-          assertShuffleMergeJoin(
-            df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType))
         }
         val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
           .filter(_.contains("is not supported in the query:"))
-        assert(logs.size === 2)
+        assert(logs.size === 1)
         logs.foreach(log =>
           assert(log.contains(s"build right for ${joinType.split("_").mkString(" ")} join.")))
       }
@@ -683,11 +695,11 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     val hintAppender = new LogAppender(s"join hint check for equi-join")
     withLogAppender(hintAppender, level = Some(Level.WARN)) {
       assertBroadcastNLJoin(
-        df1.hint("SHUFFLE_HASH").join(df2, $"a1" !== $"b1"), BuildRight)
+        df1.hint("SHUFFLE_HASH").join(df2, $"a1" =!= $"b1"), BuildRight)
     }
     withLogAppender(hintAppender, level = Some(Level.WARN)) {
       assertBroadcastNLJoin(
-        df1.join(df2.hint("MERGE"), $"a1" !== $"b1"), BuildRight)
+        df1.join(df2.hint("MERGE"), $"a1" =!= $"b1"), BuildRight)
     }
     val logs = hintAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
       .filter(_.contains("is not supported in the query:"))

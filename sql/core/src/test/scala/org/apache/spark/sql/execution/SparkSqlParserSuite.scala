@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.config.ConfigEntry
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshR
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
@@ -119,7 +120,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET spark.sql.key value"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -129,7 +130,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET spark.sql.key   'value'"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -139,7 +140,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "SET    spark.sql.key \"value\" "
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET    spark.sql.key \"value\"",
@@ -149,7 +150,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "SET spark.sql.key value1 value2"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -159,7 +160,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "SET spark.   sql.key=value"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -169,7 +170,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "SET spark   :sql:key=value"
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -179,7 +180,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "SET spark .  sql.key=value"
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -189,7 +190,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "SET spark.sql.   key=value"
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -199,7 +200,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "SET spark.sql   :key=value"
     checkError(
       exception = parseException(sql9),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
@@ -209,7 +210,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql10 = "SET spark.sql .  key=value"
     checkError(
       exception = parseException(sql10),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql10,
@@ -219,7 +220,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql11 = "SET ="
     checkError(
       exception = parseException(sql11),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql11,
@@ -229,7 +230,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql12 = "SET =value"
     checkError(
       exception = parseException(sql12),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql12,
@@ -353,7 +354,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "SET a=1; SELECT 1"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -363,7 +364,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "SET a=1;2;;"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0042",
+      errorClass = "INVALID_SET_SYNTAX",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "SET a=1;2",
@@ -548,17 +549,19 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assertEqual("ADD FILE abc.txt", AddFilesCommand(Seq("abc.txt")))
     assertEqual("ADD FILE 'abc.txt'", AddFilesCommand(Seq("abc.txt")))
     assertEqual("ADD FILE \"/path/to/abc.txt\"", AddFilesCommand("/path/to/abc.txt"::Nil))
-    assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt")))
-    assertEqual("LIST FILE '/path//abc.txt'", ListFilesCommand(Array("/path//abc.txt")))
-    assertEqual("LIST FILE \"/path2/abc.txt\"", ListFilesCommand(Array("/path2/abc.txt")))
+    assertEqual("LIST FILE abc.txt", ListFilesCommand(Array("abc.txt").toImmutableArraySeq))
+    assertEqual("LIST FILE '/path//abc.txt'",
+      ListFilesCommand(Array("/path//abc.txt").toImmutableArraySeq))
+    assertEqual("LIST FILE \"/path2/abc.txt\"",
+      ListFilesCommand(Array("/path2/abc.txt").toImmutableArraySeq))
     assertEqual("ADD JAR /path2/_2/abc.jar", AddJarsCommand(Seq("/path2/_2/abc.jar")))
     assertEqual("ADD JAR '/test/path_2/jar/abc.jar'",
       AddJarsCommand(Seq("/test/path_2/jar/abc.jar")))
     assertEqual("ADD JAR \"abc.jar\"", AddJarsCommand(Seq("abc.jar")))
     assertEqual("LIST JAR /path-with-dash/abc.jar",
-      ListJarsCommand(Array("/path-with-dash/abc.jar")))
-    assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar")))
-    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar")))
+      ListJarsCommand(Array("/path-with-dash/abc.jar").toImmutableArraySeq))
+    assertEqual("LIST JAR 'abc.jar'", ListJarsCommand(Array("abc.jar").toImmutableArraySeq))
+    assertEqual("LIST JAR \"abc.jar\"", ListJarsCommand(Array("abc.jar").toImmutableArraySeq))
     assertEqual("ADD FILE '/path with space/abc.txt'",
       AddFilesCommand(Seq("/path with space/abc.txt")))
     assertEqual("ADD JAR '/path with space/abc.jar'",
@@ -797,4 +800,84 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         start = 0,
         stop = 63))
   }
+
+  test("verify whitespace handling - standard whitespace") {
+    parser.parsePlan("SELECT 1") // ASCII space
+    parser.parsePlan("SELECT\r1") // ASCII carriage return
+    parser.parsePlan("SELECT\n1") // ASCII line feed
+    parser.parsePlan("SELECT\t1") // ASCII tab
+    parser.parsePlan("SELECT\u000B1") // ASCII vertical tab
+    parser.parsePlan("SELECT\f1") // ASCII form feed
+  }
+
+  // Need to switch off scala style for Unicode characters
+  // scalastyle:off
+  test("verify whitespace handling - Unicode no-break space") {
+    parser.parsePlan("SELECT\u00A01") // Unicode no-break space
+  }
+
+  test("verify whitespace handling - Unicode ogham space mark") {
+    parser.parsePlan("SELECT\u16801") // Unicode ogham space mark
+  }
+
+  test("verify whitespace handling - Unicode en quad") {
+    parser.parsePlan("SELECT\u20001") // Unicode en quad
+  }
+
+  test("verify whitespace handling - Unicode em quad") {
+    parser.parsePlan("SELECT\u20011") // Unicode em quad
+  }
+
+  test("verify whitespace handling - Unicode en space") {
+    parser.parsePlan("SELECT\u20021") // Unicode en space
+  }
+
+  test("verify whitespace handling - Unicode em space") {
+    parser.parsePlan("SELECT\u20031") // Unicode em space
+  }
+
+  test("verify whitespace handling - Unicode three-per-em space") {
+    parser.parsePlan("SELECT\u20041") // Unicode three-per-em space
+  }
+
+  test("verify whitespace handling - Unicode four-per-em space") {
+    parser.parsePlan("SELECT\u20051") // Unicode four-per-em space
+  }
+
+  test("verify whitespace handling - Unicode six-per-em space") {
+    parser.parsePlan("SELECT\u20061") // Unicode six-per-em space
+  }
+
+  test("verify whitespace handling - Unicode figure space") {
+    parser.parsePlan("SELECT\u20071") // Unicode figure space
+  }
+
+  test("verify whitespace handling - Unicode punctuation space") {
+    parser.parsePlan("SELECT\u20081") // Unicode punctuation space
+  }
+
+  test("verify whitespace handling - Unicode thin space") {
+    parser.parsePlan("SELECT\u20091") // Unicode thin space
+  }
+
+  test("verify whitespace handling - Unicode hair space") {
+    parser.parsePlan("SELECT\u200A1") // Unicode hair space
+  }
+
+  test("verify whitespace handling - Unicode line separator") {
+    parser.parsePlan("SELECT\u20281") // Unicode line separator
+  }
+
+  test("verify whitespace handling - Unicode narrow no-break space") {
+    parser.parsePlan("SELECT\u202F1") // Unicode narrow no-break space
+  }
+
+  test("verify whitespace handling - Unicode medium mathematical space") {
+    parser.parsePlan("SELECT\u205F1") // Unicode medium mathematical space
+  }
+
+  test("verify whitespace handling - Unicode ideographic space") {
+    parser.parsePlan("SELECT\u30001") // Unicode ideographic space
+  }
+  // scalastyle:on
 }

@@ -24,10 +24,10 @@ import java.util.List;
 import org.apache.spark.sql.catalyst.FunctionIdentifier;
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo;
 import org.apache.spark.sql.internal.SQLConf;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Row;
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.DataTypes;
 public class JavaUDFSuite implements Serializable {
   private transient SparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = SparkSession.builder()
       .master("local[*]")
@@ -49,7 +49,7 @@ public class JavaUDFSuite implements Serializable {
       .getOrCreate();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -60,7 +60,7 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
 
     Row result = spark.sql("SELECT stringLengthTest('test')").head();
-    Assert.assertEquals(4, result.getInt(0));
+    Assertions.assertEquals(4, result.getInt(0));
   }
 
   @Test
@@ -69,7 +69,7 @@ public class JavaUDFSuite implements Serializable {
         (String str1, String str2) -> str1.length() + str2.length(), DataTypes.IntegerType);
 
     Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
-    Assert.assertEquals(9, result.getInt(0));
+    Assertions.assertEquals(9, result.getInt(0));
   }
 
   public static class StringLengthTest implements UDF2<String, String, Integer> {
@@ -84,12 +84,12 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().registerJava("stringLengthTest", StringLengthTest.class.getName(),
         DataTypes.IntegerType);
     Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
-    Assert.assertEquals(9, result.getInt(0));
+    Assertions.assertEquals(9, result.getInt(0));
 
     // returnType is not provided
     spark.udf().registerJava("stringLengthTest2", StringLengthTest.class.getName(), null);
     result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
-    Assert.assertEquals(9, result.getInt(0));
+    Assertions.assertEquals(9, result.getInt(0));
   }
 
   @Test
@@ -99,18 +99,18 @@ public class JavaUDFSuite implements Serializable {
     spark.range(10).toDF("x").createOrReplaceTempView("tmp");
     // This tests when Java UDFs are required to be the semantically same (See SPARK-9435).
     List<Row> results = spark.sql("SELECT inc(x) FROM tmp GROUP BY inc(x)").collectAsList();
-    Assert.assertEquals(10, results.size());
+    Assertions.assertEquals(10, results.size());
     long sum = 0;
     for (Row result : results) {
       sum += result.getLong(0);
     }
-    Assert.assertEquals(55, sum);
+    Assertions.assertEquals(55, sum);
   }
 
   @Test
   public void udf5Test() {
     spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
-    Assert.assertThrows(AnalysisException.class,
+    Assertions.assertThrows(AnalysisException.class,
       () -> spark.sql("SELECT inc(1, 5)").collectAsList());
   }
 
@@ -118,7 +118,7 @@ public class JavaUDFSuite implements Serializable {
   public void udf6Test() {
     spark.udf().register("returnOne", () -> 1, DataTypes.IntegerType);
     Row result = spark.sql("SELECT returnOne()").head();
-    Assert.assertEquals(1, result.getInt(0));
+    Assertions.assertEquals(1, result.getInt(0));
   }
 
   @Test
@@ -130,7 +130,7 @@ public class JavaUDFSuite implements Serializable {
           "plusDay",
           (java.time.LocalDate ld) -> ld.plusDays(1), DataTypes.DateType);
       Row result = spark.sql("SELECT plusDay(DATE '2019-02-26')").head();
-      Assert.assertEquals(LocalDate.parse("2019-02-27"), result.get(0));
+      Assertions.assertEquals(LocalDate.parse("2019-02-27"), result.get(0));
     } finally {
       spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
@@ -141,6 +141,6 @@ public class JavaUDFSuite implements Serializable {
     spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
     ExpressionInfo info = spark.sessionState().catalog().lookupFunctionInfo(
             FunctionIdentifier.apply("stringLengthTest"));
-    Assert.assertEquals("java_udf", info.getSource());
+    Assertions.assertEquals("java_udf", info.getSource());
   }
 }

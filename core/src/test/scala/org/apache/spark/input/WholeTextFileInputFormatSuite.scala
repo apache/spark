@@ -19,8 +19,6 @@ package org.apache.spark.input
 
 import java.io.{DataOutputStream, File, FileOutputStream}
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**
@@ -68,7 +66,7 @@ class WholeTextFileInputFormatSuite extends SparkFunSuite {
         createNativeFile(dir, filename, contents, false)
       }
       // ensure spark job runs successfully without exceptions from the CombineFileInputFormat
-      assert(sc.wholeTextFiles(dir.toString).count == 3)
+      assert(sc.wholeTextFiles(dir.toString).count() == 3)
     }
   }
 }
@@ -83,6 +81,6 @@ object WholeTextFileInputFormatSuite {
   private val fileLengths = Array(10, 100, 1000)
 
   private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
-    filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
+    filename -> LazyList.continually(testWords.toList.to(LazyList)).flatten.take(upperBound).toArray
   }.toMap
 }

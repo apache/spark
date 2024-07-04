@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.{MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{LEARNING_RATE, NUM_ITERATIONS, SUBSAMPLING_RATE}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -25,6 +27,7 @@ import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.loss.{AbsoluteError, LogLoss, SquaredError}
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -32,10 +35,19 @@ import org.apache.spark.util.Utils
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
+  private def buildErrorLog(
+      numIterations: Int,
+      learningRate: Double,
+      subsamplingRate: Double): MessageWithContext = {
+    log"FAILED for numIterations=${MDC(NUM_ITERATIONS, numIterations)}, " +
+      log"learningRate=${MDC(LEARNING_RATE, learningRate)}, " +
+      log"subsamplingRate=${MDC(SUBSAMPLING_RATE, subsamplingRate)}"
+  }
+
   test("Regression with continuous features: SquaredError") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+        val rdd = sc.parallelize(GradientBoostedTreesSuite.data.toImmutableArraySeq, 2)
 
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
           categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
@@ -44,13 +56,13 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
-          EnsembleTestHelper.validateRegressor(gbt, GradientBoostedTreesSuite.data, 0.06)
+          EnsembleTestHelper.validateRegressor(
+            gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.06)
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 
@@ -65,7 +77,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Regression with continuous features: Absolute Error") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+        val rdd = sc.parallelize(GradientBoostedTreesSuite.data.toImmutableArraySeq, 2)
 
         val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
           categoricalFeaturesInfo = Map.empty, subsamplingRate = subsamplingRate)
@@ -74,13 +86,13 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
-          EnsembleTestHelper.validateRegressor(gbt, GradientBoostedTreesSuite.data, 0.85, "mae")
+          EnsembleTestHelper.validateRegressor(
+            gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.85, "mae")
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 
@@ -95,7 +107,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Binary classification with continuous features: Log Loss") {
     GradientBoostedTreesSuite.testCombinations.foreach {
       case (numIterations, learningRate, subsamplingRate) =>
-        val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+        val rdd = sc.parallelize(GradientBoostedTreesSuite.data.toImmutableArraySeq, 2)
 
         val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
           numClasses = 2, categoricalFeaturesInfo = Map.empty,
@@ -105,13 +117,13 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
 
         val gbt = GradientBoostedTrees.train(rdd, boostingStrategy)
 
-        assert(gbt.trees.size === numIterations)
+        assert(gbt.trees.length === numIterations)
         try {
-          EnsembleTestHelper.validateClassifier(gbt, GradientBoostedTreesSuite.data, 0.9)
+          EnsembleTestHelper.validateClassifier(
+            gbt, GradientBoostedTreesSuite.data.toImmutableArraySeq, 0.9)
         } catch {
           case e: java.lang.AssertionError =>
-            logError(s"FAILED for numIterations=$numIterations, learningRate=$learningRate," +
-              s" subsamplingRate=$subsamplingRate")
+            logError(buildErrorLog(numIterations, learningRate, subsamplingRate))
             throw e
         }
 
@@ -162,7 +174,7 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
     val path = tempDir.toURI.toString
     sc.setCheckpointDir(path)
 
-    val rdd = sc.parallelize(GradientBoostedTreesSuite.data, 2)
+    val rdd = sc.parallelize(GradientBoostedTreesSuite.data.toImmutableArraySeq, 2)
 
     val treeStrategy = new Strategy(algo = Regression, impurity = Variance, maxDepth = 2,
       categoricalFeaturesInfo = Map.empty, checkpointInterval = 2)

@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.python
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.{ContextAwareIterator, TaskContext}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -145,7 +145,7 @@ object EvaluatePython {
         case c: Int => c.toLong
       }
 
-    case StringType => (obj: Any) => nullSafeConvert(obj) {
+    case _: StringType => (obj: Any) => nullSafeConvert(obj) {
       case _ => UTF8String.fromString(obj.toString)
     }
 
@@ -183,10 +183,11 @@ object EvaluatePython {
         case c if c.getClass.isArray =>
           val array = c.asInstanceOf[Array[_]]
           if (array.length != fields.length) {
-            throw new IllegalStateException(
-              s"Input row doesn't have expected number of values required by the schema. " +
-                s"${fields.length} fields are required while ${array.length} values are provided."
-            )
+            throw new SparkIllegalArgumentException(
+              errorClass = "STRUCT_ARRAY_LENGTH_MISMATCH",
+              messageParameters = Map(
+                "expected" -> fields.length.toString,
+                "actual" -> array.length.toString))
           }
 
           val row = new GenericInternalRow(fields.length)
@@ -302,7 +303,7 @@ object EvaluatePython {
   def javaToPython(rdd: RDD[Any]): RDD[Array[Byte]] = {
     rdd.mapPartitions { iter =>
       registerPicklers()  // let it called in executor
-      new SerDeUtil.AutoBatchedPickler(new ContextAwareIterator(TaskContext.get, iter))
+      new SerDeUtil.AutoBatchedPickler(iter)
     }
   }
 }

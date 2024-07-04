@@ -18,34 +18,29 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, DataType}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
-       10
-      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       0-10
-      > SELECT _FUNC_(col) FROM VALUES (0), (10), (10), (null), (null), (null) AS tab(col);
-       10
-  """,
-  group = "agg_funcs",
-  since = "3.4.0")
-// scalastyle:on line.size.limit
 case class Mode(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+    inputAggBufferOffset: Int = 0,
+    reverseOpt: Option[Boolean] = None)
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
+    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, reverse: Boolean) = {
+    this(child, 0, 0, Some(reverse))
+  }
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -53,6 +48,21 @@ case class Mode(
   override def dataType: DataType = child.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (UnsafeRowUtils.isBinaryStable(child.dataType) || child.dataType.isInstanceOf[StringType]) {
+      /*
+        * The Mode class uses collation awareness logic to handle string data.
+        * Complex types with collated fields are not yet supported.
+       */
+      // TODO: SPARK-48700: Mode expression for complex types (all collations)
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure("The input to the function 'mode' was" +
+        " a type of binary-unstable type that is " +
+        s"not currently supported by ${prettyName}.")
+    }
+  }
 
   override def prettyName: String = "mode"
 
@@ -80,8 +90,38 @@ case class Mode(
     if (buffer.isEmpty) {
       return null
     }
-
-    buffer.maxBy(_._2)._1
+    /*
+      * The Mode class uses special collation awareness logic
+      *  to handle string data types with various collations.
+      *
+      * For string types that don't support binary equality,
+      * we create a new map where the keys are the collation keys of the original strings.
+      *
+      * Keys from the original map are aggregated based on the corresponding collation keys.
+      *  The groupMapReduce method groups the entries by collation key and maps each group
+      *  to a single value (the sum of the counts), and finally reduces the groups to a single map.
+      *
+      * The new map is then used in the rest of the Mode evaluation logic.
+      */
+    val collationAwareBuffer = child.dataType match {
+      case c: StringType if
+        !CollationFactory.fetchCollation(c.collationId).supportsBinaryEquality =>
+        val collationId = c.collationId
+        val modeMap = buffer.toSeq.groupMapReduce {
+         case (k, _) => CollationFactory.getCollationKey(k.asInstanceOf[UTF8String], collationId)
+        }(x => x)((x, y) => (x._1, x._2 + y._2)).values
+        modeMap
+      case _ => buffer
+    }
+    reverseOpt.map { reverse =>
+      val defaultKeyOrdering = if (reverse) {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]].reverse
+      } else {
+        PhysicalDataType.ordering(child.dataType).asInstanceOf[Ordering[AnyRef]]
+      }
+      val ordering = Ordering.Tuple2(Ordering.Long, defaultKeyOrdering)
+      collationAwareBuffer.maxBy { case (key, count) => (count, key) }(ordering)
+    }.getOrElse(collationAwareBuffer.maxBy(_._2))._1
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Mode =
@@ -90,8 +130,104 @@ case class Mode(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Mode =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
+  override def sql(isDistinct: Boolean): String = {
+    reverseOpt.map {
+      reverse =>
+        if (reverse) {
+          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql} DESC)"
+        } else {
+          s"$prettyName() WITHIN GROUP (ORDER BY ${child.sql})"
+        }
+    }.getOrElse(super.sql(isDistinct))
+  }
+
+  override def orderingFilled: Boolean = child != UnresolvedWithinGroup
+
+  assert(orderingFilled || (!orderingFilled && reverseOpt.isEmpty))
+
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+    child match {
+      case UnresolvedWithinGroup =>
+        if (orderingWithinGroup.length != 1) {
+          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+            nodeName, 1, orderingWithinGroup.length)
+        }
+        orderingWithinGroup.head match {
+          case SortOrder(child, Ascending, _, _) =>
+            this.copy(child = child, reverseOpt = Some(true))
+          case SortOrder(child, Descending, _, _) =>
+            this.copy(child = child, reverseOpt = Some(false))
+        }
+      case _ => this
+    }
+  }
+
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+}
+
+// TODO: SPARK-48701: PandasMode (all collations)
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(col[, deterministic]) - Returns the most frequent value for the values within `col`. NULL values are ignored. If all the values are NULL, or there are 0 rows, returns NULL.
+      When multiple values have the same greatest frequency then either any of values is returned if `deterministic` is false or is not defined, or the lowest value is returned if `deterministic` is true.
+    _FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause). NULL values are ignored.
+      If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency only one value will be returned.
+      The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or the largest value if sort direction is desc from multiple values with the same frequency.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
+       10
+      > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-10
+      > SELECT _FUNC_(col) FROM VALUES (0), (10), (10), (null), (null), (null) AS tab(col);
+       10
+      > SELECT _FUNC_(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
+       0
+      > SELECT _FUNC_(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
+       -10
+      > SELECT _FUNC_() WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10), (10) AS tab(col);
+       10
+      > SELECT _FUNC_() WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10), (10), (20), (20) AS tab(col);
+       10
+      > SELECT _FUNC_() WITHIN GROUP (ORDER BY col DESC) FROM VALUES (0), (10), (10), (20), (20) AS tab(col);
+       20
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object ModeBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 0) {
+      Mode(UnresolvedWithinGroup)
+    } else if (numArgs == 1) {
+      // For compatibility with function calls without WITHIN GROUP.
+      Mode(expressions(0))
+    } else if (numArgs == 2) {
+      // For compatibility with function calls without WITHIN GROUP.
+      if (!expressions(1).foldable) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(
+          funcName, "deterministic", BooleanType)
+      }
+      val deterministicResult = expressions(1).eval()
+      if (deterministicResult == null) {
+        throw QueryCompilationErrors.unexpectedNullError("deterministic", expressions(1))
+      }
+      if (expressions(1).dataType != BooleanType) {
+        throw QueryCompilationErrors.unexpectedInputDataTypeError(
+          funcName, 2, BooleanType, expressions(1))
+      }
+      if (deterministicResult.asInstanceOf[Boolean]) {
+        new Mode(expressions(0), true)
+      } else {
+        Mode(expressions(0))
+      }
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0), numArgs)
+    }
+  }
 }
 
 /**

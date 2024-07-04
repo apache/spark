@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.aggregate.MergingSessionsIterator
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +34,7 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("count", LongType)
-  private val rowAttributes = rowSchema.toAttributes
+  private val rowAttributes = toAttributes(rowSchema)
 
   private val keysWithSessionAttributes = rowAttributes.filter { attr =>
     List("key1", "key2", "session").contains(attr.name)
@@ -191,18 +193,27 @@ class MergingSessionsIteratorSuite extends SharedSparkSession {
     assert(iterator.hasNext)
 
     // when calling next() it can detect error and throws IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Input iterator is not sorted based on session!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.hasNext
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.hasNext
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
 
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
   }
 
   test("no key") {

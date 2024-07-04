@@ -21,12 +21,13 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Literal, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -201,7 +202,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
   test("propagate empty streaming relation through multiple UnaryNode") {
     val output = Seq($"a".int)
     val data = Seq(Row(1))
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val relation = LocalRelation(
       output,
@@ -221,10 +222,49 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-47305 correctly tag isStreaming when propagating empty relation " +
+    "with the plan containing batch and streaming") {
+    val data = Seq(Row(1))
+
+    val outputForStream = Seq($"a".int)
+    val schemaForStream = DataTypeUtils.fromAttributes(outputForStream)
+    val converterForStream = CatalystTypeConverters.createToCatalystConverter(schemaForStream)
+
+    val outputForBatch = Seq($"b".int)
+    val schemaForBatch = DataTypeUtils.fromAttributes(outputForBatch)
+    val converterForBatch = CatalystTypeConverters.createToCatalystConverter(schemaForBatch)
+
+    val streamingRelation = LocalRelation(
+      outputForStream,
+      data.map(converterForStream(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+    val batchRelation = LocalRelation(
+      outputForBatch,
+      data.map(converterForBatch(_).asInstanceOf[InternalRow]),
+      isStreaming = false)
+
+    val query = streamingRelation
+      .join(batchRelation.where(false).select($"b"), LeftOuter,
+        Some(EqualTo($"a", $"b")))
+
+    val analyzedQuery = query.analyze
+
+    val optimized = Optimize.execute(analyzedQuery)
+    // This is to deal with analysis for join condition. We expect the analyzed plan to contain
+    // filter and projection in batch relation, and know they will go away after optimization.
+    // The point to check here is that the node is replaced with "empty" LocalRelation, but the
+    // flag `isStreaming` is properly propagated.
+    val correctAnswer = analyzedQuery transform {
+      case Project(_, Filter(_, l: LocalRelation)) => l.copy(data = Seq.empty)
+    }
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("don't propagate empty streaming relation through agg") {
     val output = Seq($"a".int)
     val data = Seq(Row(1))
-    val schema = StructType.fromAttributes(output)
+    val schema = DataTypeUtils.fromAttributes(output)
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val relation = LocalRelation(
       output,

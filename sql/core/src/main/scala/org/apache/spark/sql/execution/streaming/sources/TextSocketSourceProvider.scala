@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util
 import java.util.Locale
 
@@ -86,7 +87,10 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = schema()
+    override def readSchema(): StructType = {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      columns.asSchema
+    }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       new TextSocketMicroBatchStream(host, port, numPartitions)
@@ -95,6 +99,9 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
       new TextSocketContinuousStream(host, port, numPartitions, options)
     }
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
   }
 }
 
@@ -102,5 +109,8 @@ object TextSocketReader {
   val SCHEMA_REGULAR = StructType(Array(StructField("value", StringType)))
   val SCHEMA_TIMESTAMP = StructType(Array(StructField("value", StringType),
     StructField("timestamp", TimestampType)))
-  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 }

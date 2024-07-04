@@ -242,7 +242,7 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       errorSubClass = "DATA_DIFF_TYPES",
       messageParameters = Map(
         "functionName" -> "`casewhen`",
-        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\"]")))
+        "dataType" -> "[\"STRUCT<x: INT NOT NULL>\", \"STRUCT<y: INT NOT NULL>\"]")))
 
     val checkResult2 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2)), Some(elseVal)).checkInputDataTypes()
@@ -250,7 +250,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       errorSubClass = "DATA_DIFF_TYPES",
       messageParameters = Map(
         "functionName" -> "`casewhen`",
-        "dataType" -> "[\"STRUCT<x: INT>\", \"STRUCT<y: INT>\", \"STRUCT<z: INT>\"]")))
+        "dataType" -> ("[\"STRUCT<x: INT NOT NULL>\", " +
+          "\"STRUCT<y: INT NOT NULL>\", \"STRUCT<z: INT NOT NULL>\"]"))))
   }
 
   test("SPARK-27917 test semantic equals of CaseWhen") {

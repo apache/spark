@@ -105,6 +105,6 @@ SHOW PARTITIONS customer PARTITION (city =  'San Jose');
 ### Related Statements
 
 * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
-* [INSERT STATEMENT](sql-ref-syntax-dml-insert.html)
+* [INSERT STATEMENT](sql-ref-syntax-dml-insert-table.html)
 * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
 * [SHOW TABLE](sql-ref-syntax-aux-show-table.html)

@@ -25,10 +25,13 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.internal.LogKeys.MALFORMATTED_STRING
+import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.ArrayImplicits._
 
 class VectorsSuite extends SparkFunSuite {
 
@@ -72,7 +75,8 @@ class VectorsSuite extends SparkFunSuite {
   }
 
   test("sparse vector construction with unordered elements") {
-    val vec = Vectors.sparse(n, indices.zip(values).reverse).asInstanceOf[SparseVector]
+    val vec = Vectors.sparse(n, indices.zip(values).reverse.toImmutableArraySeq)
+      .asInstanceOf[SparseVector]
     assert(vec.size === n)
     assert(vec.indices === indices)
     assert(vec.values === values)
@@ -224,7 +228,7 @@ class VectorsSuite extends SparkFunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         Vectors.parse(s)
-        logInfo(s"Didn't detect malformatted string $s.")
+        logInfo(log"Didn't detect malformatted string ${MDC(MALFORMATTED_STRING, s)}.")
       }
     }
   }
@@ -284,11 +288,11 @@ class VectorsSuite extends SparkFunSuite {
       val nnz = random.nextInt(m)
 
       val indices1 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values1 = Array.fill(nnz)(random.nextDouble)
+      val values1 = Array.fill(nnz)(random.nextDouble())
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
       val indices2 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
-      val values2 = Array.fill(nnz)(random.nextDouble)
+      val values2 = Array.fill(nnz)(random.nextDouble())
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
@@ -516,7 +520,7 @@ class VectorsSuite extends SparkFunSuite {
 
   test("sparse vector only support non-negative length") {
     val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
-    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)].toImmutableArraySeq)
     assert(v1.size === 0)
     assert(v2.size === 0)
 
@@ -524,7 +528,7 @@ class VectorsSuite extends SparkFunSuite {
       Vectors.sparse(-1, Array(1), Array(2.0))
     }
     intercept[IllegalArgumentException] {
-      Vectors.sparse(-1, Array((1, 2.0)))
+      Vectors.sparse(-1, Array((1, 2.0)).toImmutableArraySeq)
     }
   }
 
@@ -578,8 +582,8 @@ class VectorsSuite extends SparkFunSuite {
         valuesBuilder += v
       }
       val (indices, values) = vec.activeIterator.toArray.unzip
-      assert(indicesBuilder.result === indices)
-      assert(valuesBuilder.result === values)
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
     }
   }
 
@@ -599,8 +603,8 @@ class VectorsSuite extends SparkFunSuite {
         }
       }
       val (indices, values) = vec.nonZeroIterator.toArray.unzip
-      assert(indicesBuilder.result === indices)
-      assert(valuesBuilder.result === values)
+      assert(indicesBuilder.result() === indices)
+      assert(valuesBuilder.result() === values)
     }
   }
 }

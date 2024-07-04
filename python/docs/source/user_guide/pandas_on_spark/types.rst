@@ -168,13 +168,9 @@ np.byte       ByteType
 np.int16      ShortType
 np.int32      IntegerType
 np.int64      LongType
-np.int        LongType
 np.float32    FloatType
-np.float      DoubleType
 np.float64    DoubleType
-np.str        StringType
 np.unicode\_  StringType
-np.bool       BooleanType
 np.datetime64 TimestampType
 np.ndarray    ArrayType(StringType())
 ============= =======================

@@ -18,7 +18,8 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.TIMER
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -317,7 +318,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+      treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
 
     timer.stop("init")
 
@@ -393,7 +394,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       validatePredError = computeInitialPredictionAndError(
         validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
       validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-        treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+        treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
       validatePredErrorCheckpointer.update(validatePredError)
       bestValidateError = computeWeightedError(validationTreePoints, validatePredError)
       timer.stop("init validation")
@@ -477,7 +478,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(log"${MDC(TIMER, timer)}")
 
     bcSplits.destroy()
     treePoints.unpersist()

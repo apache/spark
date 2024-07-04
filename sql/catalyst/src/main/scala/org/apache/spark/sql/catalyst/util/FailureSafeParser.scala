@@ -61,12 +61,34 @@ class FailureSafeParser[IN](
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
-          Iterator(toResultRow(e.partialResult(), e.record))
+          val partialResults = e.partialResults()
+          if (partialResults.nonEmpty) {
+            partialResults.iterator.map(row => toResultRow(Some(row), e.record))
+          } else {
+            Iterator(toResultRow(None, e.record))
+          }
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(e)
+          e.getCause match {
+            case _: JsonArraysAsStructsException =>
+              // SPARK-42298 we recreate the exception here to make sure the error message
+              // have the record content.
+              throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
+            case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
+                fieldName, fieldValue, dataType)
+            case causeWrapper: LazyBadRecordCauseWrapper =>
+              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+            case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
+          }
       }
     }
+  }
+
+  private def throwMalformedRecordsDetectedInRecordParsingError(
+      e: BadRecordException, cause: Throwable): Nothing = {
+    throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+      toResultRow(e.partialResults().headOption, e.record).toString, cause)
   }
 }

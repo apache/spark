@@ -27,9 +27,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType, StringTypeAnyCollation}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
 abstract class TypeCoercionBase {
   /**
@@ -154,12 +158,12 @@ abstract class TypeCoercionBase {
       true
     } else {
       val head = types.head
-      types.tail.forall(_.sameType(head))
+      types.tail.forall(e => DataTypeUtils.sameType(e, head))
     }
   }
 
   protected def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
-    if (!expr.dataType.sameType(dt)) {
+    if (!DataTypeUtils.sameType(expr.dataType, dt)) {
       Cast(expr, dt)
     } else {
       expr
@@ -281,7 +285,6 @@ abstract class TypeCoercionBase {
         case s: Union if s.childrenResolved && !s.byName &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
           val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-
           if (newChildren.isEmpty) {
             s -> Nil
           } else {
@@ -360,11 +363,11 @@ abstract class TypeCoercionBase {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions, _))
-          if !i.resolved && lhs.length == sub.output.length =>
+      case i @ InSubquery(lhs, l: ListQuery)
+          if !i.resolved && lhs.length == l.plan.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
-        val rhs = sub.output
+        val rhs = l.plan.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
           findWiderTypeForTwo(l.dataType, r.dataType)
@@ -382,8 +385,7 @@ abstract class TypeCoercionBase {
             case (e, _) => e
           }
 
-          val newSub = Project(castedRhs, sub)
-          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output, conditions))
+          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
         } else {
           i
         }
@@ -420,8 +422,9 @@ abstract class TypeCoercionBase {
           case None => c
         }
 
-      case aj @ ArrayJoin(arr, d, nr) if !ArrayType(StringType).acceptsType(arr.dataType) &&
-        ArrayType.acceptsType(arr.dataType) =>
+      case aj @ ArrayJoin(arr, d, nr)
+          if !AbstractArrayType(StringTypeAnyCollation).acceptsType(arr.dataType) &&
+          ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
           case Some(castedArr) => ArrayJoin(castedArr, d, nr)
@@ -461,8 +464,8 @@ abstract class TypeCoercionBase {
         m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType(), _) => Sum(Cast(e, DoubleType))
-      case Average(e @ TimestampType(), _) => Average(Cast(e, DoubleType))
+      case Sum(e @ TimestampTypeExpression(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampTypeExpression(), _) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
@@ -608,7 +611,7 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
+          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
         }
         c.copy(children = newChildren)
     }
@@ -622,7 +625,8 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Lambda function isn't resolved when the rule is executed.
       case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
-          MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
+          MapType.acceptsType(a.dataType)) &&
+        !DataTypeUtils.sameType(m.leftKeyType, m.rightKeyType) =>
         findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
           case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
               !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
@@ -655,7 +659,7 @@ abstract class TypeCoercionBase {
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
           children.tail.map { e =>
-            implicitCast(e, StringType).getOrElse(e)
+            implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
           }
         } else {
           children.tail
@@ -796,7 +800,7 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+      case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -804,7 +808,7 @@ abstract class TypeCoercionBase {
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
         }
         DateAdd(l, Literal(days))
-      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+      case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -835,6 +839,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -854,17 +859,6 @@ object TypeCoercion extends TypeCoercionBase {
       StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
-
-  // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
-  // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence =
-    IndexedSeq(
-      ByteType,
-      ShortType,
-      IntegerType,
-      LongType,
-      FloatType,
-      DoubleType)
 
   override val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
       case (t1, t2) if t1 == t2 => Some(t1)
@@ -894,8 +888,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
-    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
   }
 
@@ -918,16 +912,16 @@ object TypeCoercion extends TypeCoercionBase {
    */
   def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    case (StringType, DateType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (DateType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (StringType, TimestampType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (TimestampType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (StringType, NullType) => Some(StringType)
-    case (NullType, StringType) => Some(StringType)
+    case (st: StringType, DateType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (DateType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (st: StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (TimestampType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (st: StringType, NullType) => Some(st)
+    case (NullType, st: StringType) => Some(st)
 
     // Cast to TimestampType when we compare DateType with TimestampType
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
@@ -937,8 +931,8 @@ object TypeCoercion extends TypeCoercionBase {
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
-    case (n: DecimalType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: DecimalType) => Some(DoubleType)
+    case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
+    case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
@@ -983,7 +977,7 @@ object TypeCoercion extends TypeCoercionBase {
 
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
-      case (StringType, NumericType) => NumericType.defaultConcreteType
+      case (_: StringType, NumericType) => NumericType.defaultConcreteType
 
       // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
@@ -998,13 +992,16 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
-      case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
-      case (StringType, target: NumericType) => target
-      case (StringType, datetime: DatetimeType) => datetime
-      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (StringType, BinaryType) => BinaryType
+      case (_: StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+      case (_: StringType, target: NumericType) => target
+      case (_: StringType, datetime: DatetimeType) => datetime
+      case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, StringType) if any != StringType => StringType
+      case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
+      case (any: AtomicType, st: AbstractStringType)
+        if !any.isInstanceOf[StringType] =>
+        st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
@@ -1021,6 +1018,9 @@ object TypeCoercion extends TypeCoercionBase {
       // 3. If the nullabilities of both the from type and the to type are false, the cast is
       // allowed only when Cast.forceNullable(fromType, toType) is false.
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
+        implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
+
+      case (ArrayType(fromType, fn), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null
@@ -1046,6 +1046,15 @@ object TypeCoercion extends TypeCoercionBase {
           } else {
             null
           }
+        }
+
+      case (MapType(fromKeyType, fromValueType, fn), AbstractMapType(toKeyType, toValueType)) =>
+        val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+        val newValueType = implicitCast(fromValueType, toValueType).orNull
+        if (newKeyType != null && newValueType != null) {
+          MapType(newKeyType, newValueType, fn)
+        } else {
+          null
         }
 
       case _ => null
@@ -1082,7 +1091,7 @@ object TypeCoercion extends TypeCoercionBase {
    */
   @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
-    case StringType => true
+    case _: StringType => true
     case ArrayType(et, _) => hasStringType(et)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
@@ -1100,28 +1109,33 @@ object TypeCoercion extends TypeCoercionBase {
       }
     }
 
+    private def isIntervalType(dt: DataType): Boolean = dt match {
+      case _: CalendarIntervalType | _: AnsiIntervalType => true
+      case _ => false
+    }
+
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+      case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
+        if !isIntervalType(right.dataType) =>
+        a.withNewChildren(Seq(Cast(left, DoubleType), right))
+      case a @ BinaryArithmetic(left, right @ StringTypeExpression())
+        if !isIntervalType(left.dataType) =>
+        a.withNewChildren(Seq(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
       // so that things like rounding of subsecond precision does not affect the comparison.
-      case p @ Equality(left @ StringType(), right @ TimestampType()) =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
-      case p @ Equality(left @ TimestampType(), right @ StringType()) =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
+      case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
+        p.withNewChildren(Seq(Cast(left, TimestampType), right))
+      case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
+        p.withNewChildren(Seq(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
           if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+        p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
     }
   }
 
@@ -1141,30 +1155,30 @@ object TypeCoercion extends TypeCoercionBase {
 
       // We may simplify the expression if one side is literal numeric values
       // TODO: Maybe these rules should go into the optimizer.
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualTo(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if trueValues.contains(value) => bool
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualTo(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if falseValues.contains(value) => Not(bool)
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if trueValues.contains(value) => bool
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if falseValues.contains(value) => Not(bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualNullSafe(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+      case EqualNullSafe(bool @ BooleanTypeExpression(), Literal(value, _: NumericType))
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanTypeExpression())
         if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
 
-      case EqualTo(left @ BooleanType(), right @ NumericType()) =>
+      case EqualTo(left @ BooleanTypeExpression(), right @ NumericTypeExpression()) =>
         EqualTo(Cast(left, right.dataType), right)
-      case EqualTo(left @ NumericType(), right @ BooleanType()) =>
+      case EqualTo(left @ NumericTypeExpression(), right @ BooleanTypeExpression()) =>
         EqualTo(left, Cast(right, left.dataType))
-      case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
+      case EqualNullSafe(left @ BooleanTypeExpression(), right @ NumericTypeExpression()) =>
         EqualNullSafe(Cast(left, right.dataType), right)
-      case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
+      case EqualNullSafe(left @ NumericTypeExpression(), right @ BooleanTypeExpression()) =>
         EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
@@ -1173,22 +1187,24 @@ object TypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case d @ DateAdd(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+      case s @ SubtractTimestamps(DateTypeExpression(), AnyTimestampTypeExpression(), _, _) =>
         s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), DateTypeExpression(), _, _) =>
         s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+      case s @ SubtractTimestamps(AnyTimestampTypeExpression(), AnyTimestampTypeExpression(), _, _)
         if s.left.dataType != s.right.dataType =>
         val newLeft = castIfNotSameType(s.left, TimestampNTZType)
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
-      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimeAdd(StringTypeExpression(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -1212,7 +1228,8 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
           } else {
             beforeMapChildren
           }
-          withPropagatedTypes.transformExpressionsUp(typeCoercionFn)
+          withPropagatedTypes.transformExpressionsUpWithPruning(
+            AlwaysProcess.fn, ruleId)(typeCoercionFn)
         }
     }
   }

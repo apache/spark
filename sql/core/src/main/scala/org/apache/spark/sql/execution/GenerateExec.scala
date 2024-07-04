@@ -25,15 +25,16 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
  * TODO reusing the CompletionIterator?
  */
-private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
+private[execution] sealed case class LazyIterator(func: () => IterableOnce[InternalRow])
   extends Iterator[InternalRow] {
 
-  lazy val results: Iterator[InternalRow] = func().toIterator
+  lazy val results: Iterator[InternalRow] = func().iterator
   override def hasNext: Boolean = results.hasNext
   override def next(): InternalRow = results.next()
 }
@@ -78,6 +79,10 @@ case class GenerateExec(
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+      boundGenerator.foreach {
+        case n: Nondeterministic => n.initialize(index)
+        case _ =>
+      }
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (requiredChildOutput.nonEmpty) {
 
@@ -93,10 +98,10 @@ case class GenerateExec(
           // we should always set the left (required child output)
           joinedRow.withLeft(pruneChildForResult(row))
           val outputRows = boundGenerator.eval(row)
-          if (outer && outputRows.isEmpty) {
+          if (outer && outputRows.iterator.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
-            outputRows.toIterator.map(joinedRow.withRight)
+            outputRows.iterator.map(joinedRow.withRight)
           }
         } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
@@ -106,7 +111,7 @@ case class GenerateExec(
       } else {
         iter.flatMap { row =>
           val outputRows = boundGenerator.eval(row)
-          if (outer && outputRows.isEmpty) {
+          if (outer && outputRows.iterator.isEmpty) {
             Seq(generatorNullRow)
           } else {
             outputRows
@@ -143,7 +148,7 @@ case class GenerateExec(
     }.map(_._2)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
-      case g => codeGenTraversableOnce(ctx, g, requiredInput)
+      case g => codeGenIterableOnce(ctx, g, requiredInput)
     }
   }
 
@@ -182,7 +187,7 @@ case class GenerateExec(
       case ArrayType(st: StructType, nullable) if e.inline =>
         val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
         val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
-        val columns = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+        val columns = st.fields.toImmutableArraySeq.zipWithIndex.map { case (f, i) =>
           codeGenAccessor(
             ctx,
             row.value,
@@ -235,9 +240,9 @@ case class GenerateExec(
   }
 
   /**
-   * Generate code for a regular [[TraversableOnce]] returning [[Generator]].
+   * Generate code for a regular [[IterableOnce]] returning [[Generator]].
    */
-  private def codeGenTraversableOnce(
+  private def codeGenIterableOnce(
       ctx: CodegenContext,
       e: Expression,
       requiredInput: Seq[ExprCode]): String = {
@@ -254,7 +259,7 @@ case class GenerateExec(
     val checks = optionalCode(outer, s"!$hasNext")
     val values = e.dataType match {
       case ArrayType(st: StructType, nullable) =>
-        st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+        st.fields.toImmutableArraySeq.zipWithIndex.map { case (f, i) =>
           codeGenAccessor(ctx, current, s"st_col${i}", s"$i", f.dataType, f.nullable, checks)
         }
     }
@@ -268,7 +273,7 @@ case class GenerateExec(
       val outerVal = ctx.freshName("outer")
       s"""
          |${data.code}
-         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
+         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.iterator();
          |boolean $outerVal = true;
          |while ($iterator.hasNext() || $outerVal) {
          |  $numOutput.add(1);
@@ -281,7 +286,7 @@ case class GenerateExec(
     } else {
       s"""
          |${data.code}
-         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
+         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.iterator();
          |while ($iterator.hasNext()) {
          |  $numOutput.add(1);
          |  InternalRow $current = (InternalRow)($iterator.next());

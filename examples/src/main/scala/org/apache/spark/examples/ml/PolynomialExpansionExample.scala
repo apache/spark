@@ -18,6 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import scala.collection.immutable
+
 // $example on$
 import org.apache.spark.ml.feature.PolynomialExpansion
 import org.apache.spark.ml.linalg.Vectors
@@ -27,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 object PolynomialExpansionExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("PolynomialExpansionExample")
       .getOrCreate()
 
@@ -37,7 +39,8 @@ object PolynomialExpansionExample {
       Vectors.dense(0.0, 0.0),
       Vectors.dense(3.0, -1.0)
     )
-    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+    val df = spark.createDataFrame(immutable.ArraySeq.unsafeWrapArray(data.map(Tuple1.apply)))
+      .toDF("features")
 
     val polyExpansion = new PolynomialExpansion()
       .setInputCol("features")

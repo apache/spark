@@ -61,10 +61,13 @@ abstract class ParquetFileFormatSuite
     }
 
     testReadFooters(true)
-    val exception = intercept[SparkException] {
-      testReadFooters(false)
-    }.getCause
-    assert(exception.getMessage().contains("Could not read footer for file"))
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testReadFooters(false)
+      }.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
   }
 
   test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {

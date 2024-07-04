@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.math.BigInteger
 import java.util.UUID
 
+import scala.annotation.nowarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.json4s.JsonAST._
@@ -693,6 +694,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("transform works on stream of children") {
+    @nowarn("cat=deprecation")
     val before = Coalesce(Stream(Literal(1), Literal(2)))
     // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
     // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
@@ -702,14 +704,39 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
+    @nowarn("cat=deprecation")
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
     assert(result === expected)
   }
 
+  test("SPARK-45685: transform works on LazyList of children") {
+    val before = Coalesce(LazyList(Literal(1), Literal(2)))
+    // Note it is a bit tricky to exhibit the broken behavior. Basically we want to create the
+    // situation in which the TreeNode.mapChildren function's change detection is not triggered. A
+    // stream's first element is typically materialized, so in order to not trip the TreeNode change
+    // detection logic, we should not change the first element in the sequence.
+    val result = before.transform {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    val expected = Coalesce(LazyList(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
   test("withNewChildren on stream of children") {
+    @nowarn("cat=deprecation")
     val before = Coalesce(Stream(Literal(1), Literal(2)))
+    @nowarn("cat=deprecation")
     val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
+    @nowarn("cat=deprecation")
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
+    assert(result === expected)
+  }
+
+  test("SPARK-45685: withNewChildren on LazyList of children") {
+    val before = Coalesce(LazyList(Literal(1), Literal(2)))
+    val result = before.withNewChildren(LazyList(Literal(1), Literal(3)))
+    val expected = Coalesce(LazyList(Literal(1), Literal(3)))
     assert(result === expected)
   }
 
@@ -864,35 +891,6 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(getStateful(withNestedStatefulBefore) ne getStateful(withNestedStatefulAfter))
   }
 
-  object MalformedClassObject extends Serializable {
-    case class MalformedNameExpression(child: Expression) extends TaggingExpression {
-      override protected def withNewChildInternal(newChild: Expression): Expression =
-        copy(child = newChild)
-    }
-  }
-
-  test("SPARK-32999: TreeNode.nodeName should not throw malformed class name error") {
-    val testTriggersExpectedError = try {
-      classOf[MalformedClassObject.MalformedNameExpression].getSimpleName
-      false
-    } catch {
-      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
-        true
-      case ex: Throwable => throw ex
-    }
-    // This test case only applies on older JDK versions (e.g. JDK8u), and doesn't trigger the
-    // issue on newer JDK versions (e.g. JDK11u).
-    assume(testTriggersExpectedError, "the test case didn't trigger malformed class name error")
-
-    val expr = MalformedClassObject.MalformedNameExpression(Literal(1))
-    try {
-      expr.nodeName
-    } catch {
-      case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
-        fail("TreeNode.nodeName should not throw malformed class name error")
-    }
-  }
-
   test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
     case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LeafNode {
       val output: Seq[Attribute] = Nil
@@ -920,7 +918,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       objectType = Some("VIEW"),
       objectName = Some("some_view"))
     val expectedSummary =
-      """== SQL of VIEW some_view(line 3, position 39) ==
+      """== SQL of VIEW some_view (line 3, position 39) ==
         |...7890 + 1234567890 + 1234567890, cast('a'
         |                                   ^^^^^^^^
         |as /* comment */
@@ -978,9 +976,9 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  private def newErrorAfterStream(es: Expression*) = {
-    es.toStream.append(
-      throw new NoSuchElementException("Stream should not return more elements")
+  private def newErrorAfterLazyList(es: Expression*) = {
+    es.to(LazyList).lazyAppendedAll(
+      throw new NoSuchElementException("LazyList should not return more elements")
     )
   }
 
@@ -1000,12 +998,12 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(transformed === expected)
   }
 
-  test("multiTransformDown is lazy") {
+  test("multiTransformDown alternatives are accessed only if needed") {
     val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
     val transformed = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
-      case StringLiteral("b") => newErrorAfterStream(Literal(10))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case StringLiteral("b") => newErrorAfterLazyList(Literal(10))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected = for {
       a <- Seq(Literal(1), Literal(2), Literal(3))
@@ -1019,7 +1017,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val transformed2 = e.multiTransformDown {
       case StringLiteral("a") => Seq(Literal(1), Literal(2), Literal(3))
       case StringLiteral("b") => Seq(Literal(10), Literal(20), Literal(30))
-      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterStream(Literal(100))
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => newErrorAfterLazyList(Literal(100))
     }
     val expected2 = for {
       b <- Seq(Literal(10), Literal(20), Literal(30))
@@ -1079,5 +1077,71 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq.empty
     }
     assert(transformed2.isEmpty)
+  }
+
+  test("multiTransformDown alternatives are generated only if needed") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") => newErrorAfterLazyList()
+      case StringLiteral("b") => Seq.empty
+    }
+    assert(transformed.isEmpty)
+  }
+
+  test("multiTransformDown can do non-cartesian transformations") {
+    val e = Add(Add(Literal("a"), Literal("b")), Add(Literal("c"), Literal("d")))
+    // Suppose that we want to transform both `a` and `b` to `1` and `2`, but we want to have only
+    // those alternatives where these 2 are transformed equal. The first encounter with `a` or `b`
+    // will keep track of the current alternative in a "global" `a_or_b` cache. If we encounter `a`
+    // or `b` again at other places we can return the cached value to keep the transformations in
+    // sync.
+    var a_or_b = Option.empty[Seq[Expression]]
+    val transformed = e.multiTransformDown {
+      case StringLiteral("a") | StringLiteral("b") =>
+        // Return alternatives from cache if this is not the first encounter
+        a_or_b.getOrElse(
+          // Besides returning the alternatives for the first encounter, also set up a mechanism to
+          // update the cache when the new alternatives are requested.
+          LazyList(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            a_or_b = None
+            Seq.empty
+          })
+      case Add(StringLiteral("c"), StringLiteral("d"), _) => Seq(Literal(100), Literal(200))
+    }
+    val expected = for {
+      cd <- Seq(Literal(100), Literal(200))
+      a_or_b <- Seq(Literal(1), Literal(2))
+    } yield Add(Add(a_or_b, a_or_b), cd)
+    assert(transformed == expected)
+
+    var c_or_d = Option.empty[Seq[Expression]]
+    val transformed2 = e.multiTransformDown {
+      case StringLiteral("a") | StringLiteral("b") =>
+        a_or_b.getOrElse(
+          LazyList(Literal(1), Literal(2)).map { x =>
+            a_or_b = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            a_or_b = None
+            Seq.empty
+          })
+      case StringLiteral("c") | StringLiteral("d") =>
+        c_or_d.getOrElse(
+          LazyList(Literal(10), Literal(20)).map { x =>
+            c_or_d = Some(Seq(x))
+            x
+          }.lazyAppendedAll {
+            c_or_d = None
+            Seq.empty
+          })
+    }
+    val expected2 = for {
+      c_or_d <- Seq(Literal(10), Literal(20))
+      a_or_b <- Seq(Literal(1), Literal(2))
+    } yield Add(Add(a_or_b, a_or_b), Add(c_or_d, c_or_d))
+    assert(transformed2 == expected2)
   }
 }

@@ -34,6 +34,9 @@ SELECT a + b, COUNT(b) FROM testData GROUP BY a + b;
 SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1;
 SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1;
 
+-- struct() in group by
+SELECT count(1) FROM testData GROUP BY struct(a + 0.1 AS aa);
+
 -- Aggregate with nulls.
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData;
@@ -245,6 +248,29 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
 
+-- SPARK-44846: PushFoldableIntoBranches in complex grouping expressions cause bindReference error
+SELECT c * 2 AS d
+FROM (
+         SELECT if(b > 1, 1, b) AS c
+         FROM (
+                  SELECT if(a < 0, 0, a) AS b
+                  FROM VALUES (-1), (1), (2) AS t1(a)
+              ) t2
+         GROUP BY b
+     ) t3
+GROUP BY c;
 
-SELECT mode(a), mode(b) FROM testData;
-SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a;
+-- SPARK-45599: Check that "weird" doubles group and sort as desired.
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+;

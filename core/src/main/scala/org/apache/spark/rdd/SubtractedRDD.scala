@@ -19,8 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Dependency

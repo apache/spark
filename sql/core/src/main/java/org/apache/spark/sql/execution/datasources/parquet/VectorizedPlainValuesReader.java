@@ -26,6 +26,7 @@ import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.ParquetDecodingException;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -50,7 +51,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skip() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   private void updateCurrentByte() {

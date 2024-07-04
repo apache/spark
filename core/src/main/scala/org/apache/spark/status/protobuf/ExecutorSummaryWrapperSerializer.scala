@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import java.util.Date
 
-import collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
@@ -27,7 +27,8 @@ import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
 import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrapper] {
+private[protobuf] class ExecutorSummaryWrapperSerializer
+  extends ProtobufSerDe[ExecutorSummaryWrapper] {
 
   override def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorSummary(input.info)
@@ -136,7 +137,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrap
       blacklistedInStages = binary.getBlacklistedInStagesList.asScala.map(_.toInt).toSet,
       peakMemoryMetrics = peakMemoryMetrics,
       attributes = binary.getAttributesMap.asScala.toMap,
-      resources = binary.getResourcesMap.asScala.mapValues(deserializeResourceInformation).toMap,
+      resources =
+        binary.getResourcesMap.asScala.toMap.transform((_, v) => deserializeResourceInformation(v)),
       resourceProfileId = binary.getResourceProfileId,
       isExcluded = binary.getIsExcluded,
       excludedInStages = binary.getExcludedInStagesList.asScala.map(_.toInt).toSet)

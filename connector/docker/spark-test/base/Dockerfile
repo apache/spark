@@ -18,11 +18,11 @@
 FROM ubuntu:20.04
 
 # Upgrade package index
-# install a few other useful packages plus Open Java 11
+# install a few other useful packages plus Open Java 17
 # Remove unneeded /var/lib/apt/lists/* after install to reduce the
 # docker image size (by ~30MB)
 RUN apt-get update && \
-    apt-get install -y less openjdk-11-jre-headless iproute2 vim-tiny sudo openssh-server && \
+    apt-get install -y less openjdk-17-jre-headless iproute2 vim-tiny sudo openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
 ENV SPARK_HOME /opt/spark

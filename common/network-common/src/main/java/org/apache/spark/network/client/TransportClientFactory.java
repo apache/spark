@@ -39,9 +39,14 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.*;
@@ -74,7 +79,8 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -166,8 +172,10 @@ public class TransportClientFactory implements Closeable {
       // this code was able to update things.
       TransportChannelHandler handler = cachedClient.getChannel().pipeline()
         .get(TransportChannelHandler.class);
-      synchronized (handler) {
-        handler.getResponseHandler().updateTimeOfLastRequest();
+      if (handler != null) {
+        synchronized (handler) {
+          handler.getResponseHandler().updateTimeOfLastRequest();
+        }
       }
 
       if (cachedClient.isActive()) {
@@ -185,7 +193,9 @@ public class TransportClientFactory implements Closeable {
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
-          resolvMsg, resolvedAddress, hostResolveTimeMs);
+        MDC.of(LogKeys.STATUS$.MODULE$, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress),
+        MDC.of(LogKeys.TIME$.MODULE$, hostResolveTimeMs));
     } else {
       logger.trace("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -199,7 +209,8 @@ public class TransportClientFactory implements Closeable {
           logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
+          logger.info("Found inactive connection to {}, creating a new one.",
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress));
         }
       }
       // If this connection should fast fail when last connection failed in last fast fail time
@@ -245,12 +256,13 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
+    int connCreateTimeout = conf.connectionCreationTimeoutMs();
     bootstrap.group(workerGroup)
       .channel(socketChannelClass)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.SO_KEEPALIVE, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionCreationTimeoutMs())
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connCreateTimeout)
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
     if (conf.receiveBuf() > 0) {
@@ -267,7 +279,7 @@ public class TransportClientFactory implements Closeable {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
-        TransportChannelHandler clientHandler = context.initializePipeline(ch);
+        TransportChannelHandler clientHandler = context.initializePipeline(ch, true);
         clientRef.set(clientHandler.getClient());
         channelRef.set(ch);
       }
@@ -276,12 +288,42 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.await(conf.connectionCreationTimeoutMs())) {
+
+    if (connCreateTimeout <= 0) {
+      cf.await();
+      assert cf.isDone();
+      if (cf.isCancelled()) {
+        throw new IOException(String.format("Connecting to %s cancelled", address));
+      } else if (!cf.isSuccess()) {
+        throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+      }
+    } else if (!cf.await(connCreateTimeout)) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)",
-          address, conf.connectionCreationTimeoutMs()));
+          address, connCreateTimeout));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    }
+    if (context.sslEncryptionEnabled()) {
+      final SslHandler sslHandler = cf.channel().pipeline().get(SslHandler.class);
+      Future<Channel> future = sslHandler.handshakeFuture().addListener(
+        new GenericFutureListener<Future<Channel>>() {
+          @Override
+          public void operationComplete(final Future<Channel> handshakeFuture) {
+            if (handshakeFuture.isSuccess()) {
+              logger.debug("{} successfully completed TLS handshake to ", address);
+            } else {
+              logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
+                MDC.of(LogKeys.HOST_PORT$.MODULE$, address));
+              cf.channel().close();
+            }
+          }
+      });
+      if (!future.await(conf.connectionTimeoutMs())) {
+        cf.channel().close();
+        throw new IOException(
+          String.format("Failed to connect to %s within connection timeout", address));
+      }
     }
 
     TransportClient client = clientRef.get();
@@ -297,14 +339,17 @@ public class TransportClientFactory implements Closeable {
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
-      logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
+      logger.error("Exception while bootstrapping client after {} ms", e,
+        MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, bootstrapTimeMs));
       client.close();
       throw Throwables.propagate(e);
     }
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+      MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
+      MDC.of(LogKeys.ELAPSED_TIME$.MODULE$, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }

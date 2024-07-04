@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long => JLong}
+import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float => JFloat, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, Period}
 import java.util.HashSet
 import java.util.Locale
 
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.SparkFilterApi._
@@ -37,9 +38,10 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
@@ -97,7 +99,7 @@ class ParquetFilters(
 
     val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-      (field.fieldNames.toSeq.quoted, field)
+      (field.fieldNames.toImmutableArraySeq.quoted, field)
     }
     if (caseSensitive) {
       primitiveFields.toMap
@@ -109,8 +111,8 @@ class ParquetFilters(
       primitiveFields
         .groupBy(_._1.toLowerCase(Locale.ROOT))
         .filter(_._2.size == 1)
-        .mapValues(_.head._2)
-      CaseInsensitiveMap(dedupPrimitiveFields.toMap)
+        .transform((_, v) => v.head._2)
+      CaseInsensitiveMap(dedupPrimitiveFields)
     }
   }
 
@@ -611,7 +613,13 @@ class ParquetFilters(
     value == null || (nameToParquetField(name).fieldType match {
       case ParquetBooleanType => value.isInstanceOf[JBoolean]
       case ParquetIntegerType if value.isInstanceOf[Period] => true
-      case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
+      case ParquetByteType | ParquetShortType | ParquetIntegerType => value match {
+        // Byte/Short/Int are all stored as INT32 in Parquet so filters are built using type Int.
+        // We don't create a filter if the value would overflow.
+        case _: JByte | _: JShort | _: Integer => true
+        case v: JLong => v.longValue() >= Int.MinValue && v.longValue() <= Int.MaxValue
+        case _ => false
+      }
       case ParquetLongType => value.isInstanceOf[JLong] || value.isInstanceOf[Duration]
       case ParquetFloatType => value.isInstanceOf[JFloat]
       case ParquetDoubleType => value.isInstanceOf[JDouble]
@@ -692,17 +700,19 @@ class ParquetFilters(
         makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeLt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeLtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeGt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeGtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
@@ -776,7 +786,7 @@ class ParquetFilters(
         Option(prefix).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val strToBinary = Binary.fromReusedByteArray(v.getBytes)
+              private val strToBinary = Binary.fromReusedByteArray(v.getBytes(UTF_8))
               private val size = strToBinary.length
 
               override def canDrop(statistics: Statistics[Binary]): Boolean = {

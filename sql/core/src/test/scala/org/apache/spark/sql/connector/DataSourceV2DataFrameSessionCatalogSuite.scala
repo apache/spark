@@ -110,7 +110,14 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     Option(tables.get(ident)) match {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes, None, "ALTER TABLE")
+        val provider = Option(properties.get("provider"))
+
+        val schema = CatalogV2Util.applySchemaChanges(
+          table.schema,
+          changes,
+          provider,
+          "ALTER TABLE"
+        )
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
@@ -153,7 +160,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format: String = classOf[FakeV2Provider].getName
+  protected val v2Format: String = classOf[FakeV2ProviderWithCustomSchema].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

@@ -16,10 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import javax.ws.rs.core.UriBuilder
-
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
@@ -29,7 +27,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -69,6 +66,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.get(MEMORY_OVERHEAD_FACTOR)
     }
 
+  private val driverMinimumMemoryOverhead = conf.get(DRIVER_MIN_MEMORY_OVERHEAD)
+
   // Prefer the driver memory overhead factor if set explicitly
   private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
     conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
@@ -76,10 +75,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     defaultOverheadFactor
   }
 
-  private val memoryOverheadMiB = conf
+  private val memoryOverheadMiB: Long = conf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((memoryOverheadFactor * driverMemoryMiB).toInt,
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      driverMinimumMemoryOverhead))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -143,8 +142,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
-        .addToAnnotations(conf.annotations.map { case (k, v) =>
-          (k, Utils.substituteAppNExecIds(v, conf.appId, "")) }.asJava)
+        .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")
@@ -172,7 +170,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
       val value = {
         if (key == ARCHIVES) {
-          localUris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
+          localUris.map(Utils.getUriBuilder(_).fragment(null).build()).map(_.toString)
         } else {
           localUris
         }
@@ -181,7 +179,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       if (resolved.nonEmpty) {
         val resolvedValue = if (key == ARCHIVES) {
           localUris.zip(resolved).map { case (uri, r) =>
-            UriBuilder.fromUri(r).fragment(new java.net.URI(uri).getFragment).build().toString
+            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
           }
         } else {
           resolved

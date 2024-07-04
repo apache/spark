@@ -32,7 +32,7 @@ TakeOrderedAndProject [c_customer_id]
                   BroadcastExchange #3
                     WholeStageCodegen (6)
                       Filter [(avg(ctr_total_return) * 1.2)]
-                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),ctr_store_sk,sum,count]
+                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),sum,count]
                           InputAdapter
                             Exchange [ctr_store_sk] #4
                               WholeStageCodegen (5)

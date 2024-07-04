@@ -15,11 +15,25 @@
  * limitations under the License.
  */
 
-/* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot */
+/* global $, Mustache, uiRoot */
+
+import {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getBaseURI, getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export {setTaskThreadDumpEnabled};
 
 var shouldBlockUI = true;
+var taskThreadDumpEnabled = false;
+
+/* eslint-disable no-unused-vars */
+function setTaskThreadDumpEnabled(enabled){
+  taskThreadDumpEnabled = enabled;
+}
+/* eslint-enable no-unused-vars */
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
@@ -235,11 +249,7 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
         }
       ],
       "columnDefs": [
-        { "type": "duration", "targets": 1 },
-        { "type": "duration", "targets": 2 },
-        { "type": "duration", "targets": 3 },
-        { "type": "duration", "targets": 4 },
-        { "type": "duration", "targets": 5 }
+        { "type": "duration", "targets": [1, 2, 3, 4, 5] }
       ],
       "paging": false,
       "info": false,
@@ -592,22 +602,16 @@ $(document).ready(function () {
                 // The targets: $id represents column id which comes from stagespage-template.html
                 // #summary-executor-table.If the relative position of the columns in the table
                 // #summary-executor-table has changed,please be careful to adjust the column index here
-                // Input Size / Records
-                {"type": "size", "targets": 9},
-                // Output Size / Records
-                {"type": "size", "targets": 10},
-                // Shuffle Read Size / Records
-                {"type": "size", "targets": 11},
-                // Shuffle Write Size / Records
-                {"type": "size", "targets": 12},
+                // Input Size / Records - 9
+                // Output Size / Records - 10
+                // Shuffle Read Size / Records - 11
+                // Shuffle Write Size / Records - 12
+                {"type": "size", "targets": [9, 10, 11, 12]},
                 // Peak JVM Memory OnHeap / OffHeap
-                {"visible": false, "targets": 15},
                 // Peak Execution Memory OnHeap / OffHeap
-                {"visible": false, "targets": 16},
                 // Peak Storage Memory OnHeap / OffHeap
-                {"visible": false, "targets": 17},
                 // Peak Pool Memory Direct / Mapped
-                {"visible": false, "targets": 18}
+                {"visible": false, "targets": executorOptionalColumns},
               ],
               "deferRender": true,
               "order": [[0, "asc"]],
@@ -844,11 +848,7 @@ $(document).ready(function () {
                 data.length = totalTasksToShow;
               }
             },
-            "dataSrc": function (jsons) {
-              var jsonStr = JSON.stringify(jsons);
-              var tasksToShow = JSON.parse(jsonStr);
-              return tasksToShow.aaData;
-            },
+            "dataSrc": (jsons) => jsons.aaData,
             "error": function (_ignored_jqXHR, _ignored_textStatus, _ignored_errorThrown) {
               alert("Unable to connect to the server. Looks like the Spark " +
                 "application must have ended. Please Switch to the history UI.");
@@ -856,15 +856,21 @@ $(document).ready(function () {
             }
           },
           "columns": [
-            {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-              },
-              name: "Index"
-            },
+            {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
-            {data : "status", name: "Status"},
+            {
+              data : (row, _ignored_type) => {
+                if (taskThreadDumpEnabled && row.status === "RUNNING") {
+                  var threadUrl =
+                    uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
+                  return '<div><a href=' + threadUrl + '>' + row.status + '</a></div>'
+                } else {
+                  return row.status
+                }
+              },
+              name: "Status"
+            },
             {data : "taskLocality", name: "Locality Level"},
             {data : "executorId", name: "Executor ID"},
             {data : "host", name: "Host"},
@@ -1068,26 +1074,15 @@ $(document).ready(function () {
                 if (typeof msg === 'undefined') {
                   return "";
                 } else {
-                  var indexOfLineSeparator = msg.indexOf("\n");
-                  var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
-                  var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                  return formHead + form + formMsg;
+                  return errorMessageCell(msg)
                 }
               },
               name: "Errors"
             }
           ],
           "columnDefs": [
-            { "visible": false, "targets": 11 },
-            { "visible": false, "targets": 12 },
-            { "visible": false, "targets": 13 },
-            { "visible": false, "targets": 14 },
-            { "visible": false, "targets": 15 },
-            { "visible": false, "targets": 16 },
-            { "visible": false, "targets": 17 },
-            { "visible": false, "targets": 18 },
-            { "visible": false, "targets": 21 }
+            { "visible": false, "targets": optionalColumns },
+            { "visible": false, "targets": 18 }, // accumulators
           ],
           "deferRender": true
         };

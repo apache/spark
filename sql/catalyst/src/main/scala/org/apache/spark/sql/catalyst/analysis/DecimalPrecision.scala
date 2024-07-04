@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -63,7 +65,15 @@ object DecimalPrecision extends TypeCoercionRule {
   def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val scale = max(s1, s2)
     val range = max(p1 - s1, p2 - s2)
-    DecimalType.bounded(range + scale, scale)
+    bounded(scale + range, scale)
+  }
+
+  def bounded(precision: Int, scale: Int): DecimalType = {
+    if (conf.getConf(SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST)) {
+      DecimalType.bounded(precision, scale)
+    } else {
+      DecimalType.boundedPreferIntegralDigits(precision, scale)
+    }
   }
 
   override def transform: PartialFunction[Expression, Expression] = {
@@ -77,12 +87,12 @@ object DecimalPrecision extends TypeCoercionRule {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
 
-    case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
-    e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+    case b @ BinaryComparison(e1 @ DecimalExpression(p1, s1),
+    e2 @ DecimalExpression(p2, s2)) if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)
       val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
       val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
-      b.makeCopy(Array(newE1, newE2))
+      b.withNewChildren(Seq(newE1, newE2))
   }
 
   /**
@@ -105,7 +115,7 @@ object DecimalPrecision extends TypeCoercionRule {
    */
   private val integralAndDecimalLiteral: PartialFunction[Expression, Expression] = {
 
-    case GreaterThan(i @ IntegralType(), DecimalLiteral(value)) =>
+    case GreaterThan(i @ IntegralTypeExpression(), DecimalLiteral(value)) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         TrueLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -114,7 +124,7 @@ object DecimalPrecision extends TypeCoercionRule {
         GreaterThan(i, Literal(value.floor.toLong))
       }
 
-    case GreaterThanOrEqual(i @ IntegralType(), DecimalLiteral(value)) =>
+    case GreaterThanOrEqual(i @ IntegralTypeExpression(), DecimalLiteral(value)) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         TrueLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -123,7 +133,7 @@ object DecimalPrecision extends TypeCoercionRule {
         GreaterThanOrEqual(i, Literal(value.ceil.toLong))
       }
 
-    case LessThan(i @ IntegralType(), DecimalLiteral(value)) =>
+    case LessThan(i @ IntegralTypeExpression(), DecimalLiteral(value)) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         FalseLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -132,7 +142,7 @@ object DecimalPrecision extends TypeCoercionRule {
         LessThan(i, Literal(value.ceil.toLong))
       }
 
-    case LessThanOrEqual(i @ IntegralType(), DecimalLiteral(value)) =>
+    case LessThanOrEqual(i @ IntegralTypeExpression(), DecimalLiteral(value)) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         FalseLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -141,7 +151,7 @@ object DecimalPrecision extends TypeCoercionRule {
         LessThanOrEqual(i, Literal(value.floor.toLong))
       }
 
-    case GreaterThan(DecimalLiteral(value), i @ IntegralType()) =>
+    case GreaterThan(DecimalLiteral(value), i @ IntegralTypeExpression()) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         FalseLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -150,7 +160,7 @@ object DecimalPrecision extends TypeCoercionRule {
         GreaterThan(Literal(value.ceil.toLong), i)
       }
 
-    case GreaterThanOrEqual(DecimalLiteral(value), i @ IntegralType()) =>
+    case GreaterThanOrEqual(DecimalLiteral(value), i @ IntegralTypeExpression()) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         FalseLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -159,7 +169,7 @@ object DecimalPrecision extends TypeCoercionRule {
         GreaterThanOrEqual(Literal(value.floor.toLong), i)
       }
 
-    case LessThan(DecimalLiteral(value), i @ IntegralType()) =>
+    case LessThan(DecimalLiteral(value), i @ IntegralTypeExpression()) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         TrueLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -168,7 +178,7 @@ object DecimalPrecision extends TypeCoercionRule {
         LessThan(Literal(value.floor.toLong), i)
       }
 
-    case LessThanOrEqual(DecimalLiteral(value), i @ IntegralType()) =>
+    case LessThanOrEqual(DecimalLiteral(value), i @ IntegralTypeExpression()) =>
       if (DecimalLiteral.smallerThanSmallestLong(value)) {
         TrueLiteral
       } else if (DecimalLiteral.largerThanLargestLong(value)) {
@@ -201,21 +211,21 @@ object DecimalPrecision extends TypeCoercionRule {
         case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
             l.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
+          b.withNewChildren(Seq(Cast(l, DataTypeUtils.fromLiteral(l)), r))
         case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
             r.dataType.isInstanceOf[IntegralType] &&
             literalPickMinimumPrecision =>
-          b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
+          b.withNewChildren(Seq(l, Cast(r, DataTypeUtils.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles
-        case (l @ IntegralType(), r @ DecimalType.Expression(_, _)) =>
-          b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
-        case (l @ DecimalType.Expression(_, _), r @ IntegralType()) =>
-          b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
-        case (l, r @ DecimalType.Expression(_, _)) if isFloat(l.dataType) =>
-          b.makeCopy(Array(l, Cast(r, DoubleType)))
-        case (l @ DecimalType.Expression(_, _), r) if isFloat(r.dataType) =>
-          b.makeCopy(Array(Cast(l, DoubleType), r))
+        case (l @ IntegralTypeExpression(), r @ DecimalExpression(_, _)) =>
+          b.withNewChildren(Seq(Cast(l, DecimalType.forType(l.dataType)), r))
+        case (l @ DecimalExpression(_, _), r @ IntegralTypeExpression()) =>
+          b.withNewChildren(Seq(l, Cast(r, DecimalType.forType(r.dataType))))
+        case (l, r @ DecimalExpression(_, _)) if isFloat(l.dataType) =>
+          b.withNewChildren(Seq(l, Cast(r, DoubleType)))
+        case (l @ DecimalExpression(_, _), r) if isFloat(r.dataType) =>
+          b.withNewChildren(Seq(Cast(l, DoubleType), r))
         case _ => b
       }
   }

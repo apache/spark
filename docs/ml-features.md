@@ -94,6 +94,15 @@ a feature vector.  We use `IDF` to rescale the feature vectors; this generally i
 when using text as features.  Our feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [HashingTF Python docs](api/python/reference/api/pyspark.ml.feature.HashingTF.html) and
+the [IDF Python docs](api/python/reference/api/pyspark.ml.feature.IDF.html) for more details on the API.
+
+{% include_example python/ml/tf_idf_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [HashingTF Scala docs](api/scala/org/apache/spark/ml/feature/HashingTF.html) and
@@ -110,13 +119,6 @@ Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingT
 {% include_example java/org/apache/spark/examples/ml/JavaTfIdfExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [HashingTF Python docs](api/python/reference/api/pyspark.ml.feature.HashingTF.html) and
-the [IDF Python docs](api/python/reference/api/pyspark.ml.feature.IDF.html) for more details on the API.
-
-{% include_example python/ml/tf_idf_example.py %}
-</div>
 </div>
 
 ## Word2Vec
@@ -133,6 +135,15 @@ details.
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Word2Vec Python docs](api/python/reference/api/pyspark.ml.feature.Word2Vec.html)
+for more details on the API.
+
+{% include_example python/ml/word2vec_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Word2Vec Scala docs](api/scala/org/apache/spark/ml/feature/Word2Vec.html)
@@ -149,13 +160,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaWord2VecExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Word2Vec Python docs](api/python/reference/api/pyspark.ml.feature.Word2Vec.html)
-for more details on the API.
-
-{% include_example python/ml/word2vec_example.py %}
-</div>
 </div>
 
 ## CountVectorizer
@@ -198,6 +202,16 @@ Then the output column "vector" after transformation contains:
 Each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [CountVectorizer Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizer.html)
+and the [CountVectorizerModel Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizerModel.html)
+for more details on the API.
+
+{% include_example python/ml/count_vectorizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [CountVectorizer Scala docs](api/scala/org/apache/spark/ml/feature/CountVectorizer.html)
@@ -216,14 +230,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [CountVectorizer Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizer.html)
-and the [CountVectorizerModel Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizerModel.html)
-for more details on the API.
-
-{% include_example python/ml/count_vectorizer_example.py %}
-</div>
 </div>
 
 ## FeatureHasher
@@ -284,6 +290,15 @@ real|bool |stringNum|string|features
 The resulting feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [FeatureHasher Python docs](api/python/reference/api/pyspark.ml.feature.FeatureHasher.html)
+for more details on the API.
+
+{% include_example python/ml/feature_hasher_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [FeatureHasher Scala docs](api/scala/org/apache/spark/ml/feature/FeatureHasher.html)
@@ -300,13 +315,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaFeatureHasherExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [FeatureHasher Python docs](api/python/reference/api/pyspark.ml.feature.FeatureHasher.html)
-for more details on the API.
-
-{% include_example python/ml/feature_hasher_example.py %}
-</div>
 </div>
 
 # Feature Transformers
@@ -324,6 +332,16 @@ for more details on the API.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Tokenizer Python docs](api/python/reference/api/pyspark.ml.feature.Tokenizer.html) and
+the [RegexTokenizer Python docs](api/python/reference/api/pyspark.ml.feature.RegexTokenizer.html)
+for more details on the API.
+
+{% include_example python/ml/tokenizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Tokenizer Scala docs](api/scala/org/apache/spark/ml/feature/Tokenizer.html)
@@ -342,14 +360,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaTokenizerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Tokenizer Python docs](api/python/reference/api/pyspark.ml.feature.Tokenizer.html) and
-the [RegexTokenizer Python docs](api/python/reference/api/pyspark.ml.feature.RegexTokenizer.html)
-for more details on the API.
-
-{% include_example python/ml/tokenizer_example.py %}
-</div>
 </div>
 
 ## StopWordsRemover
@@ -393,6 +403,14 @@ filtered out.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [StopWordsRemover Python docs](api/python/reference/api/pyspark.ml.feature.StopWordsRemover.html)
+for more details on the API.
+
+{% include_example python/ml/stopwords_remover_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [StopWordsRemover Scala docs](api/scala/org/apache/spark/ml/feature/StopWordsRemover.html)
@@ -409,13 +427,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaStopWordsRemoverExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [StopWordsRemover Python docs](api/python/reference/api/pyspark.ml.feature.StopWordsRemover.html)
-for more details on the API.
-
-{% include_example python/ml/stopwords_remover_example.py %}
-</div>
 </div>
 
 ## $n$-gram
@@ -427,6 +438,14 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [NGram Python docs](api/python/reference/api/pyspark.ml.feature.NGram.html)
+for more details on the API.
+
+{% include_example python/ml/n_gram_example.py %}
+</div>
 
 <div data-lang="scala" markdown="1">
 
@@ -444,13 +463,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaNGramExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [NGram Python docs](api/python/reference/api/pyspark.ml.feature.NGram.html)
-for more details on the API.
-
-{% include_example python/ml/n_gram_example.py %}
-</div>
 </div>
 
 
@@ -466,6 +478,15 @@ for `inputCol`.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Binarizer Python docs](api/python/reference/api/pyspark.ml.feature.Binarizer.html)
+for more details on the API.
+
+{% include_example python/ml/binarizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Binarizer Scala docs](api/scala/org/apache/spark/ml/feature/Binarizer.html)
@@ -482,13 +503,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaBinarizerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Binarizer Python docs](api/python/reference/api/pyspark.ml.feature.Binarizer.html)
-for more details on the API.
-
-{% include_example python/ml/binarizer_example.py %}
-</div>
 </div>
 
 ## PCA
@@ -498,6 +512,15 @@ for more details on the API.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [PCA Python docs](api/python/reference/api/pyspark.ml.feature.PCA.html)
+for more details on the API.
+
+{% include_example python/ml/pca_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [PCA Scala docs](api/scala/org/apache/spark/ml/feature/PCA.html)
@@ -514,13 +537,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaPCAExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [PCA Python docs](api/python/reference/api/pyspark.ml.feature.PCA.html)
-for more details on the API.
-
-{% include_example python/ml/pca_example.py %}
-</div>
 </div>
 
 ## PolynomialExpansion
@@ -530,6 +546,15 @@ for more details on the API.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [PolynomialExpansion Python docs](api/python/reference/api/pyspark.ml.feature.PolynomialExpansion.html)
+for more details on the API.
+
+{% include_example python/ml/polynomial_expansion_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [PolynomialExpansion Scala docs](api/scala/org/apache/spark/ml/feature/PolynomialExpansion.html)
@@ -546,13 +571,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaPolynomialExpansionExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [PolynomialExpansion Python docs](api/python/reference/api/pyspark.ml.feature.PolynomialExpansion.html)
-for more details on the API.
-
-{% include_example python/ml/polynomial_expansion_example.py %}
-</div>
 </div>
 
 ## Discrete Cosine Transform (DCT)
@@ -572,6 +590,15 @@ $0$th DCT coefficient and _not_ the $N/2$th).
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [DCT Python docs](api/python/reference/api/pyspark.ml.feature.DCT.html)
+for more details on the API.
+
+{% include_example python/ml/dct_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [DCT Scala docs](api/scala/org/apache/spark/ml/feature/DCT.html)
@@ -588,13 +615,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [DCT Python docs](api/python/reference/api/pyspark.ml.feature.DCT.html)
-for more details on the API.
-
-{% include_example python/ml/dct_example.py %}
-</div>
 </div>
 
 ## StringIndexer
@@ -702,6 +722,14 @@ Notice that the rows containing "d" or "e" are mapped to index "3.0"
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [StringIndexer Python docs](api/python/reference/api/pyspark.ml.feature.StringIndexer.html)
+for more details on the API.
+
+{% include_example python/ml/string_indexer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [StringIndexer Scala docs](api/scala/org/apache/spark/ml/feature/StringIndexer.html)
@@ -718,13 +746,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaStringIndexerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [StringIndexer Python docs](api/python/reference/api/pyspark.ml.feature.StringIndexer.html)
-for more details on the API.
-
-{% include_example python/ml/string_indexer_example.py %}
-</div>
 </div>
 
 
@@ -768,6 +789,16 @@ labels (they will be inferred from the columns' metadata):
 ~~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [IndexToString Python docs](api/python/reference/api/pyspark.ml.feature.IndexToString.html)
+for more details on the API.
+
+{% include_example python/ml/index_to_string_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [IndexToString Scala docs](api/scala/org/apache/spark/ml/feature/IndexToString.html)
@@ -786,14 +817,6 @@ for more details on the API.
 
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [IndexToString Python docs](api/python/reference/api/pyspark.ml.feature.IndexToString.html)
-for more details on the API.
-
-{% include_example python/ml/index_to_string_example.py %}
-
-</div>
 </div>
 
 ## OneHotEncoder
@@ -807,6 +830,14 @@ for more details on the API.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [OneHotEncoder Python docs](api/python/reference/api/pyspark.ml.feature.OneHotEncoder.html) for more details on the API.
+
+{% include_example python/ml/onehot_encoder_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [OneHotEncoder Scala docs](api/scala/org/apache/spark/ml/feature/OneHotEncoder.html) for more details on the API.
@@ -822,12 +853,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [OneHotEncoder Python docs](api/python/reference/api/pyspark.ml.feature.OneHotEncoder.html) for more details on the API.
-
-{% include_example python/ml/onehot_encoder_example.py %}
-</div>
 </div>
 
 ## VectorIndexer
@@ -847,6 +872,15 @@ Indexing categorical features allows algorithms such as Decision Trees and Tree 
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorIndexer Python docs](api/python/reference/api/pyspark.ml.feature.VectorIndexer.html)
+for more details on the API.
+
+{% include_example python/ml/vector_indexer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [VectorIndexer Scala docs](api/scala/org/apache/spark/ml/feature/VectorIndexer.html)
@@ -863,13 +897,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorIndexerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [VectorIndexer Python docs](api/python/reference/api/pyspark.ml.feature.VectorIndexer.html)
-for more details on the API.
-
-{% include_example python/ml/vector_indexer_example.py %}
-</div>
 </div>
 
 ## Interaction
@@ -908,6 +935,15 @@ then `interactedCol` as the output column contains:
 ~~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Interaction Python docs](api/python/reference/api/pyspark.ml.feature.Interaction.html)
+for more details on the API.
+
+{% include_example python/ml/interaction_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Interaction Scala docs](api/scala/org/apache/spark/ml/feature/Interaction.html)
@@ -924,13 +960,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Interaction Python docs](api/python/reference/api/pyspark.ml.feature.Interaction.html)
-for more details on the API.
-
-{% include_example python/ml/interaction_example.py %}
-</div>
 </div>
 
 ## Normalizer
@@ -942,6 +971,15 @@ for more details on the API.
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^1$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Normalizer Python docs](api/python/reference/api/pyspark.ml.feature.Normalizer.html)
+for more details on the API.
+
+{% include_example python/ml/normalizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Normalizer Scala docs](api/scala/org/apache/spark/ml/feature/Normalizer.html)
@@ -958,13 +996,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaNormalizerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Normalizer Python docs](api/python/reference/api/pyspark.ml.feature.Normalizer.html)
-for more details on the API.
-
-{% include_example python/ml/normalizer_example.py %}
-</div>
 </div>
 
 
@@ -984,6 +1015,15 @@ Note that if the standard deviation of a feature is zero, it will return default
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [StandardScaler Python docs](api/python/reference/api/pyspark.ml.feature.StandardScaler.html)
+for more details on the API.
+
+{% include_example python/ml/standard_scaler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [StandardScaler Scala docs](api/scala/org/apache/spark/ml/feature/StandardScaler.html)
@@ -1000,13 +1040,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaStandardScalerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [StandardScaler Python docs](api/python/reference/api/pyspark.ml.feature.StandardScaler.html)
-for more details on the API.
-
-{% include_example python/ml/standard_scaler_example.py %}
-</div>
 </div>
 
 
@@ -1028,6 +1061,15 @@ Note that if the quantile range of a feature is zero, it will return default `0.
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit quantile range.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [RobustScaler Python docs](api/python/reference/api/pyspark.ml.feature.RobustScaler.html)
+for more details on the API.
+
+{% include_example python/ml/robust_scaler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [RobustScaler Scala docs](api/scala/org/apache/spark/ml/feature/RobustScaler.html)
@@ -1044,13 +1086,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaRobustScalerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [RobustScaler Python docs](api/python/reference/api/pyspark.ml.feature.RobustScaler.html)
-for more details on the API.
-
-{% include_example python/ml/robust_scaler_example.py %}
-</div>
 </div>
 
 
@@ -1076,6 +1111,16 @@ Note that since zero values will probably be transformed to non-zero values, out
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinMaxScaler Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScaler.html)
+and the [MinMaxScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScalerModel.html)
+for more details on the API.
+
+{% include_example python/ml/min_max_scaler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [MinMaxScaler Scala docs](api/scala/org/apache/spark/ml/feature/MinMaxScaler.html)
@@ -1094,14 +1139,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [MinMaxScaler Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScaler.html)
-and the [MinMaxScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScalerModel.html)
-for more details on the API.
-
-{% include_example python/ml/min_max_scaler_example.py %}
-</div>
 </div>
 
 
@@ -1119,6 +1156,16 @@ model can then transform each feature individually to range [-1, 1].
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MaxAbsScaler Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScaler.html)
+and the [MaxAbsScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScalerModel.html)
+for more details on the API.
+
+{% include_example python/ml/max_abs_scaler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [MaxAbsScaler Scala docs](api/scala/org/apache/spark/ml/feature/MaxAbsScaler.html)
@@ -1137,14 +1184,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [MaxAbsScaler Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScaler.html)
-and the [MaxAbsScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScalerModel.html)
-for more details on the API.
-
-{% include_example python/ml/max_abs_scaler_example.py %}
-</div>
 </div>
 
 ## Bucketizer
@@ -1164,6 +1203,15 @@ More details can be found in the API docs for [Bucketizer](api/scala/org/apache/
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Bucketizer Python docs](api/python/reference/api/pyspark.ml.feature.Bucketizer.html)
+for more details on the API.
+
+{% include_example python/ml/bucketizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Bucketizer Scala docs](api/scala/org/apache/spark/ml/feature/Bucketizer.html)
@@ -1180,13 +1228,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaBucketizerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Bucketizer Python docs](api/python/reference/api/pyspark.ml.feature.Bucketizer.html)
-for more details on the API.
-
-{% include_example python/ml/bucketizer_example.py %}
-</div>
 </div>
 
 ## ElementwiseProduct
@@ -1214,6 +1255,15 @@ v_N
 This example below demonstrates how to transform vectors using a transforming vector value.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [ElementwiseProduct Python docs](api/python/reference/api/pyspark.ml.feature.ElementwiseProduct.html)
+for more details on the API.
+
+{% include_example python/ml/elementwise_product_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [ElementwiseProduct Scala docs](api/scala/org/apache/spark/ml/feature/ElementwiseProduct.html)
@@ -1230,13 +1280,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaElementwiseProductExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [ElementwiseProduct Python docs](api/python/reference/api/pyspark.ml.feature.ElementwiseProduct.html)
-for more details on the API.
-
-{% include_example python/ml/elementwise_product_example.py %}
-</div>
 </div>
 
 ## SQLTransformer
@@ -1274,6 +1317,14 @@ This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) 
 ~~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [SQLTransformer Python docs](api/python/reference/api/pyspark.ml.feature.SQLTransformer.html) for more details on the API.
+
+{% include_example python/ml/sql_transformer.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [SQLTransformer Scala docs](api/scala/org/apache/spark/ml/feature/SQLTransformer.html)
@@ -1290,12 +1341,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaSQLTransformerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [SQLTransformer Python docs](api/python/reference/api/pyspark.ml.feature.SQLTransformer.html) for more details on the API.
-
-{% include_example python/ml/sql_transformer.py %}
-</div>
 </div>
 
 ## VectorAssembler
@@ -1334,6 +1379,15 @@ output column to `features`, after transformation we should get the following Da
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorAssembler Python docs](api/python/reference/api/pyspark.ml.feature.VectorAssembler.html)
+for more details on the API.
+
+{% include_example python/ml/vector_assembler_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [VectorAssembler Scala docs](api/scala/org/apache/spark/ml/feature/VectorAssembler.html)
@@ -1350,13 +1404,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorAssemblerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [VectorAssembler Python docs](api/python/reference/api/pyspark.ml.feature.VectorAssembler.html)
-for more details on the API.
-
-{% include_example python/ml/vector_assembler_example.py %}
-</div>
 </div>
 
 ## VectorSizeHint
@@ -1385,6 +1432,15 @@ resulting dataframe to be in an inconsistent state, meaning the metadata for the
 to avoid this kind of inconsistent state.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSizeHint Python docs](api/python/reference/api/pyspark.ml.feature.VectorSizeHint.html)
+for more details on the API.
+
+{% include_example python/ml/vector_size_hint_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [VectorSizeHint Scala docs](api/scala/org/apache/spark/ml/feature/VectorSizeHint.html)
@@ -1401,13 +1457,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSizeHintExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [VectorSizeHint Python docs](api/python/reference/api/pyspark.ml.feature.VectorSizeHint.html)
-for more details on the API.
-
-{% include_example python/ml/vector_size_hint_example.py %}
-</div>
 </div>
 
 ## QuantileDiscretizer
@@ -1468,6 +1517,15 @@ a categorical one. Given `numBuckets = 3`, we should get the following DataFrame
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileDiscretizer Python docs](api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example python/ml/quantile_discretizer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [QuantileDiscretizer Scala docs](api/scala/org/apache/spark/ml/feature/QuantileDiscretizer.html)
@@ -1482,14 +1540,6 @@ Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/featur
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [QuantileDiscretizer Python docs](api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html)
-for more details on the API.
-
-{% include_example python/ml/quantile_discretizer_example.py %}
 </div>
 
 </div>
@@ -1537,6 +1587,15 @@ the relevant column.
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Imputer Python docs](api/python/reference/api/pyspark.ml.feature.Imputer.html)
+for more details on the API.
+
+{% include_example python/ml/imputer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Imputer Scala docs](api/scala/org/apache/spark/ml/feature/Imputer.html)
@@ -1553,13 +1612,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaImputerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Imputer Python docs](api/python/reference/api/pyspark.ml.feature.Imputer.html)
-for more details on the API.
-
-{% include_example python/ml/imputer_example.py %}
-</div>
 </div>
 
 # Feature Selectors
@@ -1618,6 +1670,15 @@ Suppose also that we have potential input attributes for the `userFeatures`, i.e
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSlicer Python docs](api/python/reference/api/pyspark.ml.feature.VectorSlicer.html)
+for more details on the API.
+
+{% include_example python/ml/vector_slicer_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [VectorSlicer Scala docs](api/scala/org/apache/spark/ml/feature/VectorSlicer.html)
@@ -1634,13 +1695,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [VectorSlicer Python docs](api/python/reference/api/pyspark.ml.feature.VectorSlicer.html)
-for more details on the API.
-
-{% include_example python/ml/vector_slicer_example.py %}
-</div>
 </div>
 
 ## RFormula
@@ -1704,6 +1758,15 @@ id | country | hour | clicked | features         | label
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [RFormula Python docs](api/python/reference/api/pyspark.ml.feature.RFormula.html)
+for more details on the API.
+
+{% include_example python/ml/rformula_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [RFormula Scala docs](api/scala/org/apache/spark/ml/feature/RFormula.html)
@@ -1720,13 +1783,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaRFormulaExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [RFormula Python docs](api/python/reference/api/pyspark.ml.feature.RFormula.html)
-for more details on the API.
-
-{% include_example python/ml/rformula_example.py %}
-</div>
 </div>
 
 ## ChiSqSelector
@@ -1768,6 +1824,15 @@ id | features              | clicked | selectedFeatures
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [ChiSqSelector Python docs](api/python/reference/api/pyspark.ml.feature.ChiSqSelector.html)
+for more details on the API.
+
+{% include_example python/ml/chisq_selector_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [ChiSqSelector Scala docs](api/scala/org/apache/spark/ml/feature/ChiSqSelector.html)
@@ -1784,13 +1849,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaChiSqSelectorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [ChiSqSelector Python docs](api/python/reference/api/pyspark.ml.feature.ChiSqSelector.html)
-for more details on the API.
-
-{% include_example python/ml/chisq_selector_example.py %}
-</div>
 </div>
 
 ## UnivariateFeatureSelector
@@ -1847,6 +1905,15 @@ id | features                       | label   | selectedFeatures
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [UnivariateFeatureSelector Python docs](api/python/reference/api/pyspark.ml.feature.UnivariateFeatureSelector.html)
+for more details on the API.
+
+{% include_example python/ml/univariate_feature_selector_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [UnivariateFeatureSelector Scala docs](api/scala/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
@@ -1863,13 +1930,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaUnivariateFeatureSelectorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [UnivariateFeatureSelector Python docs](api/python/reference/api/pyspark.ml.feature.UnivariateFeatureSelector.html)
-for more details on the API.
-
-{% include_example python/ml/univariate_feature_selector_example.py %}
-</div>
 </div>
 
 ## VarianceThresholdSelector
@@ -1911,6 +1971,15 @@ id | features                       | selectedFeatures
 ~~~
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VarianceThresholdSelector Python docs](api/python/reference/api/pyspark.ml.feature.VarianceThresholdSelector.html)
+for more details on the API.
+
+{% include_example python/ml/variance_threshold_selector_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [VarianceThresholdSelector Scala docs](api/scala/org/apache/spark/ml/feature/VarianceThresholdSelector.html)
@@ -1927,13 +1996,6 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaVarianceThresholdSelectorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [VarianceThresholdSelector Python docs](api/python/reference/api/pyspark.ml.feature.VarianceThresholdSelector.html)
-for more details on the API.
-
-{% include_example python/ml/variance_threshold_selector_example.py %}
-</div>
 </div>
 
 # Locality Sensitive Hashing
@@ -1997,6 +2059,15 @@ where `r` is a user-defined bucket length. The bucket length can be used to cont
 Bucketed Random Projection accepts arbitrary vectors as input features, and supports both sparse and dense vectors.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Python docs](api/python/reference/api/pyspark.ml.feature.BucketedRandomProjectionLSH.html)
+for more details on the API.
+
+{% include_example python/ml/bucketed_random_projection_lsh_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [BucketedRandomProjectionLSH Scala docs](api/scala/org/apache/spark/ml/feature/BucketedRandomProjectionLSH.html)
@@ -2011,14 +2082,6 @@ Refer to the [BucketedRandomProjectionLSH Java docs](api/java/org/apache/spark/m
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [BucketedRandomProjectionLSH Python docs](api/python/reference/api/pyspark.ml.feature.BucketedRandomProjectionLSH.html)
-for more details on the API.
-
-{% include_example python/ml/bucketed_random_projection_lsh_example.py %}
 </div>
 
 </div>
@@ -2038,6 +2101,15 @@ The input sets for MinHash are represented as binary vectors, where the vector i
 **Note:** Empty sets cannot be transformed by MinHash, which means any input vector must have at least 1 non-zero entry.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinHashLSH Python docs](api/python/reference/api/pyspark.ml.feature.MinHashLSH.html)
+for more details on the API.
+
+{% include_example python/ml/min_hash_lsh_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [MinHashLSH Scala docs](api/scala/org/apache/spark/ml/feature/MinHashLSH.html)
@@ -2054,11 +2126,4 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [MinHashLSH Python docs](api/python/reference/api/pyspark.ml.feature.MinHashLSH.html)
-for more details on the API.
-
-{% include_example python/ml/min_hash_lsh_example.py %}
-</div>
 </div>

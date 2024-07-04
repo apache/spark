@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer.ConsumerConfig._
@@ -123,8 +123,8 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar {
     @volatile var error: Throwable = null
 
     def consume(i: Int): Unit = {
-      val useCache = Random.nextBoolean
-      val taskContext = if (Random.nextBoolean) {
+      val useCache = Random.nextBoolean()
+      val taskContext = if (Random.nextBoolean()) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), 1, null, null, null)
       } else {
         null

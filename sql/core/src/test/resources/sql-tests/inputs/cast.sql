@@ -146,3 +146,34 @@ select cast(10.123456BD as interval day to second);
 select cast(80.654321BD as interval hour to minute);
 select cast(-10.123456BD as interval year to month);
 select cast(10.654321BD as interval month);
+
+-- cast double colon syntax tests
+SELECT '1.23' :: int;
+SELECT 'abc' :: int;
+SELECT '12345678901234567890123' :: long;
+SELECT '' :: int;
+SELECT NULL :: int;
+SELECT '123.a' :: int;
+SELECT '-2147483648' :: int;
+SELECT HEX('abc' :: binary);
+SELECT HEX((123 :: byte) :: binary);
+SELECT 'interval 3 month 1 hour' :: interval;
+SELECT interval 3 day 1 second :: string;
+select ' 1 ' :: DOUBLE;
+select '1.0 ' :: DEC;
+select '\t\t true \n\r ' :: boolean;
+select '2022-01-01 00:00:00' :: timestamp;
+select interval '-10-2' year to month :: smallint;
+select -10L :: interval second;
+select interval '08:11:10.001' hour to second :: decimal(10, 4);
+select 10.123456BD :: interval day to second;
+
+SELECT '1.23' :: int :: long;
+SELECT '2147483648' :: long :: int;
+SELECT CAST('2147483648' :: long AS int);
+SELECT map(1, '123', 2, '456')[1] :: int;
+
+-- cast double colon syntax negative tests
+SELECT '2147483648' :: BINT;
+SELECT '2147483648' :: SELECT;
+SELECT FALSE IS NOT NULL :: string;

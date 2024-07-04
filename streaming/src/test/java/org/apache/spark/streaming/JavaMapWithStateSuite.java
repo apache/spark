@@ -29,8 +29,8 @@ import scala.Tuple2;
 import com.google.common.collect.Sets;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.util.ManualClock;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -161,7 +161,7 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
         .advance(ssc.ssc().progressListener().batchDuration() * numBatches + 1);
     batchCounter.waitUntilBatchesCompleted(numBatches, 10000);
 
-    Assert.assertEquals(expectedOutputs, collectedOutputs);
-    Assert.assertEquals(expectedStateSnapshots, collectedStateSnapshots);
+    Assertions.assertEquals(expectedOutputs, collectedOutputs);
+    Assertions.assertEquals(expectedStateSnapshots, collectedStateSnapshots);
   }
 }

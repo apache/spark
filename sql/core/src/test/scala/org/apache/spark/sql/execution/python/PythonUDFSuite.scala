@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.functions.{array, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 class PythonUDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   import IntegratedUDFTestUtils._
 
-  val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
-  val pythonTestUDF = TestPythonUDF(name = "pyUDF")
+  val scalaTestUDF = TestScalaUDF(name = "scalaUDF", Some(LongType))
+  val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(LongType))
 
   lazy val base = Seq(
     (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
@@ -97,10 +98,30 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     df.count()
 
     val statusStore = spark.sharedState.statusStore
-    val lastExecId = statusStore.executionsList.last.executionId
+    val lastExecId = statusStore.executionsList().last.executionId
     val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
     for (metric <- pythonSQLMetrics) {
       assert(executionMetrics.contains(metric))
     }
+  }
+
+  test("PythonUDAF pretty name") {
+    assume(shouldTestPandasUDFs)
+    val udfName = "pandas_udf"
+    val df = spark.range(1)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
+    assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+      },
+      errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+      parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
+      context = ExpectedContext(
+        "transform", s".*${this.getClass.getSimpleName}.*"))
   }
 }

@@ -21,9 +21,11 @@ import java.io.OutputStream
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{Clock, SystemClock}
 
 /**
@@ -90,9 +92,7 @@ class AsyncOffsetSeqLog(
         if (ret) {
           batchId
         } else {
-          throw new IllegalStateException(
-            s"Concurrent update to the log. Multiple streaming jobs detected for $batchId"
-          )
+          throw QueryExecutionErrors.concurrentStreamLogUpdate(batchId)
         }
       })
       pendingOffsetWrites.put(batchId, future)
@@ -128,7 +128,7 @@ class AsyncOffsetSeqLog(
    * @param batchId id of batch to write
    * @param fn serialization function
    * @return CompletableFuture that contains a boolean do
-   *         indicate whether the write was successfuly or not.
+   *         indicate whether the write was successfully or not.
    *         Future can also be completed exceptionally to indicate write errors.
    */
   private def addNewBatchByStreamAsync(batchId: Long)(
@@ -160,7 +160,8 @@ class AsyncOffsetSeqLog(
             }
           } catch {
             case e: Throwable =>
-              logError(s"Encountered error while writing batch ${batchId} to offset log", e)
+              logError(log"Encountered error while writing batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} to offset log", e)
               future.completeExceptionally(e)
           }
         }

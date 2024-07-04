@@ -22,11 +22,11 @@ FWDIR="$( cd "$DIR"/.. && pwd )"
 cd "$FWDIR"
 
 BLACK_BUILD="${PYTHON_EXECUTABLE} -m black"
-BLACK_VERSION="22.6.0"
+BLACK_VERSION="23.9.1"
 $PYTHON_EXECUTABLE -c 'import black' 2> /dev/null
 if [ $? -ne 0 ]; then
     echo "The Python library providing the 'black' module was not found. Please install Black, for example, via 'pip install black==$BLACK_VERSION'."
     exit 1
 fi
 
-$BLACK_BUILD --config dev/pyproject.toml python/pyspark dev python/setup.py
+$BLACK_BUILD --config dev/pyproject.toml python/pyspark dev python/packaging

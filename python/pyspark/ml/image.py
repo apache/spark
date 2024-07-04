@@ -28,9 +28,7 @@ import sys
 from typing import Any, Dict, List, NoReturn, Optional, cast
 
 import numpy as np
-from distutils.version import LooseVersion
 
-from pyspark import SparkContext
 from pyspark.sql.types import Row, StructType, _create_row, _parse_datatype_json_string
 from pyspark.sql import SparkSession
 
@@ -64,6 +62,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._imageSchema is None:
             ctx = SparkContext._active_spark_context
@@ -84,6 +83,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
@@ -104,6 +104,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.4.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._columnSchema is None:
             ctx = SparkContext._active_spark_context
@@ -124,6 +125,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._imageFields is None:
             ctx = SparkContext._active_spark_context
@@ -138,6 +140,7 @@ class _ImageSchema:
 
         .. versionadded:: 2.3.0
         """
+        from pyspark.core.context import SparkContext
 
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context
@@ -225,14 +228,7 @@ class _ImageSchema:
         else:
             raise ValueError("Invalid number of channels")
 
-        # Running `bytearray(numpy.array([1]))` fails in specific Python versions
-        # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
-        # Here, it avoids it by converting it to bytes.
-        if LooseVersion(np.__version__) >= LooseVersion("1.9"):
-            data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
-        else:
-            # Numpy prior to 1.9 don't have `tobytes` method.
-            data = bytearray(array.astype(dtype=np.uint8).ravel())
+        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order

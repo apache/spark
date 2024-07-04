@@ -30,10 +30,11 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
@@ -55,7 +56,7 @@ object MemoryStream {
  */
 abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
   val encoder = encoderFor[A]
-  protected val attributes = encoder.schema.toAttributes
+  protected val attributes = toAttributes(encoder.schema)
 
   protected lazy val toRow: ExpressionEncoder.Serializer[A] = encoder.createSerializer()
 
@@ -68,10 +69,10 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
   }
 
   def addData(data: A*): OffsetV2 = {
-    addData(data.toTraversable)
+    addData(data)
   }
 
-  def addData(data: TraversableOnce[A]): OffsetV2
+  def addData(data: IterableOnce[A]): OffsetV2
 
   def fullSchema(): StructType = encoder.schema
 
@@ -138,6 +139,9 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
     stream.asInstanceOf[ContinuousStream]
   }
+
+  override def columnarSupportMode(): Scan.ColumnarSupportMode =
+    Scan.ColumnarSupportMode.UNSUPPORTED
 }
 
 /**
@@ -151,7 +155,10 @@ case class MemoryStream[A : Encoder](
     id: Int,
     sqlContext: SQLContext,
     numPartitions: Option[Int] = None)
-  extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
+  extends MemoryStreamBase[A](sqlContext)
+  with MicroBatchStream
+  with SupportsTriggerAvailableNow
+  with Logging {
 
   protected val output = logicalPlan.output
 
@@ -171,6 +178,9 @@ case class MemoryStream[A : Encoder](
   @GuardedBy("this")
   private var endOffset = new LongOffset(-1)
 
+  @GuardedBy("this")
+  private var availableNowEndOffset: OffsetV2 = _
+
   /**
    * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
    * -1 is used in calculations below and isn't just an arbitrary constant.
@@ -178,8 +188,8 @@ case class MemoryStream[A : Encoder](
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
-  def addData(data: TraversableOnce[A]): Offset = {
-    val objects = data.toSeq
+  def addData(data: IterableOnce[A]): Offset = {
+    val objects = data.iterator.to(Seq)
     val rows = objects.iterator.map(d => toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
     logDebug(s"Adding: $objects")
     this.synchronized {
@@ -197,7 +207,15 @@ case class MemoryStream[A : Encoder](
 
   override def initialOffset: OffsetV2 = LongOffset(-1)
 
+  override def prepareForTriggerAvailableNow(): Unit = synchronized {
+    availableNowEndOffset = latestOffset(initialOffset, ReadLimit.allAvailable())
+  }
+
   override def latestOffset(): OffsetV2 = {
+    throw new IllegalStateException("Should not reach here!")
+  }
+
+  override def latestOffset(startOffset: OffsetV2, limit: ReadLimit): OffsetV2 = {
     if (currentOffset.offset == -1) null else currentOffset
   }
 
@@ -261,7 +279,7 @@ case class MemoryStream[A : Encoder](
         s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
-    batches.trimStart(offsetDiff)
+    batches.dropInPlace(offsetDiff)
     lastOffsetCommitted = newOffset
   }
 
@@ -273,6 +291,7 @@ case class MemoryStream[A : Encoder](
     endOffset = LongOffset(-1)
     currentOffset = new LongOffset(-1)
     lastOffsetCommitted = new LongOffset(-1)
+    availableNowEndOffset = null
   }
 }
 

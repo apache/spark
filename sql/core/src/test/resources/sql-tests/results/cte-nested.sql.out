@@ -34,6 +34,28 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT (
+  WITH unreferenced AS (SELECT id)
+  SELECT 1
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery(id):int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  WITH unreferenced AS (SELECT 1)
+  SELECT id
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery(id):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))
@@ -44,7 +66,7 @@ SELECT * FROM cte
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -70,16 +92,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+2
 
 
 -- !query
@@ -113,16 +128,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<>
+struct<3:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+3
 
 
 -- !query
@@ -173,16 +181,9 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+2
 
 
 -- !query
@@ -194,16 +195,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+2
 
 
 -- !query
@@ -216,16 +210,9 @@ SELECT (
   )
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+3
 
 
 -- !query
@@ -236,16 +223,9 @@ WHERE c IN (
   SELECT * FROM t
 )
 -- !query schema
-struct<>
+struct<c:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "t"
-  }
-}
+
 
 
 -- !query
@@ -271,16 +251,9 @@ WITH
   )
 SELECT * FROM t
 -- !query schema
-struct<>
+struct<2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "aBc"
-  }
-}
+2
 
 
 -- !query
@@ -290,16 +263,9 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query schema
-struct<>
+struct<scalarsubquery():int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1200",
-  "messageParameters" : {
-    "config" : "spark.sql.legacy.ctePrecedencePolicy",
-    "name" : "aBc"
-  }
-}
+2
 
 
 -- !query
@@ -371,7 +337,7 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -406,7 +372,7 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetStructField, InSubquery, LambdaFunction, LateralSubquery, ListQuery, OuterReference, ScalarSubquery, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -47,19 +47,6 @@ class ResolveSubquerySuite extends AnalysisTest {
       joinType: JoinType = Inner,
       condition: Option[Expression] = None): LateralJoin =
     LateralJoin(left, LateralSubquery(right), joinType, condition)
-
-  test("SPARK-17251 Improve `OuterReference` to be `NamedExpression`") {
-    val expr = Filter(
-      InSubquery(Seq(a), ListQuery(Project(Seq(UnresolvedAttribute("a")), t2))), t1)
-    checkError(
-      exception = intercept[AnalysisException] {
-        SimpleAnalyzer.checkAnalysis(SimpleAnalyzer.ResolveSubquery(expr))
-      },
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
-      parameters = Map("sqlExprs" -> "\"a\""),
-      matchPVals = true
-    )
-  }
 
   test("SPARK-29145 Support subquery in join condition") {
     val expr = Join(t1,
@@ -187,7 +174,11 @@ class ResolveSubquerySuite extends AnalysisTest {
   test("lateral join with unsupported expressions") {
     val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
       condition = Some(sum($"a") === sum($"c")))
-    assertAnalysisError(plan, Seq("Invalid expressions: [sum(a), sum(c)]"))
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
+    )
   }
 
   test("SPARK-35618: lateral join with star expansion") {
@@ -215,14 +206,19 @@ class ResolveSubquerySuite extends AnalysisTest {
         LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)), Inner, None)
     )
     // SELECT * FROM t1, LATERAL (SELECT t2.*)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(star("t2"))),
-      Seq("cannot resolve 't2.*' given input columns ''")
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`t2`", "columns" -> "")
     )
     // Check case sensitivities.
     // SELECT * FROM t1, LATERAL (SELECT T1.*)
     val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
-    assertAnalysisError(plan, "cannot resolve 'T1.*' given input columns ''" :: Nil)
+    assertAnalysisErrorClass(
+      plan,
+      expectedErrorClass = "CANNOT_RESOLVE_STAR_EXPAND",
+      expectedMessageParameters = Map("targetString" -> "`T1`", "columns" -> "")
+    )
     assertAnalysisSuccess(plan, caseSensitive = false)
   }
 
@@ -236,10 +232,10 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t1,
         LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
     )
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
-      Seq("Invalid usage of '*' in expression 'count'")
-    )
+      expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `count`"))
   }
 
   test("SPARK-35618: lateral join with struct type star expansion") {
@@ -274,5 +270,33 @@ class ResolveSubquerySuite extends AnalysisTest {
         CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0
       ), Seq(a, b)).as("sub") :: Nil, t1)
     )
+  }
+
+  test("SPARK-47509: Incorrect results for subquery expressions in LambdaFunctions") {
+    val data = LocalRelation(Seq(
+      $"key".int,
+      $"values1".array(IntegerType),
+      $"values2".array(ArrayType(ArrayType(IntegerType)))))
+
+    def plan(e: Expression): LogicalPlan = data.select(e.as("res"))
+
+    def lv(s: Symbol): UnresolvedNamedLambdaVariable =
+      UnresolvedNamedLambdaVariable(Seq(s.name))
+
+    val lambdaPlanScanFromTable: LogicalPlan = plan(
+      LambdaFunction(
+        function = lv(Symbol("x")) + lv(Symbol("X")),
+        arguments = Alias(
+          child = ScalarSubquery(
+            plan(lv(Symbol("x")))),
+          name = "alias")()
+          :: lv(Symbol("X"))
+          :: Nil))
+
+    assertAnalysisErrorClass(
+      inputPlan = lambdaPlanScanFromTable,
+      expectedErrorClass =
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
+      expectedMessageParameters = Map.empty[String, String])
   }
 }

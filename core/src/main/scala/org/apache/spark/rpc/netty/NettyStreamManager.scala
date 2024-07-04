@@ -43,6 +43,10 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   private val jars = new ConcurrentHashMap[String, File]()
   private val dirs = new ConcurrentHashMap[String, File]()
 
+  override def removeFile(key: String): Unit = files.remove(key)
+
+  override def removeJar(key: String): Unit = jars.remove(key)
+
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
   }
@@ -90,4 +94,9 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
 
+  override def addDirectoryIfAbsent(baseUri: String, path: File): String = {
+    val fixedBaseUri = validateDirectoryUri(baseUri)
+    dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path.getCanonicalFile)
+    s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
+  }
 }

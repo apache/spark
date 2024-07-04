@@ -714,11 +714,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
   "messageParameters" : {
-    "argName" : "field",
-    "funcName" : "date_part",
-    "requiredType" : "string"
+    "funcName" : "`date_part`",
+    "paramName" : "`field`",
+    "paramType" : "\"STRING\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -745,11 +746,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1100",
+  "errorClass" : "NON_FOLDABLE_ARGUMENT",
+  "sqlState" : "42K08",
   "messageParameters" : {
-    "argName" : "field",
-    "funcName" : "date_part",
-    "requiredType" : "string"
+    "funcName" : "`date_part`",
+    "paramName" : "`field`",
+    "paramType" : "\"STRING\""
   },
   "queryContext" : [ {
     "objectType" : "",

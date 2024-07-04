@@ -69,7 +69,7 @@ class StandaloneDynamicAllocationSuite
     workers = makeWorkers(10, 2048)
     // Wait until all workers register with master successfully
     eventually(timeout(1.minute), interval(10.milliseconds)) {
-      assert(getMasterState.workers.size === numWorkers)
+      assert(getMasterState.workers.length === numWorkers)
     }
   }
 
@@ -93,7 +93,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
@@ -140,7 +140,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.executors.values.map(_.cores).toArray === Array(4, 4))
@@ -195,7 +195,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.executors.values.map(_.cores).toArray === Array(8, 8))
@@ -248,7 +248,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 10) // 20 cores total
       assert(apps.head.getExecutorLimit === Int.MaxValue)
@@ -302,7 +302,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 4) // 8 cores total
       assert(apps.head.getExecutorLimit === Int.MaxValue)
@@ -360,7 +360,7 @@ class StandaloneDynamicAllocationSuite
     sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === 2)
@@ -385,7 +385,7 @@ class StandaloneDynamicAllocationSuite
     sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === 2)
@@ -425,7 +425,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
@@ -465,7 +465,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === initialExecutorLimit)
       assert(apps.head.getExecutorLimit === initialExecutorLimit)
@@ -477,7 +477,7 @@ class StandaloneDynamicAllocationSuite
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
-      assert(apps.size === 1)
+      assert(apps.length === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
@@ -571,7 +571,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   /** Get the applications that are active from Master */
-  private def getApplications(): Seq[ApplicationInfo] = {
+  private def getApplications(): Array[ApplicationInfo] = {
     getMasterState.activeApps
   }
 

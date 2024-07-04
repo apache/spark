@@ -73,25 +73,25 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate to orderBy clause") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), "str".as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .orderBy($"x".asc, SortOrder(Year(CurrentDate()), Ascending), $"b".desc).analyze
+      .select($"a".as("x"), "str".as("y"), $"b")
+      .orderBy($"x".asc, SortOrder("str", Ascending), $"b".desc).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Propagate to groupBy clause") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
       .groupBy($"x", $"y", $"b")(sum($"x"), avg($"y").as("AVG"), count($"b"))
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"),
-        avg(Year(CurrentDate())).as("AVG"),
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
+        avg(Literal(42)).as("AVG"),
         count($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -99,16 +99,16 @@ class FoldablePropagationSuite extends PlanTest {
 
   test("Propagate in a complex query") {
     val query = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
       .where($"x" > 1 && $"y" === 2016 && $"b" > 1)
       .groupBy($"x", $"y", $"b")(sum($"x"), avg($"y").as("AVG"), count($"b"))
       .orderBy($"x".asc, $"AVG".asc)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
-      .select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
-      .where($"x" > 1 && Year(CurrentDate()).as("y") === 2016 && $"b" > 1)
-      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"),
-        avg(Year(CurrentDate())).as("AVG"),
+      .select($"a".as("x"), Literal(42).as("y"), $"b")
+      .where($"x" > 1 && Literal(42).as("y") === 2016 && $"b" > 1)
+      .groupBy($"x", Literal(42).as("y"), $"b")(sum($"x"),
+        avg(Literal(42)).as("AVG"),
         count($"b"))
       .orderBy($"x".asc, $"AVG".asc).analyze
 
@@ -213,5 +213,16 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(plan)
     val expected = testRelation.select(foldableAttr, $"a").rebalance(foldableAttr, $"a").analyze
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-48419: Foldable propagation replace foldable column should use origin column name") {
+    val query = testRelation
+      .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
+      .select($"x", $"y", $"z")
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .select($"a".as("x"), "str".as("Y"), $"b".as("z"))
+      .select($"x", "str".as("y"), $"z").analyze
+    comparePlans(optimized, correctAnswer)
   }
 }

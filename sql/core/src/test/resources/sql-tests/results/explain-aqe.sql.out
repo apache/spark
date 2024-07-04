@@ -55,7 +55,7 @@ EXPLAIN EXTENDED
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'Project [unresolvedalias('sum(distinct 'val), None)]
+'Project [unresolvedalias('sum(distinct 'val))]
 +- 'UnresolvedRelation [explain_temp1], [], false
 
 == Analyzed Logical Plan ==
@@ -398,7 +398,7 @@ AdaptiveSparkPlan (3)
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
-PushedFilters: [IsNotNull(key), IsNotNull(val), GreaterThan(val,3)]
+PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(key,ScalarSubquery#x), GreaterThan(val,3)]
 ReadSchema: struct<key:int,val:int>
 
 (2) Filter
@@ -425,7 +425,7 @@ AdaptiveSparkPlan (10)
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp2]
-PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(val,2)]
+PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(key,ScalarSubquery#x), EqualTo(val,2)]
 ReadSchema: struct<key:int,val:int>
 
 (5) Filter
@@ -504,6 +504,45 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 (17) AdaptiveSparkPlan
 Output [1]: [max(key)#x]
 Arguments: isFinalPlan=false
+
+Subquery:3 Hosting operator id = 4 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
+
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet spark_catalog.default.explain_temp2 (4)
+
+
+Subquery:5 Hosting operator id = 5 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
+
+
+Subquery:6 Hosting operator id = 4 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
 
 
 -- !query
@@ -635,6 +674,25 @@ Results [1]: [avg(key#x)#x AS avg(key)#x]
 (17) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
+
+Subquery:3 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet spark_catalog.default.explain_temp2 (4)
+
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet spark_catalog.default.explain_temp3 (11)
 
 
 -- !query
@@ -917,7 +975,7 @@ Execute CreateViewCommand (1)
 Output: []
 
 (2) CreateViewCommand
-Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
+Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, COMPENSATION, true
 
 (3) LogicalRelation
 Arguments: parquet, [key#x, val#x], `spark_catalog`.`default`.`explain_temp1`, false
@@ -1081,7 +1139,7 @@ EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false
+'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, false
 +- 'Project [*]
    +- 'UnresolvedRelation [explain_temp4], [], false
 

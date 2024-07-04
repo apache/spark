@@ -3300,7 +3300,7 @@ select * from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
@@ -3333,13 +3333,13 @@ select udf(t1.uunique1) from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t1`.`uunique1`",
-    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`hundred`"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`four`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3357,13 +3357,13 @@ select udf(udf(t2.uunique1)) from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t2`.`uunique1`",
-    "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`hundred`"
+    "proposal" : "`t2`.`unique1`, `t1`.`unique1`, `t2`.`unique2`, `t1`.`unique2`, `t2`.`four`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3381,13 +3381,13 @@ select udf(uunique1) from
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`uunique1`",
-    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`even`"
+    "proposal" : "`t1`.`unique1`, `t2`.`unique1`, `t1`.`unique2`, `t2`.`unique2`, `t1`.`ten`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3595,7 +3595,7 @@ select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3617,7 +3617,7 @@ select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3639,7 +3639,7 @@ select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -3661,7 +3661,7 @@ select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",

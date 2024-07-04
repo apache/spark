@@ -22,6 +22,7 @@ import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Represents a parsed R formula.
@@ -125,7 +126,7 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     schema.fields.filter(_.dataType match {
       case _: NumericType | StringType | BooleanType | _: VectorUDT => true
       case _ => false
-    }).map(_.name).filter(_ != label.value)
+    }).map(_.name).filter(_ != label.value).toImmutableArraySeq
   }
 }
 

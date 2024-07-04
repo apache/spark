@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -53,7 +54,8 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       val filteredRules = batch.rules.filter { rule =>
         val exclude = excludedRules.contains(rule.ruleName)
         if (exclude) {
-          logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+          logInfo(log"Optimization rule '${MDC(RULE_NAME, rule.ruleName)}' is excluded from " +
+            log"the optimizer.")
         }
         !exclude
       }
@@ -62,19 +64,16 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       } else if (filteredRules.nonEmpty) {
         Some(Batch(batch.name, batch.strategy, filteredRules: _*))
       } else {
-        logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
-          s"as all enclosed rules have been excluded.")
+        logInfo(log"Optimization batch '${MDC(BATCH_NAME, batch.name)}' is excluded from " +
+          log"the optimizer as all enclosed rules have been excluded.")
         None
       }
     }
   }
 
-  override protected def isPlanIntegral(
+  override protected def validatePlanChanges(
       previousPlan: LogicalPlan,
-      currentPlan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (currentPlan.resolved &&
-      !currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty) &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
+      currentPlan: LogicalPlan): Option[String] = {
+    LogicalPlanIntegrity.validateOptimizedPlan(previousPlan, currentPlan)
   }
 }

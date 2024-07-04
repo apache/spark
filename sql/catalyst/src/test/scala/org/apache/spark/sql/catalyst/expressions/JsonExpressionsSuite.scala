@@ -269,7 +269,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     Nil
 
   private def checkJsonTuple(jt: JsonTuple, expected: InternalRow): Unit = {
-    assert(jt.eval(null).toSeq.head === expected)
+    assert(jt.eval(null).iterator.to(Seq).head === expected)
   }
 
   test("json_tuple escaping") {
@@ -446,9 +446,11 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         InternalRow(null)
       )
     }.getCause
-    assert(exception.isInstanceOf[SparkException])
-    assert(exception.getMessage.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST"))
+    checkError(
+      exception = exception.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("from_json - input=array, schema=array, output=array") {
@@ -896,5 +898,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
           )
         )
     }
+  }
+
+  test("SPARK-46761: support ? characters") {
+    checkEvaluation(
+      GetJsonObject(Literal(s"""{"?":"QUESTION"}"""), Literal("$['?']")),
+      "QUESTION"
+    )
   }
 }

@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sql_2.12</artifactId>
+  <artifactId>spark-sql_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>https://spark.apache.org/</url>
@@ -89,12 +89,15 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
+    <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-format</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
@@ -106,7 +109,7 @@
       <classifier>${orc.classifier}</classifier>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-storage-api</artifactId>
     </dependency>
     <dependency>
@@ -144,13 +147,16 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.ws.xmlschema</groupId>
+      <artifactId>xmlschema-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -160,7 +166,7 @@
     <dependency>
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
-      <version>2.1.214</version>
+      <version>2.2.220</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -179,13 +185,27 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc8</artifactId>
+      <artifactId>ojdbc11</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derby</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.derby</groupId>
+      <artifactId>derbytools</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -199,18 +219,25 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-inline</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
       <artifactId>selenium-java</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>htmlunit-driver</artifactId>
+      <artifactId>htmlunit3-driver</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Explicit declaration of bouncy-castle dependencies are
+         needed for maven test builds on later hadoop releases.-->
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -252,18 +279,6 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>src/main/scala-${scala.binary.version}</source>
-              </sources>
-            </configuration>
-          </execution>
-          <execution>
             <id>add-scala-test-sources</id>
             <phase>generate-test-sources</phase>
             <goals>
@@ -279,22 +294,4 @@
       </plugin>
     </plugins>
   </build>
-  
-  <profiles>
-    <profile>
-      <id>hadoop-2</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
-          <scope>test</scope>
-        </dependency>
-        <dependency>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 </project>

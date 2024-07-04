@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.Logger
 
@@ -61,15 +63,18 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
         spark.sql("show tables")
       })
       for (msg <- Seq(
-        "show tables",
         "Could not connect to meta store",
         "org.apache.thrift.transport.TTransportException",
         "Connection refused")) {
-        exceptionString.contains(msg)
+        assert(exceptionString.contains(msg))
       }
     } finally {
       Thread.currentThread().setContextClassLoader(originalClassLoader)
       spark.sparkContext.setLogLevel(originalLevel.toString)
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+      SessionState.detachSession()
+      Hive.closeCurrent()
       spark.stop()
     }
   }

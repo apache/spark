@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.types._
@@ -23,6 +24,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An interpreted unsafe projection. This class reuses the [[UnsafeRow]] it produces, a consumer
@@ -35,7 +37,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   import InterpretedUnsafeProjection._
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] val exprs = prepareExpressions(expressions, subExprEliminationEnabled)
+  private[this] val exprs =
+    prepareExpressions(expressions.toImmutableArraySeq, subExprEliminationEnabled)
 
   /** Number of (top level) fields in the resulting row. */
   private[this] val numFields = expressions.length
@@ -136,7 +139,7 @@ object InterpretedUnsafeProjection {
     // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case udt: UserDefinedType[_] => generateFieldWriter(writer, udt.sqlType, nullable)
-      case _ => dt.physicalDataType match {
+      case _ => PhysicalDataType(dt) match {
         case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
 
         case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
@@ -158,7 +161,9 @@ object InterpretedUnsafeProjection {
 
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-        case PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+        case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
+
+        case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
         case PhysicalStructType(fields) =>
           val numFields = fields.length
@@ -229,7 +234,8 @@ object InterpretedUnsafeProjection {
         case PhysicalNullType => (_, _) => {}
 
         case _ =>
-          throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
+          throw SparkException.internalError(
+            s"The data type '${dt.typeName}' is not supported in " +
             "generating a writer function for a struct field, array element, map key or map value.")
       }
     }
@@ -288,8 +294,9 @@ object InterpretedUnsafeProjection {
    * portion of the array object. Primitives take up to 8 bytes, depending on the size of the
    * underlying data type.
    */
+  @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case NullType | StringType | BinaryType | CalendarIntervalType |
+    case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)

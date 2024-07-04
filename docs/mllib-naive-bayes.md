@@ -44,6 +44,23 @@ sparsity. Since the training data is only used once, it is not necessary to cach
 ## Examples
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+[NaiveBayes](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) implements multinomial
+naive Bayes. It takes an RDD of
+[LabeledPoint](api/python/reference/api/pyspark.mllib.regression.LabeledPoint.html) and an optionally
+smoothing parameter `lambda` as input, and output a
+[NaiveBayesModel](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html), which can be
+used for evaluation and prediction.
+
+Note that the Python API does not yet support model save/load but will in the future.
+
+Refer to the [`NaiveBayes` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) and [`NaiveBayesModel` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html) for more details on the API.
+
+{% include_example python/mllib/naive_bayes_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 [NaiveBayes](api/scala/org/apache/spark/mllib/classification/NaiveBayes$.html) implements
@@ -70,19 +87,5 @@ Refer to the [`NaiveBayes` Java docs](api/java/org/apache/spark/mllib/classifica
 
 {% include_example java/org/apache/spark/examples/mllib/JavaNaiveBayesExample.java %}
 </div>
-<div data-lang="python" markdown="1">
 
-[NaiveBayes](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) implements multinomial
-naive Bayes. It takes an RDD of
-[LabeledPoint](api/python/reference/api/pyspark.mllib.regression.LabeledPoint.html) and an optionally
-smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html), which can be
-used for evaluation and prediction.
-
-Note that the Python API does not yet support model save/load but will in the future.
-
-Refer to the [`NaiveBayes` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) and [`NaiveBayesModel` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html) for more details on the API.
-
-{% include_example python/mllib/naive_bayes_example.py %}
-</div>
 </div>

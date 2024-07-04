@@ -53,14 +53,14 @@ case class BatchInfo(
    * processing. Essentially, it is `processingEndTime` - `processingStartTime`.
    */
   def processingDelay: Option[Long] = processingEndTime.zip(processingStartTime)
-    .map(x => x._1 - x._2).headOption
+    .map(x => x._1 - x._2)
 
   /**
    * Time taken for all the jobs of this batch to finish processing from the time they
    * were submitted.  Essentially, it is `processingDelay` + `schedulingDelay`.
    */
   def totalDelay: Option[Long] = schedulingDelay.zip(processingDelay)
-    .map(x => x._1 + x._2).headOption
+    .map(x => x._1 + x._2)
 
   /**
    * The number of recorders received by the receivers in this batch.

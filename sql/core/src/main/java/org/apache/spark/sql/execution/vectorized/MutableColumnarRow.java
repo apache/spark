@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -28,6 +30,7 @@ import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * A mutable version of {@link ColumnarRow}, which is used in the vectorized hash map for hash
@@ -73,8 +76,7 @@ public final class MutableColumnarRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (dt instanceof BinaryType) {
           row.update(i, getBinary(i));
-        } else if (dt instanceof DecimalType) {
-          DecimalType t = (DecimalType)dt;
+        } else if (dt instanceof DecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (dt instanceof DateType) {
           row.setInt(i, getInt(i));
@@ -96,7 +98,7 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -144,6 +146,11 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
+  public VariantVal getVariant(int ordinal) {
+    return columns[ordinal].getVariant(rowId);
+  }
+
+  @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
     return columns[ordinal].getStruct(rowId);
   }
@@ -178,8 +185,7 @@ public final class MutableColumnarRow extends InternalRow {
       return getUTF8String(ordinal);
     } else if (dataType instanceof BinaryType) {
       return getBinary(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType t = (DecimalType) dataType;
+    } else if (dataType instanceof DecimalType t) {
       return getDecimal(ordinal, t.precision(), t.scale());
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
@@ -187,12 +193,13 @@ public final class MutableColumnarRow extends InternalRow {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
+    } else if (dataType instanceof StructType structType) {
+      return getStruct(ordinal, structType.fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
     } else {
-      throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dataType.toString()));
     }
   }
 
@@ -214,14 +221,14 @@ public final class MutableColumnarRow extends InternalRow {
         setFloat(ordinal, (float) value);
       } else if (dt instanceof DoubleType) {
         setDouble(ordinal, (double) value);
-      } else if (dt instanceof DecimalType) {
-        DecimalType t = (DecimalType) dt;
+      } else if (dt instanceof DecimalType t) {
         Decimal d = Decimal.apply((BigDecimal) value, t.precision(), t.scale());
         setDecimal(ordinal, d, t.precision());
       } else if (dt instanceof CalendarIntervalType) {
         setInterval(ordinal, (CalendarInterval) value);
       } else {
-        throw new UnsupportedOperationException("Datatype not supported " + dt);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dt.toString()));
       }
     }
   }

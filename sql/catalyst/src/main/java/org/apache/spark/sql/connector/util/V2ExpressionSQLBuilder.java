@@ -19,14 +19,20 @@ package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NullOrdering;
+import org.apache.spark.sql.connector.expressions.SortDirection;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
 import org.apache.spark.sql.connector.expressions.aggregate.Avg;
 import org.apache.spark.sql.connector.expressions.aggregate.Max;
@@ -45,167 +51,115 @@ import org.apache.spark.sql.types.DataType;
  */
 public class V2ExpressionSQLBuilder {
 
+  /**
+   * Escape the special chars for like pattern.
+   *
+   * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
+   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
+   * chars other than _ and %.
+   */
+  protected String escapeSpecialCharsForLikePattern(String str) {
+    StringBuilder builder = new StringBuilder();
+
+    for (char c : str.toCharArray()) {
+      switch (c) {
+        case '_' -> builder.append("\\_");
+        case '%' -> builder.append("\\%");
+        default -> builder.append(c);
+      }
+    }
+
+    return builder.toString();
+  }
+
   public String build(Expression expr) {
-    if (expr instanceof Literal) {
-      return visitLiteral((Literal<?>) expr);
-    } else if (expr instanceof NamedReference) {
-      return visitNamedReference((NamedReference) expr);
-    } else if (expr instanceof Cast) {
-      Cast cast = (Cast) expr;
-      return visitCast(build(cast.expression()), cast.dataType());
-    } else if (expr instanceof Extract) {
-      Extract extract = (Extract) expr;
+    if (expr instanceof Literal literal) {
+      return visitLiteral(literal);
+    } else if (expr instanceof NamedReference namedReference) {
+      return visitNamedReference(namedReference);
+    } else if (expr instanceof Cast cast) {
+      return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
+    } else if (expr instanceof Extract extract) {
       return visitExtract(extract.field(), build(extract.source()));
-    } else if (expr instanceof GeneralScalarExpression) {
-      GeneralScalarExpression e = (GeneralScalarExpression) expr;
+    } else if (expr instanceof SortOrder sortOrder) {
+      return visitSortOrder(
+        build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
+    } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
-      switch (name) {
-        case "IN": {
+      return switch (name) {
+        case "IN" -> {
           Expression[] expressions = e.children();
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
-          return visitIn(build(expressions[0]), children);
+          yield visitIn(build(expressions[0]), children);
         }
-        case "IS_NULL":
-          return visitIsNull(build(e.children()[0]));
-        case "IS_NOT_NULL":
-          return visitIsNotNull(build(e.children()[0]));
-        case "STARTS_WITH":
-          return visitStartsWith(build(e.children()[0]), build(e.children()[1]));
-        case "ENDS_WITH":
-          return visitEndsWith(build(e.children()[0]), build(e.children()[1]));
-        case "CONTAINS":
-          return visitContains(build(e.children()[0]), build(e.children()[1]));
-        case "=":
-        case "<>":
-        case "<=>":
-        case "<":
-        case "<=":
-        case ">":
-        case ">=":
-          return visitBinaryComparison(
-            name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
-        case "+":
-        case "*":
-        case "/":
-        case "%":
-        case "&":
-        case "|":
-        case "^":
-          return visitBinaryArithmetic(
-            name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
-        case "-":
+        case "IS_NULL" -> visitIsNull(build(e.children()[0]));
+        case "IS_NOT_NULL" -> visitIsNotNull(build(e.children()[0]));
+        case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
+        case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
+        case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
+        case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
+          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+        case "+", "*", "/", "%", "&", "|", "^" ->
+          visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+        case "-" -> {
           if (e.children().length == 1) {
-            return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+            yield visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
           } else {
-            return visitBinaryArithmetic(
+            yield visitBinaryArithmetic(
               name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
           }
-        case "AND":
-          return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
-        case "OR":
-          return visitOr(name, build(e.children()[0]), build(e.children()[1]));
-        case "NOT":
-          return visitNot(build(e.children()[0]));
-        case "~":
-          return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
-        case "ABS":
-        case "COALESCE":
-        case "GREATEST":
-        case "LEAST":
-        case "RAND":
-        case "LOG":
-        case "LOG10":
-        case "LOG2":
-        case "LN":
-        case "EXP":
-        case "POWER":
-        case "SQRT":
-        case "FLOOR":
-        case "CEIL":
-        case "ROUND":
-        case "SIN":
-        case "SINH":
-        case "COS":
-        case "COSH":
-        case "TAN":
-        case "TANH":
-        case "COT":
-        case "ASIN":
-        case "ASINH":
-        case "ACOS":
-        case "ACOSH":
-        case "ATAN":
-        case "ATANH":
-        case "ATAN2":
-        case "CBRT":
-        case "DEGREES":
-        case "RADIANS":
-        case "SIGN":
-        case "WIDTH_BUCKET":
-        case "SUBSTRING":
-        case "UPPER":
-        case "LOWER":
-        case "TRANSLATE":
-        case "DATE_ADD":
-        case "DATE_DIFF":
-        case "TRUNC":
-        case "AES_ENCRYPT":
-        case "AES_DECRYPT":
-        case "SHA1":
-        case "SHA2":
-        case "MD5":
-        case "CRC32":
-        case "BIT_LENGTH":
-        case "CHAR_LENGTH":
-        case "CONCAT":
-          return visitSQLFunction(name, expressionsToStringArray(e.children()));
-        case "CASE_WHEN": {
-          return visitCaseWhen(expressionsToStringArray(e.children()));
         }
-        case "TRIM":
-          return visitTrim("BOTH", expressionsToStringArray(e.children()));
-        case "LTRIM":
-          return visitTrim("LEADING", expressionsToStringArray(e.children()));
-        case "RTRIM":
-          return visitTrim("TRAILING", expressionsToStringArray(e.children()));
-        case "OVERLAY":
-          return visitOverlay(expressionsToStringArray(e.children()));
+        case "AND" -> visitAnd(name, build(e.children()[0]), build(e.children()[1]));
+        case "OR" -> visitOr(name, build(e.children()[0]), build(e.children()[1]));
+        case "NOT" -> visitNot(build(e.children()[0]));
+        case "~" -> visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "ABS", "COALESCE", "GREATEST", "LEAST", "RAND", "LOG", "LOG10", "LOG2", "LN", "EXP",
+          "POWER", "SQRT", "FLOOR", "CEIL", "ROUND", "SIN", "SINH", "COS", "COSH", "TAN", "TANH",
+          "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
+          "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
+          "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
+          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
+          visitSQLFunction(name, expressionsToStringArray(e.children()));
+        case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
+        case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
+        case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
+        case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
+        case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
         // TODO supports other expressions
-        default:
-          return visitUnexpectedExpr(expr);
-      }
-    } else if (expr instanceof Min) {
-      Min min = (Min) expr;
+        default -> visitUnexpectedExpr(expr);
+      };
+    } else if (expr instanceof Min min) {
       return visitAggregateFunction("MIN", false,
         expressionsToStringArray(min.children()));
-    } else if (expr instanceof Max) {
-      Max max = (Max) expr;
+    } else if (expr instanceof Max max) {
       return visitAggregateFunction("MAX", false,
         expressionsToStringArray(max.children()));
-    } else if (expr instanceof Count) {
-      Count count = (Count) expr;
+    } else if (expr instanceof Count count) {
       return visitAggregateFunction("COUNT", count.isDistinct(),
         expressionsToStringArray(count.children()));
-    } else if (expr instanceof Sum) {
-      Sum sum = (Sum) expr;
+    } else if (expr instanceof Sum sum) {
       return visitAggregateFunction("SUM", sum.isDistinct(),
         expressionsToStringArray(sum.children()));
     } else if (expr instanceof CountStar) {
       return visitAggregateFunction("COUNT", false, new String[]{"*"});
-    } else if (expr instanceof Avg) {
-      Avg avg = (Avg) expr;
+    } else if (expr instanceof Avg avg) {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
-    } else if (expr instanceof GeneralAggregateFunc) {
-      GeneralAggregateFunc f = (GeneralAggregateFunc) expr;
-      return visitAggregateFunction(f.name(), f.isDistinct(),
-        expressionsToStringArray(f.children()));
-    } else if (expr instanceof UserDefinedScalarFunc) {
-      UserDefinedScalarFunc f = (UserDefinedScalarFunc) expr;
+    } else if (expr instanceof GeneralAggregateFunc f) {
+      if (f.orderingWithinGroups().length == 0) {
+        return visitAggregateFunction(f.name(), f.isDistinct(),
+          expressionsToStringArray(f.children()));
+      } else {
+        return visitInverseDistributionFunction(
+          f.name(),
+          f.isDistinct(),
+          expressionsToStringArray(f.children()),
+          expressionsToStringArray(f.orderingWithinGroups()));
+      }
+    } else if (expr instanceof UserDefinedScalarFunc f) {
       return visitUserDefinedScalarFunction(f.name(), f.canonicalName(),
         expressionsToStringArray(f.children()));
-    } else if (expr instanceof UserDefinedAggregateFunc) {
-      UserDefinedAggregateFunc f = (UserDefinedAggregateFunc) expr;
+    } else if (expr instanceof UserDefinedAggregateFunc f) {
       return visitUserDefinedAggregateFunction(f.name(), f.canonicalName(), f.isDistinct(),
         expressionsToStringArray(f.children()));
     } else {
@@ -240,24 +194,24 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + value + "%'";
+    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + value + "%'";
+    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
   }
 
-  private String inputToSQL(Expression input) {
+  protected String inputToSQL(Expression input) {
     if (input.children().length > 1) {
       return "(" + build(input) + ")";
     } else {
@@ -266,20 +220,18 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitBinaryComparison(String name, String l, String r) {
-    switch (name) {
-      case "<=>":
-        return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
-      default:
-        return l + " " + name + " " + r;
+    if (name.equals("<=>")) {
+      return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
     }
+    return l + " " + name + " " + r;
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {
     return l + " " + name + " " + r;
   }
 
-  protected String visitCast(String l, DataType dataType) {
-    return "CAST(" + l + " AS " + dataType.typeName() + ")";
+  protected String visitCast(String expr, DataType exprDataType, DataType targetDataType) {
+    return "CAST(" + expr + " AS " + targetDataType.typeName() + ")";
   }
 
   protected String visitAnd(String name, String l, String r) {
@@ -329,20 +281,32 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitInverseDistributionFunction(
+      String funcName, boolean isDistinct, String[] inputs, String[] orderingWithinGroups) {
+    assert(isDistinct == false);
+    String withinGroup =
+      joinArrayToString(orderingWithinGroups, ", ", "WITHIN GROUP (ORDER BY ", ")");
+    String functionCall = joinArrayToString(inputs, ", ", funcName + "(", ")");
+    return functionCall + " " + withinGroup;
+  }
+
   protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " does not support user defined function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3141",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
-    throw new UnsupportedOperationException(this.getClass().getSimpleName() +
-      " does not support user defined aggregate function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3142",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
-    throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+    throw new SparkIllegalArgumentException(
+      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
   }
 
   protected String visitOverlay(String[] inputs) {
@@ -368,6 +332,11 @@ public class V2ExpressionSQLBuilder {
     return "EXTRACT(" + field + " FROM " + source + ")";
   }
 
+  protected String visitSortOrder(
+      String sortKey, SortDirection sortDirection, NullOrdering nullOrdering) {
+    return sortKey + " " + sortDirection + " " + nullOrdering;
+  }
+
   private String joinArrayToString(
       String[] inputs, CharSequence delimiter, CharSequence prefix, CharSequence suffix) {
     StringJoiner joiner = new StringJoiner(delimiter, prefix, suffix);
@@ -386,7 +355,7 @@ public class V2ExpressionSQLBuilder {
     return joiner.toString();
   }
 
-  private String[] expressionsToStringArray(Expression[] expressions) {
+  protected String[] expressionsToStringArray(Expression[] expressions) {
     String[] result = new String[expressions.length];
     for (int i = 0; i < expressions.length; i++) {
       result[i] = build(expressions[i]);

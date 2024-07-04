@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging

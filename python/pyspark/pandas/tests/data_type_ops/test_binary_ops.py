@@ -19,10 +19,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class BinaryOpsTest(OpsTestBase):
+class BinaryOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([b"1", b"2", b"3"])
@@ -205,6 +206,14 @@ class BinaryOpsTest(OpsTestBase):
         byte_pdf, byte_psdf = self.byte_pdf, self.byte_psdf
         self.assert_eq(byte_pdf["this"] >= byte_pdf["that"], byte_psdf["this"] >= byte_psdf["that"])
         self.assert_eq(byte_pdf["this"] >= byte_pdf["this"], byte_psdf["this"] >= byte_psdf["this"])
+
+
+class BinaryOpsTests(
+    BinaryOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

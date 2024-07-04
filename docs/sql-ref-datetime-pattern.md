@@ -41,7 +41,7 @@ Spark uses pattern letters in the following table for date and timestamp parsing
 |**a**|am-pm-of-day|am-pm|PM|
 |**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
 |**K**|hour-of-am-pm (0-11)|number(2)|0|
-|**k**|clock-hour-of-day (1-24)|number(2)|0|
+|**k**|clock-hour-of-day (1-24)|number(2)|1|
 |**H**|hour-of-day (0-23)|number(2)|0|
 |**m**|minute-of-hour|number(2)|30|
 |**s**|second-of-minute|number(2)|55|

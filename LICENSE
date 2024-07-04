@@ -213,16 +213,16 @@ Apache Software Foundation License 2.0
 common/network-common/src/main/java/org/apache/spark/network/util/LimitedInputStream.java
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
-core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
 core/src/main/resources/org/apache/spark/ui/static/vis*
 docs/js/vendor/bootstrap.js
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
-
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
+core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
 
 Python Software Foundation License
 ----------------------------------
 
-python/docs/source/_static/copybutton.js
+python/pyspark/loose_version.py
 
 BSD 3-Clause
 ------------
@@ -230,7 +230,6 @@ BSD 3-Clause
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle/*.py
 python/pyspark/join.py
-core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
 The CSS style for the navigation sidebar of the documentation was originally
 submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
@@ -248,6 +247,11 @@ core/src/main/resources/org/apache/spark/ui/static/sorttable.js
 docs/js/vendor/anchor.min.js
 docs/js/vendor/jquery*
 docs/js/vendor/modernizer*
+
+ISC License
+-----------
+
+core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
 
 Creative Commons CC0 1.0 Universal Public Domain Dedication

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.File
+import java.io.{File, PrintStream}
 import java.net.URI
 
 import org.apache.commons.lang3.StringUtils
@@ -25,9 +25,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.SparkSubmitUtils
-import org.apache.spark.internal.Logging
+import org.apache.spark.deploy.SparkSubmit
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] case class IvyProperties(
     packagesExclusions: String,
@@ -47,76 +50,6 @@ private[spark] object DependencyUtils extends Logging {
       JAR_IVY_SETTING_PATH.key
     ).map(sys.props.get(_).orNull)
     IvyProperties(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath)
-  }
-
-  private def isInvalidQueryString(tokens: Array[String]): Boolean = {
-    tokens.length != 2 || StringUtils.isBlank(tokens(0)) || StringUtils.isBlank(tokens(1))
-  }
-
-  /**
-   * Parse URI query string's parameter value of `transitive` and `exclude`.
-   * Other invalid parameters will be ignored.
-   *
-   * @param uri Ivy URI need to be downloaded.
-   * @return Tuple value of parameter `transitive` and `exclude` value.
-   *
-   *         1. transitive: whether to download dependency jar of Ivy URI, default value is true
-   *            and this parameter value is case-insensitive. This mimics Hive's behaviour for
-   *            parsing the transitive parameter. Invalid value will be treat as false.
-   *            Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
-   *            Output:  true
-   *
-   *         2. exclude: comma separated exclusions to apply when resolving transitive dependencies,
-   *            consists of `group:module` pairs separated by commas.
-   *            Example: Input:  excludeorg.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
-   *            Output:  [org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http]
-   */
-  private def parseQueryParams(uri: URI): (Boolean, String) = {
-    val uriQuery = uri.getQuery
-    if (uriQuery == null) {
-      (true, "")
-    } else {
-      val mapTokens = uriQuery.split("&").map(_.split("="))
-      if (mapTokens.exists(isInvalidQueryString)) {
-        throw new IllegalArgumentException(
-          s"Invalid query string in Ivy URI ${uri.toString}: $uriQuery")
-      }
-      val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
-
-      // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is true
-      val transitiveParams = groupedParams.get("transitive")
-      if (transitiveParams.map(_.size).getOrElse(0) > 1) {
-        logWarning("It's best to specify `transitive` parameter in ivy URI query only once." +
-          " If there are multiple `transitive` parameter, we will select the last one")
-      }
-      val transitive =
-        transitiveParams.flatMap(_.takeRight(1).map(_._2.equalsIgnoreCase("true")).headOption)
-          .getOrElse(true)
-
-      // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
-      // in an Ivy URI. When download Ivy URI jar, Spark won't download transitive jar
-      // in a excluded list.
-      val exclusionList = groupedParams.get("exclude").map { params =>
-        params.map(_._2).flatMap { excludeString =>
-          val excludes = excludeString.split(",")
-          if (excludes.map(_.split(":")).exists(isInvalidQueryString)) {
-            throw new IllegalArgumentException(
-              s"Invalid exclude string in Ivy URI ${uri.toString}:" +
-                " expected 'org:module,org:module,..', found " + excludeString)
-          }
-          excludes
-        }.mkString(",")
-      }.getOrElse("")
-
-      val validParams = Set("transitive", "exclude")
-      val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
-      if (invalidParams.nonEmpty) {
-        logWarning(s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
-          s"in Ivy URI query `$uriQuery`.")
-      }
-
-      (transitive, exclusionList)
-    }
   }
 
   /**
@@ -148,13 +81,15 @@ private[spark] object DependencyUtils extends Logging {
           s" Expected 'org:module:version', found $authority.")
     }
 
-    val (transitive, exclusionList) = parseQueryParams(uri)
-
+    val (transitive, exclusionList, repos) = MavenUtils.parseQueryParams(uri)
+    val fullReposList = Seq(ivyProperties.repositories, repos)
+      .filter(!StringUtils.isBlank(_))
+      .mkString(",")
     resolveMavenDependencies(
       transitive,
       exclusionList,
       authority,
-      ivyProperties.repositories,
+      fullReposList,
       ivyProperties.ivyRepoPath,
       Option(ivyProperties.ivySettingsPath)
     )
@@ -169,20 +104,23 @@ private[spark] object DependencyUtils extends Logging {
       ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(packagesExclusions)) {
-        packagesExclusions.split(",")
+        packagesExclusions.split(",").toImmutableArraySeq
       } else {
         Nil
       }
     // Create the IvySettings, either load from file or build defaults
+    implicit val printStream: PrintStream = SparkSubmit.printStream
     val ivySettings = ivySettingsPath match {
       case Some(path) =>
-        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+        MavenUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
 
       case None =>
-        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+        MavenUtils.buildIvySettings(
+          Option(repositories),
+          Option(ivyRepoPath))
     }
 
-    SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings,
+    MavenUtils.resolveMavenCoordinates(packages, ivySettings,
       transitive = packagesTransitive, exclusions = exclusions)
   }
 
@@ -287,10 +225,10 @@ private[spark] object DependencyUtils extends Logging {
         if (file.exists()) {
           loader.addURL(file.toURI.toURL)
         } else {
-          logWarning(s"Local jar $file does not exist, skipping.")
+          logWarning(log"Local jar ${MDC(FILE_NAME, file)} does not exist, skipping.")
         }
       case _ =>
-        logWarning(s"Skip remote jar $uri.")
+        logWarning(log"Skip remote jar ${MDC(LogKeys.URI, uri)}.")
     }
   }
 

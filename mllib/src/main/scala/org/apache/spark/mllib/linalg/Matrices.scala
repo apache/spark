@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait for a local matrix.
@@ -1140,7 +1141,7 @@ object Matrices {
               cnt += 1
             }
             startCol += nCols
-            data.toSeq
+            data.toImmutableArraySeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
@@ -1209,7 +1210,7 @@ object Matrices {
               cnt += 1
             }
             startRow += nRows
-            data.toSeq
+            data.toImmutableArraySeq
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>

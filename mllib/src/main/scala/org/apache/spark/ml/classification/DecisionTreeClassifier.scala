@@ -117,7 +117,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses = getNumClasses(dataset, $(labelCol))
+    val numClasses = getNumClasses(dataset)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +

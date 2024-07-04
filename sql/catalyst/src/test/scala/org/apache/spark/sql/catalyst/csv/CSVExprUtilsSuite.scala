@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 
 class CSVExprUtilsSuite extends SparkFunSuite {
   test("Can parse escaped characters") {
@@ -33,32 +33,49 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     assert(CSVExprUtils.toChar("""\\""") === '\\')
   }
 
+  test("Does not accept null delimiter") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toDelimiterStr(null)
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE",
+      parameters = Map.empty)
+  }
+
   test("Does not accept delimiter larger than one character") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVExprUtils.toChar("ab")
-    }
-    assert(exception.getMessage.contains("cannot be more than one character"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toChar("ab")
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
+      parameters = Map("str" -> "ab"))
   }
 
   test("Throws exception for unsupported escaped characters") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVExprUtils.toChar("""\1""")
-    }
-    assert(exception.getMessage.contains("Unsupported special character for delimiter"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toChar("""\1""")
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
+      parameters = Map("str" -> """\1"""))
   }
 
   test("string with one backward slash is prohibited") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVExprUtils.toChar("""\""")
-    }
-    assert(exception.getMessage.contains("Single backslash is prohibited"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toChar("""\""")
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
+      parameters = Map.empty)
   }
 
   test("output proper error message for empty string") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVExprUtils.toChar("")
-    }
-    assert(exception.getMessage.contains("Delimiter cannot be empty string"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException]{
+        CSVExprUtils.toChar("")
+      },
+      errorClass = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
+      parameters = Map.empty)
   }
 
   val testCases = Table(
@@ -68,7 +85,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // backslash, then tab
     ("""\\t""", Some("""\t"""), None),
     // invalid special character (dot)
-    ("""\.""", None, Some("Unsupported special character for delimiter")),
+    ("""\.""", None, Some("INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER")),
     // backslash, then dot
     ("""\\.""", Some("""\."""), None),
     // nothing special, just straight conversion
@@ -82,17 +99,16 @@ class CSVExprUtilsSuite extends SparkFunSuite {
   )
 
   test("should correctly produce separator strings, or exceptions, from input") {
-    forAll(testCases) { (input, separatorStr, expectedErrorMsg) =>
+    forAll(testCases) { (input, separatorStr, expectedErrorClass) =>
       try {
         val separator = CSVExprUtils.toDelimiterStr(input)
         assert(separatorStr.isDefined)
-        assert(expectedErrorMsg.isEmpty)
+        assert(expectedErrorClass.isEmpty)
         assert(separator.equals(separatorStr.get))
       } catch {
-        case e: IllegalArgumentException =>
+        case e: SparkIllegalArgumentException =>
           assert(separatorStr.isEmpty)
-          assert(expectedErrorMsg.isDefined)
-          assert(e.getMessage.contains(expectedErrorMsg.get))
+          assert(e.getErrorClass === expectedErrorClass.get)
       }
     }
   }

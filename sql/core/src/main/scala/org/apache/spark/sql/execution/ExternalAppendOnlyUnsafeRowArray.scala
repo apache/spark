@@ -22,7 +22,8 @@ import java.io.Closeable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -122,8 +123,9 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       inMemoryBuffer += unsafeRow.copy()
     } else {
       if (spillableArray == null) {
-        logInfo(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows, switching to " +
-          s"${classOf[UnsafeExternalSorter].getName}")
+        logInfo(log"Reached spill threshold of " +
+          log"${MDC(MAX_NUM_ROWS_IN_MEMORY_BUFFER, numRowsInMemoryBufferThreshold)} rows, " +
+          log"switching to ${MDC(CLASS_NAME, classOf[UnsafeExternalSorter].getName)}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
         spillableArray = UnsafeExternalSorter.create(
@@ -209,7 +211,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     private var currentIndex = startIndex
 
-    override def hasNext(): Boolean = !isModified() && currentIndex < numRows
+    override def hasNext: Boolean = !isModified() && currentIndex < numRows
 
     override def next(): UnsafeRow = {
       throwExceptionIfModified()
@@ -226,7 +228,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
 
-    override def hasNext(): Boolean = !isModified() && iterator.hasNext
+    override def hasNext: Boolean = !isModified() && iterator.hasNext
 
     override def next(): UnsafeRow = {
       throwExceptionIfModified()

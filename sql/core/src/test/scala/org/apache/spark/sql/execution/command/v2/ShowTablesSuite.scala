@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
+import org.apache.spark.util.Utils
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
@@ -49,54 +49,26 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
-  // The test fails for V1 catalog with the error:
-  // org.apache.spark.sql.AnalysisException:
-  //   The namespace in session catalog must have exactly one name part: spark_catalog.ns1.ns2.tbl
-  test("SHOW TABLE EXTENDED not valid v1 database") {
-    def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(sqlCommand)
-      }
-      assert(e.message.contains(s"SHOW TABLE EXTENDED is not supported for v2 tables"))
-    }
-
-    val namespace = s"$catalog.ns1.ns2"
-    val table = "tbl"
-    withTable(s"$namespace.$table") {
-      sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
-        s"$defaultUsing PARTITIONED BY (id)")
-
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED IN $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"FROM $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"IN $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-    }
+  override protected def extendedPartInNonPartedTableError(
+      catalog: String,
+      namespace: String,
+      table: String): (String, Map[String, String]) = {
+    ("_LEGACY_ERROR_TEMP_1231",
+      Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
-  // TODO(SPARK-33393): Support SHOW TABLE EXTENDED in DSv2
-  test("SHOW TABLE EXTENDED: an existing table") {
-    val table = "people"
-    withTable(s"$catalog.$table") {
-      sql(s"CREATE TABLE $catalog.$table (name STRING, id INT) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'").collect()
-      }.getMessage
-      assert(errMsg.contains("SHOW TABLE EXTENDED is not supported for v2 tables"))
-    }
-  }
+  protected override def namespaceKey: String = "Namespace"
 
-  test("show table in a not existing namespace") {
-    val e = intercept[NoSuchNamespaceException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }
-    checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`unknown`"))
-  }
+  protected override def extendedTableInfo: String =
+    s"""Type: MANAGED
+       |Provider: _
+       |Owner: ${Utils.getCurrentUserName()}
+       |Table Properties: <table properties>""".stripMargin
+
+  protected override def extendedTableSchema: String =
+    s"""Schema: root
+       | |-- id: long (nullable = true)
+       | |-- data: string (nullable = true)""".stripMargin
+
+  protected override def selectCommandSchema: Array[String] = Array("id", "data")
 }

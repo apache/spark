@@ -37,8 +37,7 @@ trait AliasHelper {
     // Find all the aliased expressions in the aggregate list that don't include any actual
     // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {
-      case a: Alias if a.child.find(e => e.isInstanceOf[AggregateExpression] ||
-        PythonUDF.isGroupedAggPandasUDF(e)).isEmpty =>
+      case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
         (a.toAttribute, a)
     }
     AttributeMap(aliasMap)

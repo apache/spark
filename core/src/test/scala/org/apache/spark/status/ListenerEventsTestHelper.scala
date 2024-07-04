@@ -27,6 +27,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
+import org.apache.spark.util.ArrayImplicits._
 
 object ListenerEventsTestHelper {
 
@@ -139,7 +140,8 @@ object ListenerEventsTestHelper {
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
     val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(
+      executorId.toString, accum.toImmutableArraySeq, executorUpdates)
   }
 
   case class JobInfo(
@@ -177,7 +179,7 @@ object ListenerEventsTestHelper {
 
     s1Tasks.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(),
         "taskType", Success, task, new ExecutorMetrics, s1Metrics))
     }
 

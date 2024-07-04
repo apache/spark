@@ -178,7 +178,7 @@ class PowerIterationClustering private[clustering] (
       .setMaxIterations($(maxIter))
     val model = algorithm.run(rdd)
 
-    model.assignments.toDF
+    model.assignments.toDF()
   }
 
   @Since("2.4.0")

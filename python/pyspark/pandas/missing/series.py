@@ -40,19 +40,12 @@ class MissingPandasLikeSeries:
     infer_objects = _unsupported_function("infer_objects")
     reorder_levels = _unsupported_function("reorder_levels")
     set_axis = _unsupported_function("set_axis")
-    to_hdf = _unsupported_function("to_hdf")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
     to_timestamp = _unsupported_function("to_timestamp")
     tz_convert = _unsupported_function("tz_convert")
     tz_localize = _unsupported_function("tz_localize")
     view = _unsupported_function("view")
-
-    # Deprecated functions
-    slice_shift = _unsupported_function(
-        "slice_shift", deprecated=True, reason="Use DataFrame/Series.shift instead."
-    )
-    tshift = _unsupported_function("tshift", deprecated=True, reason="Use `shift` instead.")
 
     # Properties we won't support.
     array = common.array(_unsupported_property)

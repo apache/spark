@@ -28,20 +28,14 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
-    val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.iterator.map { file =>
-      PartitionedFileReader(file, buildReader(file))
-    }
-    new FilePartitionReader[InternalRow](iter, options)
+    val files = partition.asInstanceOf[FilePartition].files
+    new FilePartitionReader[InternalRow](files.iterator, buildReader, options)
   }
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     assert(partition.isInstanceOf[FilePartition])
-    val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.iterator.map { file =>
-      PartitionedFileReader(file, buildColumnarReader(file))
-    }
-    new FilePartitionReader[ColumnarBatch](iter, options)
+    val files = partition.asInstanceOf[FilePartition].files
+    new FilePartitionReader[ColumnarBatch](files.iterator, buildColumnarReader, options)
   }
 
   def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]

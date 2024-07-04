@@ -148,14 +148,14 @@ select bit_count("bit count")
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"bit count\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(bit count)\""
   },
@@ -174,14 +174,14 @@ select bit_count('a')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"a\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(a)\""
   },
@@ -293,8 +293,17 @@ select getbit(11L, -1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Invalid bit position: -1 is less than zero
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`getbit`",
+    "invalidValue" : "-1",
+    "parameter" : "`pos`",
+    "upper" : "64"
+  }
+}
 
 
 -- !query
@@ -302,5 +311,166 @@ select getbit(11L, 64)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Invalid bit position: 64 exceeds the bit upper limit
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.BIT_POSITION_RANGE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`getbit`",
+    "invalidValue" : "64",
+    "parameter" : "`pos`",
+    "upper" : "64"
+  }
+}
+
+
+-- !query
+SELECT 20181117 >> 2
+-- !query schema
+struct<(20181117 >> 2):int>
+-- !query output
+5045279
+
+
+-- !query
+SELECT 20181117 << 2
+-- !query schema
+struct<(20181117 << 2):int>
+-- !query output
+80724468
+
+
+-- !query
+SELECT 20181117 >>> 2
+-- !query schema
+struct<(20181117 >>> 2):int>
+-- !query output
+5045279
+
+
+-- !query
+SELECT 20181117 > > 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 < < 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 > >> 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 <<< 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 >>>> 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >> 2
+-- !query schema
+struct<NULL:array<array<int>>,(20181117 >> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >>> 2
+-- !query schema
+struct<NULL:array<array<int>>,(20181117 >>> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
+select cast(null as map<int, array<int>>), 20181117 >> 2
+-- !query schema
+struct<NULL:map<int,array<int>>,(20181117 >> 2):int>
+-- !query output
+NULL	5045279
+
+
+-- !query
+select 1 << 1 + 2 as plus_over_shift
+-- !query schema
+struct<plus_over_shift:int>
+-- !query output
+8
+
+
+-- !query
+select 2 >> 1 << 1 as left_to_right
+-- !query schema
+struct<left_to_right:int>
+-- !query output
+2
+
+
+-- !query
+select 1 & 2 >> 1 as shift_over_ampersand
+-- !query schema
+struct<shift_over_ampersand:int>
+-- !query output
+1

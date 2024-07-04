@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -86,17 +85,8 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           sql(s"ALTER TABLE $tableName DROP PARTITION(c=$v)")
           checkAnswer(spark.table(tableName), Nil)
         }
-
-        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)"))
-        checkError(
-          exception = e1.getCause.asInstanceOf[SparkException],
-          errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s".*$tableName.*"),
-          matchPVals = true
-        )
-
-        val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        assertLengthCheckFailure(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)")
+        assertLengthCheckFailure("ALTER TABLE t DROP PARTITION(c=100000)")
       }
     }
   }
@@ -106,6 +96,8 @@ class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSi
 
   // The default Hive serde doesn't support nested null values.
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
+
+  override def getTableName(name: String): String = s"`spark_catalog`.`default`.`$name`"
 
   private var originalPartitionMode = ""
 

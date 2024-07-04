@@ -29,8 +29,9 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
@@ -62,13 +63,14 @@ private[spark] class DiskStore(
    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
     if (contains(blockId)) {
-      logWarning(s"Block $blockId is already present in the disk store")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} is already present in the disk store")
       try {
         diskManager.getFile(blockId).delete()
       } catch {
         case e: Exception =>
-          throw new IllegalStateException(
-            s"Block $blockId is already present in the disk store and could not delete it $e")
+          throw SparkException.internalError(
+            s"Block $blockId is already present in the disk store and could not delete it $e",
+            category = "STORAGE")
       }
     }
     logDebug(s"Attempting to put block $blockId")
@@ -132,7 +134,7 @@ private[spark] class DiskStore(
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
-        logWarning(s"Error deleting ${file.getPath()}")
+        logWarning(log"Error deleting ${MDC(PATH, file.getPath())}")
       }
       ret
     } else {
@@ -147,6 +149,7 @@ private[spark] class DiskStore(
   def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
     blockSizes.put(targetBlockId, blockSize)
     val targetFile = diskManager.getFile(targetBlockId.name)
+    logDebug(s"${sourceFile.getPath()} -> ${targetFile.getPath()}")
     FileUtils.moveFile(sourceFile, targetFile)
   }
 
@@ -182,6 +185,14 @@ private class DiskBlockData(
   * Please see `ManagedBuffer.convertToNetty()` for more details.
   */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
+
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
@@ -232,6 +243,9 @@ private[spark] class EncryptedBlockData(
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
+
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()
@@ -295,6 +309,8 @@ private[spark] class EncryptedManagedBuffer(
   override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
 
   override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def convertToNettyForSsl(): AnyRef = blockData.toNettyForSsl()
 
   override def createInputStream(): InputStream = blockData.toInputStream()
 

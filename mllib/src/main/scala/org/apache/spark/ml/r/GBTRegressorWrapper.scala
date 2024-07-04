@@ -29,6 +29,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class GBTRegressorWrapper private (
   val pipeline: PipelineModel,
@@ -118,7 +119,7 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("formula" -> instance.formula) ~
-        ("features" -> instance.features.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
 
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)

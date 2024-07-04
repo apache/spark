@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal, Murmur3Hash, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Murmur3Hash, Pmod}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -146,63 +146,75 @@ class DistributionSuite extends SparkFunSuite {
       false)
   }
 
-  test("HashPartitioning is the output partitioning") {
-    // HashPartitioning can satisfy ClusteredDistribution iff its hash expressions are a subset of
-    // the required clustering expressions.
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      true)
+  private def testHashPartitioningLike(
+      partitioningName: String,
+      create: (Seq[Expression], Int) => Partitioning): Unit = {
 
-    checkSatisfied(
-      HashPartitioning(Seq($"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c")),
-      true)
+    test(s"$partitioningName is the output partitioning") {
+      // HashPartitioning can satisfy ClusteredDistribution iff its hash expressions are a subset of
+      // the required clustering expressions.
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"c")),
+        true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"b", $"c")),
-      false)
+      checkSatisfied(
+        create(Seq($"b", $"c"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"c")),
+        true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"d", $"e")),
-      false)
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 10),
+        ClusteredDistribution(Seq($"b", $"c")),
+        false)
 
-    // When ClusteredDistribution.requireAllClusterKeys is set to true,
-    // HashPartitioning can only satisfy ClusteredDistribution iff its hash expressions are
-    // exactly same as the required clustering expressions.
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
-      true)
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 10),
+        ClusteredDistribution(Seq($"d", $"e")),
+        false)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
-      false)
+      // When ClusteredDistribution.requireAllClusterKeys is set to true,
+      // HashPartitioning can only satisfy ClusteredDistribution iff its hash expressions are
+      // exactly same as the required clustering expressions.
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+        true)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"b", $"a", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
-      false)
+      checkSatisfied(
+        create(Seq($"b", $"c"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+        false)
 
-    // HashPartitioning cannot satisfy OrderedDistribution
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
-      false)
+      checkSatisfied(
+        create(Seq($"b", $"a", $"c"), 10),
+        ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+        false)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"a", $"b", $"c"), 1),
-      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
-      false) // TODO: this can be relaxed.
+      // HashPartitioning cannot satisfy OrderedDistribution
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 10),
+        OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
+        false)
 
-    checkSatisfied(
-      HashPartitioning(Seq($"b", $"c"), 10),
-      OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
-      false)
+      checkSatisfied(
+        create(Seq($"a", $"b", $"c"), 1),
+        OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
+        false) // TODO: this can be relaxed.
+
+      checkSatisfied(
+        create(Seq($"b", $"c"), 10),
+        OrderedDistribution(Seq($"a".asc, $"b".asc, $"c".asc)),
+        false)
+    }
   }
+
+  testHashPartitioningLike("HashPartitioning",
+    (expressions, numPartitions) => HashPartitioning(expressions, numPartitions))
+
+  testHashPartitioningLike("CoalescedHashPartitioning", (expressions, numPartitions) =>
+      CoalescedHashPartitioning(
+        HashPartitioning(expressions, numPartitions), Seq(CoalescedBoundary(0, numPartitions))))
 
   test("RangePartitioning is the output partitioning") {
     // RangePartitioning can satisfy OrderedDistribution iff its ordering is a prefix

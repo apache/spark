@@ -29,9 +29,11 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.catalyst.types.DataTypeUtils;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.VariantType;
 
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
@@ -64,7 +66,7 @@ final class ParquetColumnVector {
       boolean isTopLevel,
       Object defaultValue) {
     DataType sparkType = column.sparkType();
-    if (!sparkType.sameType(vector.dataType())) {
+    if (!DataTypeUtils.sameType(sparkType, vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + sparkType +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }
@@ -90,7 +92,7 @@ final class ParquetColumnVector {
       // the appendObjects method. This delegates to some specific append* method depending on the
       // type of 'defaultValue'; for example, if 'defaultValue' is a Float, then we call the
       // appendFloats method.
-      if (!vector.appendObjects(capacity, defaultValue).isPresent()) {
+      if (vector.appendObjects(capacity, defaultValue).isEmpty()) {
         throw new IllegalArgumentException("Cannot assign default column value to result " +
           "column batch in vectorized Parquet reader because the data type is not supported: " +
           defaultValue);
@@ -174,7 +176,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (type instanceof StructType) {
+    } else if (type instanceof StructType || type instanceof VariantType) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
@@ -342,14 +344,10 @@ final class ParquetColumnVector {
   }
 
   private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
-    switch (memoryMode) {
-      case ON_HEAP:
-        return new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      case OFF_HEAP:
-        return new OffHeapColumnVector(capacity, DataTypes.IntegerType);
-      default:
-        throw new IllegalArgumentException("Unknown memory mode: " + memoryMode);
-    }
+    return switch (memoryMode) {
+      case ON_HEAP -> new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      case OFF_HEAP -> new OffHeapColumnVector(capacity, DataTypes.IntegerType);
+    };
   }
 
   /**

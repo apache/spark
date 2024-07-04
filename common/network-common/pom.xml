@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-network-common_2.12</artifactId>
+  <artifactId>spark-network-common_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Networking</name>
   <url>https://spark.apache.org/</url>
@@ -35,12 +35,6 @@
   </properties>
 
   <dependencies>
-    <!-- SPARK-28932 This is required in JDK11 -->
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
-    </dependency>
-
     <!-- Core dependencies -->
     <!-- Netty Begin -->
     <dependency>
@@ -65,6 +59,26 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-transport-native-kqueue</artifactId>
+      <classifier>osx-x86_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-boringssl-static</artifactId>
+      <classifier>linux-x86_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-boringssl-static</artifactId>
+      <classifier>linux-aarch_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-boringssl-static</artifactId>
+      <classifier>osx-aarch_64</classifier>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-boringssl-static</artifactId>
       <classifier>osx-x86_64</classifier>
     </dependency>
     <!-- Netty End -->
@@ -147,11 +161,22 @@
       <artifactId>log4j-slf4j2-impl</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-tags_${scala.binary.version}</artifactId>
-   </dependency>
+      <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
 
     <!--
       This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 import datetime
 import decimal
@@ -21,15 +24,14 @@ import warnings
 
 from typing import (
     TYPE_CHECKING,
-    Callable,
     Any,
     Union,
-    overload,
     Optional,
 )
 
+from pyspark.sql.column import Column as ParentColumn
+from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
 from pyspark.sql.types import DataType
-from pyspark.sql.column import Column as PySparkColumn
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
@@ -44,6 +46,7 @@ from pyspark.sql.connect.expressions import (
     WithField,
     DropField,
 )
+from pyspark.errors.utils import with_origin_to_class
 
 
 if TYPE_CHECKING:
@@ -56,195 +59,320 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.window import WindowSpec
 
 
-def _func_op(name: str, doc: Optional[str] = "") -> Callable[["Column"], "Column"]:
-    def wrapped(self: "Column") -> "Column":
-        return Column(UnresolvedFunction(name, [self._expr]))
-
-    wrapped.__doc__ = doc
-    return wrapped
+def _func_op(name: str, self: ParentColumn) -> ParentColumn:
+    return Column(UnresolvedFunction(name, [self._expr]))  # type: ignore[list-item]
 
 
 def _bin_op(
-    name: str, doc: Optional[str] = "binary function", reverse: bool = False
-) -> Callable[["Column", Any], "Column"]:
-    def wrapped(self: "Column", other: Any) -> "Column":
-        if other is None or isinstance(
-            other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
-        ):
-            other_expr = LiteralExpression._from_value(other)
-        else:
-            other_expr = other._expr
+    name: str,
+    self: ParentColumn,
+    other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
+    reverse: bool = False,
+) -> ParentColumn:
+    if other is None or isinstance(
+        other,
+        (
+            bool,
+            float,
+            int,
+            str,
+            datetime.datetime,
+            datetime.date,
+            decimal.Decimal,
+            datetime.timedelta,
+        ),
+    ):
+        other_expr = LiteralExpression._from_value(other)
+    else:
+        other_expr = other._expr  # type: ignore[assignment]
 
-        if not reverse:
-            return Column(UnresolvedFunction(name, [self._expr, other_expr]))
-        else:
-            return Column(UnresolvedFunction(name, [other_expr, self._expr]))
-
-    wrapped.__doc__ = doc
-    return wrapped
+    if not reverse:
+        return Column(UnresolvedFunction(name, [self._expr, other_expr]))  # type: ignore[list-item]
+    else:
+        return Column(UnresolvedFunction(name, [other_expr, self._expr]))  # type: ignore[list-item]
 
 
-def _unary_op(name: str, doc: Optional[str] = "unary function") -> Callable[["Column"], "Column"]:
-    def wrapped(self: "Column") -> "Column":
-        return Column(UnresolvedFunction(name, [self._expr]))
-
-    wrapped.__doc__ = doc
-    return wrapped
+def _unary_op(name: str, self: ParentColumn) -> ParentColumn:
+    return Column(UnresolvedFunction(name, [self._expr]))  # type: ignore[list-item]
 
 
-class Column:
+def _to_expr(v: Any) -> Expression:
+    return v._expr if isinstance(v, Column) else LiteralExpression._from_value(v)
+
+
+@with_origin_to_class
+class Column(ParentColumn):
+    def __new__(
+        cls,
+        expr: "Expression",
+    ) -> "Column":
+        self = object.__new__(cls)
+        self.__init__(expr)  # type: ignore[misc]
+        return self
+
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
-            raise TypeError(
-                f"Cannot construct column expected Expression, got {expr} ({type(expr)})"
+            raise PySparkTypeError(
+                error_class="NOT_EXPRESSION",
+                message_parameters={"arg_name": "expr", "arg_type": type(expr).__name__},
             )
         self._expr = expr
 
-    __gt__ = _bin_op(">")
-    __lt__ = _bin_op("<")
-    __add__ = _bin_op("+")
-    __sub__ = _bin_op("-")
-    __mul__ = _bin_op("*")
-    __div__ = _bin_op("/")
-    __truediv__ = _bin_op("/")
-    __mod__ = _bin_op("%")
-    __radd__ = _bin_op("+", reverse=True)
-    __rsub__ = _bin_op("-", reverse=True)
-    __rmul__ = _bin_op("*", reverse=True)
-    __rdiv__ = _bin_op("/", reverse=True)
-    __rtruediv__ = _bin_op("/", reverse=True)
-    __rmod__ = _bin_op("%", reverse=True)
-    __pow__ = _bin_op("power")
-    __rpow__ = _bin_op("power", reverse=True)
-    __ge__ = _bin_op(">=")
-    __le__ = _bin_op("<=")
+    def __gt__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op(">", self, other)
 
-    eqNullSafe = _bin_op("<=>", PySparkColumn.eqNullSafe.__doc__)
+    def __lt__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("<", self, other)
 
-    __neg__ = _func_op("negative")
+    def __add__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("+", self, other)
+
+    def __sub__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("-", self, other)
+
+    def __mul__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("*", self, other)
+
+    def __div__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("/", self, other)
+
+    def __truediv__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("/", self, other)
+
+    def __mod__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("%", self, other)
+
+    def __radd__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("+", self, other, reverse=True)
+
+    def __rsub__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("-", self, other, reverse=True)
+
+    def __rmul__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("*", self, other, reverse=True)
+
+    def __rdiv__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("/", self, other, reverse=True)
+
+    def __rtruediv__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("/", self, other, reverse=True)
+
+    def __rmod__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("%", self, other, reverse=True)
+
+    def __pow__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("power", self, other)
+
+    def __rpow__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("power", self, other, reverse=True)
+
+    def __ge__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op(">=", self, other)
+
+    def __le__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("<=", self, other)
+
+    def eqNullSafe(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("<=>", self, other)
+
+    def __neg__(self) -> ParentColumn:
+        return _func_op("negative", self)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
-    __and__ = _bin_op("and")
-    __or__ = _bin_op("or")
-    __invert__ = _func_op("not")
-    __rand__ = _bin_op("and")
-    __ror__ = _bin_op("or")
+    def __and__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("and", self, other)
+
+    def __or__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("or", self, other)
+
+    def __invert__(self) -> ParentColumn:
+        return _func_op("not", self)
+
+    def __rand__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("and", self, other)
+
+    def __ror__(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("or", self, other)
 
     # container operators
     def __contains__(self, item: Any) -> None:
-        raise ValueError(
-            "Cannot apply 'in' operator against a column: please use 'contains' "
-            "in a string column or 'array_contains' function for an array column."
+        raise PySparkValueError(
+            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
+            message_parameters={},
         )
 
     # bitwise operators
-    bitwiseOR = _bin_op("|", PySparkColumn.bitwiseOR.__doc__)
-    bitwiseAND = _bin_op("&", PySparkColumn.bitwiseAND.__doc__)
-    bitwiseXOR = _bin_op("^", PySparkColumn.bitwiseXOR.__doc__)
+    def bitwiseOR(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("|", self, other)
 
-    isNull = _unary_op("isnull", PySparkColumn.isNull.__doc__)
-    isNotNull = _unary_op("isnotnull", PySparkColumn.isNotNull.__doc__)
+    def bitwiseAND(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("&", self, other)
+
+    def bitwiseXOR(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("^", self, other)
+
+    def isNull(self) -> ParentColumn:
+        return _unary_op("isNull", self)
+
+    def isNotNull(self) -> ParentColumn:
+        return _unary_op("isNotNull", self)
+
+    def isNaN(self) -> ParentColumn:
+        return _unary_op("isNaN", self)
 
     def __ne__(  # type: ignore[override]
         self,
         other: Any,
-    ) -> "Column":
-        """binary function"""
-        return _func_op("not")(_bin_op("==")(self, other))
+    ) -> ParentColumn:
+        return _func_op("not", _bin_op("==", self, other))
 
     # string methods
-    contains = _bin_op("contains", PySparkColumn.contains.__doc__)
-    startswith = _bin_op("startswith", PySparkColumn.startswith.__doc__)
-    endswith = _bin_op("endswith", PySparkColumn.endswith.__doc__)
+    def contains(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("contains", self, other)
 
-    def when(self, condition: "Column", value: Any) -> "Column":
+    def startswith(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("startsWith", self, other)
+
+    def endswith(
+        self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
+    ) -> ParentColumn:
+        return _bin_op("endsWith", self, other)
+
+    def when(self, condition: ParentColumn, value: Any) -> ParentColumn:
         if not isinstance(condition, Column):
-            raise TypeError("condition should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            )
 
         if not isinstance(self._expr, CaseWhen):
-            raise TypeError(
-                "when() can only be applied on a Column previously generated by when() function"
+            raise PySparkTypeError(
+                error_class="INVALID_WHEN_USAGE",
+                message_parameters={},
             )
 
         if self._expr._else_value is not None:
-            raise TypeError("when() cannot be applied once otherwise() is applied")
+            raise PySparkTypeError(
+                error_class="INVALID_WHEN_USAGE",
+                message_parameters={},
+            )
 
-        if isinstance(value, Column):
-            _value = value._expr
-        else:
-            _value = LiteralExpression._from_value(value)
+        return Column(
+            CaseWhen(
+                branches=self._expr._branches + [(condition._expr, _to_expr(value))],
+                else_value=None,
+            )
+        )
 
-        _branches = self._expr._branches + [(condition._expr, _value)]
-
-        return Column(CaseWhen(branches=_branches, else_value=None))
-
-    when.__doc__ = PySparkColumn.when.__doc__
-
-    def otherwise(self, value: Any) -> "Column":
+    def otherwise(self, value: Any) -> ParentColumn:
         if not isinstance(self._expr, CaseWhen):
-            raise TypeError(
+            raise PySparkTypeError(
                 "otherwise() can only be applied on a Column previously generated by when()"
             )
 
         if self._expr._else_value is not None:
-            raise TypeError(
+            raise PySparkTypeError(
                 "otherwise() can only be applied once on a Column previously generated by when()"
             )
 
-        if isinstance(value, Column):
-            _value = value._expr
-        else:
-            _value = LiteralExpression._from_value(value)
+        return Column(
+            CaseWhen(
+                branches=self._expr._branches,
+                else_value=_to_expr(value),
+            )
+        )
 
-        return Column(CaseWhen(branches=self._expr._branches, else_value=_value))
+    def like(self: ParentColumn, other: str) -> ParentColumn:
+        return _bin_op("like", self, other)
 
-    otherwise.__doc__ = PySparkColumn.otherwise.__doc__
+    def rlike(self: ParentColumn, other: str) -> ParentColumn:
+        return _bin_op("rlike", self, other)
 
-    like = _bin_op("like", PySparkColumn.like.__doc__)
-    rlike = _bin_op("rlike", PySparkColumn.rlike.__doc__)
-    ilike = _bin_op("ilike", PySparkColumn.ilike.__doc__)
+    def ilike(self: ParentColumn, other: str) -> ParentColumn:
+        return _bin_op("ilike", self, other)
 
-    @overload
-    def substr(self, startPos: int, length: int) -> "Column":
-        ...
-
-    @overload
-    def substr(self, startPos: "Column", length: "Column") -> "Column":
-        ...
-
-    def substr(self, startPos: Union[int, "Column"], length: Union[int, "Column"]) -> "Column":
+    def substr(
+        self, startPos: Union[int, ParentColumn], length: Union[int, ParentColumn]
+    ) -> ParentColumn:
         if type(startPos) != type(length):
-            raise TypeError(
-                "startPos and length must be the same type. "
-                "Got {startPos_t} and {length_t}, respectively.".format(
-                    startPos_t=type(startPos),
-                    length_t=type(length),
-                )
+            raise PySparkTypeError(
+                error_class="NOT_SAME_TYPE",
+                message_parameters={
+                    "arg_name1": "startPos",
+                    "arg_name2": "length",
+                    "arg_type1": type(startPos).__name__,
+                    "arg_type2": type(length).__name__,
+                },
             )
 
-        if isinstance(length, Column):
-            length_expr = length._expr
-        elif isinstance(length, int):
-            length_expr = LiteralExpression._from_value(length)
+        if isinstance(length, (Column, int)):
+            length_expr = _to_expr(length)
+            start_expr = _to_expr(startPos)
         else:
-            raise TypeError("Unsupported type for substr().")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={"arg_name": "startPos", "arg_type": type(length).__name__},
+            )
+        return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
-        if isinstance(startPos, Column):
-            start_expr = startPos._expr
-        elif isinstance(startPos, int):
-            start_expr = LiteralExpression._from_value(startPos)
-        else:
-            raise TypeError("Unsupported type for substr().")
-
-        return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
-
-    substr.__doc__ = PySparkColumn.substr.__doc__
-
-    def __eq__(self, other: Any) -> "Column":  # type: ignore[override]
-        """Returns a binary expression with the current column as the left
-        side and the other expression as the right side.
-        """
+    def __eq__(self, other: Any) -> ParentColumn:  # type: ignore[override]
         if other is None or isinstance(
             other, (bool, float, int, str, datetime.datetime, datetime.date, decimal.Decimal)
         ):
@@ -257,85 +385,85 @@ class Column:
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         return self._expr.to_plan(session)
 
-    def alias(self, *alias: str, **kwargs: Any) -> "Column":
+    def alias(self, *alias: str, **kwargs: Any) -> ParentColumn:
         return Column(self._expr.alias(*alias, **kwargs))
-
-    alias.__doc__ = PySparkColumn.alias.__doc__
 
     name = alias
 
-    name.__doc__ = PySparkColumn.name.__doc__
-
-    def asc(self) -> "Column":
+    def asc(self) -> ParentColumn:
         return self.asc_nulls_first()
 
-    def asc_nulls_first(self) -> "Column":
+    def asc_nulls_first(self) -> ParentColumn:
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=True))
 
-    def asc_nulls_last(self) -> "Column":
+    def asc_nulls_last(self) -> ParentColumn:
         return Column(SortOrder(self._expr, ascending=True, nullsFirst=False))
 
-    def desc(self) -> "Column":
+    def desc(self) -> ParentColumn:
         return self.desc_nulls_last()
 
-    def desc_nulls_first(self) -> "Column":
+    def desc_nulls_first(self) -> ParentColumn:
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=True))
 
-    def desc_nulls_last(self) -> "Column":
+    def desc_nulls_last(self) -> ParentColumn:
         return Column(SortOrder(self._expr, ascending=False, nullsFirst=False))
 
-    def cast(self, dataType: Union[DataType, str]) -> "Column":
+    def cast(self, dataType: Union[DataType, str]) -> ParentColumn:
         if isinstance(dataType, (DataType, str)):
             return Column(CastExpression(expr=self._expr, data_type=dataType))
         else:
-            raise TypeError("unexpected type: %s" % type(dataType))
-
-    cast.__doc__ = PySparkColumn.cast.__doc__
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
 
     astype = cast
+
+    def try_cast(self, dataType: Union[DataType, str]) -> ParentColumn:
+        if isinstance(dataType, (DataType, str)):
+            return Column(
+                CastExpression(
+                    expr=self._expr,
+                    data_type=dataType,
+                    eval_mode="try",
+                )
+            )
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
 
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
-    def over(self, window: "WindowSpec") -> "Column":
+    def over(self, window: "WindowSpec") -> ParentColumn:  # type: ignore[override]
         from pyspark.sql.connect.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
-            raise TypeError(
-                f"window should be WindowSpec, but got {type(window).__name__} {window}"
+            raise PySparkTypeError(
+                error_class="NOT_WINDOWSPEC",
+                message_parameters={"arg_name": "window", "arg_type": type(window).__name__},
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
 
-    over.__doc__ = PySparkColumn.over.__doc__
-
-    def isin(self, *cols: Any) -> "Column":
+    def isin(self, *cols: Any) -> ParentColumn:
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             _cols = list(cols[0])
         else:
             _cols = list(cols)
 
-        _exprs = [self._expr]
-        for c in _cols:
-            if isinstance(c, Column):
-                _exprs.append(c._expr)
-            else:
-                _exprs.append(LiteralExpression._from_value(c))
-
-        return Column(UnresolvedFunction("in", _exprs))
-
-    isin.__doc__ = PySparkColumn.isin.__doc__
+        return Column(UnresolvedFunction("in", [self._expr] + [_to_expr(c) for c in _cols]))
 
     def between(
         self,
-        lowerBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
-        upperBound: Union["Column", "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
-    ) -> "Column":
+        lowerBound: Union[ParentColumn, "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+        upperBound: Union[ParentColumn, "LiteralType", "DateTimeLiteral", "DecimalLiteral"],
+    ) -> ParentColumn:
         return (self >= lowerBound) & (self <= upperBound)
 
-    between.__doc__ = PySparkColumn.between.__doc__
-
-    def getItem(self, key: Any) -> "Column":
+    def getItem(self, key: Any) -> ParentColumn:
         if isinstance(key, Column):
             warnings.warn(
                 "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
@@ -345,9 +473,7 @@ class Column:
             )
         return self[key]
 
-    getItem.__doc__ = PySparkColumn.getItem.__doc__
-
-    def getField(self, name: Any) -> "Column":
+    def getField(self, name: Any) -> ParentColumn:
         if isinstance(name, Column):
             warnings.warn(
                 "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
@@ -357,27 +483,31 @@ class Column:
             )
         return self[name]
 
-    getField.__doc__ = PySparkColumn.getField.__doc__
-
-    def withField(self, fieldName: str, col: "Column") -> "Column":
+    def withField(self, fieldName: str, col: ParentColumn) -> ParentColumn:
         if not isinstance(fieldName, str):
-            raise TypeError(
-                f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
             )
 
         if not isinstance(col, Column):
-            raise TypeError(f"col should be a Column, but got {type(col).__name__} {col}")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
 
         return Column(WithField(self._expr, fieldName, col._expr))
 
-    withField.__doc__ = PySparkColumn.withField.__doc__
-
-    def dropFields(self, *fieldNames: str) -> "Column":
+    def dropFields(self, *fieldNames: str) -> ParentColumn:
         dropField: Optional[DropField] = None
         for fieldName in fieldNames:
             if not isinstance(fieldName, str):
-                raise TypeError(
-                    f"fieldName should be a string, but got {type(fieldName).__name__} {fieldName}"
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={
+                        "arg_name": "fieldName",
+                        "arg_type": type(fieldName).__name__,
+                    },
                 )
 
             if dropField is None:
@@ -386,38 +516,50 @@ class Column:
                 dropField = DropField(dropField, fieldName)
 
         if dropField is None:
-            raise ValueError("dropFields requires at least 1 field")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_EMPTY",
+                message_parameters={
+                    "item": "dropFields",
+                },
+            )
 
         return Column(dropField)
 
-    dropFields.__doc__ = PySparkColumn.dropFields.__doc__
-
-    def __getattr__(self, item: Any) -> "Column":
+    def __getattr__(self, item: Any) -> ParentColumn:
+        if item == "_jc":
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
+            )
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         return self[item]
 
-    def __getitem__(self, k: Any) -> "Column":
+    def __getitem__(self, k: Any) -> ParentColumn:
         if isinstance(k, slice):
             if k.step is not None:
-                raise ValueError("slice with step is not supported.")
+                raise PySparkValueError(
+                    error_class="SLICE_WITH_STEP",
+                    message_parameters={},
+                )
             return self.substr(k.start, k.stop)
         else:
-            return Column(UnresolvedExtractValue(self._expr, LiteralExpression._from_value(k)))
+            return Column(UnresolvedExtractValue(self._expr, _to_expr(k)))
 
     def __iter__(self) -> None:
-        raise TypeError("Column is not iterable")
+        raise PySparkTypeError(
+            error_class="NOT_ITERABLE",
+            message_parameters={"objectName": "Column"},
+        )
 
     def __nonzero__(self) -> None:
-        raise ValueError(
-            "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
-            "'~' for 'not' when building DataFrame boolean expressions."
+        raise PySparkValueError(
+            error_class="CANNOT_CONVERT_COLUMN_INTO_BOOL",
+            message_parameters={},
         )
 
     __bool__ = __nonzero__
-
-
-Column.__doc__ = PySparkColumn.__doc__
 
 
 def _test() -> None:
@@ -425,37 +567,27 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.column
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.column.__dict__.copy()
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.column tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
+    )
 
-    if should_test_connect:
-        import pyspark.sql.connect.column
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.column,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
 
-        globs = pyspark.sql.connect.column.__dict__.copy()
-        globs["spark"] = (
-            PySparkSession.builder.appName("sql.connect.column tests")
-            .remote("local[4]")
-            .getOrCreate()
-        )
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.column,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS
-            | doctest.NORMALIZE_WHITESPACE
-            | doctest.IGNORE_EXCEPTION_DETAIL,
-        )
-
-        globs["spark"].stop()
-
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.column doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

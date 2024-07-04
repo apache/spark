@@ -23,10 +23,12 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.tags.SlowSQLTest
 
-
+@SlowSQLTest
 class DatasetCacheSuite extends QueryTest
   with SharedSparkSession
   with TimeLimits
@@ -269,6 +271,44 @@ class DatasetCacheSuite extends QueryTest
           // Optimized plan has non-default size in bytes
           assert(i.statsOfPlanToCache.sizeInBytes !==
             df.sparkSession.sessionState.conf.defaultSizeInBytes)
+      }
+    }
+  }
+
+  test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
+    val df1 = Seq(1 -> 1).toDF("i", "j")
+    val df2 = Seq(2 -> 2).toDF("i", "j")
+    val df3 = Seq(3 -> 3).toDF("i", "j")
+
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+      withClue("positive: union by position") {
+        val unionDf = df1.union(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.union(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("positive: union by name") {
+        val unionDf = df1.unionByName(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by position") {
+        val unionDf = df1.union(df2)
+        unionDf.cache()
+        val finalDf = unionDf.union(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by name") {
+        val unionDf = df1.unionByName(df2)
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
       }
     }
   }

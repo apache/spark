@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
+import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.util.Arrays;
@@ -29,9 +30,11 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -58,7 +61,7 @@ import org.apache.spark.util.Utils;
  */
 public class TaskMemoryManager {
 
-  private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TaskMemoryManager.class);
 
   /** The number of bits used to address the page table. */
   private static final int PAGE_NUMBER_BITS = 13;
@@ -149,8 +152,10 @@ public class TaskMemoryManager {
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
-        logger.debug("Task {} need to spill {} for {}", taskAttemptId,
-          Utils.bytesToString(required - got), requestingConsumer);
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} need to spill {} for {}", taskAttemptId,
+            Utils.bytesToString(required - got), requestingConsumer);
+        }
         // We need to call spill() on consumers to free up more memory. We want to optimize for two
         // things:
         // * Minimize the number of spill calls, to reduce the number of spill files and avoid small
@@ -193,8 +198,10 @@ public class TaskMemoryManager {
       }
 
       consumers.add(requestingConsumer);
-      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
-              requestingConsumer);
+      if (logger.isDebugEnabled()) {
+        logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
+          requestingConsumer);
+      }
       return got;
     }
   }
@@ -215,14 +222,18 @@ public class TaskMemoryManager {
       int idx) {
     MemoryMode mode = requestingConsumer.getMode();
     MemoryConsumer consumerToSpill = cList.get(idx);
-    logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
-      Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
+        Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
+    }
     try {
       long released = consumerToSpill.spill(requested, requestingConsumer);
       if (released > 0) {
-        logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,
-          Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
-          requestingConsumer);
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,
+            Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
+            requestingConsumer);
+        }
 
         // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
         // immediately notify other tasks that memory has been freed, and they may acquire the
@@ -234,12 +245,14 @@ public class TaskMemoryManager {
         cList.remove(idx);
         return 0;
       }
-    } catch (ClosedByInterruptException e) {
+    } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
-      logger.error("error while calling spill() on " + consumerToSpill, e);
+      logger.error("error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      logger.error("error while calling spill() on " + consumerToSpill, e);
+      logger.error("error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
       throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
         + e.getMessage());
@@ -251,7 +264,10 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
-    logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size),
+        consumer);
+    }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
   }
 
@@ -259,24 +275,29 @@ public class TaskMemoryManager {
    * Dump the memory usage of all consumers.
    */
   public void showMemoryUsage() {
-    logger.info("Memory used in task " + taskAttemptId);
+    logger.info("Memory used in task {}",
+      MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
         long totalMemUsage = c.getUsed();
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
-          logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
+          logger.info("Acquired by {}: {}",
+            MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, c),
+            MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        memoryNotAccountedFor, taskAttemptId);
+        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, memoryNotAccountedFor),
+        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
       logger.info(
         "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
-        memoryManager.executionMemoryUsed(), memoryManager.storageMemoryUsed());
+        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE$.MODULE$, memoryManager.executionMemoryUsed()),
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE$.MODULE$,  memoryManager.storageMemoryUsed()));
     }
   }
 
@@ -322,7 +343,8 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
+      logger.warn("Failed to allocate a page ({} bytes), try again.",
+        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, acquired));
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {
@@ -446,15 +468,19 @@ public class TaskMemoryManager {
     synchronized (this) {
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
-          // In case of failed task, it's normal to see leaked memory
-          logger.debug("unreleased " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
+          if (logger.isDebugEnabled()) {
+            // In case of failed task, it's normal to see leaked memory
+            logger.debug("unreleased {} memory from {}", Utils.bytesToString(c.getUsed()), c);
+          }
         }
       }
       consumers.clear();
 
       for (MemoryBlock page : pageTable) {
         if (page != null) {
-          logger.debug("unreleased page: " + page + " in task " + taskAttemptId);
+          if (logger.isDebugEnabled()) {
+            logger.debug("unreleased page: {} in task {}", page, taskAttemptId);
+          }
           page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
           memoryManager.tungstenMemoryAllocator().free(page);
         }

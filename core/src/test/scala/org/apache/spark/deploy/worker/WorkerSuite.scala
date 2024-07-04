@@ -23,13 +23,13 @@ import java.util.function.Supplier
 
 import scala.concurrent.duration._
 
-import org.json4s.{DefaultFormats, Extraction}
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -49,7 +49,7 @@ import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.util.Utils
 
-class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
+class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with PrivateMethodTester {
 
   import org.apache.spark.deploy.DeployTestUtils._
 
@@ -60,7 +60,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
   def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
+
+  private val _generateWorkerId = PrivateMethod[String](Symbol("generateWorkerId"))
 
   private var _worker: Worker = _
 
@@ -390,5 +392,17 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       assert(!executorDir.exists())
       assert(cleanupCalled.get() == dbCleanupEnabled)
     }
+  }
+
+  test("SPARK-45867: Support worker id pattern") {
+    val worker = makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my-worker-%2$s"))
+    assert(worker.invokePrivate(_generateWorkerId()) === "my-worker-localhost")
+  }
+
+  test("SPARK-45867: Prevent invalid worker id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my worker"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
   }
 }

@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.loss.{AbsoluteError, LogLoss, SquaredError}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suite for [[GradientBoostedTrees]].
@@ -34,8 +35,10 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
   test("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
-    val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2).map(_.asML.toInstance)
-    val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2).map(_.asML.toInstance)
+    val trainRdd = sc.parallelize(OldGBTSuite.trainData.toImmutableArraySeq, 2)
+      .map(_.asML.toInstance)
+    val validateRdd = sc.parallelize(OldGBTSuite.validateData.toImmutableArraySeq, 2)
+      .map(_.asML.toInstance)
     val seed = 42
 
     val algos = Array(Regression, Regression, Classification)

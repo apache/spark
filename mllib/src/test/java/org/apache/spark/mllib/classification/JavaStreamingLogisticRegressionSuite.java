@@ -22,9 +22,9 @@ import java.util.List;
 
 import scala.Tuple2;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.mllib.linalg.Vector;
@@ -40,7 +40,7 @@ public class JavaStreamingLogisticRegressionSuite {
 
   protected transient JavaStreamingContext ssc;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     SparkConf conf = new SparkConf()
       .setMaster("local[2]")
@@ -50,7 +50,7 @@ public class JavaStreamingLogisticRegressionSuite {
     ssc.checkpoint("checkpoint");
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     ssc.stop();
     ssc = null;

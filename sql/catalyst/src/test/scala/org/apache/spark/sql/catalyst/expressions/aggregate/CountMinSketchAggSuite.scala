@@ -144,19 +144,19 @@ class CountMinSketchAggSuite extends SparkFunSuite {
     assertResult(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        Map("inputName" -> "eps", "inputType" -> "\"DOUBLE\"", "inputExpr" -> "\"a\"")
+        Map("inputName" -> "`eps`", "inputType" -> "\"DOUBLE\"", "inputExpr" -> "\"a\"")
       )
     )(wrongEps.checkInputDataTypes())
     assertResult(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        Map("inputName" -> "confidence", "inputType" -> "\"DOUBLE\"", "inputExpr" -> "\"b\"")
+        Map("inputName" -> "`confidence`", "inputType" -> "\"DOUBLE\"", "inputExpr" -> "\"b\"")
       )
     )(wrongConfidence.checkInputDataTypes())
     assertResult(
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
-        Map("inputName" -> "seed", "inputType" -> "\"INT\"", "inputExpr" -> "\"c\"")
+        Map("inputName" -> "`seed`", "inputType" -> "\"INT\"", "inputExpr" -> "\"c\"")
       )
     )(wrongSeed.checkInputDataTypes())
   }

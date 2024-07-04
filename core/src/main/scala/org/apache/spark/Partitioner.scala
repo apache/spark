@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.log10
@@ -135,6 +136,24 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  */
 private[spark] class PartitionIdPassthrough(override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+}
+
+/**
+ * A [[org.apache.spark.Partitioner]] that partitions all records using partition value map.
+ * The `valueMap` is a map that contains tuples of (partition value, partition id). It is generated
+ * by [[org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning]], used to partition
+ * the other side of a join to make sure records with same partition value are in the same
+ * partition.
+ */
+private[spark] class KeyGroupedPartitioner(
+    valueMap: mutable.Map[Seq[Any], Int],
+    override val numPartitions: Int) extends Partitioner {
+  override def getPartition(key: Any): Int = {
+    val keys = key.asInstanceOf[Seq[Any]]
+    val normalizedKeys = ArraySeq.from(keys)
+    valueMap.getOrElseUpdate(normalizedKeys,
+      Utils.nonNegativeMod(normalizedKeys.hashCode, numPartitions))
+  }
 }
 
 /**

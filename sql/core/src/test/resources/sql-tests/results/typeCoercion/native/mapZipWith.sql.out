@@ -79,26 +79,9 @@ struct<m:map<double,struct<k:double,v1:double,v2:float>>>
 SELECT map_zip_with(decimal_map1, decimal_map2, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<>
+struct<m:map<decimal(38,2),struct<k:decimal(38,2),v1:decimal(36,0),v2:decimal(36,35)>>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "functionName" : "`map_zip_with`",
-    "leftType" : "\"DECIMAL(36,0)\"",
-    "rightType" : "\"DECIMAL(36,35)\"",
-    "sqlExpr" : "\"map_zip_with(decimal_map1, decimal_map2, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 81,
-    "fragment" : "map_zip_with(decimal_map1, decimal_map2, (k, v1, v2) -> struct(k, v1, v2))"
-  } ]
-}
+{9.22:{"k":9.22,"v1":null,"v2":9.22337203685477897945456575809789456},922337203685477897945456575809789456.00:{"k":922337203685477897945456575809789456.00,"v1":922337203685477897945456575809789456,"v2":null}}
 
 
 -- !query
@@ -123,26 +106,9 @@ struct<m:map<double,struct<k:double,v1:decimal(36,0),v2:double>>>
 SELECT map_zip_with(decimal_map2, int_map, (k, v1, v2) -> struct(k, v1, v2)) m
 FROM various_maps
 -- !query schema
-struct<>
+struct<m:map<decimal(38,28),struct<k:decimal(38,28),v1:decimal(36,35),v2:int>>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "functionName" : "`map_zip_with`",
-    "leftType" : "\"DECIMAL(36,35)\"",
-    "rightType" : "\"INT\"",
-    "sqlExpr" : "\"map_zip_with(decimal_map2, int_map, lambdafunction(struct(k, v1, v2), k, v1, v2))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 76,
-    "fragment" : "map_zip_with(decimal_map2, int_map, (k, v1, v2) -> struct(k, v1, v2))"
-  } ]
-}
+{2.0000000000000000000000000000:{"k":2.0000000000000000000000000000,"v1":null,"v2":1},9.2233720368547789794545657581:{"k":9.2233720368547789794545657581,"v1":9.22337203685477897945456575809789456,"v2":null}}
 
 
 -- !query

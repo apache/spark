@@ -6,21 +6,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "> 0",
-    "functionName" : "`concat_ws`",
-    "sqlExpr" : "\"concat_ws()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "concat_ws()"
-  } ]
+    "functionName" : "`concat_ws`"
+  }
 }
 
 
@@ -31,21 +24,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
-  "sqlState" : "42K09",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "> 0",
-    "functionName" : "`format_string`",
-    "sqlExpr" : "\"format_string()\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "format_string()"
-  } ]
+    "functionName" : "`format_string`"
+  }
 }
 
 
@@ -266,7 +252,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "errorClass" : "INVALID_INDEX_OF_ZERO",
   "sqlState" : "22003"
 }
 
@@ -818,16 +804,221 @@ Wabca
 
 
 -- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	true
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<encode(hello, WINDOWS-1252):binary>
+-- !query output
+hello
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+hello
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	false
+
+
+-- !query
+select encode('hello', 'WINDOWS-1252')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode('hello', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('hello', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`encode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	true
+
+
+-- !query
+select encode('渭城朝雨浥轻尘', 'US-ASCII')
+-- !query schema
+struct<encode(渭城朝雨浥轻尘, US-ASCII):binary>
+-- !query output
+???????
+
+
+-- !query
+select encode(scol, ecol) from values('渭城朝雨浥轻尘', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<encode(scol, ecol):binary>
+-- !query output
+???????
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	false
+
+
+-- !query
+select encode('客舍青青柳色新', 'US-ASCII')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`encode`"
+  }
+}
+
+
+-- !query
+select encode(scol, ecol) from values('客舍青青柳色新', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`encode`"
+  }
+}
+
+
+-- !query
+select encode(decode(encode('白日依山尽，黄河入海流。欲穷千里目，更上一层楼。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(白日依山尽，黄河入海流。欲穷千里目，更上一层楼。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+白日依山尽，黄河入海流。欲穷千里目，更上一层楼。
+
+
+-- !query
+select encode(decode(encode('南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+南山經之首曰䧿山。其首曰招搖之山，臨於西海之上。
+
+
+-- !query
+select encode(decode(encode('세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+세계에서 가장 인기 있는 빅데이터 처리 프레임워크인 Spark
+
+
+-- !query
+select encode(decode(encode('το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+το Spark είναι το πιο δημοφιλές πλαίσιο επεξεργασίας μεγάλων δεδομένων παγκοσμίως
+
+
+-- !query
+select encode(decode(encode('Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。', 'UTF-16'), 'UTF-16'), 'UTF-8')
+-- !query schema
+struct<encode(decode(encode(Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。, UTF-16), UTF-16), UTF-8):binary>
+-- !query output
+Sparkは世界で最も人気のあるビッグデータ処理フレームワークである。
+
+
+-- !query
 select decode()
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`decode`"
   },
@@ -848,10 +1039,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "2",
     "functionName" : "`decode`"
   },
@@ -871,6 +1063,14 @@ select decode(encode('abc', 'utf-8'), 'utf-8')
 struct<decode(encode(abc, utf-8), utf-8):string>
 -- !query output
 abc
+
+
+-- !query
+select decode(encode('大千世界', 'utf-32'), 'utf-32')
+-- !query schema
+struct<decode(encode(大千世界, utf-32), utf-32):string>
+-- !query output
+大千世界
 
 
 -- !query
@@ -927,6 +1127,170 @@ select decode(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks', NULL, '.')
 struct<decode(NULL, 6, Spark, NULL, SQL, 4, rocks, NULL, .):string>
 -- !query output
 SQL
+
+
+-- !query
+select decode(X'68656c6c6f', 'Windows-xxx')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'Windows-xxx') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "Windows-xxx",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	true
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query schema
+struct<decode(X'68656C6C6F', WINDOWS-1252):string>
+-- !query output
+hello
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<decode(scol, ecol):string>
+-- !query output
+hello
+
+
+-- !query
+set spark.sql.legacy.javaCharsets=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.javaCharsets	false
+
+
+-- !query
+select decode(X'68656c6c6f', 'WINDOWS-1252')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'68656c6c6f', 'WINDOWS-1252') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.CHARSET",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "charset" : "WINDOWS-1252",
+    "functionName" : "`decode`",
+    "parameter" : "`charset`"
+  }
+}
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	true
+
+
+-- !query
+select decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII')
+-- !query schema
+struct<decode(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', US-ASCII):string>
+-- !query output
+���������������������
+
+
+-- !query
+select decode(scol, ecol) from values(X'E58A9DE5909BE69BB4E5B0BDE4B880E69DAFE98592', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<decode(scol, ecol):string>
+-- !query output
+���������������������
+
+
+-- !query
+set spark.sql.legacy.codingErrorAction=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.codingErrorAction	false
+
+
+-- !query
+select decode(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
+  }
+}
+
+
+-- !query
+select decode(scol, ecol) from values(X'E8A5BFE587BAE998B3E585B3E697A0E69585E4BABA', 'US-ASCII') as t(scol, ecol)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "MALFORMED_CHARACTER_CODING",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "charset" : "US-ASCII",
+    "function" : "`decode`"
+  }
+}
 
 
 -- !query
@@ -1640,7 +2004,7 @@ select to_binary('abc', 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
@@ -1666,7 +2030,7 @@ select to_binary('abc', 'invalidFormat')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.INVALID_ARG_VALUE",
   "sqlState" : "42K09",
@@ -1700,13 +2064,13 @@ SELECT to_binary('abc', fmtField) FROM fmtTable
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"fmtField\"",
-    "inputName" : "fmt",
+    "inputName" : "`fmt`",
     "inputType" : "\"STRING\"",
     "sqlExpr" : "\"to_binary(abc, fmtField)\""
   },
@@ -1726,3 +2090,250 @@ DROP VIEW IF EXISTS fmtTable
 struct<>
 -- !query output
 
+
+
+-- !query
+select luhn_check('4111111111111111')
+-- !query schema
+struct<luhn_check(4111111111111111):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('5500000000000004')
+-- !query schema
+struct<luhn_check(5500000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('340000000000009')
+-- !query schema
+struct<luhn_check(340000000000009):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000004')
+-- !query schema
+struct<luhn_check(6011000000000004):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('6011000000000005')
+-- !query schema
+struct<luhn_check(6011000000000005):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('378282246310006')
+-- !query schema
+struct<luhn_check(378282246310006):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('0')
+-- !query schema
+struct<luhn_check(0):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check('4111111111111111    ')
+-- !query schema
+struct<luhn_check(4111111111111111    ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('4111111 111111111')
+-- !query schema
+struct<luhn_check(4111111 111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(' 4111111111111111')
+-- !query schema
+struct<luhn_check( 4111111111111111):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('')
+-- !query schema
+struct<luhn_check():boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('  ')
+-- !query schema
+struct<luhn_check(  ):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('510B105105105106')
+-- !query schema
+struct<luhn_check(510B105105105106):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check('ABCDED')
+-- !query schema
+struct<luhn_check(ABCDED):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(null)
+-- !query schema
+struct<luhn_check(NULL):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select luhn_check(6011111111111117)
+-- !query schema
+struct<luhn_check(6011111111111117):boolean>
+-- !query output
+true
+
+
+-- !query
+select luhn_check(6011111111111118)
+-- !query schema
+struct<luhn_check(6011111111111118):boolean>
+-- !query output
+false
+
+
+-- !query
+select luhn_check(123.456)
+-- !query schema
+struct<luhn_check(123.456):boolean>
+-- !query output
+false
+
+
+-- !query
+select is_valid_utf8('')
+-- !query schema
+struct<is_valid_utf8():boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8('abc')
+-- !query schema
+struct<is_valid_utf8(abc):boolean>
+-- !query output
+true
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query schema
+struct<is_valid_utf8(X'80'):boolean>
+-- !query output
+false
+
+
+-- !query
+select make_valid_utf8('')
+-- !query schema
+struct<make_valid_utf8():string>
+-- !query output
+
+
+
+-- !query
+select make_valid_utf8('abc')
+-- !query schema
+struct<make_valid_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query schema
+struct<make_valid_utf8(X'80'):string>
+-- !query output
+�
+
+
+-- !query
+select validate_utf8('')
+-- !query schema
+struct<validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select validate_utf8('abc')
+-- !query schema
+struct<validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select validate_utf8(x'80')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_UTF8_STRING",
+  "sqlState" : "22029",
+  "messageParameters" : {
+    "str" : "\\x80"
+  }
+}
+
+
+-- !query
+select try_validate_utf8('')
+-- !query schema
+struct<try_validate_utf8():string>
+-- !query output
+
+
+
+-- !query
+select try_validate_utf8('abc')
+-- !query schema
+struct<try_validate_utf8(abc):string>
+-- !query output
+abc
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query schema
+struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL

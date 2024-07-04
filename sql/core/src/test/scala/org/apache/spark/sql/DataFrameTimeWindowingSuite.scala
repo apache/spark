@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
@@ -314,6 +314,42 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
       )
     }
+
+    val df3 = Seq(
+      ("1969-12-31 00:00:02", 1),
+      ("1969-12-31 00:00:12", 2)).toDF("time", "value")
+    val df4 = Seq(
+      (LocalDateTime.parse("1969-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1969-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df3, df4).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1969-12-30 23:59:55", "1969-12-31 00:00:05", 1),
+          Row("1969-12-31 00:00:05", "1969-12-31 00:00:15", 2))
+      )
+    }
+
+    val df5 = Seq(
+      ("1968-12-31 00:00:02", 1),
+      ("1968-12-31 00:00:12", 2)).toDF("time", "value")
+    val df6 = Seq(
+      (LocalDateTime.parse("1968-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1968-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df5, df6).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1968-12-30 23:59:55", "1968-12-31 00:00:05", 1),
+          Row("1968-12-31 00:00:05", "1968-12-31 00:00:15", 2))
+      )
+    }
   }
 
   test("multiple time windows in a single operator throws nice exception") {
@@ -559,7 +595,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, ExpressionEncoder(
         StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
       val windowedProject = dfWithDesiredNullability

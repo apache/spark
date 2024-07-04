@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.connector.catalog.functions.BoundFunction
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -30,7 +33,7 @@ import org.apache.spark.sql.types.DataType
 case class TransformExpression(
     function: BoundFunction,
     children: Seq[Expression],
-    numBucketsOpt: Option[Int] = None) extends Expression with Unevaluable {
+    numBucketsOpt: Option[Int] = None) extends Expression {
 
   override def nullable: Boolean = true
 
@@ -54,8 +57,82 @@ case class TransformExpression(
       false
   }
 
+  /**
+   * Whether this [[TransformExpression]]'s function is compatible with the `other`
+   * [[TransformExpression]]'s function.
+   *
+   * This is true if both are instances of [[ReducibleFunction]] and there exists a [[Reducer]] r(x)
+   * such that r(t1(x)) = t2(x), or r(t2(x)) = t1(x), for all input x.
+   *
+   * @param other the transform expression to compare to
+   * @return true if compatible, false if not
+   */
+  def isCompatible(other: TransformExpression): Boolean = {
+    if (isSameFunction(other)) {
+      true
+    } else {
+      (function, other.function) match {
+        case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
+          val thisReducer = reducer(f, numBucketsOpt, o, other.numBucketsOpt)
+          val otherReducer = reducer(o, other.numBucketsOpt, f, numBucketsOpt)
+          thisReducer.isDefined || otherReducer.isDefined
+        case _ => false
+      }
+    }
+  }
+
+  /**
+   * Return a [[Reducer]] for this transform expression on another
+   * on the transform expression.
+   * <p>
+   * A [[Reducer]] exists for a transform expression function if it is
+   * 'reducible' on the other expression function.
+   * <p>
+   * @return reducer function or None if not reducible on the other transform expression
+   */
+  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
+    (function, other.function) match {
+      case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
+        reducer(e1, numBucketsOpt, e2, other.numBucketsOpt)
+      case _ => None
+    }
+  }
+
+  // Return a Reducer for a reducible function on another reducible function
+  private def reducer(
+      thisFunction: ReducibleFunction[_, _],
+      thisNumBucketsOpt: Option[Int],
+      otherFunction: ReducibleFunction[_, _],
+      otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
+    val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
+      case (Some(numBuckets), Some(otherNumBuckets)) =>
+        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
+      case _ => thisFunction.reducer(otherFunction)
+    }
+    Option(res)
+  }
+
   override def dataType: DataType = function.resultType()
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
+
+  private lazy val resolvedFunction: Option[Expression] = this match {
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, Some(numBuckets)) =>
+      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc,
+        Seq(Literal(numBuckets)) ++ arguments))
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, None) =>
+      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments))
+    case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = {
+    resolvedFunction match {
+      case Some(fn) => fn.eval(input)
+      case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }

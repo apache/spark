@@ -19,9 +19,22 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.Locale
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
+
+  val supported = Seq(
+    "inner",
+    "outer", "full", "fullouter", "full_outer",
+    "leftouter", "left", "left_outer",
+    "rightouter", "right", "right_outer",
+    "leftsemi", "left_semi", "semi",
+    "leftanti", "left_anti", "anti",
+    "cross"
+  )
+
   def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
@@ -31,17 +44,12 @@ object JoinType {
     case "leftanti" | "anti" => LeftAnti
     case "cross" => Cross
     case _ =>
-      val supported = Seq(
-        "inner",
-        "outer", "full", "fullouter", "full_outer",
-        "leftouter", "left", "left_outer",
-        "rightouter", "right", "right_outer",
-        "leftsemi", "left_semi", "semi",
-        "leftanti", "left_anti", "anti",
-        "cross")
-
-      throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
-        "Supported join types include: " + supported.mkString("'", "', '", "'") + ".")
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_JOIN_TYPE",
+        messageParameters = Map(
+          "typ" -> typ,
+          "supported" -> supported.mkString("'", "', '", "'"))
+      )
   }
 }
 
@@ -91,7 +99,7 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
     // generate SQL for this join type
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -105,6 +113,7 @@ case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType 
   require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti, Cross).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql
+  override def toString: String = s"UsingJoin($tpe, ${usingColumns.mkString("[", ", ", "]")})"
 }
 
 object LeftExistence {
@@ -124,15 +133,19 @@ object LeftSemiOrAnti {
 
 object AsOfJoinDirection {
 
+  val supported = Seq("forward", "backward", "nearest")
+
   def apply(direction: String): AsOfJoinDirection = {
     direction.toLowerCase(Locale.ROOT) match {
       case "forward" => Forward
       case "backward" => Backward
       case "nearest" => Nearest
       case _ =>
-        val supported = Seq("forward", "backward", "nearest")
-        throw new IllegalArgumentException(s"Unsupported as-of join direction '$direction'. " +
-          "Supported as-of join direction include: " + supported.mkString("'", "', '", "'") + ".")
+        throw new AnalysisException(
+          errorClass = "AS_OF_JOIN.UNSUPPORTED_DIRECTION",
+          messageParameters = Map(
+            "direction" -> direction,
+            "supported" -> supported.mkString("'", "', '", "'")))
     }
   }
 }

@@ -44,7 +44,7 @@ import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
  * @since 3.0.0
  */
 @Unstable
-public final class CalendarInterval implements Serializable {
+public final class CalendarInterval implements Serializable, Comparable<CalendarInterval> {
   // NOTE: If you're moving or renaming this file, you should also update Unidoc configuration
   // specified in 'SparkBuild.scala'.
   public final int months;
@@ -127,4 +127,26 @@ public final class CalendarInterval implements Serializable {
    * @throws ArithmeticException if a numeric overflow occurs
    */
   public Duration extractAsDuration() { return Duration.of(microseconds, ChronoUnit.MICROS); }
+
+  /**
+   * This method is not used to order CalendarInterval instances, as they are not orderable and
+   * cannot be used in a ORDER BY statement.
+   * Instead, it is used to find identical interval instances for aggregation purposes.
+   * It compares the 'months', 'days', and 'microseconds' fields of this CalendarInterval
+   * with another instance. The comparison is done first on the 'months', then on the 'days',
+   * and finally on the 'microseconds'.
+   *
+   * @param o The CalendarInterval instance to compare with.
+   * @return Zero if this object is equal to the specified object, and non-zero otherwise
+   */
+  @Override
+  public int compareTo(CalendarInterval o) {
+    if (this.months != o.months) {
+      return Integer.compare(this.months, o.months);
+    } else if (this.days != o.days) {
+      return Integer.compare(this.days, o.days);
+    } else {
+      return Long.compare(this.microseconds, o.microseconds);
+    }
+  }
 }

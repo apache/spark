@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
@@ -35,6 +38,7 @@ import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - prettyJson") {
@@ -48,6 +52,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  "name" : "myName",
         |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "batchId" : 2,
+        |  "batchDuration" : 0,
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
@@ -114,6 +119,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |  "name" : null,
          |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "batchId" : 2,
+         |  "batchDuration" : 0,
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
@@ -166,11 +172,70 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
   test("StreamingQueryProgress - json") {
     assert(compact(parse(testProgress1.json)) === testProgress1.json)
     assert(compact(parse(testProgress2.json)) === testProgress2.json)
+    assert(compact(parse(testProgress3.json)) === testProgress3.json)
   }
 
   test("StreamingQueryProgress - toString") {
     assert(testProgress1.toString === testProgress1.prettyJson)
     assert(testProgress2.toString === testProgress2.prettyJson)
+  }
+
+  test("StreamingQueryProgress - jsonString and fromJson") {
+    Seq(testProgress1, testProgress2).foreach { input =>
+      val jsonString = StreamingQueryProgress.jsonString(input)
+      val result = StreamingQueryProgress.fromJson(jsonString)
+      assert(input.id == result.id)
+      assert(input.runId == result.runId)
+      assert(input.name == result.name)
+      assert(input.timestamp == result.timestamp)
+      assert(input.batchId == result.batchId)
+      assert(input.batchDuration == result.batchDuration)
+      assert(input.durationMs == result.durationMs)
+      assert(input.eventTime == result.eventTime)
+
+      input.stateOperators.zip(result.stateOperators).foreach { case (o1, o2) =>
+        assert(o1.operatorName == o2.operatorName)
+        assert(o1.numRowsTotal == o2.numRowsTotal)
+        assert(o1.numRowsUpdated == o2.numRowsUpdated)
+        assert(o1.allUpdatesTimeMs == o2.allUpdatesTimeMs)
+        assert(o1.numRowsRemoved == o2.numRowsRemoved)
+        assert(o1.allRemovalsTimeMs == o2.allRemovalsTimeMs)
+        assert(o1.commitTimeMs == o2.commitTimeMs)
+        assert(o1.memoryUsedBytes == o2.memoryUsedBytes)
+        assert(o1.numRowsDroppedByWatermark == o2.numRowsDroppedByWatermark)
+        assert(o1.numShufflePartitions == o2.numShufflePartitions)
+        assert(o1.numStateStoreInstances == o2.numStateStoreInstances)
+        assert(o1.customMetrics == o2.customMetrics)
+      }
+
+      input.sources.zip(result.sources).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.startOffset == s2.startOffset)
+        assert(s1.endOffset == s2.endOffset)
+        assert(s1.latestOffset == s2.latestOffset)
+        assert(s1.numInputRows == s2.numInputRows)
+        if (s1.inputRowsPerSecond.isNaN) {
+          assert(s2.inputRowsPerSecond.isNaN)
+        } else {
+          assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
+        }
+        assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      Seq(input.sink).zip(Seq(result.sink)).foreach { case (s1, s2) =>
+        assert(s1.description == s2.description)
+        assert(s1.numOutputRows == s2.numOutputRows)
+        assert(s1.metrics == s2.metrics)
+      }
+
+      val resultObservedMetrics = result.observedMetrics
+      assert(input.observedMetrics.size() == resultObservedMetrics.size())
+      assert(input.observedMetrics.keySet() == resultObservedMetrics.keySet())
+      input.observedMetrics.entrySet().forEach { e =>
+        assert(e.getValue == resultObservedMetrics.get(e.getKey))
+      }
+    }
   }
 
   test("StreamingQueryStatus - prettyJson") {
@@ -215,10 +280,10 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
       // Make sure it generates the progress objects we want to test
       assert(progress.exists { p =>
-        p.sources.size >= 1 && p.stateOperators.size >= 1 && p.sink != null
+        p.sources.length >= 1 && p.stateOperators.length >= 1 && p.sink != null
       })
 
-      val array = spark.sparkContext.parallelize(progress).collect()
+      val array = spark.sparkContext.parallelize(progress.toImmutableArraySeq).collect()
       assert(array.length === progress.length)
       array.zip(progress).foreach { case (p1, p2) =>
         // Make sure we did serialize and deserialize the object
@@ -294,6 +359,47 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     )
   }
 
+  test("SPARK-45655: Use current batch timestamp in observe API") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Timestamp]
+
+    // current_date() internally uses current batch timestamp on streaming query
+    val query = inputData.toDF()
+      .filter("value < current_date()")
+      .observe("metrics", count(expr("value >= current_date()")).alias("dropped"))
+      .writeStream
+      .queryName("ts_metrics_test")
+      .format("memory")
+      .outputMode("append")
+      .start()
+
+    val timeNow = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+
+    // this value would be accepted by the filter and would not count towards
+    // dropped metrics.
+    val validValue = Timestamp.from(timeNow.minus(2, ChronoUnit.DAYS))
+    inputData.addData(validValue)
+
+    // would be dropped by the filter and count towards dropped metrics
+    inputData.addData(Timestamp.from(timeNow.plus(2, ChronoUnit.DAYS)))
+
+    query.processAllAvailable()
+    query.stop()
+
+    val dropped = query.recentProgress.map { p =>
+      val metricVal = Option(p.observedMetrics.get("metrics"))
+      metricVal.map(_.getLong(0)).getOrElse(0L)
+    }.sum
+    // ensure dropped metrics are correct
+    assert(dropped == 1)
+
+    val data = spark.read.table("ts_metrics_test").collect()
+
+    // ensure valid value ends up in output
+    assert(data(0).getAs[Timestamp](0).equals(validValue))
+  }
+
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
@@ -331,7 +437,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     eventTime = new java.util.HashMap(Map(
       "max" -> "2016-12-05T20:54:20.827Z",
       "min" -> "2016-12-05T20:54:20.827Z",
@@ -343,7 +449,7 @@ object StreamingQueryStatusAndProgressSuite {
       numShufflePartitions = 2, numStateStoreInstances = 2,
       customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
         "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
-        .mapValues(long2Long).toMap.asJava)
+        .transform((_, v) => long2Long(v)).asJava)
     )),
     sources = Array(
       new SourceProgress(
@@ -369,7 +475,7 @@ object StreamingQueryStatusAndProgressSuite {
     timestamp = "2016-12-05T20:54:20.827Z",
     batchId = 2L,
     batchDuration = 0L,
-    durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).toMap.asJava),
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
     stateOperators = Array(new StateOperatorProgress(operatorName = "op2",
@@ -392,6 +498,28 @@ object StreamingQueryStatusAndProgressSuite {
       "event_a" -> row(schema1, null, -20.7d),
       "event_b1" -> row(schema2, 33L, "foo", "bar"),
       "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
+  )
+
+  val testProgress3 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "myName",
+    timestamp = "2024-05-28T00:00:00.233Z",
+    batchId = 2L,
+    batchDuration = 0L,
+    durationMs = null,
+    eventTime = null,
+    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
+      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
+      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
+      numShufflePartitions = 2, numStateStoreInstances = 2,
+      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
+        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
+        .transform((_, v) => long2Long(v)).asJava)
+    )),
+    sources = Array(),
+    sink = SinkProgress("sink", None),
+    observedMetrics = null
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

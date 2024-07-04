@@ -21,9 +21,6 @@ Spark Session
 =============
 .. currentmodule:: pyspark.sql
 
-.. autosummary::
-    :toctree: api/
-
 The entry point to programming Spark with the Dataset and DataFrame API.
 To create a Spark session, you should use ``SparkSession.builder`` attribute.
 See also :class:`SparkSession`.
@@ -31,17 +28,29 @@ See also :class:`SparkSession`.
 .. autosummary::
     :toctree: api/
 
+    SparkSession.active
+
+.. autosummary::
+    :toctree: api/
+    :template: autosummary/accessor_method.rst
+
     SparkSession.builder.appName
     SparkSession.builder.config
     SparkSession.builder.enableHiveSupport
     SparkSession.builder.getOrCreate
     SparkSession.builder.master
     SparkSession.builder.remote
+
+.. autosummary::
+    :toctree: api/
+
     SparkSession.catalog
     SparkSession.conf
     SparkSession.createDataFrame
+    SparkSession.dataSource
     SparkSession.getActiveSession
     SparkSession.newSession
+    SparkSession.profile
     SparkSession.range
     SparkSession.read
     SparkSession.readStream
@@ -51,4 +60,33 @@ See also :class:`SparkSession`.
     SparkSession.streams
     SparkSession.table
     SparkSession.udf
+    SparkSession.udtf
     SparkSession.version
+    is_remote
+
+Spark Connect Only
+------------------
+
+.. autosummary::
+    :toctree: api/
+    :template: autosummary/accessor_method.rst
+
+    SparkSession.builder.create
+
+.. autosummary::
+    :toctree: api/
+
+    SparkSession.addArtifact
+    SparkSession.addArtifacts
+    SparkSession.addTag
+    SparkSession.clearProgressHandlers
+    SparkSession.clearTags
+    SparkSession.client
+    SparkSession.copyFromLocalToFs
+    SparkSession.getTags
+    SparkSession.interruptAll
+    SparkSession.interruptOperation
+    SparkSession.interruptTag
+    SparkSession.registerProgressHandler
+    SparkSession.removeProgressHandler
+    SparkSession.removeTag

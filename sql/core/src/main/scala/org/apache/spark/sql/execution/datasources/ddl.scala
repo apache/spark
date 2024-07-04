@@ -59,6 +59,15 @@ case class CreateTable(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
     copy(query = if (query.isDefined) Some(newChildren.head) else None)
+
+  /**
+   * Identifies the underlying table's location is qualified or absent.
+   *
+   * @return true if the location is absolute or absent, false otherwise.
+   */
+  def locationQualifiedOrAbsent: Boolean = {
+    tableDesc.storage.locationUri.map(_.isAbsolute).getOrElse(true)
+  }
 }
 
 /**
@@ -78,7 +87,7 @@ case class CreateTempViewUsing(
 
   override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
-      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      userSpecifiedSchema.map(_.toString() + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
       conf.redactOptions(options)

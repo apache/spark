@@ -17,9 +17,12 @@
 
 package org.apache.spark.internal
 
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkContext
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
@@ -29,7 +32,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenUtils, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -62,8 +65,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
+      .withPrepended(DRIVER_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
@@ -106,6 +117,14 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val DRIVER_MIN_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.minMemoryOverhead")
+    .doc("The minimum amount of non-heap memory to be allocated per driver in cluster mode, " +
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.driver.memoryOverhead is set directly.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("384m")
+
   private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.driver.memoryOverheadFactor")
       .doc("Fraction of driver memory to be allocated as additional non-heap memory per driver " +
@@ -121,6 +140,34 @@ package object config {
       .checkValue(factor => factor > 0,
         "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
+
+  private[spark] val STRUCTURED_LOGGING_ENABLED =
+    ConfigBuilder("spark.log.structuredLogging.enabled")
+      .doc("When true, Spark logs are output as structured JSON lines with added Spark " +
+        "Mapped Diagnostic Context (MDC), facilitating easier integration with log aggregation " +
+        "and analysis tools. When false, logs are plain text without MDC. This configuration " +
+        "does not apply to interactive environments such as spark-shell, spark-sql, and " +
+        "PySpark shell.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LEGACY_TASK_NAME_MDC_ENABLED =
+    ConfigBuilder("spark.log.legacyTaskNameMdc.enabled")
+      .doc("When true, the MDC (Mapped Diagnostic Context) key `mdc.taskName` will be set in the " +
+        "log output, which is the behavior of Spark version 3.1 through Spark 3.5 releases. " +
+        "When false, the logging framework will use `task_name` as the MDC key, " +
+        "aligning it with the naming convention of newer MDC keys introduced in Spark 4.0 release.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DRIVER_LOG_LOCAL_DIR =
+    ConfigBuilder("spark.driver.log.localDir")
+      .doc("Specifies a local directory to write driver logs and enable Driver Log UI Tab.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_LOG_DFS_DIR =
     ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
@@ -157,7 +204,7 @@ package object config {
     ConfigBuilder("spark.eventLog.compress")
       .version("1.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
@@ -242,7 +289,7 @@ package object config {
         "each event log file to the configured size.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val EVENT_LOG_ROLLING_MAX_FILE_SIZE =
     ConfigBuilder("spark.eventLog.rolling.maxFileSize")
@@ -257,8 +304,16 @@ package object config {
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
+  private[spark] val EXECUTOR_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      .withPrepended(EXECUTOR_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
@@ -344,6 +399,15 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val EXECUTOR_MIN_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.executor.minMemoryOverhead")
+    .doc("The minimum amount of non-heap memory to be allocated per executor " +
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.executor.memoryOverhead is set directly.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("384m")
+
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
       .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +
@@ -361,11 +425,10 @@ package object config {
       .createWithDefault(0.1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
-    .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
-      "sharing mode, the maximum amount of CPU cores to request for the application from across " +
+    .doc("When running on a standalone deploy cluster, " +
+      "the maximum amount of CPU cores to request for the application from across " +
       "the cluster (not from each machine). If not set, the default will be " +
-      "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
-      "(all available cores) on Mesos.")
+      "`spark.deploy.defaultCores` on Spark's standalone cluster manager")
     .version("0.6.0")
     .intConf
     .createOptional
@@ -707,7 +770,7 @@ package object config {
         "application ends.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -730,12 +793,12 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_DB_BACKEND =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_DB_BACKEND)
       .doc("Specifies a disk-based store used in shuffle service local db. " +
-        "LEVELDB or ROCKSDB.")
+        "ROCKSDB or LEVELDB (deprecated).")
       .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(DBBackend.values.map(_.toString).toSet)
-      .createWithDefault(DBBackend.LEVELDB.name)
+      .createWithDefault(DBBackend.ROCKSDB.name)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
@@ -933,6 +996,24 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val MAX_EXECUTOR_FAILURES =
+    ConfigBuilder("spark.executor.maxNumFailures")
+      .doc("The maximum number of executor failures before failing the application. " +
+        "This configuration only takes effect on YARN, or Kubernetes when " +
+        "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+      .version("3.5.0")
+      .intConf
+      .createOptional
+
+  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+    ConfigBuilder("spark.executor.failuresValidityInterval")
+      .doc("Interval after which executor failures will be considered independent and not " +
+        "accumulate towards the attempt count. This configuration only takes effect on YARN, " +
+        "or Kubernetes when `spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
+      .version("3.5.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
       .doc("Whether to un-register all the outputs on the host in condition that we receive " +
@@ -982,6 +1063,17 @@ package object config {
       .version("3.0.0")
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
+
+  private[spark] val LISTENER_BUS_EXIT_TIMEOUT =
+    ConfigBuilder("spark.scheduler.listenerbus.exitTimeout")
+      .doc("The time that event queue waits until the dispatch thread exits " +
+        "when stop is invoked. " +
+        "This is set to 0 by default for graceful shutdown of the event queue, " +
+        "but allow the user to configure the waiting time.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0, "Listener bus exit timeout must be non-negative duration")
+      .createWithDefault(0)
 
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
@@ -1063,10 +1155,19 @@ package object config {
 
   private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
     .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
-      "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+      "Only has effect in Spark standalone mode.")
     .version("1.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
+    .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
+      "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
+      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.MINUTES)
+    .checkValue(v => v >= 0, "The value should be a non-negative time value.")
+    .createWithDefaultString("0min")
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -1102,6 +1203,19 @@ package object config {
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .version("2.2.0")
     .stringConf
+    .createOptional
+
+  private[spark] val SPARK_LOG_LEVEL = ConfigBuilder("spark.log.level")
+    .doc("When set, overrides any user-defined log settings as if calling " +
+      "SparkContext.setLogLevel() at Spark startup. Valid log levels include: " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
+    .version("3.5.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValue(
+      logLevel => SparkContext.VALID_LOG_LEVELS.contains(logLevel),
+      "Invalid value for 'spark.log.level'. Valid values are " +
+      SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
@@ -1214,6 +1328,15 @@ package object config {
         "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
           s" be less than or equal to ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(64 * 1024 * 1024)
+
+  private[spark] val CHECKPOINT_DIR =
+    ConfigBuilder("spark.checkpoint.dir")
+      .doc(
+          "Set the default directory for checkpointing. It can be overwritten by " +
+          "SparkContext.setCheckpointDir.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
 
   private[spark] val CHECKPOINT_COMPRESS =
     ConfigBuilder("spark.checkpoint.compress")
@@ -1352,14 +1475,20 @@ package object config {
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
-      .doc("The file system for this buffer size after each partition " +
-        "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
+      .doc("(Deprecated since Spark 4.0, please use 'spark.shuffle.localDisk.file.output.buffer'.)")
       .version("2.3.0")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_LOCAL_DISK_FILE_OUTPUT_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.localDisk.file.output.buffer")
+      .doc("The file system for this buffer size after each partition " +
+        "is written in all local disk shuffle writers. In KiB unless otherwise specified.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_DISK_WRITE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
@@ -1387,6 +1516,18 @@ package object config {
       .version("2.3.0")
       .doubleConf
       .createWithDefault(1.5)
+
+  private[spark] val KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES =
+    ConfigBuilder("spark.kubernetes.jars.avoidDownloadSchemes")
+      .doc("Comma-separated list of schemes for which jars will NOT be downloaded to the " +
+        "driver local disk prior to be distributed to executors, only for kubernetes deployment. " +
+        "For use in cases when the jars are big and executor counts are high, " +
+        "concurrent download causes network saturation and timeouts. " +
+        "Wildcard '*' is denoted to not downloading jars for any the schemes.")
+      .version("4.0.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
@@ -1504,7 +1645,7 @@ package object config {
         "use fully qualified class names to specify the codec.")
       .version("3.0.0")
       .stringConf
-      .createWithDefault("zstd")
+      .createWithDefault(CompressionCodec.ZSTD)
 
   private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
     ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
@@ -1701,6 +1842,17 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
+    ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
+      .doc("The maximum number of tracked job groups that are cancelled with " +
+        "`cancelJobGroupAndFutureJobs`. If this maximum number is hit, the oldest job group " +
+        "will no longer be tracked that future jobs belonging to this job group will not " +
+        "be cancelled.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(v => v > 0, "The size of the set should be a positive value.")
+      .createWithDefault(1000)
+
   private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
     ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
       .internal()
@@ -1801,6 +1953,12 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val MASTER_REST_SERVER_HOST = ConfigBuilder("spark.master.rest.host")
+    .doc("Specifies the host of the Master REST API endpoint")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
+
   private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
     .version("1.3.0")
     .intConf
@@ -1810,6 +1968,22 @@ package object config {
     .version("1.1.0")
     .intConf
     .createWithDefault(8080)
+
+  private[spark] val MASTER_UI_HISTORY_SERVER_URL =
+    ConfigBuilder("spark.master.ui.historyServerUrl")
+      .doc("The URL where Spark history server is running. Please note that this assumes " +
+        "that all Spark jobs share the same event log location where the history server accesses.")
+      .version("4.0.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val MASTER_USE_APP_NAME_AS_APP_ID =
+    ConfigBuilder("spark.master.useAppNameAsAppId.enabled")
+      .internal()
+      .doc("(Experimental) If true, Spark master uses the user-provided appName for appId.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.snappy.blockSize")
@@ -1837,7 +2011,7 @@ package object config {
         "the codec")
       .version("0.8.0")
       .stringConf
-      .createWithDefaultString("lz4")
+      .createWithDefaultString(CompressionCodec.LZ4)
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERSIZE =
     ConfigBuilder("spark.io.compression.zstd.bufferSize")
@@ -1856,6 +2030,17 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val IO_COMPRESSION_ZSTD_WORKERS =
+    ConfigBuilder("spark.io.compression.zstd.workers")
+      .doc("Thread size spawned to compress in parallel when using Zstd. When the value is 0, " +
+        "no worker is spawned, it works in single-threaded mode. When value > 0, it triggers " +
+        "asynchronous mode, corresponding number of threads are spawned. More workers improve " +
+        "performance, but also increase memory cost.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ >= 0, "The number of workers must not be negative.")
+      .createWithDefault(0)
+
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression " +
@@ -1863,6 +2048,13 @@ package object config {
       .version("2.3.0")
       .intConf
       .createWithDefault(1)
+
+  private[spark] val IO_COMPRESSION_LZF_PARALLEL =
+    ConfigBuilder("spark.io.compression.lzf.parallel.enabled")
+      .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
     ConfigBuilder("spark.io.warning.largeFileThreshold")
@@ -1880,7 +2072,7 @@ package object config {
         "the codec.")
       .version("3.0.0")
       .stringConf
-      .createWithDefault("zstd")
+      .createWithDefault(CompressionCodec.ZSTD)
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
@@ -2079,13 +2271,13 @@ package object config {
     ConfigBuilder("spark.speculation.multiplier")
       .version("0.6.0")
       .doubleConf
-      .createWithDefault(1.5)
+      .createWithDefault(3)
 
   private[spark] val SPECULATION_QUANTILE =
     ConfigBuilder("spark.speculation.quantile")
       .version("0.6.0")
       .doubleConf
-      .createWithDefault(0.75)
+      .createWithDefault(0.9)
 
   private[spark] val SPECULATION_MIN_THRESHOLD =
     ConfigBuilder("spark.speculation.minTaskRuntime")
@@ -2224,6 +2416,14 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_ALLOW_SYNC_LOG_LEVEL =
+    ConfigBuilder("spark.executor.syncLogLevel.enabled")
+      .doc("If set to true, log level applied through SparkContext.setLogLevel() method " +
+        "will be propagated to all executors.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
     ConfigBuilder("spark.executor.killOnFatalError.depth")
       .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
@@ -2235,13 +2435,20 @@ package object config {
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
 
+  private[spark] val STAGE_MAX_CONSECUTIVE_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxConsecutiveAttempts")
+      .doc("Number of consecutive stage attempts allowed before a stage is aborted.")
+      .version("2.2.0")
+      .intConf
+      .createWithDefault(4)
+
   private[spark] val STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE =
     ConfigBuilder("spark.stage.ignoreDecommissionFetchFailure")
       .doc("Whether ignore stage fetch failure caused by executor decommission when " +
-        "count spark.stage.maxConsecutiveAttempts")
+        s"count ${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SCHEDULER_MAX_RETAINED_REMOVED_EXECUTORS =
     ConfigBuilder("spark.scheduler.maxRetainedRemovedDecommissionExecutors")
@@ -2250,6 +2457,16 @@ package object config {
         "whether fetch failure caused by removed decommissioned executors could be ignored " +
         s"when ${STAGE_IGNORE_DECOMMISSION_FETCH_FAILURE.key} is enabled.")
       .version("3.4.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(0)
+
+  private[spark] val SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS =
+    ConfigBuilder("spark.scheduler.maxRetainedUnknownDecommissionExecutors")
+      .internal()
+      .doc("Max number of unknown executors by decommission to retain. This affects " +
+        "whether executor could receive decommission request sent before its registration.")
+      .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)
@@ -2395,13 +2612,13 @@ package object config {
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
         "package files from spark.jars.packages. " +
         "This will override the Ivy property ivy.default.ivy.user.dir " +
-        "which defaults to ~/.ivy2.")
+        "which defaults to ~/.ivy2.5.2")
       .version("1.3.0")
       .stringConf
-      .createOptional
+      .createWithDefault("~/.ivy2.5.2")
 
   private[spark] val JAR_IVY_SETTING_PATH =
-    ConfigBuilder("spark.jars.ivySettings")
+    ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
         "Additional repositories given by the command-line option --repositories " +
@@ -2480,4 +2697,78 @@ package object config {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val RDD_CACHE_VISIBILITY_TRACKING_ENABLED =
+    ConfigBuilder("spark.rdd.cache.visibilityTracking.enabled")
+      .internal()
+      .doc("Set to be true to enabled RDD cache block's visibility status. Once it's enabled," +
+        " a RDD cache block can be used only when it's marked as visible. And a RDD block will be" +
+        " marked as visible only when one of the tasks generating the cache block finished" +
+        " successfully. This is relevant in context of consistent accumulator status.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STAGE_MAX_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxAttempts")
+      .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
+        "stages is resubmitted multiple times beyond the max retries limitation. The maximum " +
+        "number of stage retries is the maximum of `spark.stage.maxAttempts` and " +
+        s"`${STAGE_MAX_CONSECUTIVE_ATTEMPTS.key}`.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
+  private[spark] val SHUFFLE_SERVER_RECOVERY_DISABLED =
+    ConfigBuilder("spark.yarn.shuffle.server.recovery.disabled")
+      .internal()
+      .doc("Set to true for applications that prefer to disable recovery when the External " +
+        "Shuffle Service restarts. This configuration only takes effect on YARN.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val CONNECT_SCALA_UDF_STUB_PREFIXES =
+    ConfigBuilder("spark.connect.scalaUdf.stubPrefixes")
+      .internal()
+      .doc("""
+          |Comma-separated list of binary names of classes/packages that should be stubbed during
+          |the Scala UDF serde and execution if not found on the server classpath.
+          |An empty list effectively disables stubbing for all missing classes.
+          |By default, the server stubs classes from the Scala client package.
+          |""".stripMargin)
+      .version("3.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
+
+  private[spark] val LEGACY_ABORT_STAGE_AFTER_KILL_TASKS =
+    ConfigBuilder("spark.scheduler.stage.legacyAbortAfterKillTasks")
+      .doc("Whether to abort a stage after TaskScheduler.killAllTaskAttempts(). This is " +
+        "used to restore the original behavior in case there are any regressions after " +
+        "abort stage is removed")
+      .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION =
+    ConfigBuilder("spark.scheduler.dropTaskInfoAccumulablesOnTaskCompletion.enabled")
+      .internal()
+      .doc("If true, the task info accumulables will be cleared upon task completion in " +
+        "TaskSetManager. This reduces the heap usage of the driver by only referencing the " +
+        "task info accumulables for the active tasks and not for completed tasks.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SPARK_SHUTDOWN_TIMEOUT_MS =
+    ConfigBuilder("spark.shutdown.timeout")
+      .internal()
+      .doc("Defines the timeout period to wait for all shutdown hooks to be executed. " +
+        "This must be passed as a system property argument in the Java options, for example " +
+        "spark.driver.extraJavaOptions=\"-Dspark.shutdown.timeout=60s\".")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 }

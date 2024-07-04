@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
@@ -25,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -32,7 +32,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class BooleanOpsTest(OpsTestBase):
+class BooleanOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": [True, False, True], "that": [False, True, True]})
@@ -54,7 +54,7 @@ class BooleanOpsTest(OpsTestBase):
 
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(b_pser + pser, b_psser + psser)
+            self.assert_eq(b_pser + pser, b_psser + psser, check_exact=False)
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col == "bool":
@@ -73,7 +73,7 @@ class BooleanOpsTest(OpsTestBase):
         self.assertRaises(TypeError, lambda: b_psser - True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col])
+            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser - psdf[col])
@@ -90,7 +90,7 @@ class BooleanOpsTest(OpsTestBase):
         self.assert_eq(b_pser * False, b_psser * False)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col])
+            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
@@ -145,7 +145,7 @@ class BooleanOpsTest(OpsTestBase):
         self.assertRaises(TypeError, lambda: b_psser % True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col])
+            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser % psdf[col])
@@ -751,9 +751,7 @@ class BooleanExtensionOpsTest(OpsTestBase):
                 # A pandas boolean extension series cannot be casted to fractional extension dtypes
                 self.assert_eq([1.0, 0.0, np.nan], psser.astype(dtype).tolist())
             elif dtype in self.string_extension_dtype:
-                if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-                    # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
-                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
             else:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
@@ -807,6 +805,14 @@ class BooleanExtensionOpsTest(OpsTestBase):
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser >= other_pser, psser >= other_psser)
         self.check_extension(pser >= pser, psser >= psser)
+
+
+class BooleanOpsTests(
+    BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

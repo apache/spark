@@ -37,6 +37,8 @@ class OrcDeserializer(
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
+  private lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
+
   // `fieldWriters(index)` is
   // - null if the respective source column is missing, since the output value
   //   is always null in this case
@@ -46,13 +48,14 @@ class OrcDeserializer(
     // ADD COLUMN c DEFAULT <value>" on the Orc table, this adds one field to the Catalyst schema.
     // Then if we query the old files with the new Catalyst schema, we should only apply the
     // existence default value to the columns whose IDs are not explicitly requested.
-    if (requiredSchema.hasExistenceDefaultValues) {
-      for (i <- 0 until requiredSchema.existenceDefaultValues.size) {
-        requiredSchema.existenceDefaultsBitmask(i) =
+    val existingValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
+    if (ResolveDefaultColumns.hasExistenceDefaultValues(requiredSchema)) {
+      for (i <- 0 until existingValues.length) {
+        bitmask(i) =
           if (requestedColIds(i) != -1) {
             false
           } else {
-            requiredSchema.existenceDefaultValues(i) != null
+            existingValues(i) != null
           }
       }
     }
@@ -81,7 +84,7 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow)
+    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
     resultRow
   }
 
@@ -98,7 +101,7 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow)
+    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
     resultRow
   }
 

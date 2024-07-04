@@ -91,8 +91,7 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UploadStream) {
-      UploadStream o = (UploadStream) other;
+    if (other instanceof UploadStream o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;

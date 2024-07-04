@@ -20,7 +20,7 @@
 Python Package Management
 =========================
 
-When you want to run your PySpark application on a cluster such as YARN, Kubernetes, Mesos, etc., you need to make
+When you want to run your PySpark application on a cluster such as YARN, Kubernetes, etc., you need to make
 sure that your code and all used libraries are available on the executors.
 
 As an example, let's say you may want to run the `Pandas UDF examples <sql/arrow_pandas.rst#series-to-scalar>`_.

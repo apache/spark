@@ -24,9 +24,12 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
-import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, Offset, SerializedOffset, Source, StreamingExecutionRelation}
+import org.apache.spark.sql.execution.streaming.{LongOffset, MemoryStream, MicroBatchExecution, MultiBatchExecutor, Offset, SerializedOffset, SingleBatchExecutor, Source, StreamingExecutionRelation, StreamingQueryWrapper}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TriggerAvailableNowSuite extends FileStreamSourceTest {
 
   import testImplicits._
@@ -39,6 +42,10 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     def incrementAvailableOffset(numNewRows: Int): Unit
 
     def sourceName: String
+
+    def reset(): Unit = {
+      currentOffset = 0L
+    }
   }
 
   class TestSource extends TestDataFrameProvider with Source {
@@ -101,6 +108,22 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
 
     // remove the trailing `$` in the class name
     override def sourceName: String = MemoryStream.getClass.getSimpleName.dropRight(1)
+
+    override def reset(): Unit = {
+      super.reset()
+      memoryStream.reset()
+    }
+  }
+
+  def testWithConfigMatrix(testName: String)(testFun: => Any): Unit = {
+    Seq(true, false).foreach { useWrapper =>
+      test(testName + s" (using wrapper: $useWrapper)") {
+        withSQLConf(
+          SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED.key -> useWrapper.toString) {
+          testFun
+        }
+      }
+    }
   }
 
   Seq(
@@ -108,7 +131,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     new TestSourceWithAdmissionControl,
     new TestMicroBatchStream
   ).foreach { testSource =>
-    test(s"TriggerAvailableNow for multiple sources with ${testSource.getClass}") {
+    testWithConfigMatrix(s"TriggerAvailableNow for multiple sources with ${testSource.getClass}") {
+      testSource.reset()
+
       withTempDirs { (src, target) =>
         val checkpoint = new File(target, "chk").getCanonicalPath
         val targetDir = new File(target, "data").getCanonicalPath
@@ -152,6 +177,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           q.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
+          assertQueryUsingRightBatchExecutor(testSource, q)
           checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"),
             Seq(1, 2, 3, 7, 8, 9).map(_.toString).toDF())
         } finally {
@@ -172,6 +198,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           q2.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
+          assertQueryUsingRightBatchExecutor(testSource, q2)
           checkAnswer(sql(s"SELECT * from parquet.`$targetDir`"), (1 to 12).map(_.toString).toDF())
         } finally {
           q2.stop()
@@ -185,7 +212,9 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     new TestSourceWithAdmissionControl,
     new TestMicroBatchStream
   ).foreach { testSource =>
-    test(s"TriggerAvailableNow for single source with ${testSource.getClass}") {
+    testWithConfigMatrix(s"TriggerAvailableNow for single source with ${testSource.getClass}") {
+      testSource.reset()
+
       val tableName = "trigger_available_now_test_table"
       withTable(tableName) {
         val df = testSource.toDF
@@ -208,6 +237,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           q.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
+          assertQueryUsingRightBatchExecutor(testSource, q)
           checkAnswer(spark.table(tableName), (1 to 3).toDF())
         } finally {
           q.stop()
@@ -223,11 +253,51 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
           q2.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
+          assertQueryUsingRightBatchExecutor(testSource, q2)
           checkAnswer(spark.table(tableName), (1 to 6).toDF())
         } finally {
           q2.stop()
         }
       }
+    }
+  }
+
+  private def assertQueryUsingRightBatchExecutor(
+      testSource: TestDataFrameProvider,
+      query: StreamingQuery): Unit = {
+    val useWrapper = query.sparkSession.conf.get(
+      SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)
+
+    if (useWrapper) {
+      assertQueryUsingMultiBatchExecutor(query)
+    } else {
+      testSource match {
+        case _: TestMicroBatchStream =>
+          // Trigger.AvailableNow should take effect because all sources support
+          // Trigger.AvailableNow.
+          assertQueryUsingMultiBatchExecutor(query)
+
+        case _ =>
+          // We fall back to single batch executor because there is a source which doesn't
+          // support Trigger.AvailableNow.
+          assertQueryUsingSingleBatchExecutor(query)
+      }
+    }
+  }
+
+  private def assertQueryUsingSingleBatchExecutor(query: StreamingQuery): Unit = {
+    assert(getMicroBatchExecution(query).triggerExecutor.isInstanceOf[SingleBatchExecutor])
+  }
+
+  private def assertQueryUsingMultiBatchExecutor(query: StreamingQuery): Unit = {
+    assert(getMicroBatchExecution(query).triggerExecutor.isInstanceOf[MultiBatchExecutor])
+  }
+
+  private def getMicroBatchExecution(query: StreamingQuery): MicroBatchExecution = {
+    if (query.isInstanceOf[StreamingQueryWrapper]) {
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[MicroBatchExecution]
+    } else {
+      query.asInstanceOf[MicroBatchExecution]
     }
   }
 }

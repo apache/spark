@@ -24,15 +24,15 @@ import java.util.{Map => JMap, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.client.ZKClientConfig
@@ -206,7 +206,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
+    sendMessages(topic, messageToFreq.asScala.toMap.transform((_, v) => v.intValue()))
   }
 
   /** Send the messages to the Kafka broker */
@@ -240,9 +240,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", localHostNameForURI)
-    props.put("advertised.host.name", localHostNameForURI)
-    props.put("port", brokerPort.toString)
+    props.put("listeners", s"PLAINTEXT://$localHostNameForURI:$brokerPort")
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")
@@ -306,7 +304,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
         val leader = partitionState.leader
         val isr = partitionState.isr
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(leader) && !isr.isEmpty
+          FetchRequest.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }
@@ -333,9 +331,6 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {

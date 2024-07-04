@@ -19,15 +19,18 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A command used to create a data source table.
@@ -84,7 +87,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // This is guaranteed in `PreprocessDDL`.
       assert(table.partitionColumnNames.isEmpty)
       dataSource match {
-        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toImmutableArraySeq
         case _ => Nil
       }
     }
@@ -141,7 +144,7 @@ case class CreateDataSourceTableAsSelectCommand(
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
-  extends LeafRunnableCommand {
+  extends LeafRunnableCommand with CTEInChildren {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -170,7 +173,7 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession, table, table.storage.locationUri, SaveMode.Append, tableExists = true)
     } else {
       table.storage.locationUri.foreach { p =>
-        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf)
+        DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
       }
       assert(table.schema.isEmpty)
       sparkSession.sessionState.catalog.validateTableLocation(table)
@@ -181,7 +184,8 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, SaveMode.Overwrite, tableExists = false)
-      val tableSchema = CharVarcharUtils.getRawSchema(result.schema, sessionState.conf)
+      val tableSchema = CharVarcharUtils.getRawSchema(
+        removeInternalMetadata(result.schema), sessionState.conf)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -193,7 +197,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-            sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+            sparkSession.sessionState.conf.manageFilesourcePartitions =>
           // Need to recover partitions into the metastore so our saved data is visible.
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
@@ -228,8 +232,13 @@ case class CreateDataSourceTableAsSelectCommand(
       dataSource.writeAndRead(mode, query, outputColumnNames)
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
+        logError(log"Failed to write to table " +
+          log"${MDC(TABLE_NAME, table.identifier.unquotedString)}", ex)
         throw ex
     }
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(query = WithCTE(query, cteDefs))
   }
 }

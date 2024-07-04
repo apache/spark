@@ -21,10 +21,13 @@ import com.google.common.annotations.VisibleForTesting;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
+import org.apache.spark.SparkIllegalArgumentException;
+
 /**
- * Expression information, will be used to describe a expression.
+ * Expression information, will be used to describe an expression.
  */
 public class ExpressionInfo {
     private String className;
@@ -45,10 +48,11 @@ public class ExpressionInfo {
             "collection_funcs", "predicate_funcs", "conditional_funcs", "conversion_funcs",
             "csv_funcs", "datetime_funcs", "generator_funcs", "hash_funcs", "json_funcs",
             "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs", "string_funcs", "struct_funcs",
-            "window_funcs", "xml_funcs", "table_funcs", "url_funcs"));
+            "window_funcs", "xml_funcs", "table_funcs", "url_funcs", "variant_funcs"));
 
     private static final Set<String> validSources =
-            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "java_udf"));
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf",
+                    "java_udf", "python_udtf"));
 
     public String getClassName() {
         return className;
@@ -144,36 +148,37 @@ public class ExpressionInfo {
         }
         if (!note.isEmpty()) {
             if (!note.contains("    ") || !note.endsWith("  ")) {
-                throw new IllegalArgumentException("'note' is malformed in the expression [" +
-                    this.name + "]. It should start with a newline and 4 leading spaces; end " +
-                    "with a newline and two spaces; however, got [" + note + "].");
+                throw new SparkIllegalArgumentException(
+                  "_LEGACY_ERROR_TEMP_3201", Map.of("exprName", this.name, "note", note));
             }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!group.isEmpty() && !validGroups.contains(group)) {
-            throw new IllegalArgumentException("'group' is malformed in the expression [" +
-                this.name + "]. It should be a value in " + validGroups + "; however, " +
-                "got [" + group + "].");
+            throw new SparkIllegalArgumentException(
+              "_LEGACY_ERROR_TEMP_3202",
+              Map.of("exprName", this.name,
+                "validGroups", String.valueOf(validGroups.stream().sorted().toList()),
+                "group", group));
         }
         if (!source.isEmpty() && !validSources.contains(source)) {
-            throw new IllegalArgumentException("'source' is malformed in the expression [" +
-                    this.name + "]. It should be a value in " + validSources + "; however, " +
-                    "got [" + source + "].");
+            throw new SparkIllegalArgumentException(
+              "_LEGACY_ERROR_TEMP_3203",
+              Map.of("exprName", this.name,
+                "validSources", String.valueOf(validSources.stream().sorted().toList()),
+                "source", source));
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
-                throw new IllegalArgumentException("'since' is malformed in the expression [" +
-                    this.name + "]. It should not start with a negative number; however, " +
-                    "got [" + since + "].");
+                throw new SparkIllegalArgumentException(
+                  "_LEGACY_ERROR_TEMP_3204", Map.of("exprName", this.name, "since", since));
             }
             this.extended += "\n    Since: " + since + "\n";
         }
         if (!deprecated.isEmpty()) {
             if (!deprecated.contains("    ") || !deprecated.endsWith("  ")) {
-                throw new IllegalArgumentException("'deprecated' is malformed in the " +
-                    "expression [" + this.name + "]. It should start with a newline and 4 " +
-                    "leading spaces; end with a newline and two spaces; however, got [" +
-                    deprecated + "].");
+                throw new SparkIllegalArgumentException(
+                  "_LEGACY_ERROR_TEMP_3205",
+                  Map.of("exprName", this.name, "deprecated", deprecated));
             }
             this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }
@@ -191,7 +196,7 @@ public class ExpressionInfo {
      * @deprecated This constructor is deprecated as of Spark 3.0. Use other constructors to fully
      *   specify each argument for extended usage.
      */
-    @Deprecated
+    @Deprecated(since = "3.0.0")
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNION
@@ -84,7 +83,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
     }
 
     colType.fields
-      .filter(f => targetType.fields.find(tf => resolver(f.name, tf.name)).isEmpty)
+      .filter(f => !targetType.fields.exists(tf => resolver(f.name, tf.name)))
       .foreach { f =>
         newStructFields ++= Literal(f.name) :: ExtractValue(col, Literal(f.name), resolver) :: Nil
       }
@@ -207,10 +206,9 @@ object ResolveUnion extends Rule[LogicalPlan] {
     case e if !e.childrenResolved => e
 
     case Union(children, byName, allowMissingCol) if byName =>
-      val union = children.reduceLeft { (left, right) =>
+      children.reduceLeft { (left, right) =>
         checkColumnNames(left, right)
         unionTwoSides(left, right, allowMissingCol)
       }
-      CombineUnions(union)
   }
 }

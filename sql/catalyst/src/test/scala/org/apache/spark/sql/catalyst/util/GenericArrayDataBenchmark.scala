@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Benchmark for [[GenericArrayData]].
@@ -58,7 +59,7 @@ object GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("arrayOfAnyAsSeq") { _ =>
-      val arr: Seq[Any] = new Array[Any](arraySize)
+      val arr: Seq[Any] = new Array[Any](arraySize).toImmutableArraySeq
       var n = 0
       while (n < valuesPerIteration) {
         new GenericArrayData(arr)

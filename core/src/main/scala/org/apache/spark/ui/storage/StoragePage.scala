@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.SortedMap
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1
@@ -98,7 +98,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       <td>{rdd.storageLevel}
       </td>
       <td>{rdd.numCachedPartitions.toString}</td>
-      <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
+      <td>{"%.2f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memoryUsed.toString}>{Utils.bytesToString(rdd.memoryUsed)}</td>
       <td sorttable_customkey={rdd.diskUsed.toString} >{Utils.bytesToString(rdd.diskUsed)}</td>
     </tr>

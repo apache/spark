@@ -36,7 +36,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
@@ -93,7 +93,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName a name for your job, to display on the cluster web UI
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
@@ -725,7 +725,8 @@ class StreamingContext private[streaming] (
 
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
-    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    logInfo(log"Invoking stop(stopGracefully=" +
+      log"${MDC(LogKeys.VALUE, stopGracefully)}) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }

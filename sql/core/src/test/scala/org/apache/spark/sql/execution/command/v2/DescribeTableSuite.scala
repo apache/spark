@@ -90,7 +90,8 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("Location", "file:/tmp/testcat/table_name", ""),
           Row("Provider", "_", ""),
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
-          Row("Table Properties", "[bar=baz]", "")))
+          Row("Table Properties", "[bar=baz]", ""),
+          Row("Statistics", "0 bytes, 0 rows", null)))
     }
   }
 
@@ -109,7 +110,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`key1`",
-          "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`, `test_catalog`.`ns`.`tbl`.`col`"),
+          "proposal" -> "`key`, `col`"),
         context = ExpectedContext(
           fragment = query,
           start = 0,
@@ -140,7 +141,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`KEY`",
-            "proposal" -> "`test_catalog`.`ns`.`tbl`.`key`"),
+            "proposal" -> "`key`"),
           context = ExpectedContext(
             fragment = query,
             start = 0,
@@ -149,13 +150,41 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
-  // TODO(SPARK-39859): Support v2 `DESCRIBE TABLE EXTENDED` for columns
   test("describe extended (formatted) a column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""
         |CREATE TABLE $tbl
         |(key INT COMMENT 'column_comment', col STRING)
         |$defaultUsing""".stripMargin)
+
+      sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("info_name", StringType),
+        ("info_value", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "key"),
+          Row("data_type", "int"),
+          Row("comment", "column_comment"),
+          Row("min", "NULL"),
+          Row("max", "NULL"),
+          Row("num_nulls", "1"),
+          Row("distinct_count", "4"),
+          Row("avg_col_len", "NULL"),
+          Row("max_col_len", "NULL")))
+    }
+  }
+
+  test("SPARK-46535: describe extended (formatted) a column without col stats") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(
+        s"""
+           |CREATE TABLE $tbl
+           |(key INT COMMENT 'column_comment', col STRING)
+           |$defaultUsing""".stripMargin)
+
       val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl key")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
@@ -166,6 +195,22 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("col_name", "key"),
           Row("data_type", "int"),
           Row("comment", "column_comment")))
+    }
+  }
+
+  test("describe extended table with stats") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(
+        s"""
+           |CREATE TABLE $tbl
+           |(key INT, col STRING)
+           |$defaultUsing""".stripMargin)
+
+      sql(s"INSERT INTO $tbl values (1, 'aaa'), (2, 'bbb'), (3, 'ccc'), (null, 'ddd')")
+      val descriptionDf = sql(s"DESCRIBE TABLE EXTENDED $tbl")
+      val stats = descriptionDf.filter("col_name == 'Statistics'").head()
+        .getAs[String]("data_type")
+      assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
     }
   }
 }

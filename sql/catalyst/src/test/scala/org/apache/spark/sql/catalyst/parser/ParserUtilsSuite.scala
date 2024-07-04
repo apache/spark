@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.jdk.CollectionConverters._
+
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -130,6 +131,18 @@ class ParserUtilsSuite extends SparkFunSuite {
         |cd\ef"""".stripMargin) ==
       """ab
         |cdef""".stripMargin)
+
+    // String with an invalid '\' as the last character.
+    assert(unescapeSQLString(""""abc\"""") == "abc\\")
+
+    // Strings containing invalid Unicode escapes with non-hex characters.
+    assert(unescapeSQLString("\"abc\\uXXXXa\"") == "abcuXXXXa")
+    assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
+    assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
+    assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+    // Guard against off-by-one errors in the "all chars are hex" routine:
+    assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
+
     // scalastyle:on nonascii
   }
 
@@ -183,10 +196,12 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("string") {
-    assert(string(showDbsContext.pattern.STRING()) == "identifier_with_wildcards")
-    assert(string(createDbContext.commentSpec().get(0).stringLit().STRING()) == "database_comment")
+    assert(string(showDbsContext.pattern.STRING_LITERAL()) == "identifier_with_wildcards")
+    assert(string(createDbContext.commentSpec().get(0).stringLit().STRING_LITERAL()) ==
+      "database_comment")
 
-    assert(string(createDbContext.locationSpec.asScala.head.stringLit().STRING) == "/home/user/db")
+    assert(string(createDbContext.locationSpec.asScala.head.stringLit().STRING_LITERAL()) ==
+      "/home/user/db")
   }
 
   test("position") {
@@ -216,7 +231,7 @@ class ParserUtilsSuite extends SparkFunSuite {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(ctx.stringLit().STRING), CurrentOrigin.get)
+      (string(ctx.stringLit().STRING_LITERAL), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))

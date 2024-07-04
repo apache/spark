@@ -88,11 +88,11 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
     val dataset4 = mock[DataFrame]
     val dataset5 = mock[DataFrame]
 
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
-    when(dataset5.toDF).thenReturn(dataset5)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
+    when(dataset5.toDF()).thenReturn(dataset5)
 
     when(estimator1.fit(meq(dataset1))).thenReturn(model1)
     when(model1.transform(meq(dataset1))).thenReturn(dataset2)
@@ -153,10 +153,10 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
     val dataset2 = mock[DataFrame]
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
 
     val transformer1 = mock[Transformer]
     val model = mock[MyModel]

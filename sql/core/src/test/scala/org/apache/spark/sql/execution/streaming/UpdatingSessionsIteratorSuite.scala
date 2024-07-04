@@ -24,6 +24,7 @@ import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -34,7 +35,7 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("aggVal1", LongType).add("aggVal2", DoubleType)
-  private val rowAttributes = rowSchema.toAttributes
+  private val rowAttributes = toAttributes(rowSchema)
 
   private val noKeyRowAttributes = rowAttributes.filterNot { attr =>
     Seq("key1", "key2").contains(attr.name)
@@ -265,18 +266,27 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     assert(iterator.hasNext)
 
     // when calling next() it can detect error and throws IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator must be sorted by key and session start!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.hasNext
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.hasNext
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
 
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
   }
 
   test("throws exception if data is not sorted by key") {
@@ -298,18 +308,27 @@ class UpdatingSessionsIteratorSuite extends SharedSparkSession {
     // second row itself is OK but while finding end of session it reads third row, and finds
     // its key is already finished processing, hence precondition for sorting is broken, and
     // it throws IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator must be sorted by key and session start!"))
 
     // afterwards, calling either hasNext() or next() will throw IllegalStateException
-    intercept[IllegalStateException] {
-      iterator.hasNext
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.hasNext
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
 
-    intercept[IllegalStateException] {
-      iterator.next()
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        iterator.next()
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "The iterator is already corrupted."))
   }
 
   test("no key") {

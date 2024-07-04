@@ -19,11 +19,15 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
+import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
+import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -112,6 +116,12 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
+  public CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getInterval(rowId);
+  }
+
+  @Override
   public byte[] getBinary(int rowId) {
     if (isNullAt(rowId)) return null;
     return accessor.getBinary(rowId);
@@ -142,54 +152,57 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   void initAccessor(ValueVector vector) {
-    if (vector instanceof BitVector) {
-      accessor = new BooleanAccessor((BitVector) vector);
-    } else if (vector instanceof TinyIntVector) {
-      accessor = new ByteAccessor((TinyIntVector) vector);
-    } else if (vector instanceof SmallIntVector) {
-      accessor = new ShortAccessor((SmallIntVector) vector);
-    } else if (vector instanceof IntVector) {
-      accessor = new IntAccessor((IntVector) vector);
-    } else if (vector instanceof BigIntVector) {
-      accessor = new LongAccessor((BigIntVector) vector);
-    } else if (vector instanceof Float4Vector) {
-      accessor = new FloatAccessor((Float4Vector) vector);
-    } else if (vector instanceof Float8Vector) {
-      accessor = new DoubleAccessor((Float8Vector) vector);
-    } else if (vector instanceof DecimalVector) {
-      accessor = new DecimalAccessor((DecimalVector) vector);
-    } else if (vector instanceof VarCharVector) {
-      accessor = new StringAccessor((VarCharVector) vector);
-    } else if (vector instanceof VarBinaryVector) {
-      accessor = new BinaryAccessor((VarBinaryVector) vector);
-    } else if (vector instanceof DateDayVector) {
-      accessor = new DateAccessor((DateDayVector) vector);
-    } else if (vector instanceof TimeStampMicroTZVector) {
-      accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
-    } else if (vector instanceof TimeStampMicroVector) {
-      accessor = new TimestampNTZAccessor((TimeStampMicroVector) vector);
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    if (vector instanceof BitVector bitVector) {
+      accessor = new BooleanAccessor(bitVector);
+    } else if (vector instanceof TinyIntVector tinyIntVector) {
+      accessor = new ByteAccessor(tinyIntVector);
+    } else if (vector instanceof SmallIntVector smallIntVector) {
+      accessor = new ShortAccessor(smallIntVector);
+    } else if (vector instanceof IntVector intVector) {
+      accessor = new IntAccessor(intVector);
+    } else if (vector instanceof BigIntVector bigIntVector) {
+      accessor = new LongAccessor(bigIntVector);
+    } else if (vector instanceof Float4Vector float4Vector) {
+      accessor = new FloatAccessor(float4Vector);
+    } else if (vector instanceof Float8Vector float8Vector) {
+      accessor = new DoubleAccessor(float8Vector);
+    } else if (vector instanceof DecimalVector decimalVector) {
+      accessor = new DecimalAccessor(decimalVector);
+    } else if (vector instanceof VarCharVector varCharVector) {
+      accessor = new StringAccessor(varCharVector);
+    } else if (vector instanceof LargeVarCharVector largeVarCharVector) {
+      accessor = new LargeStringAccessor(largeVarCharVector);
+    } else if (vector instanceof VarBinaryVector varBinaryVector) {
+      accessor = new BinaryAccessor(varBinaryVector);
+    } else if (vector instanceof LargeVarBinaryVector largeVarBinaryVector) {
+      accessor = new LargeBinaryAccessor(largeVarBinaryVector);
+    } else if (vector instanceof DateDayVector dateDayVector) {
+      accessor = new DateAccessor(dateDayVector);
+    } else if (vector instanceof TimeStampMicroTZVector timeStampMicroTZVector) {
+      accessor = new TimestampAccessor(timeStampMicroTZVector);
+    } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
+      accessor = new TimestampNTZAccessor(timeStampMicroVector);
+    } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
-    } else if (vector instanceof ListVector) {
-      ListVector listVector = (ListVector) vector;
+    } else if (vector instanceof ListVector listVector) {
       accessor = new ArrayAccessor(listVector);
-    } else if (vector instanceof StructVector) {
-      StructVector structVector = (StructVector) vector;
+    } else if (vector instanceof StructVector structVector) {
       accessor = new StructAccessor(structVector);
 
       childColumns = new ArrowColumnVector[structVector.size()];
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
       }
-    } else if (vector instanceof NullVector) {
-      accessor = new NullAccessor((NullVector) vector);
-    } else if (vector instanceof IntervalYearVector) {
-      accessor = new IntervalYearAccessor((IntervalYearVector) vector);
-    } else if (vector instanceof DurationVector) {
-      accessor = new DurationAccessor((DurationVector) vector);
+    } else if (vector instanceof NullVector nullVector) {
+      accessor = new NullAccessor(nullVector);
+    } else if (vector instanceof IntervalYearVector intervalYearVector) {
+      accessor = new IntervalYearAccessor(intervalYearVector);
+    } else if (vector instanceof DurationVector durationVector) {
+      accessor = new DurationAccessor(durationVector);
+    } else if (vector instanceof IntervalMonthDayNanoVector intervalMonthDayNanoVector) {
+      accessor = new IntervalMonthDayNanoAccessor(intervalMonthDayNanoVector);
     } else {
-      throw new UnsupportedOperationException();
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3160");
     }
   }
 
@@ -214,51 +227,55 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     boolean getBoolean(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte getByte(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     short getShort(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     int getInt(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     long getLong(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     float getFloat(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     double getDouble(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
+    }
+
+    CalendarInterval getInterval(int rowId) {
+      throw SparkUnsupportedOperationException.apply();
     }
 
     Decimal getDecimal(int rowId, int precision, int scale) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     UTF8String getUTF8String(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte[] getBinary(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarArray getArray(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarMap getMap(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 
@@ -406,11 +423,50 @@ public class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  static class LargeStringAccessor extends ArrowVectorAccessor {
+
+    private final LargeVarCharVector accessor;
+    private final NullableLargeVarCharHolder stringResult = new NullableLargeVarCharHolder();
+
+    LargeStringAccessor(LargeVarCharVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final UTF8String getUTF8String(int rowId) {
+      accessor.get(rowId, stringResult);
+      if (stringResult.isSet == 0) {
+        return null;
+      } else {
+        return UTF8String.fromAddress(null,
+          stringResult.buffer.memoryAddress() + stringResult.start,
+          // A single string cannot be larger than the max integer size, so the conversion is safe
+          (int)(stringResult.end - stringResult.start));
+      }
+    }
+  }
+
   static class BinaryAccessor extends ArrowVectorAccessor {
 
     private final VarBinaryVector accessor;
 
     BinaryAccessor(VarBinaryVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final byte[] getBinary(int rowId) {
+      return accessor.getObject(rowId);
+    }
+  }
+
+  static class LargeBinaryAccessor extends ArrowVectorAccessor {
+
+    private final LargeVarBinaryVector accessor;
+
+    LargeBinaryAccessor(LargeVarBinaryVector vector) {
       super(vector);
       this.accessor = vector;
     }
@@ -556,6 +612,29 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final long getLong(int rowId) {
       return DurationVector.get(accessor.getDataBuffer(), rowId);
+    }
+  }
+
+  static class IntervalMonthDayNanoAccessor extends ArrowVectorAccessor {
+
+    private final IntervalMonthDayNanoVector accessor;
+
+    private final NullableIntervalMonthDayNanoHolder result =
+      new NullableIntervalMonthDayNanoHolder();
+
+    IntervalMonthDayNanoAccessor(IntervalMonthDayNanoVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    CalendarInterval getInterval(int rowId) {
+      accessor.get(rowId, result);
+      if (result.isSet == 0) {
+        return null;
+      } else {
+        return new CalendarInterval(result.months, result.days, result.nanoseconds / 1000);
+      }
     }
   }
 }

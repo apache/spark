@@ -21,7 +21,7 @@ import java.io.File
 import java.nio.file.Files
 
 import scala.annotation.meta.getter
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
@@ -31,7 +31,8 @@ import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.{FsHistoryProvider, FsHistoryProviderMetadata}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
@@ -95,7 +96,9 @@ private[spark] object KVUtils extends Logging {
 
     val kvSerializer = serializer(conf, live)
     val db = backend(conf, live) match {
-      case LEVELDB => new LevelDB(path, kvSerializer)
+      case LEVELDB =>
+        logWarning("The LEVELDB is deprecated. Please use ROCKSDB instead.")
+        new LevelDB(path, kvSerializer)
       case ROCKSDB => new RocksDB(path, kvSerializer)
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)
@@ -152,7 +155,7 @@ private[spark] object KVUtils extends Logging {
           open(dbPath, metadata, conf, live)
         case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
           // Get rid of the corrupted data and re-create it.
-          logWarning(s"Failed to load disk store $dbPath :", dbExc)
+          logWarning(log"Failed to load disk store ${MDC(PATH, dbPath)} :", dbExc)
           Utils.deleteRecursively(dbPath)
           open(dbPath, metadata, conf, live)
       }

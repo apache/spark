@@ -26,13 +26,14 @@ import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation
   SpearmanCorrelation}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // test input data
-  val xData = Array(1.0, 0.0, -2.0)
-  val yData = Array(4.0, 5.0, 3.0)
-  val zeros = new Array[Double](3)
+  val xData = Array(1.0, 0.0, -2.0).toImmutableArraySeq
+  val yData = Array(4.0, 5.0, 3.0).toImmutableArraySeq
+  val zeros = new Array[Double](3).toImmutableArraySeq
   val data = Seq(
     Vectors.dense(1.0, 0.0, 0.0, -2.0),
     Vectors.dense(4.0, 5.0, 0.0, 3.0),
@@ -41,8 +42,8 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   )
 
   test("corr(x, y) pearson, 1 value in data") {
-    val x = sc.parallelize(Array(1.0))
-    val y = sc.parallelize(Array(4.0))
+    val x = sc.parallelize(Array(1.0).toImmutableArraySeq)
+    val y = sc.parallelize(Array(4.0).toImmutableArraySeq)
     intercept[IllegalArgumentException] {
       Statistics.corr(x, y, "pearson")
     }

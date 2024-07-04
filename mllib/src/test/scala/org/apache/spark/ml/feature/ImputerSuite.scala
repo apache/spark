@@ -339,9 +339,10 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCols(Array("out1"))
 
     val types = Seq(IntegerType, LongType)
+    import org.apache.spark.util.ArrayImplicits._
     for (mType <- types) {
       // cast all columns to desired data type for testing
-      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)).toImmutableArraySeq: _*)
       ImputerSuite.iterateStrategyTest(true, imputer, df2)
     }
   }
@@ -360,9 +361,10 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("out")
 
     val types = Seq(IntegerType, LongType)
+    import org.apache.spark.util.ArrayImplicits._
     for (mType <- types) {
       // cast all columns to desired data type for testing
-      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)).toImmutableArraySeq: _*)
       ImputerSuite.iterateStrategyTest(false, imputer, df2)
     }
   }
@@ -382,9 +384,10 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       .setMissingValue(-1.0)
 
     val types = Seq(IntegerType, LongType)
+    import org.apache.spark.util.ArrayImplicits._
     for (mType <- types) {
       // cast all columns to desired data type for testing
-      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)).toImmutableArraySeq: _*)
       ImputerSuite.iterateStrategyTest(true, imputer, df2)
     }
   }
@@ -404,9 +407,10 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       .setMissingValue(-1.0)
 
     val types = Seq(IntegerType, LongType)
+    import org.apache.spark.util.ArrayImplicits._
     for (mType <- types) {
       // cast all columns to desired data type for testing
-      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)).toImmutableArraySeq: _*)
       ImputerSuite.iterateStrategyTest(false, imputer, df2)
     }
   }

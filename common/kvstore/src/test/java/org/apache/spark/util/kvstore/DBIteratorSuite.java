@@ -28,13 +28,15 @@ import java.util.Random;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.junit.Assert.*;
+// checkstyle.on: RegexpSinglelineJava
+import static org.junit.jupiter.api.Assertions.*;
 
 public abstract class DBIteratorSuite {
 
@@ -79,25 +81,25 @@ public abstract class DBIteratorSuite {
 
   /**
    * Implementations should override this method; it is called only once, before all tests are
-   * run. Any state can be safely stored in static variables and cleaned up in a @AfterClass
+   * run. Any state can be safely stored in static variables and cleaned up in a @AfterAll
    * handler.
    */
   protected abstract KVStore createStore() throws Exception;
 
-  @BeforeClass
+  @BeforeAll
   public static void setupClass() {
     long seed = RND.nextLong();
     LOG.info("Random seed: {}", seed);
     RND.setSeed(seed);
   }
 
-  @AfterClass
-  public static void cleanupData() throws Exception {
+  @AfterAll
+  public static void cleanupData() {
     allEntries = null;
     db = null;
   }
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     if (db != null) {
       return;
@@ -485,8 +487,8 @@ public abstract class DBIteratorSuite {
       message = "stray";
     }
 
-    assertEquals(String.format("Found %s elements: %s", message, Arrays.asList(remaining)),
-      expectedCount, actualCount);
+    assertEquals(expectedCount, actualCount,
+      String.format("Found %s elements: %s", message, Arrays.asList(remaining)));
   }
 
   private KVStoreView<CustomType1> view() throws Exception {

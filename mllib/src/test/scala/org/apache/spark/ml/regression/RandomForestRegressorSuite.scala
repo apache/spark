@@ -29,6 +29,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -46,7 +47,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
-        .map(_.asML))
+        .map(_.asML).toImmutableArraySeq)
 
     linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
@@ -139,7 +140,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>

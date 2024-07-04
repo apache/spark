@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.internal.LogKeys.TABLE_NAME
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.StructType
 
 case class CreateTableExec(
     catalog: TableCatalog,
     identifier: Identifier,
-    tableSchema: StructType,
+    columns: Array[Column],
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
     ignoreIfExists: Boolean) extends LeafV2CommandExec {
@@ -42,10 +43,11 @@ case class CreateTableExec(
   override protected def run(): Seq[InternalRow] = {
     if (!catalog.tableExists(identifier)) {
       try {
-        catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+        catalog.createTable(identifier, columns, partitioning.toArray, tableProperties.asJava)
       } catch {
         case _: TableAlreadyExistsException if ignoreIfExists =>
-          logWarning(s"Table ${identifier.quoted} was created concurrently. Ignoring.")
+          logWarning(
+            log"Table ${MDC(TABLE_NAME, identifier.quoted)} was created concurrently. Ignoring.")
       }
     } else if (!ignoreIfExists) {
       throw QueryCompilationErrors.tableAlreadyExistsError(identifier)

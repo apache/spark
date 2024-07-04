@@ -1,0 +1,15 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "namedTable": {
+      "unparsedIdentifier": "tempdb.myStreamingTable",
+      "options": {
+        "p1": "v1",
+        "p2": "v2"
+      }
+    },
+    "isStreaming": true
+  }
+}

@@ -19,10 +19,12 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithID, TransportClient}
@@ -54,17 +56,21 @@ class NettyBlockRpcServer(
       BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
     } catch {
       case e: IllegalArgumentException if e.getMessage.startsWith("Unknown message type") =>
-        logWarning(s"This could be a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
-          s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
-          "in case of security incidents.")
+        logWarning(log"This could be a corrupted RPC message (capacity: " +
+          log"${MDC(RPC_MESSAGE_CAPACITY, rpcMessage.capacity())}) " +
+          log"from ${MDC(SOCKET_ADDRESS, client.getSocketAddress)}. " +
+          log"Please use `spark.authenticate.*` configurations " +
+          log"in case of security incidents.")
         throw e
 
       case _: IndexOutOfBoundsException | _: NegativeArraySizeException =>
         // Netty may throw non-'IOException's for corrupted buffers. In this case,
         // we ignore the entire message with warnings because we cannot trust any contents.
-        logWarning(s"Ignored a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
-          s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
-          "in case of security incidents.")
+        logWarning(log"Ignored a corrupted RPC message (capacity: " +
+          log"${MDC(RPC_MESSAGE_CAPACITY, rpcMessage.capacity())}) " +
+          log"from ${MDC(SOCKET_ADDRESS, client.getSocketAddress)}. " +
+          log"Please use `spark.authenticate.*` configurations " +
+          log"in case of security incidents.")
         return
     }
     logTrace(s"Received request: $message")
@@ -93,8 +99,8 @@ class NettyBlockRpcServer(
           } else {
             val startAndEndId = fetchShuffleBlocks.reduceIds(index)
             if (startAndEndId.length != 2) {
-              throw new IllegalStateException(s"Invalid shuffle fetch request when batch mode " +
-                s"is enabled: $fetchShuffleBlocks")
+              throw SparkException.internalError("Invalid shuffle fetch request when batch mode " +
+                s"is enabled: $fetchShuffleBlocks", category = "NETWORK")
             }
             Array(blockManager.getLocalBlockData(
               ShuffleBlockBatchId(
@@ -125,8 +131,10 @@ class NettyBlockRpcServer(
         if (blockStored) {
           responseContext.onSuccess(ByteBuffer.allocate(0))
         } else {
-          val exception = new Exception(s"Upload block for $blockId failed. This mostly happens " +
-            s"when there is not sufficient space available to store the block.")
+          val exception = SparkException.internalError(
+            s"Upload block for $blockId failed. This mostly happens " +
+            "when there is not sufficient space available to store the block.",
+            category = "NETWORK")
           responseContext.onFailure(exception)
         }
 
@@ -137,13 +145,15 @@ class NettyBlockRpcServer(
           val errorMsg = "Invalid GetLocalDirsForExecutors request: " +
             s"${if (isIncorrectAppId) s"incorrect application id: ${getLocalDirs.appId};"}" +
             s"${if (execNum != 1) s"incorrect executor number: $execNum (expected 1);"}"
-          responseContext.onFailure(new IllegalStateException(errorMsg))
+          responseContext.onFailure(
+            SparkException.internalError(errorMsg, category = "NETWORK"))
         } else {
           val expectedExecId = blockManager.asInstanceOf[BlockManager].executorId
           val actualExecId = getLocalDirs.execIds.head
           if (actualExecId != expectedExecId) {
-            responseContext.onFailure(new IllegalStateException(
-              s"Invalid executor id: $actualExecId, expected $expectedExecId."))
+            responseContext.onFailure(SparkException.internalError(
+              s"Invalid executor id: $actualExecId, expected $expectedExecId.",
+              category = "NETWORK"))
           } else {
             responseContext.onSuccess(new LocalDirsForExecutors(
               Map(actualExecId -> blockManager.getLocalDiskDirs).asJava).toByteBuffer)

@@ -19,14 +19,13 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.text.similarity.LevenshteinDistance
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils extends Logging {
@@ -48,9 +47,9 @@ object StringUtils extends Logging {
     val out = new StringBuilder()
 
     while (in.hasNext) {
-      in.next match {
+      in.next() match {
         case c1 if c1 == escapeChar && in.hasNext =>
-          val c = in.next
+          val c = in.next()
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
@@ -73,10 +72,28 @@ object StringUtils extends Logging {
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
-  private[spark] def orderStringsBySimilarity(
+  private[spark] def orderSuggestedIdentifiersBySimilarity(
       baseString: String,
-      testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+      candidates: Seq[Seq[String]]): Seq[String] = {
+    val baseParts = UnresolvedAttribute.parseAttributeName(baseString)
+    val strippedCandidates =
+      // Group by the qualifier. If all identifiers have the same qualifier, strip it.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`def`.`t2`) => Seq(`t1`, `t2`)
+      if (baseParts.size == 1 && candidates.groupBy(_.dropRight(1)).size == 1) {
+        candidates.map(_.takeRight(1))
+      // Group by the qualifier excluding table name. If all identifiers have the same prefix
+      // (namespace) excluding table names, strip this prefix.
+      // For example: Seq(`abc`.`def`.`t1`, `abc`.`xyz`.`t2`) => Seq(`def`.`t1`, `xyz`.`t2`)
+      } else if (baseParts.size <= 2 && candidates.groupBy(_.dropRight(2)).size == 1) {
+        candidates.map(_.takeRight(2))
+      } else {
+        // Some candidates have different qualifiers
+        candidates
+      }
+
+    strippedCandidates
+      .map(quoteNameParts)
+      .sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale
@@ -107,50 +124,6 @@ object StringUtils extends Logging {
   }
 
   /**
-   * Concatenation of sequence of strings to final string with cheap append method
-   * and one memory allocation for the final string.  Can also bound the final size of
-   * the string.
-   */
-  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-    protected val strings = new ArrayBuffer[String]
-    protected var length: Int = 0
-
-    def atLimit: Boolean = length >= maxLength
-
-    /**
-     * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.  Returns true if the string still
-     * has room for further appends before it hits its max limit.
-     */
-    def append(s: String): Unit = {
-      if (s != null) {
-        val sLen = s.length
-        if (!atLimit) {
-          val available = maxLength - length
-          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
-          strings.append(stringToAppend)
-        }
-
-        // Keeps the total length of appended strings. Note that we need to cap the length at
-        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
-        // length causing StringIndexOutOfBoundsException in the substring call above.
-        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
-      }
-    }
-
-    /**
-     * The method allocates memory for all appended strings, writes them to the memory and
-     * returns concatenated string.
-     */
-    override def toString: String = {
-      val finalLength = if (atLimit) maxLength else length
-      val result = new java.lang.StringBuilder(finalLength)
-      strings.foreach(result.append)
-      result.toString
-    }
-  }
-
-  /**
    * A string concatenator for plan strings.  Uses length from a configured value, and
    *  prints a warning the first time a plan is truncated.
    */
@@ -158,16 +131,18 @@ object StringUtils extends Logging {
     override def toString: String = {
       if (atLimit) {
         logWarning(
-          "Truncated the string representation of a plan since it was too long. The " +
-            s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
-            s"can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+          log"Truncated the string representation of a plan since it was too long. The " +
+            log"plan had length ${MDC(QUERY_PLAN_LENGTH_ACTUAL, length)} " +
+            log"and the maximum is ${MDC(QUERY_PLAN_LENGTH_MAX, maxLength)}. This behavior " +
+            log"can be adjusted by setting " +
+            log"'${MDC(CONFIG, SQLConf.MAX_PLAN_STRING_LENGTH.key)}'.")
         val truncateMsg = if (maxLength == 0) {
           s"Truncated plan of $length characters"
         } else {
           s"... ${length - maxLength} more characters"
         }
         val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
-        strings.foreach(result.append)
+        strings.forEach(s => result.append(s))
         result.append(truncateMsg)
         result.toString
       } else {

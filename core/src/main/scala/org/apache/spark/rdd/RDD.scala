@@ -36,7 +36,8 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
 import org.apache.spark.partial.BoundedDouble
@@ -45,6 +46,7 @@ import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
   Utils => collectionUtils}
@@ -209,7 +211,7 @@ abstract class RDD[T: ClassTag](
    * @return This RDD.
    */
   def unpersist(blocking: Boolean = false): this.type = {
-    logInfo(s"Removing RDD $id from persistence list")
+    logInfo(log"Removing RDD ${MDC(RDD_ID, id)} from persistence list")
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
@@ -223,14 +225,17 @@ abstract class RDD[T: ClassTag](
    * not use `this` because RDDs are user-visible, so users might have added their own locking on
    * RDDs; sharing that could lead to a deadlock.
    *
-   * One thread might hold the lock on many of these, for a chain of RDD dependencies; but
-   * because DAGs are acyclic, and we only ever hold locks for one path in that DAG, there is no
-   * chance of deadlock.
+   * One thread might hold the lock on many of these, for a chain of RDD dependencies. Deadlocks
+   * are possible if we try to lock another resource while holding the stateLock,
+   * and the lock acquisition sequence of these locks is not guaranteed to be the same.
+   * This can lead lead to a deadlock as one thread might first acquire the stateLock,
+   * and then the resource,
+   * while another thread might first acquire the resource, and then the stateLock.
    *
    * Executors may reference the shared fields (though they should never mutate them,
    * that only happens on the driver).
    */
-  private val stateLock = new Serializable {}
+  private[spark] val stateLock = new Serializable {}
 
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
@@ -372,10 +377,12 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
-      readCachedBlock = false
-      computeOrReadCheckpoint(partition, context)
-    }) match {
+    SparkEnv.get.blockManager.getOrElseUpdateRDDBlock(
+      context.taskAttemptId(), blockId, storageLevel, elementClassTag, () => {
+        readCachedBlock = false
+        computeOrReadCheckpoint(partition, context)
+      }
+    ) match {
       // Block hit.
       case Left(blockResult) =>
         if (readCachedBlock) {
@@ -418,7 +425,7 @@ abstract class RDD[T: ClassTag](
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
+  def flatMap[U: ClassTag](f: T => IterableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.flatMap(cleanF))
   }
@@ -637,7 +644,8 @@ abstract class RDD[T: ClassTag](
           // this shouldn't happen often because we use a big multiplier for the initial size
           var numIters = 0
           while (samples.length < num) {
-            logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
+            logWarning(log"Needed to re-sample due to insufficient sample size. " +
+              log"Repeat #${MDC(NUM_ITERATIONS, numIters)}")
             samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
             numIters += 1
           }
@@ -907,6 +915,31 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Return a new RDD by applying an evaluator to each partition of this RDD. The given evaluator
+   * factory will be serialized and sent to executors, and each task will create an evaluator with
+   * the factory, and use the evaluator to transform the data of the input partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def mapPartitionsWithEvaluator[U: ClassTag](
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory)
+  }
+
+  /**
+   * Zip this RDD's partitions with another RDD and return a new RDD by applying an evaluator to
+   * the zipped partitions. Assumes that the two RDDs have the *same number of partitions*, but
+   * does *not* require them to have the same number of elements in each partition.
+   */
+  @DeveloperApi
+  @Since("3.5.0")
+  def zipPartitionsWithEvaluator[U: ClassTag](
+      rdd2: RDD[T],
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new ZippedPartitionsWithEvaluatorRDD(this, rdd2, evaluatorFactory)
+  }
+
+  /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    *
@@ -1017,7 +1050,8 @@ abstract class RDD[T: ClassTag](
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
-    Array.concat(results: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    Array.concat(results.toImmutableArraySeq: _*)
   }
 
   /**
@@ -1177,7 +1211,7 @@ abstract class RDD[T: ClassTag](
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
-   * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
+   * and one operation for merging two U's, as in scala.IterableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
    *
@@ -1192,8 +1226,7 @@ abstract class RDD[T: ClassTag](
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
-    val cleanCombOp = sc.clean(combOp)
-    val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    val aggregatePartition = (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
     val mergeResult = (_: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
@@ -1231,7 +1264,7 @@ abstract class RDD[T: ClassTag](
       val cleanSeqOp = context.clean(seqOp)
       val cleanCombOp = context.clean(combOp)
       val aggregatePartition =
-        (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+        (it: Iterator[T]) => it.foldLeft(zeroValue)(cleanSeqOp)
       var partiallyAggregated: RDD[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
       var numPartitions = partiallyAggregated.partitions.length
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
@@ -1458,7 +1491,7 @@ abstract class RDD[T: ClassTag](
           }
         }
 
-        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
@@ -1621,6 +1654,13 @@ abstract class RDD[T: ClassTag](
    * RDDs will be removed. This function must be called before any job has been
    * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
+   *
+   * The data is only checkpointed when `doCheckpoint()` is called, and this only happens at the
+   * end of the first action execution on this RDD. The final data that is checkpointed after the
+   * first action may be different from the data that was used during the action, due to
+   * non-determinism of the underlying operation and retries. If the purpose of the checkpoint is
+   * to achieve saving a deterministic snapshot of the data, an eager action may need to be called
+   * first on the RDD to trigger the checkpoint.
    */
   def checkpoint(): Unit = RDDCheckpointData.synchronized {
     // NOTE: we use a global lock here due to complexities downstream with ensuring
@@ -1650,10 +1690,17 @@ abstract class RDD[T: ClassTag](
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    *
    * The checkpoint directory set through `SparkContext#setCheckpointDir` is not used.
+   *
+   * The data is only checkpointed when `doCheckpoint()` is called, and this only happens at the
+   * end of the first action execution on this RDD. The final data that is checkpointed after the
+   * first action may be different from the data that was used during the action, due to
+   * non-determinism of the underlying operation and retries. If the purpose of the checkpoint is
+   * to achieve saving a deterministic snapshot of the data, an eager action may need to be called
+   * first on the RDD to trigger the checkpoint.
    */
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
-    if (conf.get(DYN_ALLOCATION_ENABLED) &&
-        conf.contains(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)) {
+    if (Utils.isDynamicAllocationEnabled(conf) &&
+      conf.contains(DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT)) {
       logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
         "which removes executors along with their cached blocks. If you must use both " +
         "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +
@@ -1936,8 +1983,7 @@ abstract class RDD[T: ClassTag](
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
         "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
           info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
-
-      s"$rdd [$persistence]" +: storageInfo
+      (s"$rdd [$persistence]" +: storageInfo).toImmutableArraySeq
     }
 
     // Apply a different rule to the last child
@@ -2149,6 +2195,7 @@ object RDD {
  * Note that, the output of an RDD usually relies on the parent RDDs. When the parent RDD's output
  * is INDETERMINATE, it's very likely the RDD's output is also INDETERMINATE.
  */
-private[spark] object DeterministicLevel extends Enumeration {
+@DeveloperApi
+object DeterministicLevel extends Enumeration {
   val DETERMINATE, UNORDERED, INDETERMINATE = Value
 }

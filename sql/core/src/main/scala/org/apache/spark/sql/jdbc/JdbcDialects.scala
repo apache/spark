@@ -17,20 +17,25 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, Statement, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.ServiceLoader
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -39,11 +44,12 @@ import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedRef
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -87,15 +93,52 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
-   * @param sqlType The sql type (see java.sql.Types)
-   * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
-   * @param size The size of the type.
-   * @param md Result metadata associated with this type.
-   * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or null if the default type mapping should be used.
+   *
+   * Guidelines for mapping database defined timestamps to Spark SQL timestamps:
+   * <ul>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampNTZType]]
+   *   </li>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if !preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampType]](LTZ)
+   *   </li>
+   *   <li>TIMESTAMP WITH TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>TIMESTAMP WITH LOCAL TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>
+   *     If the TIMESTAMP cannot be distinguished by `sqlType` and `typeName`, preferTimestampNTZ
+   *     is respected for now, but we may need to add another option in the future if necessary.
+   *   </li>
+   * </ul>
+   *
+   * @param sqlType Refers to [[java.sql.Types]] constants, or other constants defined by the
+   *                target database, e.g. `-101` is Oracle's TIMESTAMP WITH TIME ZONE type.
+   *                This value is returned by [[java.sql.ResultSetMetaData#getColumnType]].
+   * @param typeName The column type name used by the database (e.g. "BIGINT UNSIGNED"). This is
+   *                 sometimes used to determine the target data type when `sqlType` is not
+   *                 sufficient if multiple database types are conflated into a single id.
+   *                 This value is returned by [[java.sql.ResultSetMetaData#getColumnTypeName]].
+   * @param size The size of the type, e.g. the maximum precision for numeric types, length for
+   *             character string, etc.
+   *             This value is returned by [[java.sql.ResultSetMetaData#getPrecision]].
+   * @param md Result metadata associated with this type. This contains additional information
+   *           from [[java.sql.ResultSetMetaData]] or user specified options.
+   *           <ul>
+   *             <li>
+   *               `isTimestampNTZ`: Whether read a TIMESTAMP WITHOUT TIME ZONE value as
+   *               [[org.apache.spark.sql.types.TimestampNTZType]] or not. This is configured by
+   *               `JDBCOptions.preferTimestampNTZ`.
+   *             </li>
+   *             <li>
+   *               `scale`: The length of fractional part [[java.sql.ResultSetMetaData#getScale]]
+   *             </li>
+   *            </ul>
+   * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
+   *         or None if the default type mapping should be used.
    */
   def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
@@ -103,6 +146,74 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Converts an instance of `java.sql.Timestamp` to a custom `java.sql.Timestamp` value.
+   * @param t represents a specific instant in time based on
+   *          the hybrid calendar which combines Julian and
+   *          Gregorian calendars.
+   * @return the timestamp value to convert to
+   * @throws IllegalArgumentException if t is null
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
+   * Converts an instance of `java.sql.Date` to a custom `java.sql.Date` value.
+   * @param d the date value returned from JDBC ResultSet getDate method.
+   * @return the date value after conversion
+   */
+  @Since("4.0.0")
+  def convertJavaDateToDate(d: Date): Date = d
+
+  /**
+   * Converts an year-month interval string to an int value `months`.
+   *
+   * @param yearmonthStr the year-month interval string
+   * @return the number of total months in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getYearMonthIntervalAsMonths(yearmonthStr: String): Int = {
+    fromYearMonthString(yearmonthStr).months
+  }
+
+  /**
+   * Converts a day-time interval string to a long value `micros`.
+   *
+   * @param daytimeStr the day-time interval string
+   * @return the number of total microseconds in the interval
+   * @throws IllegalArgumentException if the input string is invalid
+   */
+  @Since("4.0.0")
+  def getDayTimeIntervalAsMicros(daytimeStr: String): Long = {
+    getDuration(fromDayTimeString(daytimeStr), TimeUnit.MICROSECONDS)
+  }
+
+  /**
+   * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
+   * value stored in a remote database.
+   * JDBC dialects should override this function to provide implementations that suit their
+   * JDBC drivers.
+   * @param t Timestamp returned from JDBC driver getTimestamp method.
+   * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
+   */
+  @Since("3.5.0")
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(t))
+  }
+
+  /**
+   * Converts a LocalDateTime representing a TimestampNTZ type to an
+   * instance of `java.sql.Timestamp`.
+   * @param ldt representing a TimestampNTZType.
+   * @return A Java Timestamp representing this LocalDateTime.
+   */
+  @Since("3.5.0")
+  def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    val micros = localDateTimeToMicros(ldt)
+    toJavaTimestampNoRebase(micros)
+  }
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
@@ -122,7 +233,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       val connection =
         ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+        s"The driver could not open a JDBC connection. Check the URL: ${options.getRedactUrl()}")
       connection
     }
   }
@@ -136,13 +247,52 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Create the table if the table does not exist.
+   * To allow certain options to append when create a new table, which can be
+   * table_options or partition_options.
+   * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+   *
+   * @param statement The Statement object used to execute SQL statements.
+   * @param tableName The name of the table to be created.
+   * @param strSchema The schema of the table to be created.
+   * @param options The JDBC options. It contains the create table option, which can be
+   *                table_options or partition_options.
+   */
+  def createTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    val createTableOptions = options.createTableOptions
+    statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
+  }
+
+  /**
+   * Returns an Insert SQL statement template for inserting a row into the target table via JDBC
+   * conn. Use "?" as placeholder for each value to be inserted.
+   * E.g. `INSERT INTO t ("name", "age", "gender") VALUES (?, ?, ?)`
+   *
+   * @param table The name of the table.
+   * @param fields The fields of the row that will be inserted.
+   * @return The SQL query to use for insert data into table.
+   */
+  @Since("4.0.0")
+  def insertIntoTable(
+      table: String,
+      fields: Array[StructField]): String = {
+    val placeholders = fields.map(_ => "?").mkString(",")
+    val columns = fields.map(x => quoteIdentifier(x.name)).mkString(",")
+    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+  }
+
+  /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
    * @param table  The name of the table.
    * @return The SQL query to use for checking the table.
    */
   def getTableExistsQuery(table: String): String = {
-    s"SELECT * FROM $table WHERE 1=0"
+    s"SELECT 1 FROM $table WHERE 1=0"
   }
 
   /**
@@ -167,7 +317,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   def getTruncateQuery(table: String): String = {
-    getTruncateQuery(table, isCascadingTruncateTable)
+    getTruncateQuery(table, isCascadingTruncateTable())
   }
 
   /**
@@ -181,7 +331,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("2.4.0")
   def getTruncateQuery(
     table: String,
-    cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
       s"TRUNCATE TABLE $table"
   }
 
@@ -212,6 +362,10 @@ abstract class JdbcDialect extends Serializable with Logging {
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: LocalDateTime =>
+      val timestampFormatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"'${timestampFormatter.format(timestampValue)}'"
     case timestampValue: Instant =>
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
@@ -237,10 +391,10 @@ abstract class JdbcDialect extends Serializable with Logging {
       quoteIdentifier(namedRef.fieldNames.head)
     }
 
-    override def visitCast(l: String, dataType: DataType): String = {
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
       val databaseTypeDefinition =
         getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      s"CAST($l AS $databaseTypeDefinition)"
+      s"CAST($expr AS $databaseTypeDefinition)"
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
@@ -249,8 +403,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: $funcName")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -259,8 +416,28 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction(funcName)) {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support aggregate function: $funcName");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
+      }
+    }
+
+    override def visitInverseDistributionFunction(
+        funcName: String,
+        isDistinct: Boolean,
+        inputs: Array[String],
+        orderingWithinGroups: Array[String]): String = {
+      if (isSupportedFunction(funcName)) {
+        super.visitInverseDistributionFunction(
+          dialectFunctionName(funcName), isDistinct, inputs, orderingWithinGroups)
+      } else {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3178",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
 
@@ -270,8 +447,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("OVERLAY")) {
         super.visitOverlay(inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "OVERLAY"))
       }
     }
 
@@ -279,8 +459,11 @@ abstract class JdbcDialect extends Serializable with Logging {
       if (isSupportedFunction("TRIM")) {
         super.visitTrim(direction, inputs)
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: TRIM")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> "TRIM"))
       }
     }
   }
@@ -361,7 +544,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     while (rs.next()) {
       schemaBuilder += Array(rs.getString(1))
     }
-    schemaBuilder.result
+    schemaBuilder.result()
   }
 
   /**
@@ -379,8 +562,22 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
+  @deprecated("Please override renameTable method with identifiers", "3.5.0")
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  @Since("3.5.0")
+  def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
@@ -471,6 +668,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Build a SQL statement to drop the given table.
+   *
+   * @param table the table name
+   * @return The SQL statement to use for drop the table.
+   */
+  @Since("4.0.0")
+  def dropTable(table: String): String = {
+    s"DROP TABLE $table"
+  }
+
+  /**
    * Build a create index SQL statement.
    *
    * @param indexName         the name of the index to be created
@@ -486,7 +694,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): String = {
-    throw new UnsupportedOperationException("createIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3179")
   }
 
   /**
@@ -503,7 +711,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       indexName: String,
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    throw new UnsupportedOperationException("indexExists is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3180")
   }
 
   /**
@@ -511,10 +719,10 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @param indexName the name of the index to be dropped.
    * @param tableIdent the table on which index to be dropped.
-  * @return the SQL statement to use for dropping the index.
+   * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
-    throw new UnsupportedOperationException("dropIndex is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3181")
   }
 
   /**
@@ -524,7 +732,23 @@ abstract class JdbcDialect extends Serializable with Logging {
       conn: Connection,
       tableIdent: Identifier,
       options: JDBCOptions): Array[TableIndex] = {
-    throw new UnsupportedOperationException("listIndexes is not supported")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param e The dialect specific exception.
+   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param messageParameters The message parameters of `errorClass`
+   * @param description The error description
+   * @return `AnalysisException` or its sub-class.
+   */
+  def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    classifyException(description, e)
   }
 
   /**
@@ -533,28 +757,105 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
+  @deprecated("Please override the classifyException method with an error class", "4.0.0")
   def classifyException(message: String, e: Throwable): AnalysisException = {
-    new AnalysisException(message, cause = Some(e))
+    new AnalysisException(
+      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      messageParameters = Map(
+        "url" -> "jdbc:",
+        "message" -> message),
+      cause = Some(e))
   }
 
   /**
-   * returns the LIMIT clause for the SELECT statement
+   * Returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"LIMIT $limit" else ""
+    if (limit > 0) s"LIMIT $limit" else ""
   }
 
   /**
-   * returns the OFFSET clause for the SELECT statement
+   * Returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {
-    if (offset > 0 ) s"OFFSET $offset" else ""
+    if (offset > 0) s"OFFSET $offset" else ""
   }
+
+  /**
+   * Returns the SQL builder for the SELECT statement.
+   */
+  def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new JdbcSQLQueryBuilder(this, options)
+
+  /**
+   * Returns ture if dialect supports LIMIT clause.
+   *
+   * Note: Some build-in dialect supports LIMIT clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
+   */
+  def supportsLimit: Boolean = false
+
+  /**
+   * Returns ture if dialect supports OFFSET clause.
+   *
+   * Note: Some build-in dialect supports OFFSET clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MySQLDialect.MySQLSQLQueryBuilder}.
+   */
+  def supportsOffset: Boolean = false
 
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
-    throw new UnsupportedOperationException("TableSample is not supported by this data source")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
+
+  /**
+   * Return the DB-specific quoted and fully qualified table name
+   */
+  @Since("3.5.0")
+  def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
+
+  /**
+   * Return TimestampType/TimestampNTZType based on the metadata.
+   */
+  protected final def getTimestampType(md: Metadata): DataType = {
+    JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
+  }
+
+  /**
+   * Get extra column metadata for the given column.
+   *
+   * @param conn The connection currently connection being used.
+   * @param rsmd The metadata of the current result set.
+   * @param columnIdx The index of the column.
+   * @param metadata The metadata builder to store the extra column information.
+   */
+  @Since("4.0.0")
+  def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {}
+}
+
+/**
+ * Make the `classifyException` method throw out the original exception
+ */
+trait NoLegacyJDBCError extends JdbcDialect {
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = errorClass,
+      messageParameters = messageParameters,
+      cause = Some(e))
+  }
 }
 
 /**
@@ -592,14 +893,14 @@ object JdbcDialects {
 
   private[this] var dialects = List[JdbcDialect]()
 
-  registerDialect(MySQLDialect)
-  registerDialect(PostgresDialect)
-  registerDialect(DB2Dialect)
-  registerDialect(MsSqlServerDialect)
-  registerDialect(DerbyDialect)
-  registerDialect(OracleDialect)
-  registerDialect(TeradataDialect)
-  registerDialect(H2Dialect)
+  private def registerDialects(): Unit = {
+    val loader = ServiceLoader.load(classOf[JdbcDialect], Utils.getContextOrSparkClassLoader)
+    val iter = loader.iterator()
+    while (iter.hasNext) {
+      registerDialect(iter.next())
+    }
+  }
+  registerDialects()
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -617,6 +918,6 @@ object JdbcDialects {
 /**
  * NOOP dialect object, always returning the neutral element.
  */
-private object NoopDialect extends JdbcDialect {
+private[spark] object NoopDialect extends JdbcDialect {
   override def canHandle(url : String): Boolean = true
 }

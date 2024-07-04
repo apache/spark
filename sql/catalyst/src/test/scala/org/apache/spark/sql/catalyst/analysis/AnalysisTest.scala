@@ -20,21 +20,21 @@ package org.apache.spark.sql.catalyst.analysis
 import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 trait AnalysisTest extends PlanTest {
-
-  import org.apache.spark.QueryContext
 
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
@@ -83,7 +83,13 @@ trait AnalysisTest extends PlanTest {
     createTempView(catalog, "TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     createGlobalTempView(catalog, "TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
+    createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
+      overrideIfExists = true)
     new Analyzer(catalog) {
+      catalogManager.tempVariableManager.create(
+        "testVarA", "1", Literal(1), overrideIfExists = true)
+      catalogManager.tempVariableManager.create(
+        "testVarNull", null, Literal(null, StringType), overrideIfExists = true)
       override val extendedResolutionRules = extendedAnalysisRules
     }
   }
@@ -176,7 +182,7 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       expectedErrorClass: String,
       expectedMessageParameters: Map[String, String],
-      queryContext: Array[QueryContext] = Array.empty,
+      queryContext: Array[ExpectedContext] = Array.empty,
       caseSensitive: Boolean = true): Unit = {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val analyzer = getAnalyzer
@@ -206,5 +212,9 @@ trait AnalysisTest extends PlanTest {
 
   protected def parseException(parser: String => Any)(sqlText: String): ParseException = {
     intercept[ParseException](parser(sqlText))
+  }
+
+  protected def internalException(parser: String => Any)(sqlText: String): SparkException = {
+    intercept[SparkException](parser(sqlText))
   }
 }

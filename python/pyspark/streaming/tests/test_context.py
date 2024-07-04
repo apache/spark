@@ -24,7 +24,6 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 class StreamingContextTests(PySparkStreamingTestCase):
-
     duration = 0.1
     setupCalled = False
 

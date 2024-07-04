@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions;
 import java.util.Arrays;
 
 import org.apache.spark.annotation.Evolving;
-import scala.collection.JavaConverters;
+import scala.jdk.javaapi.CollectionConverters;
 
 import org.apache.spark.sql.types.DataType;
 
@@ -45,7 +45,7 @@ public class Expressions {
    */
   public static Transform apply(String name, Expression... args) {
     return LogicalExpressions.apply(name,
-        JavaConverters.asScalaBuffer(Arrays.asList(args)).toSeq());
+        CollectionConverters.asScala(Arrays.asList(args)).toSeq());
   }
 
   /**

@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -37,6 +37,7 @@ import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -406,15 +407,19 @@ private[tree] object TreeEnsembleModel extends Logging {
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
-          logWarning(s"$className.save() was called, but it may fail because of too little" +
-            s" driver memory (${driverMemory}m)." +
-            s"  If failure occurs, try setting driver-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, className)}.save() was called, " +
+            log"but it may fail because of too little driver memory " +
+            log"(${MDC(LogKeys.DRIVER_MEMORY_SIZE, driverMemory)}m). If failure occurs, " +
+            log"try setting driver-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       } else {
         if (sc.executorMemory <= memThreshold) {
-          logWarning(s"$className.save() was called, but it may fail because of too little" +
-            s" executor memory (${sc.executorMemory}m)." +
-            s"  If failure occurs try setting executor-memory ${memThreshold}m (or larger).")
+          logWarning(log"${MDC(LogKeys.CLASS_NAME, className)}.save() was called, " +
+            log"but it may fail because of too little executor memory " +
+            log"(${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, sc.executorMemory)}m). If failure occurs, " +
+            log"try setting executor-memory ${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, memThreshold)}m " +
+            log"(or larger).")
         }
       }
 
@@ -428,9 +433,10 @@ private[tree] object TreeEnsembleModel extends Logging {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
-        tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }
+      val dataRDD = sc.parallelize(model.trees.zipWithIndex.toImmutableArraySeq)
+        .flatMap { case (tree, treeId) =>
+          tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
+        }
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
@@ -438,7 +444,7 @@ private[tree] object TreeEnsembleModel extends Logging {
      * Read metadata from the loaded JSON metadata.
      */
     def readMetadata(metadata: JValue): Metadata = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       (metadata \ "metadata").extract[Metadata]
     }
 

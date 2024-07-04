@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.{Identifier, Table}
@@ -56,11 +56,13 @@ class AlterTableSetLocationSuite
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) USING foo")
 
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(e.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1045",
+        parameters = Map.empty
+      )
     }
   }
 }

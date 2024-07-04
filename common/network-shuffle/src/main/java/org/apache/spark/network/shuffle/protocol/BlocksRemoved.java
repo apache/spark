@@ -51,8 +51,7 @@ public class BlocksRemoved extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof BlocksRemoved) {
-      BlocksRemoved o = (BlocksRemoved) other;
+    if (other instanceof BlocksRemoved o) {
       return numRemovedBlocks == o.numRemovedBlocks;
     }
     return false;

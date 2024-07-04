@@ -1,5 +1,6 @@
 -- A test suite for scalar subquery in SELECT clause
 
+--ONLY_IF spark
 create temporary view t1 as select * from values
   ('val1a', 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 00:00:00.000', date '2014-04-04'),
   ('val1b', 8S, 16, 19L, float(17.0), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
@@ -236,107 +237,25 @@ SELECT c, (
     WHERE a + b = c
 ) FROM (VALUES (6)) t2(c);
 
--- Set operations in correlation path
+-- SPARK-43156: scalar subquery with Literal result like `COUNT(1) is null`
+SELECT *, (SELECT count(1) is null FROM t2 WHERE t1.c1 = t2.c1) FROM t1;
 
-CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
-CREATE OR REPLACE TEMP VIEW t1(t1a, t1b, t1c) AS VALUES (1, 1, 3);
-CREATE OR REPLACE TEMP VIEW t2(t2a, t2b, t2c) AS VALUES (1, 1, 5), (2, 2, 7);
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2;
 
-SELECT t0a, (SELECT sum(c) FROM
-  (SELECT t1c as c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION ALL
-  SELECT t2c as c
-  FROM   t2
-  WHERE  t2b = t0b)
-)
-FROM t0;
+-- SPARK-43596: handle IsNull when rewriting the domain join
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=false;
+WITH T AS (SELECT 1 AS a)
+SELECT (SELECT sum(1) FROM T WHERE a = col OR upper(col)= 'Y')
+FROM (SELECT null as col) as foo;
+set spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline=true;
 
-SELECT t0a, (SELECT sum(c) FROM
-  (SELECT t1c as c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION ALL
-  SELECT t2c as c
-  FROM   t2
-  WHERE  t2a = t0a)
-)
-FROM t0;
+-- SPARK-43760: the result of the subquery can be NULL.
+select * from (
+ select t1.id c1, (
+  select t2.id c from range (1, 2) t2
+  where t1.id = t2.id  ) c2
+ from range (1, 3) t1 ) t
+where t.c2 is not null;
 
-SELECT t0a, (SELECT sum(c) FROM
-  (SELECT t1c as c
-  FROM   t1
-  WHERE  t1a > t0a
-  UNION ALL
-  SELECT t2c as c
-  FROM   t2
-  WHERE  t2b <= t0b)
-)
-FROM t0;
-
-SELECT t0a, (SELECT sum(t1c) FROM
-  (SELECT t1c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION ALL
-  SELECT t2c
-  FROM   t2
-  WHERE  t2b = t0b)
-)
-FROM t0;
-
-SELECT t0a, (SELECT sum(t1c) FROM
-  (SELECT t1c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION DISTINCT
-  SELECT t2c
-  FROM   t2
-  WHERE  t2b = t0b)
-)
-FROM t0;
-
--- Tests for column aliasing
-SELECT t0a, (SELECT sum(t1a + 3 * t1b + 5 * t1c) FROM
-  (SELECT t1c as t1a, t1a as t1b, t0a as t1c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION ALL
-  SELECT t0a as t2b, t2c as t1a, t0b as t2c
-  FROM   t2
-  WHERE  t2b = t0b)
-)
-FROM t0;
-
--- Test handling of COUNT bug
-SELECT t0a, (SELECT count(t1c) FROM
-  (SELECT t1c
-  FROM   t1
-  WHERE  t1a = t0a
-  UNION DISTINCT
-  SELECT t2c
-  FROM   t2
-  WHERE  t2b = t0b)
-)
-FROM t0;
-
--- Correlated references in project
-SELECT t0a, (SELECT sum(d) FROM
-  (SELECT t1a - t0a as d
-  FROM   t1
-  UNION ALL
-  SELECT t2a - t0a as d
-  FROM   t2)
-)
-FROM t0;
-
--- Correlated references in aggregate - unsupported
-SELECT t0a, (SELECT sum(d) FROM
-  (SELECT sum(t0a) as d
-  FROM   t1
-  UNION ALL
-  SELECT sum(t2a) + t0a as d
-  FROM   t2)
-)
-FROM t0;
+-- SPARK-43838: Subquery on single table with having clause
+SELECT c1, c2, (SELECT count(*) cnt FROM t1 t2 WHERE t1.c1 = t2.c1 HAVING cnt = 0) FROM t1

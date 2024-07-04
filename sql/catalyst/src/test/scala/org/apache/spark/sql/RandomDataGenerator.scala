@@ -33,6 +33,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -52,9 +53,12 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  final val MAX_STR_LEN: Int = 1024
-  final val MAX_ARR_SIZE: Int = 128
-  final val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxStrLen", "1024").toInt
+  final val MAX_ARR_SIZE: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxArraySize", "128").toInt
+  final val MAX_MAP_SIZE: Int =
+    System.getProperty("spark.sql.test.randomDataGenerator.maxMapSize", "128").toInt
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -347,7 +351,7 @@ object RandomDataGenerator {
       case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
-        }
+        }.toImmutableArraySeq
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
           Some(() => Row.fromSeq(fieldGenerators.map(_.apply())))

@@ -24,11 +24,12 @@ import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 object NaiveBayesSuite {
@@ -160,7 +161,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -211,7 +213,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -250,7 +253,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.dense(-1.0)),
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0)))
-    intercept[SparkException] {
+    intercept[SparkRuntimeException] {
       NaiveBayes.train(sc.makeRDD(dense, 2))
     }
     val sparse = Seq(
@@ -258,7 +261,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty)))
-    intercept[SparkException] {
+    intercept[SparkRuntimeException] {
       NaiveBayes.train(sc.makeRDD(sparse, 2))
     }
     val nan = Seq(
@@ -266,7 +269,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty)))
-    intercept[SparkException] {
+    intercept[SparkRuntimeException] {
       NaiveBayes.train(sc.makeRDD(nan, 2))
     }
   }
@@ -278,7 +281,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0)))
 
-    intercept[SparkException] {
+    intercept[SparkRuntimeException] {
       NaiveBayes.train(sc.makeRDD(badTrain, 2), 1.0, Bernoulli)
     }
 

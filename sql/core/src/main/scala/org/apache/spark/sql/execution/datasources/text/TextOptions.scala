@@ -45,6 +45,7 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
   val encoding: Option[String] = parameters.get(ENCODING)
 
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { lineSep =>
+    require(lineSep != null, s"'$LINE_SEP' cannot be a null value.")
     require(lineSep.nonEmpty, s"'$LINE_SEP' cannot be an empty string.")
 
     lineSep

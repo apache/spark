@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
@@ -37,7 +38,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
@@ -142,10 +143,10 @@ class GaussianMixtureModel private[ml] (
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GaussianMixtureModel.transform() does " +
+        log"nothing because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   @Since("2.0.0")
@@ -189,7 +190,7 @@ class GaussianMixtureModel private[ml] (
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
       (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
-    }
+    }.toImmutableArraySeq
     SparkSession.builder().getOrCreate().createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
@@ -441,7 +442,7 @@ class GaussianMixture @Since("2.0.0") (
       instances.mapPartitions { iter =>
         if (iter.nonEmpty) {
           val agg = new ExpectationAggregator(numFeatures, bcWeights, bcGaussians)
-          while (iter.hasNext) { agg.add(iter.next) }
+          while (iter.hasNext) { agg.add(iter.next()) }
           // sum of weights in this partition
           val ws = agg.weights.sum
           if (iteration == 0) weightSumAccum.add(ws)
@@ -508,8 +509,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view.slice(start, end)
-      val weightSlice = sampleWeights.view.slice(start, end)
+      val sampleSlice = samples.slice(start, end)
+      val weightSlice = sampleWeights.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 

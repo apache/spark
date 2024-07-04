@@ -19,12 +19,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes_2.12</artifactId>
+  <artifactId>spark-kubernetes_2.13</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes</name>
   <properties>
@@ -120,10 +120,30 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.bytebuddy</groupId>
+      <artifactId>byte-buddy-agent</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.jmock</groupId>
-      <artifactId>jmock-junit4</artifactId>
+      <artifactId>jmock-junit5</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.junit.jupiter</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.junit.platform</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>test</scope>
     </dependency>
 

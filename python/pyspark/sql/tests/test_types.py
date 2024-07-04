@@ -23,19 +23,29 @@ import os
 import pickle
 import sys
 import unittest
+from dataclasses import dataclass, asdict
 
 from pyspark.sql import Row
-from pyspark.sql.functions import col
-from pyspark.sql.udf import UserDefinedFunction
-from pyspark.errors import AnalysisException
+from pyspark.sql import functions as F
+from pyspark.errors import (
+    AnalysisException,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkRuntimeError,
+    PySparkNotImplementedError,
+)
 from pyspark.sql.types import (
+    DataType,
     ByteType,
     ShortType,
     IntegerType,
     FloatType,
     DateType,
     TimestampType,
+    TimestampNTZType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
+    CalendarIntervalType,
     MapType,
     StringType,
     CharType,
@@ -49,6 +59,8 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -66,6 +78,7 @@ from pyspark.testing.sqlutils import (
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
@@ -114,6 +127,16 @@ class TypesTestsMixin:
     def test_infer_schema(self):
         d = [Row(l=[], d={}, s=None), Row(l=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame(rdd, schema=123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
         df = self.spark.createDataFrame(rdd)
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
@@ -170,6 +193,7 @@ class TypesTestsMixin:
             Row(a=1),
             Row("a")(1),
             A(),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
 
         df = self.spark.createDataFrame([data])
@@ -192,6 +216,7 @@ class TypesTestsMixin:
             "struct<a:bigint>",
             "struct<a:bigint>",
             "struct<a:bigint>",
+            "struct<b:struct<c:timestamp>>",
         ]
         self.assertEqual(actual, expected)
 
@@ -214,14 +239,25 @@ class TypesTestsMixin:
             Row(a=1),
             Row(a=1),
             Row(a=1),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
         self.assertEqual(actual, expected)
 
         with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
             with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
-                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                data = [
+                    (
+                        datetime.datetime(1970, 1, 1, 0, 0),
+                        Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
+                    )
+                ]
+                df = self.spark.createDataFrame(data)
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+                self.assertEqual(
+                    list(df.schema)[1].dataType.simpleString(), "struct<a:struct<a:timestamp_ntz>>"
+                )
+                self.assertEqual(df.first()[1], Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))))
 
             df = self.spark.createDataFrame(
                 [
@@ -288,11 +324,21 @@ class TypesTestsMixin:
                 NestedRow([{"payment": 100.5, "name": "B"}], [2, 3]),
             ]
 
-            nestedRdd = self.sc.parallelize(data)
-            df = self.spark.createDataFrame(nestedRdd)
+            df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
-            df = self.spark.createDataFrame(data)
+    def test_infer_nested_dict_as_struct_with_rdd(self):
+        # SPARK-35929: Test inferring nested dict as a struct type.
+        NestedRow = Row("f1", "f2")
+
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            data = [
+                NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
+                NestedRow([{"payment": 100.5, "name": "B"}], [2, 3]),
+            ]
+
+            nestedRdd = self.sc.parallelize(data)
+            df = self.spark.createDataFrame(nestedRdd)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
     def test_infer_array_merge_element_types(self):
@@ -300,10 +346,6 @@ class TypesTestsMixin:
         ArrayRow = Row("f1", "f2")
 
         data = [ArrayRow([1, None], [None, 2])]
-
-        rdd = self.sc.parallelize(data)
-        df = self.spark.createDataFrame(rdd)
-        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
         df = self.spark.createDataFrame(data)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
@@ -329,7 +371,17 @@ class TypesTestsMixin:
         with self.assertRaisesRegex(ValueError, "types cannot be determined after inferring"):
             self.spark.createDataFrame(data4)
 
-    def test_infer_array_element_type_empty(self):
+    def test_infer_array_merge_element_types_with_rdd(self):
+        # SPARK-39168: Test inferring array element type from all values in array
+        ArrayRow = Row("f1", "f2")
+
+        data = [ArrayRow([1, None], [None, 2])]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
+
+    def test_infer_array_element_type_empty_rdd(self):
         # SPARK-39168: Test inferring array element type from all rows
         ArrayRow = Row("f1")
 
@@ -341,6 +393,12 @@ class TypesTestsMixin:
         self.assertEqual(Row(f1=[]), rows[0])
         self.assertEqual(Row(f1=[None]), rows[1])
         self.assertEqual(Row(f1=[1]), rows[2])
+
+    def test_infer_array_element_type_empty(self):
+        # SPARK-39168: Test inferring array element type from all rows
+        ArrayRow = Row("f1")
+
+        data = [ArrayRow([]), ArrayRow([None]), ArrayRow([1])]
 
         df = self.spark.createDataFrame(data)
         rows = df.collect()
@@ -355,12 +413,6 @@ class TypesTestsMixin:
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
             data = [NestedRow([{"payment": 200.5}, {"name": "A"}])]
 
-            nestedRdd = self.sc.parallelize(data)
-            df = self.spark.createDataFrame(nestedRdd)
-            self.assertEqual(
-                Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
-            )
-
             df = self.spark.createDataFrame(data)
             self.assertEqual(
                 Row(f1=[Row(payment=200.5, name=None), Row(payment=None, name="A")]), df.first()
@@ -373,19 +425,78 @@ class TypesTestsMixin:
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
 
+    def test_infer_map_merge_pair_types_with_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all values in array
+        MapRow = Row("f1", "f2")
+
+        data = [MapRow({"a": 1, "b": None}, {"a": None, "b": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1={"a": 1, "b": None}, f2={"a": None, "b": 1}), df.first())
+
+    def test_infer_map_pair_type_empty_rdd(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_empty(self):
+        # SPARK-48247: Test inferring map pair type from all rows
+        MapRow = Row("f1")
+
+        data = [MapRow({}), MapRow({"a": None}), MapRow({"a": 1})]
+
+        df = self.spark.createDataFrame(data)
+        rows = df.collect()
+        self.assertEqual(Row(f1={}), rows[0])
+        self.assertEqual(Row(f1={"a": None}), rows[1])
+        self.assertEqual(Row(f1={"a": 1}), rows[2])
+
+    def test_infer_map_pair_type_with_nested_maps(self):
+        # SPARK-48247: Test inferring nested map
+        NestedRow = Row("f1", "f2")
+
+        data = [
+            NestedRow({"payment": 200.5, "name": "A"}, {"outer": {"payment": 200.5, "name": "A"}})
+        ]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(
+            Row(
+                f1={"payment": "200.5", "name": "A"},
+                f2={"outer": {"payment": "200.5", "name": "A"}},
+            ),
+            df.first(),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
 
+    def test_create_dataframe_from_dataclasses(self):
+        @dataclass
+        class User:
+            name: str
+            age: int
+            is_active: bool
+
+        user = User(name="John", age=30, is_active=True)
+        r = self.spark.createDataFrame([user]).first()
+        self.assertEqual(asdict(user), r.asDict())
+
     def test_negative_decimal(self):
-        try:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+        with self.sql_conf({"spark.sql.legacy.allowNegativeScaleOfDecimal": True}):
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
-            ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+            ret = df.select(F.col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
             self.assertEqual(actual, [0, 10])
-        finally:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -488,6 +599,247 @@ class TypesTestsMixin:
             self.assertEqual(1, row.asDict()["l"][0].a)
             self.assertEqual(1.0, row.asDict()["d"]["key"].c)
 
+    def test_convert_list_to_str(self):
+        data = [[[123], 120]]
+        schema = StructType(
+            [
+                StructField("name", StringType(), True),
+                StructField("income", LongType(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(data, schema)
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.count(), 1)
+        self.assertEqual(df.head(), Row(name="[123]", income=120))
+
+    def test_schema_with_collations_json_ser_de(self):
+        from pyspark.sql.types import _parse_datatype_json_string
+
+        unicode_collation = "UNICODE"
+
+        simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
+
+        nested_struct = StructType([StructField("nested", simple_struct)])
+
+        array_in_schema = StructType(
+            [StructField("array", ArrayType(StringType(unicode_collation)))]
+        )
+
+        map_in_schema = StructType(
+            [
+                StructField(
+                    "map", MapType(StringType(unicode_collation), StringType(unicode_collation))
+                )
+            ]
+        )
+
+        nested_map = StructType(
+            [
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField(
+                                "mapField",
+                                MapType(
+                                    StringType(unicode_collation), StringType(unicode_collation)
+                                ),
+                            )
+                        ]
+                    ),
+                )
+            ]
+        )
+
+        array_in_map = StructType(
+            [
+                StructField(
+                    "arrInMap",
+                    MapType(
+                        StringType(unicode_collation), ArrayType(StringType(unicode_collation))
+                    ),
+                )
+            ]
+        )
+
+        nested_array_in_map_value = StructType(
+            [
+                StructField(
+                    "nestedArrayInMap",
+                    ArrayType(
+                        MapType(
+                            StringType(unicode_collation),
+                            ArrayType(ArrayType(StringType(unicode_collation))),
+                        )
+                    ),
+                )
+            ]
+        )
+
+        schema_with_multiple_fields = StructType(
+            simple_struct.fields
+            + nested_struct.fields
+            + array_in_schema.fields
+            + map_in_schema.fields
+            + nested_map.fields
+            + array_in_map.fields
+            + nested_array_in_map_value.fields
+        )
+
+        schemas = [
+            simple_struct,
+            nested_struct,
+            array_in_schema,
+            map_in_schema,
+            nested_map,
+            nested_array_in_map_value,
+            array_in_map,
+            schema_with_multiple_fields,
+        ]
+
+        for schema in schemas:
+            scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
+            python_datatype = _parse_datatype_json_string(scala_datatype.json())
+            assert schema == python_datatype
+            assert schema == _parse_datatype_json_string(schema.json())
+
+    def test_schema_with_collations_on_non_string_types(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        collations_on_int_col_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "integer",
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_array_element_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField.element": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_on_array_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "arrayField",
+              "type": {{
+                  "type": "array",
+                  "elementType": "integer",
+                  "containsNull": true
+              }},
+              "nullable": true,
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "arrayField": "icu.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        collations_in_nested_map_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "nested",
+              "type": {{
+                "type": "struct",
+                "fields": [
+                  {{
+                    "name": "mapField",
+                    "type": {{
+                      "type": "map",
+                      "keyType": "string",
+                      "valueType": "integer",
+                      "valueContainsNull": true
+                    }},
+                    "nullable": true,
+                    "metadata": {{
+                      "{_COLLATIONS_METADATA_KEY}": {{
+                        "mapField.value": "icu.UNICODE"
+                      }}
+                    }}
+                  }}
+                ]
+              }},
+              "nullable": true,
+              "metadata": {{}}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_int_col_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_array_element_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_on_array_json)
+        )
+
+        self.assertRaises(
+            PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
+        )
+
+    def test_schema_with_bad_collations_provider(self):
+        from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
+
+        schema_json = f"""
+        {{
+          "type": "struct",
+          "fields": [
+            {{
+              "name": "c1",
+              "type": "string",
+              "nullable": "true",
+              "metadata": {{
+                "{_COLLATIONS_METADATA_KEY}": {{
+                  "c1": "badProvider.UNICODE"
+                }}
+              }}
+            }}
+          ]
+        }}
+        """
+
+        self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
@@ -548,8 +900,6 @@ class TypesTestsMixin:
         df.collect()
 
     def test_complex_nested_udt_in_df(self):
-        from pyspark.sql.functions import udf
-
         schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)], schema=schema
@@ -558,7 +908,7 @@ class TypesTestsMixin:
 
         gd = df.groupby("key").agg({"val": "collect_list"})
         gd.collect()
-        udf = udf(lambda k, v: [(k, v[0])], ArrayType(df.schema))
+        udf = F.udf(lambda k, v: [(k, v[0])], ArrayType(df.schema))
         gd.select(udf(*gd)).collect()
 
     def test_udt_with_none(self):
@@ -595,6 +945,29 @@ class TypesTestsMixin:
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
+    def test_infer_schema_with_udt_with_column_names(self):
+        row = (1.0, ExamplePoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row], ["label", "point"])
+        schema = df.schema
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), ExamplePointUDT)
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, ExamplePoint(1.0, 2.0))
+
+        row = (1.0, PythonOnlyPoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row], ["label", "point"])
+        schema = df.schema
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), PythonOnlyUDT)
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
+
     def test_apply_schema_with_udt(self):
         row = (1.0, ExamplePoint(1.0, 2.0))
         schema = StructType(
@@ -618,22 +991,52 @@ class TypesTestsMixin:
         point = df.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
+    def test_apply_schema_with_nullable_udt(self):
+        rows = [(1.0, ExamplePoint(1.0, 2.0)), (2.0, None)]
+        schema = StructType(
+            [
+                StructField("label", DoubleType(), False),
+                StructField("point", ExamplePointUDT(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(rows, schema)
+        points = [row.point for row in df.collect()]
+        self.assertEqual(points, [ExamplePoint(1.0, 2.0), None])
+
+        rows = [(1.0, PythonOnlyPoint(1.0, 2.0)), (2.0, None)]
+        schema = StructType(
+            [
+                StructField("label", DoubleType(), False),
+                StructField("point", PythonOnlyUDT(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(rows, schema)
+        points = [row.point for row in df.collect()]
+        self.assertEqual(points, [PythonOnlyPoint(1.0, 2.0), None])
+
     def test_udf_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
-        udf = UserDefinedFunction(lambda p: p.y, DoubleType())
+        udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
-        udf2 = UserDefinedFunction(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
+        udf2 = F.udf(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
         self.assertEqual(ExamplePoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
-        udf = UserDefinedFunction(lambda p: p.y, DoubleType())
+        udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
-        udf2 = UserDefinedFunction(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
+        udf2 = F.udf(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
         self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
+
+    def test_rdd_with_udt(self):
+        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row])
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
+
+        row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row])
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
 
     def test_parquet_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -673,8 +1076,6 @@ class TypesTestsMixin:
         )
 
     def test_cast_to_string_with_udt(self):
-        from pyspark.sql.functions import col
-
         row = (ExamplePoint(1.0, 2.0), PythonOnlyPoint(3.0, 4.0))
         schema = StructType(
             [
@@ -684,18 +1085,16 @@ class TypesTestsMixin:
         )
         df = self.spark.createDataFrame([row], schema)
 
-        result = df.select(col("point").cast("string"), col("pypoint").cast("string")).head()
+        result = df.select(F.col("point").cast("string"), F.col("pypoint").cast("string")).head()
         self.assertEqual(result, Row(point="(1.0, 2.0)", pypoint="[3.0, 4.0]"))
 
     def test_cast_to_udt_with_udt(self):
-        from pyspark.sql.functions import col
-
         row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        self.assertRaises(AnalysisException, lambda: df.select(col("point").cast(PythonOnlyUDT())))
-        self.assertRaises(
-            AnalysisException, lambda: df.select(col("python_only_point").cast(ExamplePointUDT()))
-        )
+        with self.assertRaises(AnalysisException):
+            df.select(F.col("point").cast(PythonOnlyUDT())).collect()
+        with self.assertRaises(AnalysisException):
+            df.select(F.col("python_only_point").cast(ExamplePointUDT())).collect()
 
     def test_struct_type(self):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
@@ -748,13 +1147,48 @@ class TypesTestsMixin:
         self.assertRaises(IndexError, lambda: struct1[9])
         self.assertRaises(TypeError, lambda: struct1[9.9])
 
-    def test_parse_datatype_string(self):
-        from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
+    def test_parse_datatype_json_string(self):
+        from pyspark.sql.types import _parse_datatype_json_string
 
-        for k, t in _all_atomic_types.items():
-            if k != "varchar" and k != "char":
-                self.assertEqual(t(), _parse_datatype_string(k))
+        for dataType in [
+            StringType(),
+            CharType(5),
+            VarcharType(10),
+            BinaryType(),
+            BooleanType(),
+            DecimalType(),
+            DecimalType(10, 2),
+            FloatType(),
+            DoubleType(),
+            ByteType(),
+            ShortType(),
+            IntegerType(),
+            LongType(),
+            DateType(),
+            TimestampType(),
+            TimestampNTZType(),
+            NullType(),
+            VariantType(),
+            YearMonthIntervalType(),
+            YearMonthIntervalType(YearMonthIntervalType.YEAR),
+            YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            DayTimeIntervalType(),
+            DayTimeIntervalType(DayTimeIntervalType.DAY),
+            DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+            CalendarIntervalType(),
+        ]:
+            json_str = dataType.json()
+            parsed = _parse_datatype_json_string(json_str)
+            self.assertEqual(dataType, parsed)
+
+    def test_parse_datatype_string(self):
+        from pyspark.sql.types import _all_mappable_types, _parse_datatype_string
+
+        for k, t in _all_mappable_types.items():
+            self.assertEqual(t(), _parse_datatype_string(k))
+
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(StringType(), _parse_datatype_string("string"))
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -780,6 +1214,314 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
             _parse_datatype_string("a INT, c DOUBLE"),
         )
+        self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+
+    def test_tree_string(self):
+        schema1 = DataType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
+
+        self.assertEqual(
+            schema1.treeString().split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(-1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema1.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: struct (nullable = true)",
+                " |    |-- c3: integer (nullable = true)",
+                " |    |-- c4: struct (nullable = true)",
+                " |    |    |-- c5: integer (nullable = true)",
+                " |    |    |-- c6: integer (nullable = true)",
+                "",
+            ],
+        )
+
+        schema2 = DataType.fromDDL(
+            "c1 INT, c2 ARRAY<STRUCT<c3: INT>>, c4 STRUCT<c5: INT, c6: ARRAY<ARRAY<INT>>>"
+        )
+        self.assertEqual(
+            schema2.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                " |    |    |    |-- element: integer (containsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema2.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: integer (nullable = true)",
+                " |-- c2: array (nullable = true)",
+                " |    |-- element: struct (containsNull = true)",
+                " |    |    |-- c3: integer (nullable = true)",
+                " |-- c4: struct (nullable = true)",
+                " |    |-- c5: integer (nullable = true)",
+                " |    |-- c6: array (nullable = true)",
+                " |    |    |-- element: array (containsNull = true)",
+                " |    |    |    |-- element: integer (containsNull = true)",
+                "",
+            ],
+        )
+
+        schema3 = DataType.fromDDL(
+            "c1 MAP<INT, STRUCT<c2: MAP<INT, INT>>>, c3 STRUCT<c4: MAP<INT, MAP<INT, INT>>>"
+        )
+        self.assertEqual(
+            schema3.treeString(0).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(1).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |-- c3: struct (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(2).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(3).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                "",
+            ],
+        )
+        self.assertEqual(
+            schema3.treeString(4).split("\n"),
+            [
+                "root",
+                " |-- c1: map (nullable = true)",
+                " |    |-- key: integer",
+                " |    |-- value: struct (valueContainsNull = true)",
+                " |    |    |-- c2: map (nullable = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                " |-- c3: struct (nullable = true)",
+                " |    |-- c4: map (nullable = true)",
+                " |    |    |-- key: integer",
+                " |    |    |-- value: map (valueContainsNull = true)",
+                " |    |    |    |-- key: integer",
+                " |    |    |    |-- value: integer (valueContainsNull = true)",
+                "",
+            ],
+        )
+
+    def test_tree_string_for_builtin_types(self):
+        schema = (
+            StructType()
+            .add("n", NullType())
+            .add("str", StringType())
+            .add("c", CharType(10))
+            .add("v", VarcharType(10))
+            .add("bin", BinaryType())
+            .add("bool", BooleanType())
+            .add("date", DateType())
+            .add("ts", TimestampType())
+            .add("ts_ntz", TimestampNTZType())
+            .add("dec", DecimalType(10, 2))
+            .add("double", DoubleType())
+            .add("float", FloatType())
+            .add("long", LongType())
+            .add("int", IntegerType())
+            .add("short", ShortType())
+            .add("byte", ByteType())
+            .add("ym_interval_1", YearMonthIntervalType())
+            .add("ym_interval_2", YearMonthIntervalType(YearMonthIntervalType.YEAR))
+            .add(
+                "ym_interval_3",
+                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
+            )
+            .add("dt_interval_1", DayTimeIntervalType())
+            .add("dt_interval_2", DayTimeIntervalType(DayTimeIntervalType.DAY))
+            .add(
+                "dt_interval_3",
+                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
+            )
+            .add("cal_interval", CalendarIntervalType())
+            .add("var", VariantType())
+        )
+        self.assertEqual(
+            schema.treeString().split("\n"),
+            [
+                "root",
+                " |-- n: void (nullable = true)",
+                " |-- str: string (nullable = true)",
+                " |-- c: char(10) (nullable = true)",
+                " |-- v: varchar(10) (nullable = true)",
+                " |-- bin: binary (nullable = true)",
+                " |-- bool: boolean (nullable = true)",
+                " |-- date: date (nullable = true)",
+                " |-- ts: timestamp (nullable = true)",
+                " |-- ts_ntz: timestamp_ntz (nullable = true)",
+                " |-- dec: decimal(10,2) (nullable = true)",
+                " |-- double: double (nullable = true)",
+                " |-- float: float (nullable = true)",
+                " |-- long: long (nullable = true)",
+                " |-- int: integer (nullable = true)",
+                " |-- short: short (nullable = true)",
+                " |-- byte: byte (nullable = true)",
+                " |-- ym_interval_1: interval year to month (nullable = true)",
+                " |-- ym_interval_2: interval year (nullable = true)",
+                " |-- ym_interval_3: interval year to month (nullable = true)",
+                " |-- dt_interval_1: interval day to second (nullable = true)",
+                " |-- dt_interval_2: interval day (nullable = true)",
+                " |-- dt_interval_3: interval hour to second (nullable = true)",
+                " |-- cal_interval: interval (nullable = true)",
+                " |-- var: variant (nullable = true)",
+                "",
+            ],
+        )
 
     def test_metadata_null(self):
         schema = StructType(
@@ -798,6 +1540,18 @@ class TypesTestsMixin:
         self.assertEqual("b", df.select(df.r.getField("b")).first()[0])
         self.assertEqual("v", df.select(df.d["k"]).first()[0])
         self.assertEqual("v", df.select(df.d.getItem("k")).first()[0])
+
+        # Deprecated behaviors
+        map_col = F.create_map(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("mapped", map_col.getItem(F.col("id"))).first()[1], 100
+        )
+
+        struct_col = F.struct(F.lit(0), F.lit(100), F.lit(1), F.lit(200))
+        self.assertEqual(
+            self.spark.range(1).withColumn("struct", struct_col.getField(F.lit("col1"))).first()[1],
+            0,
+        )
 
     def test_infer_long_type(self):
         longrow = [Row(f1="a", f2=100000000000000)]
@@ -843,8 +1597,13 @@ class TypesTestsMixin:
         self.assertEqual(
             _merge_type(ArrayType(LongType()), ArrayType(LongType())), ArrayType(LongType())
         )
-        with self.assertRaisesRegex(TypeError, "element in array"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), LongType())),
@@ -856,8 +1615,13 @@ class TypesTestsMixin:
             MapType(StringType(), LongType()),
         )
 
-        with self.assertRaisesRegex(TypeError, "value of map"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -866,11 +1630,16 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -898,7 +1667,7 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "element in array field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]
@@ -907,6 +1676,11 @@ class TypesTestsMixin:
                     [StructField("f1", ArrayType(DoubleType())), StructField("f2", StringType())]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -930,7 +1704,7 @@ class TypesTestsMixin:
                 ]
             ),
         )
-        with self.assertRaisesRegex(TypeError, "value of map field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [
@@ -945,6 +1719,11 @@ class TypesTestsMixin:
                     ]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -1047,14 +1826,24 @@ class TypesTestsMixin:
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
+                message_parameters={"field_name": "myarray"},
+            )
 
     def test_repr(self):
         instances = [
             NullType(),
             StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_LCASE"),
+            StringType("UNICODE"),
+            StringType("UNICODE_CI"),
             CharType(10),
             VarcharType(10),
             BinaryType(),
@@ -1068,10 +1857,12 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             ShortType(),
+            CalendarIntervalType(),
             ArrayType(StringType()),
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
             StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
@@ -1089,14 +1880,32 @@ class TypesTestsMixin:
             "interval hour to second",
         )
 
-        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(endField=DayTimeIntervalType.SECOND)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "None", "end_field": "3"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(123)
 
-        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "123", "end_field": "123"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
             DayTimeIntervalType(DayTimeIntervalType.DAY, 321)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "0", "end_field": "321"},
+        )
 
     def test_daytime_interval_type(self):
         # SPARK-37277: Support DayTimeIntervalType in createDataFrame
@@ -1109,6 +1918,8 @@ class TypesTestsMixin:
             ),
             (datetime.timedelta(microseconds=-123),),
             (datetime.timedelta(days=-1),),
+            (datetime.timedelta(microseconds=388629894454999981),),
+            (datetime.timedelta(days=-1, seconds=86399, microseconds=999999),),  # -1 microsecond
         ]
         df = self.spark.createDataFrame(timedetlas, schema="td interval day to second")
         self.assertEqual(set(r.td for r in df.collect()), set(set(r[0] for r in timedetlas)))
@@ -1143,6 +1954,307 @@ class TypesTestsMixin:
 
         for n, (a, e) in enumerate(zip(actual, expected)):
             self.assertEqual(a, e, "%s does not match with %s" % (exprs[n], expected[n]))
+
+    def test_yearmonth_interval_type_constructor(self):
+        self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
+        self.assertEqual(
+            YearMonthIntervalType(YearMonthIntervalType.YEAR).simpleString(), "interval year"
+        )
+        self.assertEqual(
+            YearMonthIntervalType(
+                YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH
+            ).simpleString(),
+            "interval year to month",
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
+            YearMonthIntervalType(endField=3)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "None", "end_field": "3"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
+            YearMonthIntervalType(123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "123", "end_field": "123"},
+        )
+
+        with self.assertRaises(PySparkRuntimeError) as pe:
+            YearMonthIntervalType(YearMonthIntervalType.YEAR, 321)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_INTERVAL_CASTING",
+            message_parameters={"start_field": "0", "end_field": "321"},
+        )
+
+    def test_yearmonth_interval_type(self):
+        schema1 = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").schema
+        self.assertEqual(schema1.fields[0].dataType, YearMonthIntervalType(0, 1))
+
+        schema2 = self.spark.sql("SELECT INTERVAL '10' YEAR AS interval").schema
+        self.assertEqual(schema2.fields[0].dataType, YearMonthIntervalType(0, 0))
+
+        schema3 = self.spark.sql("SELECT INTERVAL '8' MONTH AS interval").schema
+        self.assertEqual(schema3.fields[0].dataType, YearMonthIntervalType(1, 1))
+
+    def test_calendar_interval_type_constructor(self):
+        self.assertEqual(CalendarIntervalType().simpleString(), "interval")
+
+        with self.assertRaisesRegex(TypeError, "takes 1 positional argument but 2 were given"):
+            CalendarIntervalType(3)
+
+    def test_calendar_interval_type(self):
+        schema1 = self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_calendar_interval_type_with_sf(self):
+        schema1 = self.spark.range(1).select(F.make_interval(F.lit(1))).schema
+        self.assertEqual(schema1.fields[0].dataType, CalendarIntervalType())
+
+    def test_variant_type(self):
+        from decimal import Decimal
+
+        self.assertEqual(VariantType().simpleString(), "variant")
+
+        # Holds a tuple of (key, json string value, python value)
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc"),
+            ("null", "null", None),
+            ("true", "true", True),
+            ("false", "false", False),
+            ("int1", "1", 1),
+            ("-int1", "-5", -5),
+            ("int2", "257", 257),
+            ("-int2", "-124", -124),
+            ("int4", "65793", 65793),
+            ("-int4", "-69633", -69633),
+            ("int8", "4295033089", 4295033089),
+            ("-int8", "-4294967297", -4294967297),
+            ("float4", "3.402e+38", 3.402e38),
+            ("-float4", "-3.402e+38", -3.402e38),
+            ("float8", "1.79769e+308", 1.79769e308),
+            ("-float8", "-1.79769e+308", -1.79769e308),
+            ("dec4", "123.456", Decimal("123.456")),
+            ("-dec4", "-321.654", Decimal("-321.654")),
+            ("dec8", "429.4967297", Decimal("429.4967297")),
+            ("-dec8", "-5.678373902", Decimal("-5.678373902")),
+            ("dec16", "467440737095.51617", Decimal("467440737095.51617")),
+            ("-dec16", "-67.849438003827263", Decimal("-67.849438003827263")),
+            ("arr", '[1.1,"2",[3],{"4":5}]', [Decimal("1.1"), "2", [3], {"4": 5}]),
+            ("obj", '{"a":["123",{"b":2}],"c":3}', {"a": ["123", {"b": 2}], "c": 3}),
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+
+        df = self.spark.createDataFrame([({"json": json_str})])
+        row = df.select(
+            F.parse_json(df.json).alias("v"),
+            F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
+            F.struct([F.parse_json(F.lit('{"b": "2"}'))]).alias("s"),
+            F.create_map([F.lit("k"), F.parse_json(F.lit('{"c": true}'))]).alias("m"),
+        ).collect()[0]
+
+        # These data types are not supported by parse_json yet so they are being handled
+        # separately - Date, Timestamp, TimestampNTZ, Binary, Float (Single Precision)
+        date_columns = self.spark.sql(
+            "select cast(Date('2021-01-01')"
+            + " as variant) as d0, cast(Date('1800-12-31')"
+            + " as variant) as d1"
+        ).collect()[0]
+        float_columns = self.spark.sql(
+            "select cast(Float(5.5)" + " as variant) as f0, cast(Float(-5.5) as variant) as f1"
+        ).collect()[0]
+        binary_columns = self.spark.sql(
+            "select cast(binary(x'324FA69E')" + " as variant) as b"
+        ).collect()[0]
+        timetamp_ntz_columns = self.spark.sql(
+            "select cast(cast('1940-01-01 12:33:01.123'"
+            + " as timestamp_ntz) as variant) as tntz0, cast(cast('2522-12-31 05:57:13'"
+            + " as timestamp_ntz) as variant) as tntz1, cast(cast('0001-07-15 17:43:26+08:00'"
+            + " as timestamp_ntz) as variant) as tntz2"
+        ).collect()[0]
+        timetamp_columns = self.spark.sql(
+            "select cast(cast('1940-01-01 12:35:13.123+7:30'"
+            + " as timestamp) as variant) as t0, cast(cast('2522-12-31 00:00:00-5:23'"
+            + " as timestamp) as variant) as t1, cast(cast('0001-12-31 01:01:01+08:00'"
+            + " as timestamp) as variant) as t2"
+        ).collect()[0]
+
+        variants = [
+            row["v"],
+            row["a"][0],
+            row["s"]["col1"],
+            row["m"]["k"],
+            date_columns["d0"],
+            date_columns["d1"],
+            float_columns["f0"],
+            float_columns["f1"],
+            binary_columns["b"],
+            timetamp_ntz_columns["tntz0"],
+            timetamp_ntz_columns["tntz1"],
+            timetamp_ntz_columns["tntz2"],
+            timetamp_columns["t0"],
+            timetamp_columns["t1"],
+            timetamp_columns["t2"],
+        ]
+
+        for v in variants:
+            self.assertEqual(type(v), VariantVal)
+
+        # check str (to_json)
+        as_string = str(variants[0])
+        for key, expected, _ in expected_values:
+            self.assertTrue('"%s":%s' % (key, expected) in as_string)
+        self.assertEqual(str(variants[1]), '{"a":1}')
+        self.assertEqual(str(variants[2]), '{"b":"2"}')
+        self.assertEqual(str(variants[3]), '{"c":true}')
+        self.assertEqual(str(variants[4]), '"2021-01-01"')
+        self.assertEqual(str(variants[5]), '"1800-12-31"')
+        self.assertEqual(str(variants[6]), "5.5")
+        self.assertEqual(str(variants[7]), "-5.5")
+        self.assertEqual(str(variants[8]), '"Mk+mng=="')
+        self.assertEqual(str(variants[9]), '"1940-01-01 12:33:01.123000"')
+        self.assertEqual(str(variants[10]), '"2522-12-31 05:57:13"')
+        self.assertEqual(str(variants[11]), '"0001-07-15 17:43:26"')
+        self.assertEqual(str(variants[12]), '"1940-01-01 05:05:13.123000+00:00"')
+        self.assertEqual(str(variants[13]), '"2522-12-31 05:23:00+00:00"')
+        self.assertEqual(str(variants[14]), '"0001-12-30 17:01:01+00:00"')
+
+        # Check to_json on timestamps with custom timezones
+        self.assertEqual(
+            variants[12].toJson("America/Los_Angeles"), '"1939-12-31 21:05:13.123000-08:00"'
+        )
+
+        # check toPython
+        as_python = variants[0].toPython()
+        for key, _, obj in expected_values:
+            self.assertEqual(as_python[key], obj)
+        self.assertEqual(variants[1].toPython(), {"a": 1})
+        self.assertEqual(variants[2].toPython(), {"b": "2"})
+        self.assertEqual(variants[3].toPython(), {"c": True})
+        self.assertEqual(variants[4].toPython(), datetime.date(2021, 1, 1))
+        self.assertEqual(variants[5].toPython(), datetime.date(1800, 12, 31))
+        self.assertEqual(variants[6].toPython(), float(5.5))
+        self.assertEqual(variants[7].toPython(), float(-5.5))
+        self.assertEqual(variants[8].toPython(), bytearray(b"2O\xa6\x9e"))
+        self.assertEqual(variants[9].toPython(), datetime.datetime(1940, 1, 1, 12, 33, 1, 123000))
+        self.assertEqual(variants[10].toPython(), datetime.datetime(2522, 12, 31, 5, 57, 13))
+        self.assertEqual(variants[11].toPython(), datetime.datetime(1, 7, 15, 17, 43, 26))
+        self.assertEqual(
+            variants[12].toPython(),
+            datetime.datetime(
+                1940,
+                1,
+                1,
+                12,
+                35,
+                13,
+                123000,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=7, minutes=30)),
+            ),
+        )
+        self.assertEqual(
+            variants[13].toPython(),
+            datetime.datetime(
+                2522,
+                12,
+                31,
+                3,
+                3,
+                31,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=-2, minutes=-20, seconds=31)),
+            ),
+        )
+        self.assertEqual(
+            variants[14].toPython(),
+            datetime.datetime(
+                1,
+                12,
+                31,
+                16,
+                3,
+                23,
+                tzinfo=datetime.timezone(datetime.timedelta(hours=23, minutes=2, seconds=22)),
+            ),
+        )
+
+        # check repr
+        self.assertEqual(str(variants[0]), str(eval(repr(variants[0]))))
+
+        metadata = bytes([1, 0, 0])
+        self.assertEqual(str(VariantVal(bytes([32, 0, 1, 0, 0, 0]), metadata)), "1")
+        self.assertEqual(str(VariantVal(bytes([32, 1, 2, 0, 0, 0]), metadata)), "0.2")
+        self.assertEqual(str(VariantVal(bytes([32, 2, 3, 0, 0, 0]), metadata)), "0.03")
+        self.assertEqual(str(VariantVal(bytes([32, 0, 1, 0, 0, 0]), metadata)), "1")
+        self.assertEqual(str(VariantVal(bytes([32, 0, 255, 201, 154, 59]), metadata)), "999999999")
+        self.assertRaises(
+            PySparkValueError, lambda: str(VariantVal(bytes([32, 0, 0, 202, 154, 59]), metadata))
+        )
+        self.assertRaises(
+            PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
+        )
+
+    def test_from_ddl(self):
+        self.assertEqual(DataType.fromDDL("long"), LongType())
+        self.assertEqual(
+            DataType.fromDDL("a: int, b: string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, b string"),
+            StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, v variant"),
+            StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
+        )
+
+    def test_collated_string(self):
+        dfs = [
+            self.spark.sql("SELECT 'abc' collate UTF8_LCASE"),
+            self.spark.createDataFrame(
+                [], StructType([StructField("id", StringType("UTF8_LCASE"))])
+            ),
+        ]
+        for df in dfs:
+            # performs both datatype -> proto & proto -> datatype conversions
+            self.assertEqual(
+                df.to(StructType([StructField("new", StringType("UTF8_LCASE"))]))
+                .schema[0]
+                .dataType,
+                StringType("UTF8_LCASE"),
+            )
+
+    def test_infer_array_element_type_with_struct(self):
+        # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
+        with self.sql_conf(
+            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+        ):
+            self.assertEqual(
+                ArrayType(ArrayType(LongType())),
+                self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
+            )
+
+    def test_ym_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
+        with self.temp_env({"PYSPARK_YM_INTERVAL_LEGACY": "1"}):
+            self.assertEqual(
+                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first(),
+                Row(interval=128),
+            )
+
+    def test_cal_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
 
 
 class DataTypeTests(unittest.TestCase):
@@ -1197,6 +2309,15 @@ class DataTypeTests(unittest.TestCase):
         # test __repr__ with unicode values
         self.assertEqual(repr(Row("数", "量")), "<Row('数', '量')>")
 
+    # SPARK-44643: test __repr__ with empty Row
+    def test_row_repr_with_empty_row(self):
+        self.assertEqual(repr(Row(a=Row())), "Row(a=<Row()>)")
+        self.assertEqual(repr(Row(Row())), "<Row(<Row()>)>")
+
+        EmptyRow = Row()
+        self.assertEqual(repr(Row(a=EmptyRow())), "Row(a=Row())")
+        self.assertEqual(repr(Row(EmptyRow())), "<Row(Row())>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
@@ -1210,17 +2331,32 @@ class DataTypeTests(unittest.TestCase):
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
-class DataTypeVerificationTests(unittest.TestCase):
+class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
-        self.assertRaisesRegex(
-            ValueError,
-            "test_name",
-            lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None),
+        with self.assertRaises(PySparkValueError) as pe:
+            _make_type_verifier(StringType(), nullable=False, name="test_name")(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
+            message_parameters={
+                "field_name": "test_name",
+            },
         )
 
         schema = StructType([StructField("a", StructType([StructField("b", IntegerType())]))])
-        self.assertRaisesRegex(
-            TypeError, "field b in field a", lambda: _make_type_verifier(schema)([["data"]])
+        with self.assertRaises(PySparkTypeError) as pe:
+            _make_type_verifier(schema)([["data"]])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+            message_parameters={
+                "data_type": "IntegerType()",
+                "field_name": "field b in field a",
+                "obj": "'data'",
+                "obj_type": "<class 'str'>",
+            },
         )
 
     def test_verify_type_ok_nullable(self):
@@ -1257,6 +2393,7 @@ class DataTypeVerificationTests(unittest.TestCase):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
+            ("", StringType("UTF8_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -1325,6 +2462,7 @@ class DataTypeVerificationTests(unittest.TestCase):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
+            (None, StringType("UTF8_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)
@@ -1399,6 +2537,13 @@ class DataTypeVerificationTests(unittest.TestCase):
 
         self.assertEqual(r, expected)
         self.assertEqual(repr(r), "Row(b=1, a=2)")
+
+    def test_struct_field_from_json(self):
+        # SPARK-40820: fromJson with only name and type
+        json = {"name": "c1", "type": "string"}
+        struct_field = StructField.fromJson(json)
+
+        self.assertEqual(repr(struct_field), "StructField('c1', StringType(), True)")
 
 
 class TypesTests(TypesTestsMixin, ReusedSQLTestCase):

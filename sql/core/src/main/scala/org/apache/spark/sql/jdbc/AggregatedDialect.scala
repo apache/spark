@@ -26,7 +26,8 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
  *
  * @param dialects List of dialects.
  */
-private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
+private class AggregatedDialect(dialects: List[JdbcDialect])
+  extends JdbcDialect with NoLegacyJDBCError {
 
   require(dialects.nonEmpty)
 
@@ -73,7 +74,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
    */
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     dialects.head.getTruncateQuery(table, cascade)
   }
 }

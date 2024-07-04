@@ -40,12 +40,12 @@ class ArrayWrappers {
   public static Comparable<Object> forArray(Object a) {
     Preconditions.checkArgument(a.getClass().isArray());
     Comparable<?> ret;
-    if (a instanceof int[]) {
-      ret = new ComparableIntArray((int[]) a);
-    } else if (a instanceof long[]) {
-      ret = new ComparableLongArray((long[]) a);
-    } else if (a instanceof byte[]) {
-      ret = new ComparableByteArray((byte[]) a);
+    if (a instanceof int[] ia) {
+      ret = new ComparableIntArray(ia);
+    } else if (a instanceof long[] la) {
+      ret = new ComparableLongArray(la);
+    } else if (a instanceof byte[] ba) {
+      ret = new ComparableByteArray(ba);
     } else {
       Preconditions.checkArgument(!a.getClass().getComponentType().isPrimitive());
       ret = new ComparableObjectArray((Object[]) a);
@@ -63,10 +63,10 @@ class ArrayWrappers {
 
     @Override
     public boolean equals(Object other) {
-      if (!(other instanceof ComparableIntArray)) {
+      if (!(other instanceof ComparableIntArray comparableIntArray)) {
         return false;
       }
-      return Arrays.equals(array, ((ComparableIntArray) other).array);
+      return Arrays.equals(array, comparableIntArray.array);
     }
 
     @Override
@@ -102,10 +102,10 @@ class ArrayWrappers {
 
     @Override
     public boolean equals(Object other) {
-      if (!(other instanceof ComparableLongArray)) {
+      if (!(other instanceof ComparableLongArray comparableLongArray)) {
         return false;
       }
-      return Arrays.equals(array, ((ComparableLongArray) other).array);
+      return Arrays.equals(array, comparableLongArray.array);
     }
 
     @Override
@@ -141,10 +141,10 @@ class ArrayWrappers {
 
     @Override
     public boolean equals(Object other) {
-      if (!(other instanceof ComparableByteArray)) {
+      if (!(other instanceof ComparableByteArray comparableByteArray)) {
         return false;
       }
-      return Arrays.equals(array, ((ComparableByteArray) other).array);
+      return Arrays.equals(array, comparableByteArray.array);
     }
 
     @Override
@@ -180,10 +180,10 @@ class ArrayWrappers {
 
     @Override
     public boolean equals(Object other) {
-      if (!(other instanceof ComparableObjectArray)) {
+      if (!(other instanceof ComparableObjectArray comparableObjectArray)) {
         return false;
       }
-      return Arrays.equals(array, ((ComparableObjectArray) other).array);
+      return Arrays.equals(array, comparableObjectArray.array);
     }
 
     @Override

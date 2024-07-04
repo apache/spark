@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, SchemaPruning}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -28,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
 object PushDownUtils {
@@ -66,7 +68,11 @@ object PushDownUtils {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (Left(r.pushedFilters()), (untranslatableExprs ++ postScanFilters).toSeq)
+        // Normally translated filters (postScanFilters) are simple filters that can be evaluated
+        // faster, while the untranslated filters are complicated filters that take more time to
+        // evaluate, so we want to evaluate the postScanFilters filters first.
+        (Left(r.pushedFilters().toImmutableArraySeq),
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -95,11 +101,15 @@ object PushDownUtils {
         val postScanFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
           DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
         }
-        (Right(r.pushedPredicates), (untranslatableExprs ++ postScanFilters).toSeq)
+        // Normally translated filters (postScanFilters) are simple filters that can be evaluated
+        // faster, while the untranslated filters are complicated filters that take more time to
+        // evaluate, so we want to evaluate the postScanFilters filters first.
+        (Right(r.pushedPredicates.toImmutableArraySeq),
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (Right(f.pushedFilters), postScanFilters)
+        (Right(f.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
   }
@@ -206,7 +216,7 @@ object PushDownUtils {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    cleaned.toAttributes.map {
+    toAttributes(cleaned).map {
       // we have to keep the attribute id during transformation
       a => a.withExprId(nameToAttr(a.name).exprId)
     }

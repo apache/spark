@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
@@ -108,11 +108,14 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(10)
     val planner = spark.sessionState.planner
     val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
-    val err = intercept[IllegalStateException] {
-      planner.plan(deduplicate)
-    }
-    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
-      "should have been replaced by aggregate in the optimizer"))
+    checkError(
+      exception = intercept[SparkException] {
+        planner.plan(deduplicate)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Deduplicate operator for non streaming data source should have been " +
+          "replaced by aggregate in the optimizer")))
   }
 
   test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
@@ -149,7 +152,7 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override val supportsColumnar: Boolean = true
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
     RowToColumnarExec(child).executeColumnar()
-  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)

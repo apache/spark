@@ -98,7 +98,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       new ExecutorResourceRequests().cores(4)
     val rp = rpBuilder.require(taskReq).require(execReq).build()
     val executorResourceForRp = ResourceProfile.getResourcesForClusterManager(
-      rp.id, rp.executorResources, 0.0, sparkConf, false, Map.empty)
+      rp.id, rp.executorResources, 500L, 0.0, sparkConf, false, Map.empty)
     // Standalone cluster only take cores and executor memory as built-in resources.
     assert(executorResourceForRp.cores.get === 4)
     assert(executorResourceForRp.executorMemoryMiB === 1024L)
@@ -144,6 +144,22 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       .set(TASK_GPU_ID.amountConf, "0.33")
     val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     assert(immrprof.taskResources.get("gpu").get.amount == 0.33)
+  }
+
+  test("test default profile task gpus 0") {
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_GPU_ID.amountConf, "2")
+      .set(TASK_GPU_ID.amountConf, "0")
+    val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.taskResources.get("gpu") == None)
+  }
+
+  test("test default profile executor gpus 0") {
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_GPU_ID.amountConf, "0")
+      .set(TASK_GPU_ID.amountConf, "1")
+    val immrprof = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(immrprof.executorResources.get("gpu") == None)
   }
 
   test("maxTasksPerExecutor cpus") {
@@ -272,13 +288,13 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder.require(taskReq).require(eReq)
-    val rprof = rprofBuilder.build
+    val rprof = rprofBuilder.build()
 
     val rprofBuilder2 = new ResourceProfileBuilder()
     val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
     val eReq2 = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprofBuilder2.require(taskReq2).require(eReq2)
-    val rprof2 = rprofBuilder.build
+    val rprof2 = rprofBuilder.build()
     rprof2.setResourceProfileId(rprof.id)
 
     assert(rprof === rprof2, "resource profile equality not working")
@@ -338,15 +354,14 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     assert(rprof.taskResources.get("fpga").get.amount === 4.0,
       "Task resources should have 4.0 gpu")
 
-    var taskError = intercept[AssertionError] {
+    val taskError = intercept[AssertionError] {
       rprof.require(new TaskResourceRequests().resource("gpu", 1.5))
     }.getMessage()
-    assert(taskError.contains("The resource amount 1.5 must be either <= 0.5, or a whole number."))
+    assert(taskError.contains("The resource amount 1.5 must be either <= 1.0, or a whole number."))
 
-    taskError = intercept[AssertionError] {
-      rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
-    }.getMessage()
-    assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
+    rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
+    rprof.require(new TaskResourceRequests().resource("gpu", 1.0))
+    rprof.require(new TaskResourceRequests().resource("gpu", 2.0))
   }
 
   test("ResourceProfile has correct custom executor resources") {
@@ -358,7 +373,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     rprof.require(eReq)
 
     // Update this if new resource type added
-    assert(ResourceProfile.allSupportedExecutorResources.size === 5,
+    assert(ResourceProfile.allSupportedExecutorResources.length === 5,
       "Executor resources should have 5 supported resources")
     assert(rprof.build().getCustomExecutorResources().size === 1,
       "Executor resources should have 1 custom resource")
@@ -375,6 +390,33 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
 
     assert(rprof.build().getCustomTaskResources().size === 1,
       "Task resources should have 1 custom resource")
+  }
+
+  test("SPARK-45527 fractional TaskResourceRequests in ResourceProfile") {
+    val ereqs = new ExecutorResourceRequests().cores(6).resource("gpus", 6)
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.5)
+    new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.7)
+
+    val msg = intercept[AssertionError] {
+      new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+    }.getMessage
+    assert(msg.contains("The task resource amount 0.7 must be either <= 0.5, or a whole number"))
+  }
+
+  test("SPARK-45527 fractional TaskResourceRequests in TaskResourceProfile") {
+    var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
+    new ResourceProfileBuilder().require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.5)
+    new ResourceProfileBuilder().require(treqs).build()
+
+    treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.7)
+    new ResourceProfileBuilder().require(treqs).build()
   }
 
   private def withMockSparkEnv(conf: SparkConf)(f: => Unit): Unit = {

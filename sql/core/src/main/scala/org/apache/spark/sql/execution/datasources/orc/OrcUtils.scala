@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -31,7 +31,8 @@ import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStat
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -44,17 +45,19 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Schem
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 object OrcUtils extends Logging {
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
-    "NONE" -> "",
-    "SNAPPY" -> ".snappy",
-    "ZLIB" -> ".zlib",
-    "ZSTD" -> ".zstd",
-    "LZ4" -> ".lz4",
-    "LZO" -> ".lzo")
+    OrcCompressionCodec.NONE.name() -> "",
+    OrcCompressionCodec.SNAPPY.name() -> ".snappy",
+    OrcCompressionCodec.ZLIB.name() -> ".zlib",
+    OrcCompressionCodec.ZSTD.name() -> ".zstd",
+    OrcCompressionCodec.LZ4.name() -> ".lz4",
+    OrcCompressionCodec.LZO.name() -> ".lzo",
+    OrcCompressionCodec.BROTLI.name() -> ".brotli")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
@@ -85,7 +88,7 @@ object OrcUtils extends Logging {
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
-          logWarning(s"Skipped the footer in the corrupted file: $file", e)
+          logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
           None
         } else {
           throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
@@ -303,6 +306,10 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
           Some(typeDesc)
+        case _: StringType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, StringType.typeName)
+          Some(typeDesc)
         case _ => None
       }
     }
@@ -502,7 +509,7 @@ object OrcUtils extends Logging {
         case (x, _) =>
           throw new IllegalArgumentException(
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
-      }
+      }.toImmutableArraySeq
 
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)

@@ -113,6 +113,28 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
         )
 
+    def test_type_annotation_tuple_generics(self):
+        def func(iter: Iterator[tuple[pd.DataFrame, pd.Series]]) -> Iterator[pd.DataFrame]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
+        def func(iter: Iterator[tuple[pd.DataFrame, ...]]) -> Iterator[pd.Series]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
+        def func(iter: Iterator[tuple[Union[pd.DataFrame, pd.Series], ...]]) -> Iterator[pd.Series]:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.SCALAR_ITER
+        )
+
     def test_type_annotation_group_agg(self):
         def func(col: pd.Series) -> str:
             pass

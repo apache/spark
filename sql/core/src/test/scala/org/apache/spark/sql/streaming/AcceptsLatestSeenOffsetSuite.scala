@@ -26,7 +26,9 @@ import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, S
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ContinuousMemoryStreamOffset}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._

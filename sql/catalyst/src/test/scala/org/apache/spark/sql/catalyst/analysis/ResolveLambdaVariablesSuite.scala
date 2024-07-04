@@ -79,15 +79,25 @@ class ResolveLambdaVariablesSuite extends PlanTest {
   test("fail - name collisions") {
     val p = plan(ArrayTransform(values1,
       LambdaFunction(lv(Symbol("x")) + lv(Symbol("X")), lv(Symbol("x")) :: lv(Symbol("X")) :: Nil)))
-    val msg = intercept[AnalysisException](Analyzer.execute(p)).getMessage
-    assert(msg.contains("arguments should not have names that are semantically the same"))
+
+    checkError(
+      exception = intercept[AnalysisException](Analyzer.execute(p)),
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
+      parameters = Map(
+        "args" -> "`x`, `x`",
+        "caseSensitiveConfig" -> "\"spark.sql.caseSensitive\"")
+    )
   }
 
   test("fail - lambda arguments") {
     val p = plan(ArrayTransform(values1,
       LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")) + lv(Symbol("z")),
         lv(Symbol("x")) :: lv(Symbol("y")) :: lv(Symbol("z")) :: Nil)))
-    val msg = intercept[AnalysisException](Analyzer.execute(p)).getMessage
-    assert(msg.contains("does not match the number of arguments expected"))
+
+    checkError(
+      exception = intercept[AnalysisException](Analyzer.execute(p)),
+      errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
+      parameters = Map("expectedNumArgs" -> "3", "actualNumArgs" -> "1")
+    )
   }
 }

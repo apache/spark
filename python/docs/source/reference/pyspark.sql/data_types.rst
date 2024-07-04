@@ -44,6 +44,9 @@ Data Types
     VarcharType
     StructField
     StructType
+    VariantType
     TimestampType
     TimestampNTZType
     DayTimeIntervalType
+    YearMonthIntervalType
+    CalendarIntervalType

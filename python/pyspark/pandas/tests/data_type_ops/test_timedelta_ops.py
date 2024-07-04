@@ -21,10 +21,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class TimedeltaOpsTest(OpsTestBase):
+class TimedeltaOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([timedelta(1), timedelta(microseconds=2), timedelta(weeks=3)])
@@ -200,6 +201,14 @@ class TimedeltaOpsTest(OpsTestBase):
         pdf, psdf = self.timedelta_pdf, self.timedelta_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+
+
+class TimedeltaOpsTests(
+    TimedeltaOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

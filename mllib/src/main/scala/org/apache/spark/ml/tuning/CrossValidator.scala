@@ -19,15 +19,16 @@ package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CROSS_VALIDATION_METRIC, CROSS_VALIDATION_METRICS, ESTIMATOR_PARAM_MAP}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
@@ -37,6 +38,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -158,10 +160,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     // Compute metrics for each model over each split
     val (splits, schemaWithoutFold) = if ($(foldCol) == "") {
-      (MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed)), schema)
+      (MLUtils.kFold(dataset.toDF().rdd, $(numFolds), $(seed)), schema)
     } else {
       val filteredSchema = StructType(schema.filter(_.name != $(foldCol)).toArray)
-      (MLUtils.kFold(dataset.toDF, $(numFolds), $(foldCol)), filteredSchema)
+      (MLUtils.kFold(dataset.toDF(), $(numFolds), $(foldCol)), filteredSchema)
     }
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schemaWithoutFold).cache()
@@ -191,12 +193,13 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       foldMetrics
     }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
-    instr.logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
+    instr.logInfo(log"Average cross-validation metrics: ${MDC(
+      CROSS_VALIDATION_METRICS, metrics.mkString("[", ", ", "]"))}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best cross-validation metric: $bestMetric.")
+    instr.logInfo(log"Best set of parameters:\n${MDC(ESTIMATOR_PARAM_MAP, epm(bestIndex))}")
+    instr.logInfo(log"Best cross-validation metric: ${MDC(CROSS_VALIDATION_METRIC, bestMetric)}.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     copyValues(new CrossValidatorModel(uid, bestModel, metrics)
       .setSubModels(subModels).setParent(this))
@@ -398,7 +401,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toSeq) ~
+      val extraMetadata = ("avgMetrics" -> instance.avgMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString

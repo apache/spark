@@ -21,7 +21,7 @@ import java.net.URI
 import java.security.SecureRandom
 import java.util.{Collections, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -32,7 +32,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.POD_ID
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -120,8 +121,8 @@ object KubernetesUtils extends Logging {
         case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
         case _ =>
           logWarning(
-            s"specified container ${name} not found on pod template, " +
-              s"falling back to taking the first container")
+            log"specified container ${MDC(POD_ID, name)} not found on pod template, " +
+              log"falling back to taking the first container")
           Option.empty
       }
     val containers = pod.getSpec.getContainers.asScala.toList

@@ -32,7 +32,8 @@ import org.apache.hadoop.security.token.Token
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.KEYTAB
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -43,8 +44,9 @@ private[spark] class HiveDelegationTokenProvider
 
   override def serviceName: String = "hive"
 
-  private val classNotFoundErrorStr = s"You are attempting to use the " +
-    s"${getClass.getCanonicalName}, but your Spark distribution is not built with Hive libraries."
+  private val classNotFoundErrorStr =
+    log"You are attempting to use the ${MDC(CLASS_NAME, getClass.getCanonicalName)}, " +
+      log"but your Spark distribution is not built with Hive libraries."
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.io.{IOException, OutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
@@ -32,8 +32,7 @@ import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
@@ -83,7 +82,14 @@ private[avro] class AvroOutputWriter(
 
   override def write(row: InternalRow): Unit = {
     val key = new AvroKey(serializer.serialize(row).asInstanceOf[GenericRecord])
-    recordWriter.write(key, NullWritable.get())
+    try {
+      recordWriter.write(key, NullWritable.get())
+    } catch {
+      // Unwrap the Avro `AppendWriteException` which is only used to work around the Java API
+      // signature (DataFileWriter#write) that only allows to throw `IOException`.
+      case e: org.apache.avro.file.DataFileWriter.AppendWriteException =>
+        throw e.getCause
+    }
   }
 
   override def close(): Unit = recordWriter.close(context)

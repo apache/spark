@@ -25,10 +25,10 @@ import scala.util.control.NonFatal
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataInputStream, Path}
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 
@@ -45,7 +45,7 @@ case class StreamMetadata(id: String) {
 }
 
 object StreamMetadata extends Logging {
-  implicit val format = Serialization.formats(NoTypeHints)
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
@@ -60,7 +60,7 @@ object StreamMetadata extends Logging {
         Some(metadata)
       } catch {
         case NonFatal(e) =>
-          logError(s"Error reading stream metadata from $metadataFile", e)
+          logError(log"Error reading stream metadata from ${MDC(LogKeys.PATH, metadataFile)}", e)
           throw e
       } finally {
         IOUtils.closeQuietly(input)
@@ -91,7 +91,8 @@ object StreamMetadata extends Logging {
         if (output != null) {
           output.cancel()
         }
-        logError(s"Error writing stream metadata $metadata to $metadataFile", e)
+        logError(log"Error writing stream metadata ${MDC(LogKeys.METADATA, metadata)} to " +
+          log"${MDC(LogKeys.PATH, metadataFile)}", e)
         throw e
     }
   }

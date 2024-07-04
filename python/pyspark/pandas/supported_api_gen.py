@@ -19,27 +19,26 @@
 Generate 'Supported pandas APIs' documentation file
 """
 import warnings
-from distutils.version import LooseVersion
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
-from typing import Any, Callable, Dict, List, NamedTuple, Set, TextIO, Tuple
+from typing import Any, Dict, List, NamedTuple, Set, TextIO, Tuple
+from types import FunctionType
 
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
 import pyspark.pandas.window as psw
-from pyspark.pandas.exceptions import PandasNotImplementedError
-
 import pandas as pd
 import pandas.core.groupby as pdg
 import pandas.core.window as pdw
 
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas.exceptions import PandasNotImplementedError
+
+# Constants
 MAX_MISSING_PARAMS_SIZE = 5
-COMMON_PARAMETER_SET = {
-    "kwargs",
-    "args",
-    "cls",
-}  # These are not counted as missing parameters.
+COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
+PANDAS_LATEST_VERSION = "2.2.2"
 
 RST_HEADER = """
 =====================
@@ -73,6 +72,10 @@ The API list is updated based on the `latest pandas official API reference
 
 @unique
 class Implemented(Enum):
+    """
+    Enumeration of implementation statuses.
+    """
+
     IMPLEMENTED = "Y"
     NOT_IMPLEMENTED = "N"
     PARTIALLY_IMPLEMENTED = "P"
@@ -80,7 +83,7 @@ class Implemented(Enum):
 
 class SupportedStatus(NamedTuple):
     """
-    Defines a supported status for specific pandas API
+    Defines a supported status for specific pandas API.
     """
 
     implemented: str
@@ -89,47 +92,108 @@ class SupportedStatus(NamedTuple):
 
 def generate_supported_api(output_rst_file_path: str) -> None:
     """
-    Generate supported APIs status dictionary.
+    Generate the supported APIs status dictionary and write it to an RST file.
 
     Parameters
     ----------
     output_rst_file_path : str
         The path to the document file in RST format.
-
-    Write supported APIs documentation.
     """
-    pandas_latest_version = "1.5.3"
-    if LooseVersion(pd.__version__) != LooseVersion(pandas_latest_version):
+    _check_pandas_version()
+    all_supported_status = _collect_supported_status()
+    _write_rst(output_rst_file_path, all_supported_status)
+
+
+def _check_pandas_version() -> None:
+    """
+    Check if the installed pandas version matches the expected version.
+    """
+    if LooseVersion(pd.__version__) != LooseVersion(PANDAS_LATEST_VERSION):
         msg = (
-            "Warning: Latest version of pandas (%s) is required to generate the documentation; "
-            "however, your version was %s" % (pandas_latest_version, pd.__version__)
+            f"Warning: pandas {PANDAS_LATEST_VERSION} is required; your version is {pd.__version__}"
         )
         warnings.warn(msg, UserWarning)
         raise ImportError(msg)
 
+
+def _collect_supported_status() -> Dict[Tuple[str, str], Dict[str, SupportedStatus]]:
+    """
+    Collect the supported status across multiple module paths.
+    """
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
         pd_modules = _get_pd_modules(pd_module_group)
         _update_all_supported_status(
             all_supported_status, pd_modules, pd_module_group, ps_module_group
         )
-    _write_rst(output_rst_file_path, all_supported_status)
+    return all_supported_status
+
+
+def _get_pd_modules(pd_module_group: Any) -> List[str]:
+    """
+    Get sorted list of pandas member names from a pandas module.
+
+    Parameters
+    ----------
+    pd_module_group : Any
+        Importable pandas module.
+
+    Returns
+    -------
+    List[str]
+        Sorted list of member names.
+    """
+    return sorted(m[0] for m in getmembers(pd_module_group, isclass) if not m[0].startswith("_"))
+
+
+def _update_all_supported_status(
+    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
+    pd_modules: List[str],
+    pd_module_group: Any,
+    ps_module_group: Any,
+) -> None:
+    """
+    Update the supported status dictionary with status from multiple modules.
+
+    Parameters
+    ----------
+    all_supported_status : Dict[Tuple[str, str], Dict[str, SupportedStatus]]
+        The dictionary to update with supported statuses.
+    pd_modules : List[str]
+        List of module names in pandas.
+    pd_module_group : Any
+        Importable pandas module group.
+    ps_module_group : Any
+        Corresponding pyspark.pandas module group.
+    """
+    pd_modules.append("")  # Include General Function APIs
+    for module_name in pd_modules:
+        supported_status = _create_supported_by_module(
+            module_name, pd_module_group, ps_module_group
+        )
+        if supported_status:
+            all_supported_status[(module_name, ps_module_group.__name__)] = supported_status
 
 
 def _create_supported_by_module(
     module_name: str, pd_module_group: Any, ps_module_group: Any
 ) -> Dict[str, SupportedStatus]:
     """
-    Retrieves supported status of pandas module
+    Create a dictionary of supported status for a specific pandas module.
 
     Parameters
     ----------
     module_name : str
-        Class name that exists in the path of the module.
+        Name of the module in pandas.
     pd_module_group : Any
-        Specific path of importable pandas module.
-    ps_module_group: Any
-        Specific path of importable pyspark.pandas module.
+        Importable pandas module.
+    ps_module_group : Any
+        Corresponding pyspark.pandas module.
+
+    Returns
+    -------
+    Dict[str, SupportedStatus]
+        Dictionary of supported status for the module.
     """
     pd_module = getattr(pd_module_group, module_name) if module_name else pd_module_group
     try:
@@ -138,23 +202,11 @@ def _create_supported_by_module(
         # module not implemented
         return {}
 
-    pd_funcs = dict(
-        [
-            m
-            for m in getmembers(pd_module, isfunction)
-            if not m[0].startswith("_") and m[0] in pd_module.__dict__
-        ]
-    )
+    pd_funcs = dict([m for m in getmembers(pd_module, isfunction) if not m[0].startswith("_")])
     if not pd_funcs:
         return {}
 
-    ps_funcs = dict(
-        [
-            m
-            for m in getmembers(ps_module, isfunction)
-            if not m[0].startswith("_") and m[0] in ps_module.__dict__
-        ]
-    )
+    ps_funcs = dict([m for m in getmembers(ps_module, isfunction) if not m[0].startswith("_")])
 
     return _organize_by_implementation_status(
         module_name, pd_funcs, ps_funcs, pd_module_group, ps_module_group
@@ -163,13 +215,13 @@ def _create_supported_by_module(
 
 def _organize_by_implementation_status(
     module_name: str,
-    pd_funcs: Dict[str, Callable],
-    ps_funcs: Dict[str, Callable],
+    pd_funcs: Dict[str, FunctionType],
+    ps_funcs: Dict[str, FunctionType],
     pd_module_group: Any,
     ps_module_group: Any,
 ) -> Dict[str, SupportedStatus]:
     """
-    Check the implementation status and parameters of both modules.
+    Organize functions by implementation status between pandas and pyspark.pandas.
 
     Parameters
     ----------
@@ -183,6 +235,11 @@ def _organize_by_implementation_status(
         Specific path of importable pandas module.
     ps_module_group: Any
         Specific path of importable pyspark.pandas module.
+
+    Returns
+    -------
+    Dict[str, SupportedStatus]
+        Dictionary of implementation status.
     """
     pd_dict = {}
     for pd_func_name, pd_func in pd_funcs.items():
@@ -226,7 +283,7 @@ def _transform_missing(
     ps_module_path: str,
 ) -> str:
     """
-    Transform missing parameters into table information string.
+    Transform missing parameters into a formatted string for table display.
 
     Parameters
     ----------
@@ -240,6 +297,11 @@ def _transform_missing(
         Path string of pandas module.
     ps_module_path : str
         Path string of pyspark.pandas module.
+
+    Returns
+    -------
+    str
+        Formatted string representing missing parameters.
 
     Examples
     --------
@@ -263,47 +325,6 @@ def _transform_missing(
     return missing_str
 
 
-def _get_pd_modules(pd_module_group: Any) -> List[str]:
-    """
-    Returns sorted pandas member list from pandas module path.
-
-    Parameters
-    ----------
-    pd_module_group : Any
-        Specific path of importable pandas module.
-    """
-    return sorted([m[0] for m in getmembers(pd_module_group, isclass) if not m[0].startswith("_")])
-
-
-def _update_all_supported_status(
-    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
-    pd_modules: List[str],
-    pd_module_group: Any,
-    ps_module_group: Any,
-) -> None:
-    """
-    Updates supported status across multiple module paths.
-
-    Parameters
-    ----------
-    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]
-        Data that stores the supported status across multiple module paths.
-    pd_modules: List[str]
-        Name list of pandas modules.
-    pd_module_group : Any
-        Specific path of importable pandas module.
-    ps_module_group: Any
-        Specific path of importable pyspark.pandas module.
-    """
-    pd_modules += [""]  # for General Function APIs
-    for module_name in pd_modules:
-        supported_status = _create_supported_by_module(
-            module_name, pd_module_group, ps_module_group
-        )
-        if supported_status:
-            all_supported_status[(module_name, ps_module_group.__name__)] = supported_status
-
-
 def _write_table(
     module_name: str,
     module_path: str,
@@ -311,7 +332,18 @@ def _write_table(
     w_fd: TextIO,
 ) -> None:
     """
-    Write table by using Sphinx list-table directive.
+    Write the support status in a table format using Sphinx list-table directive.
+
+    Parameters
+    ----------
+    module_name : str
+        The name of the module whose support status is being documented.
+    module_path : str
+        The import path of the module in the documentation.
+    supported_status : Dict[str, SupportedStatus]
+        A dictionary mapping each function name to its support status.
+    w_fd : TextIO
+        An open file descriptor where the table will be written.
     """
     lines = []
     if module_name:
@@ -348,7 +380,17 @@ def _write_table(
 
 def _escape_func_str(func_str: str) -> str:
     """
-    Transforms which affecting rst data format.
+    Escape function names to conform to RST format.
+
+    Parameters
+    ----------
+    func_str : str
+        Function name to escape.
+
+    Returns
+    -------
+    str
+        Escaped function name.
     """
     # TODO: Take into account that this function can create links incorrectly
     # We can create alias links or links to parent methods
@@ -363,7 +405,14 @@ def _write_rst(
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
 ) -> None:
     """
-    Writes the documentation to the target file path.
+    Write the final RST file with the collected support status.
+
+    Parameters
+    ----------
+    output_rst_file_path : str
+        Path to the output RST file.
+    all_supported_status : Dict
+        Collected support status data.
     """
     with open(output_rst_file_path, "w") as w_fd:
         w_fd.write(RST_HEADER)

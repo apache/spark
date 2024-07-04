@@ -19,18 +19,20 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -38,7 +40,8 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -51,7 +54,7 @@ import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -61,7 +64,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
+object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -86,7 +89,7 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
         targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
-    if (providedPartitions.size != targetPartitionSchema.fields.size) {
+    if (providedPartitions.size != targetPartitionSchema.fields.length) {
       throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
         targetPartitionSchema, providedPartitions.size)
     }
@@ -124,18 +127,26 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
     val projectList =
-      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.size) ++
+      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.length) ++
         partitionList.take(staticPartitions.size).map(_.get) ++
-        sourceAttributes.takeRight(targetPartitionSchema.fields.size - staticPartitions.size)
+        sourceAttributes.takeRight(targetPartitionSchema.fields.length - staticPartitions.size)
 
     projectList
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      ResolveDefaultColumns.validateTableProviderForDefaultValue(
+        tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
+          tableDesc.schema, "CREATE TABLE")
+
+      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          tableDesc.identifier, "generated columns")
+      }
+
       val newTableDesc = tableDesc.copy(schema = newSchema)
       CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
@@ -144,7 +155,7 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
-        parts, _, query, overwrite, false) if parts.isEmpty =>
+        parts, _, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -156,7 +167,8 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _) =>
+        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _, _)
+        if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -187,7 +199,8 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
+        throw QueryCompilationErrors
+          .cannotWriteDataToRelationsWithMultiplePathsError(t.location.rootPaths)
       }
 
       val outputPath = t.location.rootPaths.head
@@ -215,7 +228,7 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
       // We write to staging directories and move to final partition directories after writing
       // job is done. So it is ok to have outputPath try to overwrite inputpath.
       if (overwrite && !insertCommand.dynamicPartitionOverwrite) {
-        DDLUtils.verifyNotReadPath(actualQuery, outputPath)
+        DDLUtils.verifyNotReadPath(actualQuery, outputPath, table)
       }
       insertCommand
   }
@@ -266,10 +279,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+        _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
+        _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
@@ -481,47 +495,81 @@ object DataSourceStrategy
       val partitionSet = AttributeSet(partitionColumns)
       val predicates = ExpressionSet(normalizedFilters
         .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
-      logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+      logInfo(log"Pruning directories with: ${MDC(PREDICATES, predicates.mkString(","))}")
       predicates
+    }
+  }
+
+  /**
+   * Creates a collation aware filter if the input data type is string with non-default collation
+   */
+  private def collationAwareFilter(filter: sources.Filter, dataType: DataType): Filter = {
+    if (!SchemaUtils.hasNonUTF8BinaryCollation(dataType)) {
+      return filter
+    }
+
+    filter match {
+      case sources.EqualTo(attribute, value) =>
+        CollatedEqualTo(attribute, value, dataType)
+      case sources.EqualNullSafe(attribute, value) =>
+        CollatedEqualNullSafe(attribute, value, dataType)
+      case sources.GreaterThan(attribute, value) =>
+        CollatedGreaterThan(attribute, value, dataType)
+      case sources.GreaterThanOrEqual(attribute, value) =>
+        CollatedGreaterThanOrEqual(attribute, value, dataType)
+      case sources.LessThan(attribute, value) =>
+        CollatedLessThan(attribute, value, dataType)
+      case sources.LessThanOrEqual(attribute, value) =>
+        CollatedLessThanOrEqual(attribute, value, dataType)
+      case sources.In(attribute, values) =>
+        CollatedIn(attribute, values, dataType)
+      case sources.StringStartsWith(attribute, value) =>
+        CollatedStringStartsWith(attribute, value, dataType)
+      case sources.StringEndsWith(attribute, value) =>
+        CollatedStringEndsWith(attribute, value, dataType)
+      case sources.StringContains(attribute, value) =>
+        CollatedStringContains(attribute, value, dataType)
+      case other =>
+        other
     }
   }
 
   private def translateLeafNodeFilter(
       predicate: Expression,
       pushableColumn: PushableColumnBase): Option[Filter] = predicate match {
-    case expressions.EqualTo(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualTo(name, convertToScala(v, t)))
-    case expressions.EqualTo(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.EqualTo(name, convertToScala(v, t)))
+    case expressions.EqualTo(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.EqualTo(name, convertToScala(v, t)), e.dataType))
+    case expressions.EqualTo(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.EqualTo(name, convertToScala(v, t)), e.dataType))
 
-    case expressions.EqualNullSafe(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
-    case expressions.EqualNullSafe(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.EqualNullSafe(name, convertToScala(v, t)))
+    case expressions.EqualNullSafe(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.EqualNullSafe(name, convertToScala(v, t)), e.dataType))
+    case expressions.EqualNullSafe(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.EqualNullSafe(name, convertToScala(v, t)), e.dataType))
 
-    case expressions.GreaterThan(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThan(name, convertToScala(v, t)))
-    case expressions.GreaterThan(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.LessThan(name, convertToScala(v, t)))
+    case expressions.GreaterThan(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.GreaterThan(name, convertToScala(v, t)), e.dataType))
+    case expressions.GreaterThan(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.LessThan(name, convertToScala(v, t)), e.dataType))
 
-    case expressions.LessThan(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThan(name, convertToScala(v, t)))
-    case expressions.LessThan(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.GreaterThan(name, convertToScala(v, t)))
+    case expressions.LessThan(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.LessThan(name, convertToScala(v, t)), e.dataType))
+    case expressions.LessThan(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.GreaterThan(name, convertToScala(v, t)), e.dataType))
 
-    case expressions.GreaterThanOrEqual(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
-    case expressions.GreaterThanOrEqual(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
+    case expressions.GreaterThanOrEqual(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
+    case expressions.GreaterThanOrEqual(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.LessThanOrEqual(name, convertToScala(v, t)), e.dataType))
 
-    case expressions.LessThanOrEqual(pushableColumn(name), Literal(v, t)) =>
-      Some(sources.LessThanOrEqual(name, convertToScala(v, t)))
-    case expressions.LessThanOrEqual(Literal(v, t), pushableColumn(name)) =>
-      Some(sources.GreaterThanOrEqual(name, convertToScala(v, t)))
+    case expressions.LessThanOrEqual(e @ pushableColumn(name), Literal(v, t)) =>
+      Some(collationAwareFilter(sources.LessThanOrEqual(name, convertToScala(v, t)), e.dataType))
+    case expressions.LessThanOrEqual(Literal(v, t), e @ pushableColumn(name)) =>
+      Some(collationAwareFilter(sources.GreaterThanOrEqual(name, convertToScala(v, t)), e.dataType))
 
     case expressions.InSet(e @ pushableColumn(name), set) =>
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      Some(sources.In(name, set.toArray.map(toScala)))
+      Some(collationAwareFilter(sources.In(name, set.toArray.map(toScala)), e.dataType))
 
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
@@ -529,20 +577,20 @@ object DataSourceStrategy
     case expressions.In(e @ pushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
       val hSet = list.map(_.eval(EmptyRow))
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
-      Some(sources.In(name, hSet.toArray.map(toScala)))
+      Some(collationAwareFilter(sources.In(name, hSet.toArray.map(toScala)), e.dataType))
 
     case expressions.IsNull(pushableColumn(name)) =>
       Some(sources.IsNull(name))
     case expressions.IsNotNull(pushableColumn(name)) =>
       Some(sources.IsNotNull(name))
-    case expressions.StartsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringStartsWith(name, v.toString))
+    case expressions.StartsWith(e @ pushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(collationAwareFilter(sources.StringStartsWith(name, v.toString), e.dataType))
 
-    case expressions.EndsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringEndsWith(name, v.toString))
+    case expressions.EndsWith(e @ pushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(collationAwareFilter(sources.StringEndsWith(name, v.toString), e.dataType))
 
-    case expressions.Contains(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-      Some(sources.StringContains(name, v.toString))
+    case expressions.Contains(e @ pushableColumn(name), Literal(v: UTF8String, StringType)) =>
+      Some(collationAwareFilter(sources.StringContains(name, v.toString), e.dataType))
 
     case expressions.Literal(true, BooleanType) =>
       Some(sources.AlwaysTrue)
@@ -659,9 +707,10 @@ object DataSourceStrategy
     // A map from original Catalyst expressions to corresponding translated data source filters.
     // If a predicate is not in this map, it means it cannot be pushed down.
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
+    // SPARK-41636: we keep the order of the predicates to avoid CodeGenerator cache misses
+    val translatedMap: Map[Expression, Filter] = ListMap(predicates.flatMap { p =>
       translateFilter(p, supportNestedPredicatePushdown).map(f => p -> f)
-    }.toMap
+    }: _*)
 
     val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
@@ -730,7 +779,8 @@ object DataSourceStrategy
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
-      val toRow = RowEncoder(StructType.fromAttributes(output), lenient = true).createSerializer()
+      val toRow =
+        ExpressionEncoder(DataTypeUtils.fromAttributes(output), lenient = true).createSerializer()
       rdd.mapPartitions { iterator =>
         iterator.map(toRow)
       }

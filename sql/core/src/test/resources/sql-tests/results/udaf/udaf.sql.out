@@ -32,10 +32,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "2",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`spark_catalog`.`default`.`mydoubleavg`"
   },
@@ -65,6 +66,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "CANNOT_LOAD_FUNCTION_CLASS",
+  "sqlState" : "46103",
   "messageParameters" : {
     "className" : "test.non.existent.udaf",
     "functionName" : "`spark_catalog`.`default`.`udaf1`"

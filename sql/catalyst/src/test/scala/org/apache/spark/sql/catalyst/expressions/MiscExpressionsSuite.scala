@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -37,7 +38,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[RuntimeException](
       RaiseError(Literal.create(null, StringType)),
       EmptyRow,
-      null
+      "[USER_RAISED_EXCEPTION] null"
     )
 
     // Expects a string
@@ -45,10 +46,10 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
-          "requiredType" -> "\"STRING\"",
-          "inputSql" -> "\"5\"",
-          "inputType" -> "\"INT\""
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"MAP<STRING, STRING>\"",
+          "inputSql" -> "\"map(errorMessage, 5)\"",
+          "inputType" -> "\"MAP<STRING, INT>\""
         )
       )
     )

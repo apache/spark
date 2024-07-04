@@ -33,8 +33,10 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
@@ -80,7 +82,7 @@ class UISeleniumSuite
           |appender.console.name = console
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
-          |appender.console.layout.pattern = %d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex
+          |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
         """.stripMargin,
         new File(s"$tempLog4jConf/log4j2.properties"),
         StandardCharsets.UTF_8)
@@ -90,8 +92,8 @@ class UISeleniumSuite
 
     s"""$startScript
         |  --master local
-        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+        |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+        |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
@@ -106,7 +108,7 @@ class UISeleniumSuite
       val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
-        "CREATE TABLE test_map(key INT, value STRING)",
+        "CREATE TABLE test_map (key INT, value STRING) USING HIVE",
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)

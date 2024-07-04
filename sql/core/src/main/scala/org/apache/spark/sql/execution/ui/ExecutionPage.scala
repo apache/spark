@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
@@ -77,22 +76,17 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
         </div>
-        <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
-        </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
+      val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-        modifiedConfigs(
-          executionUIData.modifiedConfigs.filterKeys(
-            !_.startsWith(pandasOnSparkConfPrefix)).toMap) ++
+        modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
-          executionUIData.modifiedConfigs.filterKeys(_.startsWith(pandasOnSparkConfPrefix)).toMap)
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) })
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -116,19 +110,25 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       request: HttpServletRequest,
       metrics: Map[Long, String],
       graph: SparkPlanGraph): Seq[Node] = {
-    val metadata = graph.allNodes.flatMap { node =>
-      val nodeId = s"plan-meta-data-${node.id}"
-      <div id={nodeId}>{node.desc}</div>
-    }
 
     <div>
-      <div id="plan-viz-graph"></div>
+      <div>
+        <span style="cursor: pointer;" onclick="togglePlanViz();">
+          <span id="plan-viz-graph-arrow" class="arrow-open"></span>
+          <a>Plan Visualization</a>
+        </span>
+      </div>
+
+      <div id="plan-viz-graph">
+        <div>
+          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+        </div>
+      </div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
         </div>
-        <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
-        {metadata}
       </div>
       {planVisualizationResources(request)}
       <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>

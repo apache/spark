@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, HASH_MAP_SIZE, OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.ArrayImplicits._
 
 class ObjectAggregationIterator(
     partIndex: Int,
@@ -74,7 +77,8 @@ class ObjectAggregationIterator(
     }
     val newFunctions = initializeAggregateFunctions(newExpressions, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
-    generateProcessRow(newExpressions, newFunctions, newInputAttributes)
+    generateProcessRow(
+      newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
   }
 
   /**
@@ -106,7 +110,7 @@ class ObjectAggregationIterator(
       val defaultAggregationBuffer = createNewAggregationBuffer()
       generateOutput(UnsafeRow.createFromByteArray(0, 0), defaultAggregationBuffer)
     } else {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }
@@ -118,7 +122,7 @@ class ObjectAggregationIterator(
   //  - when creating the re-used buffer for sort-based aggregation
   private def createNewAggregationBuffer(): SpecificInternalRow = {
     val bufferFieldTypes = aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
-    val buffer = new SpecificInternalRow(bufferFieldTypes)
+    val buffer = new SpecificInternalRow(bufferFieldTypes.toImmutableArraySeq)
     initAggregationBuffer(buffer)
     buffer
   }
@@ -171,10 +175,12 @@ class ObjectAggregationIterator(
         // The hash map gets too large, makes a sorted spill and clear the map.
         if (hashMap.size >= fallbackCountThreshold && inputRows.hasNext) {
           logInfo(
-            s"Aggregation hash map size ${hashMap.size} reaches threshold " +
-              s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              " based aggregation. You may change the threshold by adjust option " +
-              SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
+            log"Aggregation hash map size ${MDC(HASH_MAP_SIZE, hashMap.size)} reaches threshold " +
+              log"capacity " +
+              log"(${MDC(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD, fallbackCountThreshold)}" +
+              log" entries), spilling and falling back to sort based aggregation. You may change " +
+              log"the threshold by adjust option " +
+              log"${MDC(CONFIG, SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key)}"
           )
 
           // Falls back to sort-based aggregation
@@ -185,12 +191,12 @@ class ObjectAggregationIterator(
 
       if (sortBased) {
         val sortIteratorFromHashMap = hashMap
-          .dumpToExternalSorter(groupingAttributes, aggregateFunctions)
+          .dumpToExternalSorter(groupingAttributes, aggregateFunctions.toImmutableArraySeq)
           .sortedIterator()
         sortBasedAggregationStore = new SortBasedAggregator(
           sortIteratorFromHashMap,
-          StructType.fromAttributes(originalInputAttributes),
-          StructType.fromAttributes(groupingAttributes),
+          DataTypeUtils.fromAttributes(originalInputAttributes),
+          DataTypeUtils.fromAttributes(groupingAttributes),
           processRow,
           mergeAggregationBuffers,
           createNewAggregationBuffer())
@@ -253,7 +259,7 @@ class SortBasedAggregator(
       private var result: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
 
-      override def hasNext(): Boolean = {
+      override def hasNext: Boolean = {
         result != null || findNextSortedGroup()
       }
 

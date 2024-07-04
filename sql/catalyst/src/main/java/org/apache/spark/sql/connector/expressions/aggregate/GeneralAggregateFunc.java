@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
+import java.util.Arrays;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.SortValue;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
@@ -39,6 +42,9 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *  <li><pre>REGR_R2(input1, input2)</pre> Since 3.4.0</li>
  *  <li><pre>REGR_SLOPE(input1, input2)</pre> Since 3.4.0</li>
  *  <li><pre>REGR_SXY(input1, input2)</pre> Since 3.4.0</li>
+ *  <li><pre>MODE() WITHIN (ORDER BY input1 [ASC|DESC])</pre> Since 4.0.0</li>
+ *  <li><pre>PERCENTILE_CONT(input1) WITHIN (ORDER BY input2 [ASC|DESC])</pre> Since 4.0.0</li>
+ *  <li><pre>PERCENTILE_DISC(input1) WITHIN (ORDER BY input2 [ASC|DESC])</pre> Since 4.0.0</li>
  * </ol>
  *
  * @since 3.3.0
@@ -48,11 +54,21 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
   private final String name;
   private final boolean isDistinct;
   private final Expression[] children;
+  private final SortValue[] orderingWithinGroups;
 
   public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] children) {
     this.name = name;
     this.isDistinct = isDistinct;
     this.children = children;
+    this.orderingWithinGroups = new SortValue[]{};
+  }
+
+  public GeneralAggregateFunc(
+      String name, boolean isDistinct, Expression[] children, SortValue[] orderingWithinGroups) {
+    this.name = name;
+    this.isDistinct = isDistinct;
+    this.children = children;
+    this.orderingWithinGroups = orderingWithinGroups;
   }
 
   public String name() { return name; }
@@ -60,4 +76,28 @@ public final class GeneralAggregateFunc extends ExpressionWithToString implement
 
   @Override
   public Expression[] children() { return children; }
+
+  public SortValue[] orderingWithinGroups() { return orderingWithinGroups; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    GeneralAggregateFunc that = (GeneralAggregateFunc) o;
+
+    if (isDistinct != that.isDistinct) return false;
+    if (!name.equals(that.name)) return false;
+    if (!Arrays.equals(children, that.children)) return false;
+    return Arrays.equals(orderingWithinGroups, that.orderingWithinGroups);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = name.hashCode();
+    result = 31 * result + (isDistinct ? 1 : 0);
+    result = 31 * result + Arrays.hashCode(children);
+    result = 31 * result + Arrays.hashCode(orderingWithinGroups);
+    return result;
+  }
 }

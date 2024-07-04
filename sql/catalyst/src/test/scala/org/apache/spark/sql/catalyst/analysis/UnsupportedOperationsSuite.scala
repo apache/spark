@@ -541,8 +541,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         isMapGroupsWithState = true, GroupStateTimeout.ProcessingTimeTimeout(), streamRelation)),
     outputMode = Append)
 
-  // stream-stream relation, time interval join can't be followed by any stateful operators
-  assertFailOnGlobalWatermarkLimit(
+  // stream-stream relation, time interval join can be followed by any stateful operators
+  assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream time-interval join followed by agg",
     Aggregate(Nil, aggExprs("c"),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -550,7 +550,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // stream-stream relation, only equality join can be followed by any stateful operators
+  // stream-stream relation, equality join can be followed by any stateful operators
   assertPassOnGlobalWatermarkLimit(
     "multiple stateful ops - stream-stream equality join followed by agg",
     Aggregate(Nil, aggExprs("c"),
@@ -601,10 +601,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       outputMode = outputMode)
   }
 
-  // Deduplication, if on event time column, is a stateful operator
-  // and cannot be placed after join
-  assertFailOnGlobalWatermarkLimit(
-    "multiple stateful ops - stream-stream time interval join followed by" +
+  assertPassOnGlobalWatermarkLimit(
+    "multiple stateful ops - stream-stream time interval join followed by " +
       "dedup (with event-time)",
     Deduplicate(Seq(attributeWithWatermark),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -612,11 +610,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // Deduplication, if not on event time column,
-  // although it is still a stateful operator,
-  // it can be placed after join
   assertPassOnGlobalWatermarkLimit(
-    "multiple stateful ops - stream-stream time interval join followed by" +
+    "multiple stateful ops - stream-stream time interval join followed by " +
       "dedup (without event-time)",
     Deduplicate(Seq(att),
       streamRelation.join(streamRelation, joinType = Inner,
@@ -624,15 +619,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           attributeWithWatermark > attributeWithWatermark + 10))),
     outputMode = Append)
 
-  // for a stream-stream join followed by a stateful operator,
-  // if the join is keyed on time-interval inequality conditions (inequality on watermarked cols),
-  // should fail.
-  // if the join is keyed on time-interval equality conditions -> should pass
   Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach {
     joinType =>
-      assertFailOnGlobalWatermarkLimit(
+      assertPassOnGlobalWatermarkLimit(
         s"streaming aggregation after " +
-          s"stream-stream $joinType join keyed on time inequality in Append mode are not supported",
+          s"stream-stream $joinType join keyed on time interval in Append mode are not supported",
         streamRelation.join(streamRelation, joinType = joinType,
           condition = Some(attributeWithWatermark === attribute &&
             attributeWithWatermark < attributeWithWatermark + 10))
@@ -692,7 +683,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
       Iterator.empty
     }
-    implicit val intEncoder = ExpressionEncoder[Int]
+    implicit val intEncoder = ExpressionEncoder[Int]()
 
     left.cogroup[Int, Int, Int, Int](
       right,
@@ -747,7 +738,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
-    "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
+    "window",
+    Window(Nil, Nil, Nil, _),
+    errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
@@ -879,7 +872,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     operationName: String,
     logicalPlanGenerator: LogicalPlan => LogicalPlan,
     outputMode: OutputMode = Append,
-    expectedMsg: String = ""): Unit = {
+    expectedMsg: String = "",
+    errorClass: String = ""): Unit = {
 
     val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
 
@@ -887,7 +881,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       s"$operationName with stream relation",
       wrapInStreaming(logicalPlanGenerator(streamRelation)),
       outputMode,
-      expectedMsgs)
+      expectedMsgs,
+      errorClass)
 
     assertSupportedInStreamingPlan(
       s"$operationName with batch relation",
@@ -1034,10 +1029,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       name: String,
       plan: LogicalPlan,
       outputMode: OutputMode,
-      expectedMsgs: Seq[String]): Unit = {
+      expectedMsgs: Seq[String],
+      errorClass: String = ""): Unit = {
     testError(
       s"streaming plan - $name: not supported",
-      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported") {
+      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported",
+      errorClass) {
       UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
     }
   }
@@ -1099,7 +1096,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
    * Test whether the body of code will fail. If it does fail, then check if it has expected
    * messages.
    */
-  def testError(testName: String, expectedMsgs: Seq[String])(testBody: => Unit): Unit = {
+  def testError(
+      testName: String,
+      expectedMsgs: Seq[String],
+      errorClass: String = "")(testBody: => Unit): Unit = {
 
     test(testName) {
       val e = intercept[AnalysisException] {
@@ -1110,6 +1110,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           fail(s"Exception message should contain: '$m', " +
             s"actual exception message:\n\t'${e.getMessage}'")
         }
+      }
+      if (!errorClass.isEmpty) {
+        assert(e.getErrorClass == errorClass)
       }
     }
   }

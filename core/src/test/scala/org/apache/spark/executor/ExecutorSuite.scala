@@ -26,10 +26,11 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, Map}
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import org.apache.logging.log4j._
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -268,6 +269,27 @@ class ExecutorSuite extends SparkFunSuite
 
   test("Heartbeat should not drop zero accumulator updates when the conf is disabled") {
     heartbeatZeroAccumulatorUpdateTest(false)
+  }
+
+  test("SPARK-39696: Using accumulators should not cause heartbeat to fail") {
+    val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
+    conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1ms")
+    sc = new SparkContext(conf)
+
+    val accums = (1 to 10).map(i => sc.longAccumulator(s"mapperRunAccumulator$i"))
+    val input = sc.parallelize(1 to 10, 10)
+    var testRdd = input.map(i => (i, i))
+    (0 to 10).foreach( i =>
+      testRdd = testRdd.map(x => { accums.foreach(_.add(1)); (x._1 * i, x._2) }).reduceByKey(_ + _)
+    )
+
+    val logAppender = new LogAppender("heartbeat thread should not die")
+    withLogAppender(logAppender, level = Some(Level.ERROR)) {
+      val _ = testRdd.count()
+    }
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("Uncaught exception in thread executor-heartbeater"))
+    assert(logs.isEmpty)
   }
 
   private def withMockHeartbeatReceiverRef(executor: Executor)
@@ -526,9 +548,10 @@ class ExecutorSuite extends SparkFunSuite
       // and takes a long time to finish because file download is slow:
       val slowLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
-          Map.empty,
-          Map.empty,
-          Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          executor.defaultSessionState,
           Some(startLatch),
           Some(endLatch))
       })
@@ -541,9 +564,10 @@ class ExecutorSuite extends SparkFunSuite
       // dependency update:
       val blockedLibraryDownloadThread = new Thread(() => {
         executor.updateDependencies(
-          Map.empty,
-          Map.empty,
-          Map.empty)
+          immutable.Map.empty,
+          immutable.Map.empty,
+          immutable.Map.empty,
+          executor.defaultSessionState)
       })
       blockedLibraryDownloadThread.start()
       eventually(timeout(10.seconds), interval(100.millis)) {
@@ -599,6 +623,7 @@ class ExecutorSuite extends SparkFunSuite
       numPartitions = 1,
       locs = Seq(),
       outputId = 0,
+      JobArtifactSet.emptyJobArtifactSet,
       localProperties = new Properties(),
       serializedTaskMetrics = serializedTaskMetrics
     )
@@ -614,12 +639,10 @@ class ExecutorSuite extends SparkFunSuite
       name = "",
       index = 0,
       partitionId = 0,
-      addedFiles = Map[String, Long](),
-      addedJars = Map[String, Long](),
-      addedArchives = Map[String, Long](),
+      JobArtifactSet.emptyJobArtifactSet,
       properties = new Properties,
       cpus = 1,
-      resources = immutable.Map[String, ResourceInformation](),
+      resources = Map.empty,
       serializedTask)
   }
 

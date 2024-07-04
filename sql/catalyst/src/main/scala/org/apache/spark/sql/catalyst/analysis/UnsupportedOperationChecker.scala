@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison, CurrentDate, CurrentTimestampLike, Expression, GreaterThan, GreaterThanOrEqual, GroupingSets, LessThan, LessThanOrEqual, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -37,6 +39,10 @@ object UnsupportedOperationChecker extends Logging {
     plan.foreachUp {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
+
+      case d: DeduplicateWithinWatermark =>
+        throwError("dropDuplicatesWithinWatermark is not supported with batch " +
+          "DataFrames/DataSets")(d)
 
       case _ =>
     }
@@ -53,26 +59,6 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   /**
-   * Checks if the expression contains a range comparison, in which
-   * either side of the comparison is an event-time column. This is used for checking
-   * stream-stream time interval join.
-   * @param e the expression to be checked
-   * @return true if there is a time-interval join.
-   */
-  private def hasRangeExprAgainstEventTimeCol(e: Expression): Boolean = {
-    def hasEventTimeColBinaryComp(neq: Expression): Boolean = {
-      val exp = neq.asInstanceOf[BinaryComparison]
-      hasEventTimeCol(exp.left) || hasEventTimeCol(exp.right)
-    }
-
-    e.exists {
-      case neq @ (_: LessThanOrEqual | _: LessThan | _: GreaterThanOrEqual | _: GreaterThan) =>
-        hasEventTimeColBinaryComp(neq)
-      case _ => false
-    }
-  }
-
-  /**
    * This method, combined with isStatefulOperation, determines all disallowed
    * behaviors in multiple stateful operators.
    * Concretely, All conditions defined below cannot be followed by any streaming stateful
@@ -84,9 +70,6 @@ object UnsupportedOperationChecker extends Logging {
    */
   private def ifCannotBeFollowedByStatefulOperation(
       p: LogicalPlan, outputMode: OutputMode): Boolean = p match {
-    case ExtractEquiJoinKeys(_, _, _, otherCondition, _, left, right, _) =>
-      left.isStreaming && right.isStreaming &&
-        otherCondition.isDefined && hasRangeExprAgainstEventTimeCol(otherCondition.get)
     // FlatMapGroupsWithState configured with event time
     case f @ FlatMapGroupsWithState(_, _, _, _, _, _, _, _, _, timeout, _, _, _, _, _, _)
       if f.isStreaming && timeout == GroupStateTimeout.EventTimeTimeout => true
@@ -118,6 +101,8 @@ object UnsupportedOperationChecker extends Logging {
     case f: FlatMapGroupsWithState if f.isStreaming => true
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
+    case d: DeduplicateWithinWatermark if d.isStreaming => true
+    case t: TransformWithState if t.isStreaming => true
     case _ => false
   }
 
@@ -149,7 +134,8 @@ object UnsupportedOperationChecker extends Logging {
         }
       }
     } catch {
-      case e: AnalysisException if !failWhenDetected => logWarning(s"${e.message};\n$plan")
+      case e: AnalysisException if !failWhenDetected =>
+        logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
     }
   }
 
@@ -468,6 +454,19 @@ object UnsupportedOperationChecker extends Logging {
               throwError(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
           }
 
+        case d: DeduplicateWithinWatermark if d.isStreaming =>
+          // Find any attributes that are associated with an eventTime watermark.
+          val watermarkAttributes = d.child.output.collect {
+            case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+          }
+
+          // DeduplicateWithinWatermark requires event time column being set in the input DataFrame
+          if (watermarkAttributes.isEmpty) {
+            throwError(
+              "dropDuplicatesWithinWatermark is not supported on streaming DataFrames/DataSets " +
+                "without watermark")(plan)
+          }
+
         case c: CoGroup if c.children.exists(_.isStreaming) =>
           throwError("CoGrouping with a streaming DataFrame/Dataset is not supported")
 
@@ -494,8 +493,18 @@ object UnsupportedOperationChecker extends Logging {
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(_, _, _, child) if child.isStreaming =>
-          throwError("Non-time-based windows are not supported on streaming DataFrames/Datasets")
+        case Window(windowExpression, _, _, child) if child.isStreaming =>
+          val (windowFuncList, columnNameList, windowSpecList) = windowExpression.flatMap { e =>
+            e.collect {
+              case we: WindowExpression =>
+                (we.windowFunction.toString, e.toAttribute.sql, we.windowSpec.sql)
+              }
+          }.unzip3
+          throw QueryExecutionErrors.nonTimeWindowNotSupportedInStreamingError(
+            windowFuncList,
+            columnNameList,
+            windowSpecList,
+            subPlan.origin)
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
@@ -545,8 +554,11 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   private def throwError(msg: String)(implicit operator: LogicalPlan): Nothing = {
-    throw new AnalysisException(
-      msg, operator.origin.line, operator.origin.startPosition, Some(operator))
+    throw new ExtendedAnalysisException(
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3102",
+        messageParameters = Map("msg" -> msg)),
+      plan = operator)
   }
 
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {

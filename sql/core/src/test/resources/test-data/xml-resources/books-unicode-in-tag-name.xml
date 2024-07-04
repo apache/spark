@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<κατάλογος>
+    <書 ид="bk101">
+        <aŭtoro>Gambardella, Matthew</aŭtoro>
+        <ítulo>XML Developer's Guide</ítulo>
+        <ჟანრი>Computer</ჟანრი>
+        <цена>44.95</цена>
+        <publish_date>2000-10-01</publish_date>
+    </書>
+    <書>
+        <aŭtoro>Ralls, Kim</aŭtoro>
+        <ítulo>Midnight Rain</ítulo>
+        <ჟანრი>Fantasy</ჟანრი>
+        <цена>5.95</цена>
+        <publish_date>2000-12-16</publish_date>
+    </書>
+    <書 ид="bk103">
+        <aŭtoro>Corets, Eva</aŭtoro>
+        <ítulo>Maeve Ascendant</ítulo>
+        <ჟანრი>Fantasy</ჟანრი>
+        <цена>5.95</цена>
+        <publish_date>2000-11-17</publish_date>
+    </書>
+</κατάλογος>

@@ -1,6 +1,6 @@
 Package: SparkR
 Type: Package
-Version: 3.5.0
+Version: 4.0.0
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
 Authors@R:
@@ -10,7 +10,7 @@ Authors@R:
 License: Apache License (== 2.0)
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
-SystemRequirements: Java (>= 8, < 18)
+SystemRequirements: Java (>= 17, < 22)
 Depends:
     R (>= 3.5),
     methods
@@ -21,7 +21,7 @@ Suggests:
     testthat,
     e1071,
     survival,
-    arrow (>= 1.0.0)
+    arrow (>= 10.0.0)
 Collate:
     'schema.R'
     'generics.R'

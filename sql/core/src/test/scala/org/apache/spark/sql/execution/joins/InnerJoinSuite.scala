@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, EqualTo, Expression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -182,10 +182,14 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
     testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
-            expectedAnswer.map(Row.fromTuple),
-            sortAnswers = true)
+          Seq(true, false).foreach { enable =>
+            withSQLConf(SQLConf.USE_PARTITION_EVALUATOR.key -> enable.toString) {
+              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+                makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
+          }
         }
       }
     }
@@ -223,7 +227,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
     "inner join, one match per row",
     myUpperCaseData,
     myLowerCaseData,
-    () => (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+    () => EqualTo(myUpperCaseData.col("N").expr, myLowerCaseData.col("n").expr),
     Seq(
       (1, "A", 1, "a"),
       (2, "B", 2, "b"),
@@ -239,7 +243,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       "inner join, multiple matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => EqualTo(left.col("a").expr, right.col("a").expr),
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
@@ -256,7 +260,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       "inner join, no matches",
       left,
       right,
-      () => (left.col("a") === right.col("a")).expr,
+      () => EqualTo(left.col("a").expr, right.col("a").expr),
       Seq.empty
     )
   }
@@ -268,7 +272,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       "inner join, null safe",
       left,
       right,
-      () => (left.col("b") <=> right.col("b")).expr,
+      () => EqualNullSafe(left.col("b").expr, right.col("b").expr),
       Seq(
         (1, 0, 1, 0),
         (2, null, 2, null)
@@ -284,7 +288,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       "SPARK-15822 - test structs as keys",
       left,
       right,
-      () => (left.col("key") === right.col("key")).expr,
+      () => EqualTo(left.col("key").expr, right.col("key").expr),
       Seq(
         (Row(0, 0), "L0", Row(0, 0), "R0"),
         (Row(1, 1), "L1", Row(1, 1), "R1"),

@@ -19,8 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -38,7 +39,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
 
   def generateRows(schema: StructType, numRows: Int): Array[InternalRow] = {
     val generator = RandomDataGenerator.forType(schema, nullable = false).get
-    val toRow = RowEncoder(schema).createSerializer()
+    val toRow = ExpressionEncoder(schema).createSerializer()
     (1 to numRows).map(_ => toRow(generator().asInstanceOf[Row]).copy()).toArray
   }
 
@@ -50,7 +51,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
       val benchmark = new Benchmark("unsafe projection", iters * numRows.toLong, output = output)
 
       val schema1 = new StructType().add("l", LongType, false)
-      val attrs1 = schema1.toAttributes
+      val attrs1 = DataTypeUtils.toAttributes(schema1)
       val rows1 = generateRows(schema1, numRows)
       val projection1 = UnsafeProjection.create(attrs1, attrs1)
 
@@ -66,7 +67,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
       }
 
       val schema2 = new StructType().add("l", LongType, true)
-      val attrs2 = schema2.toAttributes
+      val attrs2 = DataTypeUtils.toAttributes(schema2)
       val rows2 = generateRows(schema2, numRows)
       val projection2 = UnsafeProjection.create(attrs2, attrs2)
 
@@ -89,7 +90,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
         .add("long", LongType, false)
         .add("float", FloatType, false)
         .add("double", DoubleType, false)
-      val attrs3 = schema3.toAttributes
+      val attrs3 = DataTypeUtils.toAttributes(schema3)
       val rows3 = generateRows(schema3, numRows)
       val projection3 = UnsafeProjection.create(attrs3, attrs3)
 
@@ -112,7 +113,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
         .add("long", LongType, true)
         .add("float", FloatType, true)
         .add("double", DoubleType, true)
-      val attrs4 = schema4.toAttributes
+      val attrs4 = DataTypeUtils.toAttributes(schema4)
       val rows4 = generateRows(schema4, numRows)
       val projection4 = UnsafeProjection.create(attrs4, attrs4)
 

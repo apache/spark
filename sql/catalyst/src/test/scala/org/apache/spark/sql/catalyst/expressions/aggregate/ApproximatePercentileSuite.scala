@@ -224,7 +224,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "accuracy",
+          "inputName" -> toSQLId("accuracy"),
           "inputType" -> toSQLType(accuracyExpression.dataType),
           "inputExpr" -> toSQLExpr(accuracyExpression)
         )
@@ -241,7 +241,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "percentage",
+          "inputName" -> toSQLId("percentage"),
           "inputType" -> toSQLType(attribute.dataType),
           "inputExpr" -> toSQLExpr(attribute)
         )
@@ -379,7 +379,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> "(\"DOUBLE\" or \"ARRAY<DOUBLE>\")",
               "inputSql" -> toSQLExpr(percentageExpression),
               "inputType" -> "\"ARRAY<VOID>\"")
@@ -399,7 +399,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "3",
+            "paramIndex" -> ordinalNumber(2),
             "requiredType" -> "\"INTEGRAL\"",
             "inputSql" -> toSQLExpr(Literal(acc)),
             "inputType" -> toSQLType(Literal(acc).dataType)

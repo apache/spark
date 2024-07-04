@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.parquet.column.ParquetProperties
@@ -28,7 +28,8 @@ import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnVector
@@ -55,7 +56,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
 
-    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
+    val sparkSession = SparkSession.builder().config(conf).getOrCreate()
 
     // Set default configs. Individual cases will change them if necessary.
     sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
@@ -90,34 +91,48 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   private def saveAsCsvTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "gzip").option("header", true).csv(dir)
+    df.mode("overwrite")
+      .option("compression", GZIP.lowerCaseName())
+      .option("header", true)
+      .csv(dir)
     spark.read.option("header", true).csv(dir).createOrReplaceTempView("csvTable")
   }
 
   private def saveAsJsonTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "gzip").json(dir)
+    df.mode("overwrite").option("compression", GZIP.lowerCaseName()).json(dir)
     spark.read.json(dir).createOrReplaceTempView("jsonTable")
   }
 
   private def saveAsParquetV1Table(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "snappy").parquet(dir)
+    df.mode("overwrite")
+      .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+      .parquet(dir)
     spark.read.parquet(dir).createOrReplaceTempView("parquetV1Table")
   }
 
   private def saveAsParquetV2Table(df: DataFrameWriter[Row], dir: String): Unit = {
     withSQLConf(ParquetOutputFormat.WRITER_VERSION ->
       ParquetProperties.WriterVersion.PARQUET_2_0.toString) {
-      df.mode("overwrite").option("compression", "snappy").parquet(dir)
+      df.mode("overwrite")
+        .option("compression", ParquetCompressionCodec.SNAPPY.lowerCaseName())
+        .parquet(dir)
       spark.read.parquet(dir).createOrReplaceTempView("parquetV2Table")
     }
   }
 
   private def saveAsOrcTable(df: DataFrameWriter[Row], dir: String): Unit = {
-    df.mode("overwrite").option("compression", "snappy").orc(dir)
+    df.mode("overwrite").orc(dir)
     spark.read.orc(dir).createOrReplaceTempView("orcTable")
   }
 
   private def withParquetVersions(f: String => Unit): Unit = Seq("V1", "V2").foreach(f)
+
+  private def getExpr(dataType: DataType = IntegerType): String = dataType match {
+    case BooleanType => "CASE WHEN value % 2 = 0 THEN true ELSE false END"
+    case ByteType => "cast(value % 128 as byte)"
+    case ShortType => "cast(value % 32768 as short)"
+    case _ => s"cast(value % ${Int.MaxValue} as ${dataType.sql})"
+  }
 
   def numericScanBenchmark(values: Int, dataType: DataType): Unit = {
     // Benchmarks running through spark sql.
@@ -135,12 +150,14 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong())
+          .selectExpr(getExpr(dataType) + " as id")
+          .createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
+        prepareTable(dir, spark.sql(s"SELECT id FROM t1"))
 
         val query = dataType match {
-          case BooleanType => "sum(cast(id as bigint))"
+          case BooleanType => "sum(if(cast(id as boolean), 1, 0))"
           case _ => "sum(id)"
         }
 
@@ -280,10 +297,10 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(dir,
-          spark.sql(s"SELECT named_struct('f', CAST(value as ${dataType.sql})) as col FROM t1"),
+          spark.sql(s"SELECT named_struct('f', ${getExpr(dataType)}) as col FROM t1"),
           onlyParquetOrc = true)
 
         sqlBenchmark.addCase(s"SQL ORC MR") { _ =>
@@ -338,7 +355,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).map { x =>
+        spark.range(values).map(_ => Random.nextLong()).map { x =>
           val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
           val mapOfStructColumn = Map(
             s"$x" -> (x * 0.1, (x, s"$x" * 100)),
@@ -404,11 +421,11 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
-          spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
+          spark.sql(s"SELECT ${getExpr()} c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
           spark.sql("select sum(c1), sum(length(c2)) from csvTable").noop()
@@ -453,7 +470,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
         prepareTable(
           dir,
@@ -502,9 +519,10 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
-        spark.range(values).map(_ => Random.nextLong).createOrReplaceTempView("t1")
+        spark.range(values).map(_ => Random.nextLong()).createOrReplaceTempView("t1")
 
-        prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
+        prepareTable(dir,
+          spark.sql(s"SELECT value % 2 AS p, ${getExpr()} id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
           spark.sql("select sum(id) from csvTable").noop()
@@ -702,8 +720,8 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       withTempTable("t1", "csvTable", "jsonTable", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         val middle = width / 2
-        val selectExpr = (1 to width).map(i => s"value as c$i")
-        spark.range(values).map(_ => Random.nextLong).toDF()
+        val selectExpr = (1 to width).map(i => s"${getExpr()} as c$i")
+        spark.range(values).map(_ => Random.nextLong()).toDF()
           .selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
 
         prepareTable(dir, spark.sql("SELECT * FROM t1"))

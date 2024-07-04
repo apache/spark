@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-mllib_2.12</artifactId>
+  <artifactId>spark-mllib_2.13</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
   </properties>
@@ -34,6 +34,10 @@
   <url>https://spark.apache.org/</url>
 
   <dependencies>
+    <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
@@ -91,12 +95,10 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.scalanlp</groupId>
       <artifactId>breeze_${scala.binary.version}</artifactId>
@@ -113,11 +115,6 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-inline</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

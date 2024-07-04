@@ -120,7 +120,7 @@ Prerequisite
 
 PySpark development requires to build Spark that needs a proper JDK installed, etc. See `Building Spark <https://spark.apache.org/docs/latest/building-spark.html>`_ for more details.
 
-Note that if you intend to contribute to Spark Connect in Python, ``buf`` version ``1.12.0`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
+Note that if you intend to contribute to Spark Connect in Python, ``buf`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
 
 Conda
 ~~~~~
@@ -129,7 +129,7 @@ If you are using Conda, the development environment can be set as follows.
 
 .. code-block:: bash
 
-    # Python 3.7+ is required
+    # Python 3.9+ is required
     conda create --name pyspark-dev-env python=3.9
     conda activate pyspark-dev-env
     pip install --upgrade -r dev/requirements.txt
@@ -145,7 +145,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 pip
 ~~~
 
-With Python 3.7+, pip can be used as below to install and set up the development environment.
+With Python 3.9+, pip can be used as below to install and set up the development environment.
 
 .. code-block:: bash
 
@@ -246,9 +246,9 @@ To throw a standardized user-facing error or exception, developers should specif
 Usage
 ~~~~~
 
-1. Check if an appropriate error class already exists in `error_classes.py`.
+1. Check if an appropriate error class already exists in `Error classes in PySpark <errors.rst#error-classes-in-pyspark>`_.
    If true, use the error class and skip to step 3.
-2. Add a new class to `error_classes.py`; keep in mind the invariants below.
+2. Add a new class to `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_; keep in mind the invariants below.
 3. Check if the exception type already extends `PySparkException`.
    If true, skip to step 5.
 4. Mix `PySparkException` into the exception.
@@ -266,7 +266,7 @@ Throw with arbitrary error message:
 
 **After**
 
-`error_classes.py`
+`error-conditions.json`
 
 .. code-block:: python
 

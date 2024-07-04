@@ -27,9 +27,11 @@ import com.google.common.io.Closeables;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
 /**
  * Manages some sort-shuffle data, including the creation
@@ -47,8 +49,9 @@ public class TestShuffleDataContext {
   }
 
   public void create() throws IOException {
+    String root = System.getProperty("java.io.tmpdir");
     for (int i = 0; i < localDirs.length; i ++) {
-      localDirs[i] = JavaUtils.createTempDir().getAbsolutePath();
+      localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
         new File(localDirs[i], String.format("%02x", p)).mkdirs();
@@ -124,7 +127,7 @@ public class TestShuffleDataContext {
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
     File file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename));
-    Assert.assertFalse("this test file has been already generated", file.exists());
+    Assertions.assertFalse(file.exists(), "this test file has been already generated");
     try {
       dataStream = new FileOutputStream(
         new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename)));

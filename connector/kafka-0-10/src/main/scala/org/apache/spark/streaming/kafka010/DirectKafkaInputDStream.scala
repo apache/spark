@@ -21,13 +21,14 @@ import java.{ util => ju }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{OFFSET, TIME, TOPIC_PARTITION, TOPIC_PARTITION_OFFSET_RANGE}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
@@ -71,7 +72,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
       kc = consumerStrategy.onStart(
-        currentOffsets.mapValues(l => java.lang.Long.valueOf(l)).toMap.asJava)
+        currentOffsets.transform((_, l) => java.lang.Long.valueOf(l)).asJava)
     }
     kc
   }
@@ -83,7 +84,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   protected def getBrokers = {
-    val c = consumer
+    val c = consumer()
     val result = new ju.HashMap[TopicPartition, String]()
     val hosts = new ju.HashMap[TopicPartition, String]()
     val assignments = c.assignment().iterator()
@@ -146,7 +147,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
           val backpressureRate = lag / totalLag.toDouble * rate
           tp -> (if (maxRateLimitPerPartition > 0) {
-            Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
+            Math.min(backpressureRate, maxRateLimitPerPartition.toDouble)} else backpressureRate)
         }
       case None => offsets.map { case (tp, offset) => tp -> ppc.maxRatePerPartition(tp).toDouble }
     }
@@ -177,7 +178,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
         val off = acc.get(tp).map(o => Math.min(o, m.offset)).getOrElse(m.offset)
         acc + (tp -> off)
       }.foreach { case (tp, off) =>
-          logInfo(s"poll(0) returned messages, seeking $tp to $off to compensate")
+          logInfo(log"poll(0) returned messages, seeking ${MDC(TOPIC_PARTITION, tp)} to " +
+            log"${MDC(OFFSET, off)} to compensate")
           c.seek(tp, off)
       }
     }
@@ -187,7 +189,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
    * Returns the latest (highest) available offsets, taking new partitions into account.
    */
   protected def latestOffsets(): Map[TopicPartition, Long] = {
-    val c = consumer
+    val c = consumer()
     paranoidPoll(c)
     val parts = c.assignment().asScala
 
@@ -247,7 +249,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val metadata = Map(
       "offsets" -> offsetRanges.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
-    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+    val inputInfo = StreamInputInfo(id, rdd.count(), metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets
@@ -256,7 +258,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   }
 
   override def start(): Unit = {
-    val c = consumer
+    val c = consumer()
     paranoidPoll(c)
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
@@ -296,14 +298,14 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
     var osr = commitQueue.poll()
     while (null != osr) {
-      val tp = osr.topicPartition
+      val tp = osr.topicPartition()
       val x = m.get(tp)
       val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
       m.put(tp, new OffsetAndMetadata(offset))
       osr = commitQueue.poll()
     }
     if (!m.isEmpty) {
-      consumer.commitAsync(m, commitCallback.get)
+      consumer().commitAsync(m, commitCallback.get)
     }
   }
 
@@ -325,7 +327,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+         logInfo(log"Restoring KafkaRDD for time ${MDC(TIME, t)} " +
+           log"${MDC(TOPIC_PARTITION_OFFSET_RANGE, b.mkString("[", ", ", "]"))}")
          generatedRDDs += t -> new KafkaRDD[K, V](
            context.sparkContext,
            executorKafkaParams,

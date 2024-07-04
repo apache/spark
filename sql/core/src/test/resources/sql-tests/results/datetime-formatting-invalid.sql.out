@@ -10,6 +10,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'GGGGG'"
   }
 }
@@ -26,6 +27,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'yyyyyyy'"
   }
 }
@@ -36,8 +38,14 @@ select date_format('2018-11-17 13:33:33.333', 'qqqqq')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: q
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "pattern" : "qqqqq"
+  }
+}
 
 
 -- !query
@@ -45,8 +53,14 @@ select date_format('2018-11-17 13:33:33.333', 'QQQQQ')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: Q
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "pattern" : "QQQQQ"
+  }
+}
 
 
 -- !query
@@ -60,6 +74,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'MMMMM'"
   }
 }
@@ -76,6 +91,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'LLLLL'"
   }
 }
@@ -92,6 +108,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'EEEEE'"
   }
 }
@@ -108,6 +125,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'FF'"
   }
 }
@@ -124,6 +142,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'ddd'"
   }
 }
@@ -140,6 +159,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'DDDD'"
   }
 }
@@ -156,6 +176,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'HHH'"
   }
 }
@@ -172,6 +193,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'hhh'"
   }
 }
@@ -188,6 +210,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'kkk'"
   }
 }
@@ -204,6 +227,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'KKK'"
   }
 }
@@ -220,6 +244,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'mmm'"
   }
 }
@@ -236,6 +261,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'sss'"
   }
 }
@@ -252,6 +278,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'SSSSSSSSSS'"
   }
 }
@@ -268,6 +295,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'aa'"
   }
 }
@@ -293,6 +321,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'zzzzz'"
   }
 }
@@ -318,6 +347,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'ZZZZZZ'"
   }
 }
@@ -346,8 +376,15 @@ select date_format('2018-11-17 13:33:33.333', 'A')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: A
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "c" : "A",
+    "pattern" : "A"
+  }
+}
 
 
 -- !query
@@ -355,8 +392,15 @@ select date_format('2018-11-17 13:33:33.333', 'n')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: n
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "c" : "n",
+    "pattern" : "n"
+  }
+}
 
 
 -- !query
@@ -364,8 +408,15 @@ select date_format('2018-11-17 13:33:33.333', 'N')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: N
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "c" : "N",
+    "pattern" : "N"
+  }
+}
 
 
 -- !query
@@ -373,8 +424,15 @@ select date_format('2018-11-17 13:33:33.333', 'p')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: p
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "c" : "p",
+    "pattern" : "p"
+  }
+}
 
 
 -- !query
@@ -388,6 +446,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'Y'"
   }
 }
@@ -404,6 +463,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'w'"
   }
 }
@@ -420,6 +480,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'W'"
   }
 }
@@ -436,6 +497,7 @@ org.apache.spark.SparkUpgradeException
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "pattern" : "'u'"
   }
 }
@@ -446,8 +508,14 @@ select date_format('2018-11-17 13:33:33.333', 'e')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
+  "messageParameters" : {
+    "c" : "e"
+  }
+}
 
 
 -- !query
@@ -455,8 +523,14 @@ select date_format('2018-11-17 13:33:33.333', 'c')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
+  "messageParameters" : {
+    "c" : "c"
+  }
+}
 
 
 -- !query
@@ -464,8 +538,15 @@ select date_format('2018-11-17 13:33:33.333', 'B')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: B
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "c" : "B",
+    "pattern" : "B"
+  }
+}
 
 
 -- !query

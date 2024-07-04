@@ -174,7 +174,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
               "or \"INTERVAL YEAR TO MONTH\")"),
             "inputSql" -> "\"a\"",
@@ -197,7 +197,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
               "or \"INTERVAL YEAR TO MONTH\")"),
             "inputSql" -> "\"a\"",
@@ -216,7 +216,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "3",
+            "paramIndex" -> ordinalNumber(2),
             "requiredType" -> "\"INTEGRAL\"",
             "inputSql" -> "\"frq\"",
             "inputType" -> toSQLType(frequencyType)
@@ -278,7 +278,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "NON_FOLDABLE_INPUT",
           messageParameters = Map(
-            "inputName" -> "percentage",
+            "inputName" -> toSQLId("percentage"),
             "inputType" -> toSQLType(percentage.dataType),
             "inputExpr" -> toSQLExpr(percentage))
         )
@@ -296,7 +296,7 @@ class PercentileSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2",
+            "paramIndex" -> ordinalNumber(1),
             "requiredType" -> "\"DOUBLE\"",
             "inputSql" -> toSQLExpr(percentage),
             "inputType" -> toSQLType(dataType)
@@ -346,7 +346,7 @@ class PercentileSuite extends SparkFunSuite {
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> "\"ARRAY<DOUBLE>\"",
               "inputSql" -> toSQLExpr(percentageExpression),
               "inputType" -> "\"ARRAY<VOID>\""

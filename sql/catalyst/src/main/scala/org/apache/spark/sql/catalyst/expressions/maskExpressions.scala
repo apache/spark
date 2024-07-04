@@ -18,12 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -75,6 +78,28 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "3.4.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
+object MaskExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val strArg = InputParameter("str")
+    val upperCharArg = InputParameter("upperChar",
+      Some(Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType)))
+    val lowerCharArg = InputParameter("lowerChar",
+      Some(Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType)))
+    val digitCharArg = InputParameter("digitChar",
+      Some(Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType)))
+    val otherCharArg = InputParameter("otherChar",
+      Some(Literal.create(Mask.MASKED_IGNORE, SQLConf.get.defaultStringType)))
+    val functionSignature: FunctionSignature = FunctionSignature(Seq(
+      strArg, upperCharArg, lowerCharArg, digitCharArg, otherCharArg))
+    Some(functionSignature)
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 5)
+    new Mask(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+  }
+}
+
 case class Mask(
     input: Expression,
     upperChar: Expression,
@@ -88,33 +113,34 @@ case class Mask(
   def this(input: Expression) =
     this(
       input,
-      Literal(Mask.MASKED_UPPERCASE),
-      Literal(Mask.MASKED_LOWERCASE),
-      Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal.create(Mask.MASKED_UPPERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression) =
     this(
       input,
       upperChar,
-      Literal(Mask.MASKED_LOWERCASE),
-      Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal.create(Mask.MASKED_LOWERCASE, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(input: Expression, upperChar: Expression, lowerChar: Expression) =
     this(
       input,
       upperChar,
       lowerChar,
-      Literal(Mask.MASKED_DIGIT),
-      Literal(Mask.MASKED_IGNORE, StringType))
+      Literal.create(Mask.MASKED_DIGIT, SQLConf.get.defaultStringType),
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   def this(
       input: Expression,
       upperChar: Expression,
       lowerChar: Expression,
       digitChar: Expression) =
-    this(input, upperChar, lowerChar, digitChar, Literal(Mask.MASKED_IGNORE, StringType))
+    this(input, upperChar, lowerChar, digitChar,
+      Literal.create(Mask.MASKED_IGNORE, input.dataType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
 
@@ -124,7 +150,7 @@ case class Mask(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> message,
+              "inputName" -> toSQLId(message),
               "inputType" -> toSQLType(exp.dataType),
               "inputExpr" -> toSQLExpr(exp))))
       } else {
@@ -166,7 +192,8 @@ case class Mask(
    *      NumericType, IntegralType, FractionalType.
    */
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, StringType, StringType, StringType, StringType)
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation,
+      StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullable: Boolean = true
 
@@ -223,8 +250,23 @@ case class Mask(
     val fifthGen = children(4).genCode(ctx)
     val resultCode =
       f(firstGen.value, secondGen.value, thirdGen.value, fourthGen.value, fifthGen.value)
-    ev.copy(
-      code = code"""
+    if (nullable) {
+      // this function is somewhat like a `UnaryExpression`, in that only the first child
+      // determines whether the result is null
+      val nullSafeEval = ctx.nullSafeExec(children(0).nullable, firstGen.isNull)(resultCode)
+      ev.copy(code = code"""
+        ${firstGen.code}
+        ${secondGen.code}
+        ${thirdGen.code}
+        ${fourthGen.code}
+        ${fifthGen.code}
+        boolean ${ev.isNull} = ${firstGen.isNull};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $nullSafeEval
+      """)
+    } else {
+      ev.copy(
+        code = code"""
         ${firstGen.code}
         ${secondGen.code}
         ${thirdGen.code}
@@ -232,14 +274,15 @@ case class Mask(
         ${fifthGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""",
-      isNull = FalseLiteral)
+        isNull = FalseLiteral)
+    }
   }
 
   /**
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = StringType
+  override def dataType: DataType = input.dataType
 
   /**
    * Returns a Seq of the children of this node. Children should not change. Immutability required
@@ -261,13 +304,13 @@ case class MaskArgument(maskChar: Char, ignore: Boolean)
 
 object Mask {
   // Default character to replace upper-case characters
-  private val MASKED_UPPERCASE = 'X'
+  val MASKED_UPPERCASE = 'X'
   // Default character to replace lower-case characters
-  private val MASKED_LOWERCASE = 'x'
+  val MASKED_LOWERCASE = 'x'
   // Default character to replace digits
-  private val MASKED_DIGIT = 'n'
+  val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
-  private val MASKED_IGNORE = null
+  val MASKED_IGNORE = null
 
   def transformInput(
       input: Any,

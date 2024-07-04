@@ -39,51 +39,51 @@ class PushProjectionThroughLimitSuite extends PlanTest {
 
     val query1 = testRelation
       .limit(10)
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(15).analyze
     val optimized1 = Optimize.execute(query1)
     val expected1 = testRelation
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(10).analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
       .sortBy($"a".asc)
       .limit(10)
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(15).analyze
     val optimized2 = Optimize.execute(query2)
     val expected2 = testRelation
       .sortBy($"a".asc)
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(10).analyze
     comparePlans(optimized2, expected2)
 
     val query3 = testRelation
       .limit(10)
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(20)
-      .select('a)
+      .select(Symbol("a"))
       .limit(15).analyze
     val optimized3 = Optimize.execute(query3)
     val expected3 = testRelation
-      .select('a, 'b, 'c')
-      .select('a)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .select(Symbol("a"))
       .limit(10).analyze
     comparePlans(optimized3, expected3)
 
     val query4 = testRelation
       .sortBy($"a".asc)
       .limit(10)
-      .select('a, 'b, 'c')
+      .select(Symbol("a"), Symbol("b"), 'c')
       .limit(20)
-      .select('a)
+      .select(Symbol("a"))
       .limit(15).analyze
     val optimized4 = Optimize.execute(query4)
     val expected4 = testRelation
       .sortBy($"a".asc)
-      .select('a, 'b, 'c')
-      .select('a)
+      .select(Symbol("a"), Symbol("b"), 'c')
+      .select(Symbol("a"))
       .limit(10).analyze
     comparePlans(optimized4, expected4)
   }

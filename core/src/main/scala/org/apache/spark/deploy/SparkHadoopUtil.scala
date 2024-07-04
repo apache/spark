@@ -17,29 +17,29 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, FileNotFoundException, IOException}
 import java.net.InetAddress
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale}
+import java.util.{Date, Locale}
 
-import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
+import scala.language.existentials
 
-import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.hdfs.DistributedFileSystem.HdfsDataOutputStreamBuilder
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.BUFFER_SIZE
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -142,8 +142,9 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo("Attempting to login to Kerberos " +
-        s"using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo(log"Attempting to login to Kerberos using principal: " +
+        log"${MDC(LogKeys.PRINCIPAL, principalName)} and keytab: " +
+        log"${MDC(LogKeys.KEYTAB, keytabFilename)}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
   }
@@ -175,7 +176,7 @@ private[spark] class SparkHadoopUtil extends Logging {
      * So we need a map to track the bytes read from the child threads and parent thread,
      * summing them together to get the bytes read of this task.
      */
-    new Function0[Long] {
+    new (() => Long) {
       private val bytesReadMap = new mutable.HashMap[Long, Long]()
 
       override def apply(): Long = {
@@ -220,25 +221,10 @@ private[spark] class SparkHadoopUtil extends Logging {
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
       val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
+      (leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))).toImmutableArraySeq
     }
 
     if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
-  }
-
-  def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
-    listLeafDirStatuses(fs, fs.getFileStatus(basePath))
-  }
-
-  def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
-    def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-      val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
-      leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
-    }
-
-    assert(baseStatus.isDirectory)
-    recurse(baseStatus)
   }
 
   def isGlobPath(pattern: Path): Boolean = {
@@ -252,7 +238,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
   def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
-      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
+      statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toImmutableArraySeq
     }.getOrElse(Seq.empty[Path])
   }
 
@@ -264,42 +250,7 @@ private[spark] class SparkHadoopUtil extends Logging {
     if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
-  /**
-   * Lists all the files in a directory with the specified prefix, and does not end with the
-   * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
-   * the respective files.
-   */
-  def listFilesSorted(
-      remoteFs: FileSystem,
-      dir: Path,
-      prefix: String,
-      exclusionSuffix: String): Array[FileStatus] = {
-    try {
-      val fileStatuses = remoteFs.listStatus(dir,
-        new PathFilter {
-          override def accept(path: Path): Boolean = {
-            val name = path.getName
-            name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
-          }
-        })
-      Arrays.sort(fileStatuses, (o1: FileStatus, o2: FileStatus) =>
-        Longs.compare(o1.getModificationTime, o2.getModificationTime))
-      fileStatuses
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error while attempting to list files from application staging dir", e)
-        Array.empty
-    }
-  }
-
-  private[spark] def getSuffixForCredentialsPath(credentialsPath: Path): Int = {
-    val fileName = credentialsPath.getName
-    fileName.substring(
-      fileName.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM) + 1).toInt
-  }
-
-
-  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^\\}\\$\\s]+\\})".r.unanchored
+  private val HADOOP_CONF_PATTERN = "(\\$\\{hadoopconf-[^}$\\s]+})".r.unanchored
 
   /**
    * Substitute variables by looking them up in Hadoop configs. Only variables that match the
@@ -397,10 +348,6 @@ private[spark] object SparkHadoopUtil extends Logging {
 
   private lazy val instance = new SparkHadoopUtil
 
-  val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
-
-  val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
-
   /**
    * Number of records to update input metrics when reading from HadoopRDDs.
    *
@@ -441,6 +388,11 @@ private[spark] object SparkHadoopUtil extends Logging {
    * and which are picked up by the authentication provider
    * `EnvironmentVariableCredentialsProvider`; those are not propagated.
    */
+
+  /**
+   * AWS Endpoint URL.
+   */
+  private[deploy] val ENV_VAR_AWS_ENDPOINT_URL = "AWS_ENDPOINT_URL"
 
   /**
    * AWS Access key.
@@ -491,6 +443,7 @@ private[spark] object SparkHadoopUtil extends Logging {
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
       appendS3CredentialsFromEnvironment(hadoopConf,
+        System.getenv(ENV_VAR_AWS_ENDPOINT_URL),
         System.getenv(ENV_VAR_AWS_ACCESS_KEY),
         System.getenv(ENV_VAR_AWS_SECRET_KEY),
         System.getenv(ENV_VAR_AWS_SESSION_TOKEN))
@@ -518,6 +471,7 @@ private[spark] object SparkHadoopUtil extends Logging {
   // Exposed for testing
   private[deploy] def appendS3CredentialsFromEnvironment(
       hadoopConf: Configuration,
+      endpointUrl: String,
       keyId: String,
       accessKey: String,
       sessionToken: String): Unit = {
@@ -530,6 +484,10 @@ private[spark] object SparkHadoopUtil extends Logging {
       hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
       hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
       hadoopConf.set("fs.s3a.secret.key", accessKey, source + ENV_VAR_AWS_SECRET_KEY)
+
+      if (endpointUrl != null) {
+        hadoopConf.set("fs.s3a.endpoint", endpointUrl, source + ENV_VAR_AWS_ENDPOINT_URL)
+      }
 
       // look for session token if the other variables were set
       if (sessionToken != null) {
@@ -572,16 +530,6 @@ private[spark] object SparkHadoopUtil extends Logging {
     if (conf.getOption("spark.hadoop.fs.s3a.downgrade.syncable.exceptions").isEmpty) {
       hadoopConf.set("fs.s3a.downgrade.syncable.exceptions", "true", setBySpark)
     }
-    // In Hadoop 3.3.1, AWS region handling with the default "" endpoint only works
-    // in EC2 deployments or when the AWS CLI is installed.
-    // The workaround is to set the name of the S3 endpoint explicitly,
-    // if not already set. See HADOOP-17771.
-    if (hadoopConf.get("fs.s3a.endpoint", "").isEmpty &&
-      hadoopConf.get("fs.s3a.endpoint.region") == null) {
-      // set to US central endpoint which can also connect to buckets
-      // in other regions at the expense of a HEAD request during fs creation
-      hadoopConf.set("fs.s3a.endpoint", "s3.amazonaws.com", setBySpark)
-    }
   }
 
   private def appendSparkHiveConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
@@ -615,37 +563,32 @@ private[spark] object SparkHadoopUtil extends Logging {
    * Create a file on the given file system, optionally making sure erasure coding is disabled.
    *
    * Disabling EC can be helpful as HDFS EC doesn't support hflush(), hsync(), or append().
-   * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
+   * https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
    */
   // scalastyle:on line.size.limit
   def createFile(fs: FileSystem, path: Path, allowEC: Boolean): FSDataOutputStream = {
     if (allowEC) {
       fs.create(path)
     } else {
-      try {
-        // Use reflection as this uses APIs only available in Hadoop 3
-        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
-        // the builder api does not resolve relative paths, nor does it create parent dirs, while
-        // the old api does.
-        if (!fs.mkdirs(path.getParent())) {
-          throw new IOException(s"Failed to create parents of $path")
-        }
-        val qualifiedPath = fs.makeQualified(path)
-        val builder = builderMethod.invoke(fs, qualifiedPath)
-        val builderCls = builder.getClass()
-        // this may throw a NoSuchMethodException if the path is not on hdfs
-        val replicateMethod = builderCls.getMethod("replicate")
-        val buildMethod = builderCls.getMethod("build")
-        val b2 = replicateMethod.invoke(builder)
-        buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
-      } catch {
-        case  _: NoSuchMethodException =>
-          // No createFile() method, we're using an older hdfs client, which doesn't give us control
-          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
-          // old apis.
-          fs.create(path)
+      // the builder api does not resolve relative paths, nor does it create parent dirs, while
+      // the old api does.
+      if (!fs.mkdirs(path.getParent())) {
+        throw new IOException(s"Failed to create parents of $path")
+      }
+      val qualifiedPath = fs.makeQualified(path)
+      val builder = fs.createFile(qualifiedPath)
+      builder match {
+        case hb: HdfsDataOutputStreamBuilder => hb.replicate().build()
+        case _ => fs.create(path)
       }
     }
   }
 
+  def isFile(fs: FileSystem, path: Path): Boolean = {
+    try {
+      fs.getFileStatus(path).isFile
+    } catch {
+      case _: FileNotFoundException => false
+    }
+  }
 }

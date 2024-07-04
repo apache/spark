@@ -19,11 +19,11 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-import javax.servlet.http.HttpServletRequest
 
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.json.MetricsModule
 import com.fasterxml.jackson.databind.ObjectMapper
+import jakarta.servlet.http.HttpServletRequest
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SparkConf

@@ -26,7 +26,7 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
   private val thread = new Thread("RecurringTimer - " + name) {
     setDaemon(true)
-    override def run(): Unit = { loop }
+    override def run(): Unit = { loop() }
   }
 
   @volatile private var prevTime = -1L

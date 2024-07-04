@@ -31,6 +31,9 @@ private[spark] object SparkExitCode {
   /** Exception appears when the computer cannot find the specified path. */
   val ERROR_PATH_NOT_FOUND = 3
 
+  /** Exit due to executor failures exceeds the threshold. */
+  val EXCEED_MAX_EXECUTOR_FAILURES = 11
+
   /** The default uncaught exception handler was reached. */
   val UNCAUGHT_EXCEPTION = 50
 
@@ -41,6 +44,9 @@ private[spark] object SparkExitCode {
   /** The default uncaught exception handler was reached, and the uncaught exception was an
       OutOfMemoryError. */
   val OOM = 52
+
+  /** Exit because the driver is running over the given threshold. */
+  val DRIVER_TIMEOUT = 124
 
   /** Exception indicate command not found. */
   val ERROR_COMMAND_NOT_FOUND = 127

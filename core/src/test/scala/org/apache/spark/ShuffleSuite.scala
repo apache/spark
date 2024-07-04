@@ -21,7 +21,7 @@ import java.io.{File, RandomAccessFile}
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
@@ -37,6 +37,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, MyRDD, SparkListener,
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDirsTest {
@@ -50,7 +51,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     sc = new SparkContext("local", "test", myConf)
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
-    assert(groups.size === 2)
+    assert(groups.length === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
@@ -73,7 +74,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     c.setSerializer(new KryoSerializer(conf))
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
 
-    assert(c.count === 10)
+    assert(c.count() === 10)
 
     // All blocks must have non-zero size
     (0 until NUM_BLOCKS).foreach { id =>
@@ -95,7 +96,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       NonJavaSerializableClass,
       NonJavaSerializableClass](b, new HashPartitioner(3))
     c.setSerializer(new KryoSerializer(conf))
-    assert(c.count === 10)
+    assert(c.count() === 10)
   }
 
   test("zero sized blocks") {
@@ -113,7 +114,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       .setSerializer(new KryoSerializer(conf))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
+    assert(c.count() === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
@@ -138,7 +139,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
+    assert(c.count() === 4)
 
     val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
       val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
@@ -154,7 +155,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
-    val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
+    val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1)).toImmutableArraySeq
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new ShuffledRDD[Int, Int, Int](pairs,
       new HashPartitioner(2)).collect()
@@ -167,7 +168,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
-    val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
+    val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22)).toImmutableArraySeq
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
       .sortByKey().collect()
@@ -452,7 +453,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     val newConf = conf.clone
       .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
       .set(TEST_NO_STAGE_RETRY, false)
-      .set("spark.stage.maxConsecutiveAttempts", "1")
+      .set(config.STAGE_MAX_CONSECUTIVE_ATTEMPTS, 1)
     sc = new SparkContext("local-cluster[2, 1, 2048]", "test", newConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     // materialize the shuffle map outputs
@@ -482,6 +483,17 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     }
     assert(e.getMessage.contains("corrupted due to DISK_ISSUE"))
   }
+
+  test("SPARK-39771: warn when shuffle block number is too large") {
+    sc = new SparkContext("local", "test", conf)
+    val logAppender = new LogAppender("warn when shuffle block number is too large")
+    withLogAppender(logAppender) {
+      sc.parallelize(1 to 100000, 100000).map(x => (x, x)).reduceByKey(_ + _).toDebugString
+    }
+    assert(logAppender
+      .loggingEvents
+      .count(_.getMessage.getFormattedMessage.contains(s"The number of shuffle blocks")) == 1)
+  }
 }
 
 /**
@@ -502,7 +514,7 @@ class InterleaveIterators[T, R](
   class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
     def hasNext: Boolean = sub.hasNext
 
-    def next: E = {
+    def next(): E = {
       barrier.await()
       sub.next()
     }

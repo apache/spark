@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 @SlowHiveTest
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
@@ -77,7 +78,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         child = child,
         ioschema = hiveIOSchema
       ),
-      rowsDf.collect())
+      rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
@@ -94,7 +95,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           child = ExceptionInjectingOperator(child),
           ioschema = hiveIOSchema
         ),
-        rowsDf.collect())
+        rowsDf.collect().toImmutableArraySeq)
     }
     assert(e.getMessage().contains("intentional exception"))
     // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
@@ -135,7 +136,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         child = child,
         ioschema = hiveIOSchema
       ),
-      rowsDf.select("name").collect())
+      rowsDf.select("name").collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
@@ -183,7 +184,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string")).as("value")).collect())
+            $"e".cast("string")).as("value")).collect().toImmutableArraySeq)
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size > 2 and just specify serde,
@@ -207,7 +208,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         identity,
         df.select(
           $"a".cast("string").as("key"),
-          $"b".cast("string").as("value")).collect())
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
 
       // In hive default serde mode, if we don't define output schema,
@@ -239,7 +240,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             $"b".cast("string"),
             $"c".cast("string"),
             $"d".cast("string"),
-            $"e".cast("string")).as("value")).collect())
+            $"e".cast("string")).as("value")).collect().toImmutableArraySeq)
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size > 2 and specify serde
@@ -265,7 +266,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         identity,
         df.select(
           $"a".cast("string").as("key"),
-          $"b".cast("string").as("value")).collect())
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size = 2 and specify serde, it will these two column as
@@ -290,7 +291,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         identity,
         df.select(
           $"a".cast("string").as("key"),
-          $"b".cast("string").as("value")).collect())
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size < 2 and specify serde, it will return null for deficiency
@@ -315,7 +316,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         identity,
         df.select(
           $"a".cast("string").as("key"),
-          lit(null)).collect())
+          lit(null)).collect().toImmutableArraySeq)
     }
   }
 
@@ -346,7 +347,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           child = child,
           ioschema = hiveIOSchema
         ),
-        df.select($"c", $"d", $"e").collect())
+        df.select($"c", $"d", $"e").collect().toImmutableArraySeq)
     }
   }
 
@@ -367,7 +368,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |USING 'cat' AS (c array<int>, d map<string, int>, e struct<col1:int, col2:string>)
           |FROM v
         """.stripMargin)
-      checkAnswer(query, identity, df.select($"c", $"d", $"e").collect())
+      checkAnswer(query, identity, df.select($"c", $"d", $"e").collect().toImmutableArraySeq)
     }
   }
 
@@ -380,7 +381,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[AnalysisException] {
         val plan = createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -390,9 +391,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[AnalysisException] {
         val plan = createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -402,7 +403,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
         SparkPlanTest.executePlan(plan, hiveContext)
       }.getMessage
-      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
     }
   }
 
@@ -415,24 +416,23 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
       ).toDF("a", "b", "c")
       df.createTempView("v")
-
-      val e1 = intercept[SparkException] {
+      val e1 = intercept[AnalysisException] {
         sql(
           """
             |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e1.contains("interval cannot be converted to Hive TypeInfo"))
+      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
 
-      val e2 = intercept[SparkException] {
+      val e2 = intercept[AnalysisException] {
         sql(
           """
             |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
             |FROM v
           """.stripMargin).collect()
       }.getMessage
-      assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
+      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
     }
   }
 
@@ -571,7 +571,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("j", DayTimeIntervalType(SECOND))()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select($"a", $"b", $"c", $"d", $"e", $"f", $"g", $"h", $"i", $"j").collect())
+        df.select($"a", $"b", $"c", $"d", $"e", $"f", $"g", $"h", $"i", $"j").collect()
+          .toImmutableArraySeq)
     }
   }
 
@@ -598,7 +599,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("c", YearMonthIntervalType(MONTH))()),
           child = child,
           ioschema = hiveIOSchema),
-        df.select($"a", $"b", $"c").collect())
+        df.select($"a", $"b", $"c").collect().toImmutableArraySeq)
     }
   }
 
@@ -616,7 +617,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             output = Seq(AttributeReference("a", DayTimeIntervalType())()),
             child = child,
             ioschema = hiveIOSchema),
-          df.select($"a").collect())
+          df.select($"a").collect().toImmutableArraySeq)
       }.getMessage
       assert(e.contains("java.lang.ArithmeticException: long overflow"))
     }

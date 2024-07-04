@@ -353,9 +353,16 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         case a: AggregateExpression => a
       })
     }
+    val groupByExpressionSeq = Seq(newPlan, cachedPlan).map(_.groupingExpressions)
+
     val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
-      aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
-        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)))
+      aggregateExpressionsSeq.zip(groupByExpressionSeq).map {
+        case (aggregateExpressions, groupByExpressions) =>
+          Aggregate.supportsHashAggregate(
+            aggregateExpressions.flatMap(
+              _.aggregateFunction.aggBufferAttributes), groupByExpressions)
+      }
+
     newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
       newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
         val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
@@ -381,7 +388,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
               val subqueryCTE = header.plan.asInstanceOf[CTERelationDef]
               GetStructField(
                 ScalarSubquery(
-                  CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output),
+                  CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output,
+                    subqueryCTE.isStreaming),
                   exprId = ssr.exprId),
                 ssr.headerIndex)
             } else {

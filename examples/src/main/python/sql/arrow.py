@@ -33,6 +33,25 @@ require_minimum_pandas_version()
 require_minimum_pyarrow_version()
 
 
+def dataframe_to_from_arrow_table_example(spark: SparkSession) -> None:
+    import pyarrow as pa
+    import numpy as np
+
+    # Create a PyArrow Table
+    table = pa.table([pa.array(np.random.rand(100)) for i in range(3)], names=["a", "b", "c"])
+
+    # Create a Spark DataFrame from the PyArrow Table
+    df = spark.createDataFrame(table)
+
+    # Convert the Spark DataFrame to a PyArrow Table
+    result_table = df.select("*").toArrow()
+
+    print(result_table.schema)
+    # a: double
+    # b: double
+    # c: double
+
+
 def dataframe_with_arrow_example(spark: SparkSession) -> None:
     import numpy as np
     import pandas as pd
@@ -275,12 +294,35 @@ def cogrouped_apply_in_pandas_example(spark: SparkSession) -> None:
     # +--------+---+---+----+
 
 
+def arrow_python_udf_example(spark: SparkSession) -> None:
+    from pyspark.sql.functions import udf
+
+    @udf(returnType='int')  # A default, pickled Python UDF
+    def slen(s):  # type: ignore[no-untyped-def]
+        return len(s)
+
+    @udf(returnType='int', useArrow=True)  # An Arrow Python UDF
+    def arrow_slen(s):  # type: ignore[no-untyped-def]
+        return len(s)
+
+    df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+
+    df.select(slen("name"), arrow_slen("name")).show()
+    # +----------+----------------+
+    # |slen(name)|arrow_slen(name)|
+    # +----------+----------------+
+    # |         8|               8|
+    # +----------+----------------+
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
         .appName("Python Arrow-in-Spark example") \
         .getOrCreate()
 
+    print("Running Arrow conversion example: DataFrame to Table")
+    dataframe_to_from_arrow_table_example(spark)
     print("Running Pandas to/from conversion example")
     dataframe_with_arrow_example(spark)
     print("Running pandas_udf example: Series to Frame")

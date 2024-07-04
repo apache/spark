@@ -26,10 +26,10 @@ import java.util.*;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.jupiter.api.*;
+
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.api.java.function.ReduceFunction;
-import org.junit.*;
-
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -45,12 +45,12 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
   private TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -86,7 +86,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(ARRAY_RECORDS, records);
+    Assertions.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -129,7 +129,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(MAP_RECORDS, records);
+    Assertions.assertEquals(MAP_RECORDS, records);
   }
 
   @Test
@@ -167,7 +167,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<RecordSpark22000> records = dataset.collectAsList();
 
-    Assert.assertEquals(expectedRecords, records);
+    Assertions.assertEquals(expectedRecords, records);
   }
 
   @Test
@@ -186,9 +186,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
 
-    AnalysisException e = Assert.assertThrows(AnalysisException.class,
+    AnalysisException e = Assertions.assertThrows(AnalysisException.class,
       () -> dataFrame.as(encoder).collect());
-    Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
+    Assertions.assertTrue(e.getMessage().contains("Cannot up cast "));
   }
 
   private static Row createRecordSpark22000Row(Long index) {
@@ -282,8 +282,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof ArrayRecord)) return false;
-      ArrayRecord other = (ArrayRecord) obj;
+      if (!(obj instanceof ArrayRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) &&
               Arrays.equals(other.ints, ints);
     }
@@ -330,8 +329,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof MapRecord)) return false;
-      MapRecord other = (MapRecord) obj;
+      if (!(obj instanceof MapRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
     }
 
@@ -376,8 +374,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof Interval)) return false;
-      Interval other = (Interval) obj;
+      if (!(obj instanceof Interval other)) return false;
       return (other.startTime == this.startTime) && (other.endTime == this.endTime);
     }
 
@@ -550,7 +547,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
       List<LocalDateInstantRecord> records = dataset.collectAsList();
 
-      Assert.assertEquals(expectedRecords, records);
+      Assertions.assertEquals(expectedRecords, records);
     } finally {
         spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }
@@ -580,7 +577,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     ReduceFunction<Item> rf = new ReduceFunction<Item>() {
       @Override
       public Item call(Item item1, Item item2) throws Exception {
-        Assert.assertNotSame(item1, item2);
+        Assertions.assertNotSame(item1, item2);
         return item1.addValue(item2.getV());
       }
     };
@@ -596,7 +593,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<Tuple2<String, Item>> result = finalDs.collectAsList();
 
-    Assert.assertEquals(expectedRecords, result);
+    Assertions.assertEquals(expectedRecords, result);
   }
 
   public static class Item implements Serializable {
@@ -635,10 +632,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
 
     public boolean equals(Object o) {
-      if (!(o instanceof Item)) {
+      if (!(o instanceof Item other)) {
         return false;
       }
-      Item other = (Item) o;
       if (other.getK().equals(k) && other.getV() == v) {
         return true;
       }

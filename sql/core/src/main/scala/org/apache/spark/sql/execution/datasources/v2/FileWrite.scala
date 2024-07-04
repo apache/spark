@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 trait FileWrite extends Write {
@@ -90,7 +92,8 @@ trait FileWrite extends Write {
         s"got: ${paths.mkString(", ")}")
     }
     val pathName = paths.head
-    SchemaUtils.checkColumnNameDuplication(schema.fields.map(_.name), caseSensitiveAnalysis)
+    SchemaUtils.checkColumnNameDuplication(
+      schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
     DataSource.validateSchema(schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
@@ -119,7 +122,7 @@ trait FileWrite extends Write {
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
-    val allColumns = schema.toAttributes
+    val allColumns = toAttributes(schema)
     val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)

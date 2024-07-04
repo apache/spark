@@ -21,43 +21,31 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.spark</groupId>
-        <artifactId>spark-parent_2.12</artifactId>
-        <version>3.5.0-SNAPSHOT</version>
+        <artifactId>spark-parent_2.13</artifactId>
+        <version>4.0.0-SNAPSHOT</version>
         <relativePath>../../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>spark-connect-common_2.12</artifactId>
+    <artifactId>spark-connect-common_2.13</artifactId>
     <packaging>jar</packaging>
     <name>Spark Project Connect Common</name>
     <url>https://spark.apache.org/</url>
     <properties>
         <sbt.project.name>connect-common</sbt.project.name>
-        <guava.version>31.0.1-jre</guava.version>
-        <guava.failureaccess.version>1.0.1</guava.failureaccess.version>
-        <io.grpc.version>1.47.0</io.grpc.version>
-        <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>${guava.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>failureaccess</artifactId>
-            <version>${guava.failureaccess.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
@@ -80,28 +68,29 @@
             <version>${io.grpc.version}</version>
         </dependency>
         <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-inprocess</artifactId>
+            <version>${io.grpc.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-http2</artifactId>
             <version>${netty.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-handler-proxy</artifactId>
             <version>${netty.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport-native-unix-common</artifactId>
             <version>${netty.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency> <!-- necessary for Java 9+ -->
             <groupId>org.apache.tomcat</groupId>
             <artifactId>annotations-api</artifactId>
             <version>${tomcat.annotations.api.version}</version>
-            <scope>provided</scope>
         </dependency>
         <!--
           This spark-tags test-dep is needed even though it isn't used in this module,
@@ -131,18 +120,6 @@
                 <artifactId>build-helper-maven-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>add-sources</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>add-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>src/main/scala-${scala.binary.version}</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>add-scala-test-sources</id>
                         <phase>generate-test-sources</phase>
                         <goals>
@@ -156,7 +133,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Shade all GRPC / Guava / Protobuf dependencies of this build -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -164,34 +140,19 @@
                     <shadedArtifactAttached>false</shadedArtifactAttached>
                     <artifactSet>
                         <includes>
-                            <include>com.google.guava:*</include>
+                            <include>org.spark-project.spark:unused</include>
+                            <include>org.apache.tomcat:annotations-api</include>
                         </includes>
                     </artifactSet>
-                    <relocations>
-                        <relocation>
-                            <pattern>com.google.common</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-                            <includes>
-                                <include>com.google.common.**</include>
-                            </includes>
-                        </relocation>
-                        <relocation>
-                            <pattern>com.google.thirdparty</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-                            <includes>
-                                <include>com.google.thirdparty.**</include>
-                            </includes>
-                        </relocation>
-                        <relocation>
-                            <pattern>android.annotation</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.android_annotation</shadedPattern>
-                        </relocation>
-                        <relocation>
-                            <pattern>com.google.errorprone.annotations</pattern>
-                            <shadedPattern>${spark.shade.packageName}.connect.errorprone_annotations</shadedPattern>
-                        </relocation>
-                    </relocations>
                 </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

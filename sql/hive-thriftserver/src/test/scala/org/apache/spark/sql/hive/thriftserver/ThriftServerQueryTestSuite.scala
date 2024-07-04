@@ -26,13 +26,15 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
-import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
+import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -68,7 +70,7 @@ import org.apache.spark.sql.types._
  *   4. Support UDAF testing.
  */
 // scalastyle:on line.size.limit
-class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
+class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer with Logging {
 
 
   override def mode: ServerMode.Value = ServerMode.binary
@@ -97,7 +99,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "subquery/in-subquery/in-group-by.sql",
     "subquery/in-subquery/simple-in.sql",
     "subquery/in-subquery/in-order-by.sql",
-    "subquery/in-subquery/in-set-operations.sql"
+    "subquery/in-subquery/in-set-operations.sql",
+    // SPARK-42921
+    "timestampNTZ/datetime-special-ansi.sql",
+    // SPARK-47264
+    "collations.sql"
   )
 
   override def runQueries(
@@ -105,19 +111,19 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       testCase: TestCase,
       configSet: Seq[(String, String)]): Unit = {
     // We do not test with configSet.
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
       }
 
       testCase match {
-        case _: PgSQLTest =>
+        case _: SQLQueryTestSuite#PgSQLTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
           statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-        case _: AnsiTest =>
+        case _: SQLQueryTestSuite#AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-        case _: TimestampNTZTest =>
+        case _: SQLQueryTestSuite#TimestampNTZTest =>
           statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
             s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
         case _ =>
@@ -125,17 +131,19 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       // Run the SQL queries preparing them for comparison.
-      val outputs: Seq[QueryOutput] = queries.map { sql =>
-        val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
-        // We might need to do some query canonicalization in the future.
-        QueryOutput(
-          sql = sql,
-          schema = "",
-          output = output.mkString("\n").replaceAll("\\s+$", ""))
+      val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
+        queries.map { sql =>
+          val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
+          // We might need to do some query canonicalization in the future.
+          ExecutionOutput(
+            sql = sql,
+            schema = Some(""),
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
+        }
       }
 
       // Read back the golden file.
-      val expectedOutputs: Seq[QueryOutput] = {
+      val expectedOutputs: Seq[QueryTestOutput] = {
         val goldenOutput = fileToString(new File(testCase.resultFile))
         val segments = goldenOutput.split("-- !query.*\n")
 
@@ -152,9 +160,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           } else {
             originalOut
           }
-          QueryOutput(
+          ExecutionOutput(
             sql = sql,
-            schema = "",
+            schema = Some(""),
             output = output.replaceAll("\\s+$", "")
           )
         }
@@ -235,20 +243,27 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     } else {
       // Create a test case to run this case.
       test(testCase.name) {
-        runTest(testCase)
+        runSqlTestCase(testCase, listTestCases)
       }
     }
   }
 
   override lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      var resultFile = resultFileForInputFile(file)
+      // JDK-4511638 changes 'toString' result of Float/Double
+      // JDK-8282081 changes DataTimeFormatter 'F' symbol
+      if (Utils.isJavaVersionAtLeast21 && (new File(resultFile + ".java21")).exists()) {
+        resultFile += ".java21"
+      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
       if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udaf")) {
+        Seq.empty
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udtf")) {
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
@@ -263,7 +278,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   test("Check if ThriftServer can work") {
-    withJdbcStatement { statement =>
+    withJdbcStatement() { statement =>
       val rs = statement.executeQuery("select 1L")
       rs.next()
       assert(rs.getLong(1) === 1L)
@@ -285,8 +300,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     val rs = statement.executeQuery(sql)
     val cols = rs.getMetaData.getColumnCount
     val timeFormatters = getTimeFormatters
+    val binaryFormatter = getBinaryFormatter
     val buildStr = () => (for (i <- 1 to cols) yield {
-      getHiveResult(rs.getObject(i), timeFormatters)
+      getHiveResult(rs.getObject(i), timeFormatters, binaryFormatter)
     }).mkString("\t")
 
     val answer = Iterator.continually(rs.next()).takeWhile(identity).map(_ => buildStr()).toSeq
@@ -308,18 +324,20 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       upperCase.startsWith("(")
   }
 
-  private def getHiveResult(obj: Object, timeFormatters: TimeFormatters): String = {
+  private def getHiveResult(
+      obj: Object, timeFormatters: TimeFormatters, binaryFormatter: BinaryFormatter): String = {
     obj match {
       case null =>
-        toHiveString((null, StringType), false, timeFormatters)
+        toHiveString((null, StringType), false, timeFormatters, binaryFormatter)
       case d: java.sql.Date =>
-        toHiveString((d, DateType), false, timeFormatters)
+        toHiveString((d, DateType), false, timeFormatters, binaryFormatter)
       case t: Timestamp =>
-        toHiveString((t, TimestampType), false, timeFormatters)
+        toHiveString((t, TimestampType), false, timeFormatters, binaryFormatter)
       case d: java.math.BigDecimal =>
-        toHiveString((d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters)
+        toHiveString((
+          d, DecimalType.fromDecimal(Decimal(d))), false, timeFormatters, binaryFormatter)
       case bin: Array[Byte] =>
-        toHiveString((bin, BinaryType), false, timeFormatters)
+        toHiveString((bin, BinaryType), false, timeFormatters, binaryFormatter)
       case other =>
         other.toString
     }

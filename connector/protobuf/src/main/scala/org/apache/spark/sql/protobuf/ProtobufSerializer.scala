@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.protobuf
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.{Duration, DynamicMessage, Timestamp}
+import com.google.protobuf.{BoolValue, ByteString, BytesValue, DoubleValue, Duration, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, Timestamp, UInt32Value, UInt64Value, WireFormat}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
 
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils.{toFieldStr, ProtoMatchedField}
 import org.apache.spark.sql.types._
@@ -91,8 +91,17 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) => {
           getter.getInt(ordinal)
         }
+      case (LongType, INT) if fieldDescriptor.getLiteType == WireFormat.FieldType.UINT32 =>
+        (getter, ordinal) => {
+          getter.getLong(ordinal).toInt
+        }
       case (LongType, LONG) =>
         (getter, ordinal) => getter.getLong(ordinal)
+      case (DecimalType(), LONG)
+        if fieldDescriptor.getLiteType == WireFormat.FieldType.UINT64 =>
+        (getter, ordinal) => {
+          getter.getDecimal(ordinal, 20, 0).toUnscaledLong
+        }
       case (FloatType, FLOAT) =>
         (getter, ordinal) => getter.getFloat(ordinal)
       case (DoubleType, DOUBLE) =>
@@ -103,13 +112,26 @@ private[sql] class ProtobufSerializer(
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
-            throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufEnumTypeError(
+            throw QueryExecutionErrors.cannotConvertCatalystValueToProtobufEnumTypeError(
               catalystPath,
               toFieldStr(protoPath),
               data,
               enumSymbols.mkString("\"", "\", \"", "\""))
           }
           fieldDescriptor.getEnumType.findValueByName(data)
+      case (IntegerType, ENUM) =>
+        val enumValues: Set[Int] =
+          fieldDescriptor.getEnumType.getValues.asScala.map(e => e.getNumber).toSet
+        (getter, ordinal) =>
+          val data = getter.getInt(ordinal)
+          if (!enumValues.contains(data)) {
+            throw QueryExecutionErrors.cannotConvertCatalystValueToProtobufEnumTypeError(
+              catalystPath,
+              toFieldStr(protoPath),
+              data.toString,
+              enumValues.mkString(", "))
+          }
+          fieldDescriptor.getEnumType.findValueByNumber(data)
       case (StringType, STRING) =>
         (getter, ordinal) => {
           String.valueOf(getter.getUTF8String(ordinal))
@@ -151,6 +173,52 @@ private[sql] class ProtobufSerializer(
           java.util.Arrays.asList(result: _*)
         }
 
+      // Handle serializing primitives back into well known wrapper types.
+      case (BooleanType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == BoolValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          BoolValue.of(getter.getBoolean(ordinal))
+
+      case (IntegerType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == Int32Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          Int32Value.of(getter.getInt(ordinal))
+
+      case (IntegerType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == UInt32Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          UInt32Value.of(getter.getInt(ordinal))
+
+      case (LongType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == Int64Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          Int64Value.of(getter.getLong(ordinal))
+
+      case (LongType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == UInt64Value.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          UInt64Value.of(getter.getLong(ordinal))
+
+      case (StringType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == StringValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          StringValue.of(getter.getUTF8String(ordinal).toString)
+
+      case (BinaryType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == BytesValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          BytesValue.of(ByteString.copyFrom(getter.getBinary(ordinal)))
+
+      case (FloatType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == FloatValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          FloatValue.of(getter.getFloat(ordinal))
+
+      case (DoubleType, MESSAGE)
+        if fieldDescriptor.getMessageType.getFullName == DoubleValue.getDescriptor.getFullName =>
+        (getter, ordinal) =>
+          DoubleValue.of(getter.getDouble(ordinal))
+
       case (st: StructType, MESSAGE) =>
         val structConverter =
           newStructConverter(st, fieldDescriptor.getMessageType, catalystPath, protoPath)
@@ -160,7 +228,7 @@ private[sql] class ProtobufSerializer(
       case (MapType(kt, vt, valueContainsNull), MESSAGE) =>
         var keyField: FieldDescriptor = null
         var valueField: FieldDescriptor = null
-        fieldDescriptor.getMessageType.getFields.asScala.map { field =>
+        fieldDescriptor.getMessageType.getFields.asScala.foreach { field =>
           field.getName match {
             case "key" =>
               keyField = field

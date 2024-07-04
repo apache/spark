@@ -34,20 +34,20 @@ class LogicalPlanIntegritySuite extends PlanTest {
 
   test("Checks if the same `ExprId` refers to a semantically-equal attribute in a plan output") {
     val t = LocalRelation($"a".int, $"b".int)
-    assert(hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output)))
-    assert(!hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output.zipWithIndex.map {
+    assert(hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output)).isEmpty)
+    assert(hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output.zipWithIndex.map {
       case (a, i) => AttributeReference(s"c$i", LongType)(a.exprId)
-    })))
+    })).isDefined)
   }
 
   test("Checks if reference ExprIds are not reused when assigning a new ExprId") {
     val t = LocalRelation($"a".int, $"b".int)
     val Seq(a, b) = t.output
-    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")())))
-    assert(!checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = a.exprId))))
-    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = b.exprId))))
-    assert(checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")())))
-    assert(!checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = a.exprId))))
-    assert(!checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = b.exprId))))
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")())).isEmpty)
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = a.exprId))).isDefined)
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = b.exprId))).isEmpty)
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")())).isEmpty)
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = a.exprId))).isDefined)
+    assert(checkIfSameExprIdNotReused(t.select(Alias(a + b, "ab")(exprId = b.exprId))).isDefined)
   }
 }

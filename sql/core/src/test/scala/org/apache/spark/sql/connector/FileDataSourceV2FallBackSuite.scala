@@ -18,8 +18,8 @@ package org.apache.spark.sql.connector
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -51,7 +51,7 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
   override def schema(): StructType = StructType(Nil)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    throw new AnalysisException("Dummy file reader")
+    throw SparkException.internalError("Dummy file reader")
   }
 
   override def capabilities(): java.util.Set[TableCapability] =
@@ -75,7 +75,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
   override def schema(): StructType = StructType(Nil)
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
-    throw new AnalysisException("Dummy file writer")
+    throw SparkException.internalError("Dummy file writer")
 
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
@@ -99,10 +99,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
       checkAnswer(spark.read.parquet(path), df)
 
       // Dummy File reader should fail as expected.
-      val exception = intercept[AnalysisException] {
-        spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
-      }
-      assert(exception.message.equals("Dummy file reader"))
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
+        },
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" -> "Dummy file reader"))
     }
   }
 
@@ -125,10 +127,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "foo,bar") {
         // Dummy File reader should fail as DISABLED_V2_FILE_DATA_SOURCE_READERS doesn't include it.
-        val exception = intercept[AnalysisException] {
-          spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
-        }
-        assert(exception.message.equals("Dummy file reader"))
+        checkError(
+          exception = intercept[SparkException] {
+            spark.read.format(dummyReadOnlyFileSourceV2).load(path).collect()
+          },
+          errorClass = "INTERNAL_ERROR",
+          parameters = Map("message" -> "Dummy file reader"))
       }
     }
   }

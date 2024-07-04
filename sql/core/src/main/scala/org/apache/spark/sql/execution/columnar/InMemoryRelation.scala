@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,15 +27,18 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution.{ColumnarToRowTransition, InputAdapter, QueryExecution, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructType, UserDefinedType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The default implementation of CachedBatch.
@@ -58,7 +61,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] =
-    throw new IllegalStateException("Columnar input is not supported")
+    throw SparkException.internalError("Columnar input is not supported")
 
   override def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
@@ -108,8 +111,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
             rowCount += 1
           }
 
-          val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics).toSeq)
+          val stats = new GenericInternalRow(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
           DefaultCachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
@@ -144,7 +147,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[ColumnarBatch] = {
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
-    val outputSchema = StructType.fromAttributes(selectedAttributes)
+    val outputSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val columnIndices =
       selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
 
@@ -190,7 +193,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     }.toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes.toImmutableArraySeq)
       columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
         requestedColumnIndices.toArray)
@@ -211,9 +214,15 @@ case class CachedRDDBuilder(
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
+  private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+
+  val supportsColumnarInput: Boolean = {
+    cachedPlan.supportsColumnar &&
+      serializer.supportsColumnarInput(cachedPlan.output)
+  }
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
@@ -247,22 +256,22 @@ case class CachedRDDBuilder(
   }
 
   private def isCachedRDDLoaded: Boolean = {
-      _cachedColumnBuffersAreLoaded || {
-        val bmMaster = SparkEnv.get.blockManager.master
-        val rddLoaded = _cachedColumnBuffers.partitions.forall { partition =>
-          bmMaster.getBlockStatus(RDDBlockId(_cachedColumnBuffers.id, partition.index), false)
-            .exists { case(_, blockStatus) => blockStatus.isCached }
-        }
-        if (rddLoaded) {
-          _cachedColumnBuffersAreLoaded = rddLoaded
-        }
-        rddLoaded
+    _cachedColumnBuffersAreLoaded || {
+      // We must make sure the statistics of `sizeInBytes` and `rowCount` are accurate if
+      // `isCachedRDDLoaded` return true. Otherwise, AQE would do a wrong optimization,
+      // e.g., convert a non-empty plan to empty local relation if `rowCount` is 0.
+      // Because the statistics is based on accumulator, here we use an extra accumulator to
+      // track if all partitions are materialized.
+      val rddLoaded = _cachedColumnBuffers.partitions.length == materializedPartitions.value
+      if (rddLoaded) {
+        _cachedColumnBuffersAreLoaded = rddLoaded
+      }
+      rddLoaded
     }
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val cb = if (cachedPlan.supportsColumnar &&
-        serializer.supportsColumnarInput(cachedPlan.output)) {
+    val cb = if (supportsColumnarInput) {
       serializer.convertColumnarBatchToCachedBatch(
         cachedPlan.executeColumnar(),
         cachedPlan.output,
@@ -275,10 +284,21 @@ case class CachedRDDBuilder(
         storageLevel,
         cachedPlan.conf)
     }
-    val cached = cb.map { batch =>
-      sizeInBytesStats.add(batch.sizeInBytes)
-      rowCountStats.add(batch.numRows)
-      batch
+    val cached = cb.mapPartitionsInternal { it =>
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
+        }
+      }
+      new Iterator[CachedBatch] {
+        override def hasNext: Boolean = it.hasNext
+        override def next(): CachedBatch = {
+          val batch = it.next()
+          sizeInBytesStats.add(batch.sizeInBytes)
+          rowCountStats.add(batch.numRows)
+          batch
+        }
+      }
     }.persist(storageLevel)
     cached.setName(cachedName)
     cached
@@ -311,6 +331,11 @@ object InMemoryRelation {
     }
     case c2r: ColumnarToRowTransition => // This matches when whole stage code gen is disabled.
       c2r.child
+    case adaptive: AdaptiveSparkPlanExec =>
+      // If AQE is enabled for cached plan and table cache supports columnar in, we should mark
+      // `AdaptiveSparkPlanExec.supportsColumnar` as true to avoid inserting `ColumnarToRow`, so
+      // that `CachedBatchSerializer` can use `convertColumnarBatchToCachedBatch` to cache data.
+      adaptive.copy(supportsColumnar = true)
     case _ => plan
   }
 
@@ -381,7 +406,7 @@ case class InMemoryRelation(
   override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
       cacheBuilder,
       outputOrdering)
 

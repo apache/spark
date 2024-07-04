@@ -24,8 +24,10 @@ import java.util.Locale
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -135,8 +137,8 @@ private[sql] object PythonSQLUtils extends Logging {
   def addJarToCurrentClassLoader(path: String): Unit = {
     Utils.getContextOrSparkClassLoader match {
       case cl: MutableURLClassLoader => cl.addURL(Utils.resolveURI(path).toURL)
-      case cl => logWarning(
-        s"Unsupported class loader $cl will not update jars in the thread class loader.")
+      case cl => logWarning(log"Unsupported class loader ${MDC(CLASS_LOADER, cl)} will not " +
+        log"update jars in the thread class loader.")
     }
   }
 
@@ -144,8 +146,6 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
     Column(EWM(e.expr, alpha, ignoreNA))
-
-  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 
@@ -161,12 +161,8 @@ private[sql] object PythonSQLUtils extends Logging {
       case "HOUR" => Column(zero.copy(hours = e.expr))
       case "MINUTE" => Column(zero.copy(mins = e.expr))
       case "SECOND" => Column(zero.copy(secs = e.expr))
-      case _ => throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
+      case _ => throw SparkException.internalError(s"Got the unexpected unit '$unit'.")
     }
-  }
-
-  def timestampDiff(unit: String, start: Column, end: Column): Column = {
-    Column(TimestampDiff(unit, start.expr, end.expr))
   }
 
   def pandasProduct(e: Column, ignoreNA: Boolean): Column = {

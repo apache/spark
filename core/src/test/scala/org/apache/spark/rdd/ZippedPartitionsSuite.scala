@@ -21,7 +21,7 @@ import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 object ZippedPartitionsSuite {
   def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]) : Iterator[Int] = {
-    Iterator(i.toArray.size, s.toArray.size, d.toArray.size)
+    Iterator(i.toArray.length, s.toArray.length, d.toArray.length)
   }
 }
 
@@ -35,7 +35,7 @@ class ZippedPartitionsSuite extends SparkFunSuite with SharedSparkContext {
 
     val obtainedSizes = zippedRDD.collect()
     val expectedSizes = Array(2, 3, 1, 2, 3, 1)
-    assert(obtainedSizes.size == 6)
+    assert(obtainedSizes.length == 6)
     assert(obtainedSizes.zip(expectedSizes).forall(x => x._1 == x._2))
   }
 }

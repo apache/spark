@@ -16,14 +16,15 @@
  */
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.resolveArgOffsets
 import org.apache.spark.sql.execution.streaming._
@@ -32,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -72,17 +72,20 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected val initialStateDataAttrs: Seq[Attribute] = null
   override protected val initialState: SparkPlan = null
   override protected val hasInitialState: Boolean = false
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override protected val stateEncoder: ExpressionEncoder[Any] =
-    RowEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+    ExpressionEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
   override def output: Seq[Attribute] = outAttributes
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
-  private val pythonFunction = functionExpr.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+  private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
+  private val pythonFunction = pythonUDF.func
+  private val chainedFunc =
+    Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
   private lazy val (dedupAttributes, argOffsets) = resolveArgOffsets(
     groupingAttributes ++ child.output, groupingAttributes)
 
@@ -135,7 +138,7 @@ case class FlatMapGroupsInPandasWithStateExec(
     override def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
         initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
-      throw new UnsupportedOperationException("Should not reach here!")
+      throw SparkUnsupportedOperationException()
     }
 
     override def processTimedOutState(): Iterator[InternalRow] = {
@@ -144,7 +147,7 @@ case class FlatMapGroupsInPandasWithStateExec(
           case ProcessingTimeTimeout => batchTimestampMs.get
           case EventTimeTimeout => eventTimeWatermarkForEviction.get
           case _ =>
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Cannot filter timed out keys for $timeoutConf")
         }
         val timingOutPairs = stateManager.getAllState(store).filter { state =>
@@ -169,14 +172,15 @@ case class FlatMapGroupsInPandasWithStateExec(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         Array(argOffsets),
-        StructType.fromAttributes(dedupAttributesWithNull),
+        DataTypeUtils.fromAttributes(dedupAttributesWithNull),
         sessionLocalTimeZone,
         pythonRunnerConf,
         stateEncoder.asInstanceOf[ExpressionEncoder[Row]],
         groupingAttributes.toStructType,
         outAttributes.toStructType,
         stateType,
-        pythonMetrics)
+        pythonMetrics,
+        jobArtifactUUID)
 
       val context = TaskContext.get()
 
@@ -228,7 +232,7 @@ case class FlatMapGroupsInPandasWithStateExec(
         stateData: StateData,
         valueRowIter: Iterator[InternalRow],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
-      throw new UnsupportedOperationException("Should not reach here!")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

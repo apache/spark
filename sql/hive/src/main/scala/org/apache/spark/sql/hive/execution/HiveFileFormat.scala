@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -30,14 +31,14 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
-import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
@@ -76,10 +77,10 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
     val outputCommitterClass = conf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =
-        s"$outputCommitterClass may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+        log"${MDC(CLASS_NAME, outputCommitterClass)} may be an output committer that writes data " +
+          log"directly to the final location. Because speculation is enabled, this output " +
+          log"committer may cause data loss (see the case in SPARK-10063). If possible, please " +
+          log"use an output committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR
 import org.apache.spark.sql.types.BooleanType
 
 class ReplaceOperatorSuite extends PlanTest {
@@ -233,13 +234,24 @@ class ReplaceOperatorSuite extends PlanTest {
     val basePlan = LocalRelation(Seq($"a".int, $"b".int))
     val otherPlan = basePlan.where($"a".in(1, 2) || $"b".in())
     val except = Except(basePlan, otherPlan, false)
-    val result = OptimizeIn(Optimize.execute(except.analyze))
-    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
-      Filter(!Coalesce(Seq(
-        $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
-        Literal.FalseLiteral)),
-        basePlan)).analyze
-    comparePlans(result, correctAnswer)
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "false") {
+      val result = OptimizeIn(Optimize.execute(except.analyze))
+      val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+        Filter(!Coalesce(Seq(
+          $"a".in(1, 2) || Literal.FalseLiteral,
+          Literal.FalseLiteral)),
+          basePlan)).analyze
+      comparePlans(result, correctAnswer)
+    }
+    withSQLConf(LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      val result = OptimizeIn(Optimize.execute(except.analyze))
+      val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+        Filter(!Coalesce(Seq(
+          $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+          Literal.FalseLiteral)),
+          basePlan)).analyze
+      comparePlans(result, correctAnswer)
+    }
   }
 
   test("SPARK-26366: ReplaceExceptWithFilter should not transform non-deterministic") {
@@ -251,6 +263,37 @@ class ReplaceOperatorSuite extends PlanTest {
       a1 <=> a2 }.reduce( _ && _)
     val correctAnswer = Aggregate(basePlan.output, otherPlan.output,
       Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
+    comparePlans(result, correctAnswer)
+  }
+
+  test("SPARK-46763: ReplaceDeduplicateWithAggregate non-grouping keys with duplicate attributes") {
+    val a = $"a".int
+    val b = $"b".int
+    val first_a = Alias(new First(a).toAggregateExpression(), a.name)()
+
+    val query = Project(
+      projectList = Seq(a, b),
+      Deduplicate(
+        keys = Seq(b),
+        child = Project(
+          projectList = Seq(a, a, b),
+          child = LocalRelation(Seq(a, b))
+        )
+      )
+    ).analyze
+
+    val result = Optimize.execute(query)
+    val correctAnswer = Project(
+        projectList = Seq(first_a.toAttribute, b),
+        Aggregate(
+            Seq(b),
+            Seq(first_a, first_a, b),
+            Project(
+              projectList = Seq(a, a, b),
+              child = LocalRelation(Seq(a, b))
+            )
+        )
+    ).analyze
     comparePlans(result, correctAnswer)
   }
 }

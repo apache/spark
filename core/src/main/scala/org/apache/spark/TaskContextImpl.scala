@@ -20,11 +20,12 @@ package org.apache.spark
 import java.util.{Properties, Stack}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.LISTENER
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -246,7 +247,7 @@ private[spark] class TaskContextImpl(
             }
           }
           listenerExceptions += e
-          logError(s"Error in $name", e)
+          logError(log"Error in ${MDC(LISTENER, name)}", e)
       }
     }
     if (listenerExceptions.nonEmpty) {
@@ -275,6 +276,8 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
 
+  override def isFailed(): Boolean = synchronized(failureCauseOpt.isDefined)
+
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
@@ -292,5 +295,5 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  private[spark] override def getLocalProperties(): Properties = localProperties
+  private[spark] override def getLocalProperties: Properties = localProperties
 }

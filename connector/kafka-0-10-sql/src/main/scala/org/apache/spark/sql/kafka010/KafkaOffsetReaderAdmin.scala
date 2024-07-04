@@ -20,8 +20,8 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.kafka.clients.admin.{Admin, ListOffsetsOptions, ListOffsetsResult, OffsetSpec}
@@ -30,10 +30,12 @@ import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 import org.apache.kafka.common.requests.OffsetFetchResponse
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_RETRY, OFFSETS, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
@@ -118,10 +120,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
     def validateTopicPartitions(partitions: Set[TopicPartition],
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-      assert(partitions == partitionOffsets.keySet,
-        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest.\n" +
-          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
+      if (partitions != partitionOffsets.keySet) {
+        throw KafkaExceptions.startOffsetDoesNotMatchAssigned(partitionOffsets.keySet, partitions)
+      }
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
@@ -147,7 +148,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   override def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
-      reportDataLoss: String => Unit): KafkaSourceOffset = {
+      reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset = {
     val fnAssertParametersWithPartitions: ju.Set[TopicPartition] => Unit = { partitions =>
       assert(partitions.asScala == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
@@ -334,8 +335,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
           incorrectOffsets = findIncorrectOffsets()
           if (incorrectOffsets.nonEmpty) {
-            logWarning("Found incorrect offsets in some partitions " +
-              s"(partition, previous offset, fetched offset): $incorrectOffsets")
+            logWarning(log"Found incorrect offsets in some partitions " +
+              log"(partition, previous offset, fetched offset): ${MDC(OFFSETS, incorrectOffsets)}")
             if (attempt < maxOffsetFetchAttempts) {
               logWarning("Retrying to fetch latest offsets because of incorrect offsets")
               Thread.sleep(offsetFetchAttemptIntervalMs)
@@ -403,8 +404,10 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         offsetRangesBase.map(range => (range.topicPartition, range.untilOffset)).toMap
 
       // No need to report data loss here
-      val resolvedFromOffsets = fetchSpecificOffsets(fromOffsetsMap, _ => ()).partitionToOffsets
-      val resolvedUntilOffsets = fetchSpecificOffsets(untilOffsetsMap, _ => ()).partitionToOffsets
+      val resolvedFromOffsets =
+        fetchSpecificOffsets(fromOffsetsMap, (_, _) => ()).partitionToOffsets
+      val resolvedUntilOffsets =
+        fetchSpecificOffsets(untilOffsetsMap, (_, _) => ()).partitionToOffsets
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
@@ -418,7 +421,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
           val end = splitOffsetRanges.last.copy(untilOffset = untilOffsetsMap(tp))
           Seq(first) ++ splitOffsetRanges.drop(1).dropRight(1) :+ end
         }
-      }.toArray.toSeq
+      }.toArray.toImmutableArraySeq
     } else {
       offsetRangesBase
     }
@@ -443,7 +446,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   override def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,
-      reportDataLoss: String => Unit): Seq[KafkaOffsetRange] = {
+      reportDataLoss: (String, () => Throwable) => Unit): Seq[KafkaOffsetRange] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
     val newPartitionInitialOffsets = fetchEarliestOffsets(newPartitions.toSeq)
@@ -451,22 +454,31 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
       reportDataLoss(
-        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
+        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed",
+        () =>
+          KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
     }
-    logInfo(s"Partitions added: $newPartitionInitialOffsets")
+    logInfo(log"Partitions added: ${MDC(TOPIC_PARTITION_OFFSET, newPartitionInitialOffsets)}")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
       reportDataLoss(
-        s"Added partition $p starts from $o instead of 0. Some data may have been missed")
+        s"Added partition $p starts from $o instead of 0. Some data may have been missed",
+        () => KafkaExceptions.addedPartitionDoesNotStartFromZero(p, o))
     }
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      val message = if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
-      } else {
-        s"$deletedPartitions are gone. Some data may have been missed."
-      }
-      reportDataLoss(message)
+      val (message, config) =
+        if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          (s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+            Some(ConsumerConfig.GROUP_ID_CONFIG))
+        } else {
+          (s"$deletedPartitions are gone. Some data may have been missed.", None)
+        }
+
+      reportDataLoss(
+        message,
+        () =>
+          KafkaExceptions.partitionsDeleted(deletedPartitions, config))
     }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
@@ -483,12 +495,15 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       val fromOffset = fromOffsets(tp)
       val untilOffset = untilOffsets(tp)
       if (untilOffset < fromOffset) {
-        reportDataLoss(s"Partition $tp's offset was changed from " +
-          s"$fromOffset to $untilOffset, some data may have been missed")
+        reportDataLoss(
+          s"Partition $tp's offset was changed from " +
+            s"$fromOffset to $untilOffset, some data may have been missed",
+          () =>
+            KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
-    rangeCalculator.getRanges(ranges, getSortedExecutorList)
+    rangeCalculator.getRanges(ranges, getSortedExecutorList.toImmutableArraySeq)
   }
 
   private def partitionsAssignedToAdmin(
@@ -519,7 +534,8 @@ private[kafka010] class KafkaOffsetReaderAdmin(
         } catch {
           case NonFatal(e) =>
             lastException = e
-            logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
+            logWarning(
+              log"Error in attempt ${MDC(NUM_RETRY, attempt)} getting Kafka offsets: ", e)
             attempt += 1
             Thread.sleep(offsetFetchAttemptIntervalMs)
             resetAdmin()

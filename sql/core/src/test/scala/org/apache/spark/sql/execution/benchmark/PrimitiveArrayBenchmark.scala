@@ -33,7 +33,7 @@ import org.apache.spark.sql.SparkSession
 object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = {
-    SparkSession.builder
+    SparkSession.builder()
       .master("local[1]")
       .appName("microbenchmark")
       .config("spark.sql.shuffle.partitions", 1)
@@ -54,24 +54,24 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
 
     val sc = spark.sparkContext
     val primitiveIntArray = Array.fill[Int](count)(65535)
-    val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS
-    dsInt.count  // force to build dataset
+    val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS()
+    dsInt.count()  // force to build dataset
     val intArray = { i: Int =>
       var n = 0
       var len = 0
       while (n < iters) {
-        len += dsInt.map(e => e).queryExecution.toRdd.collect.length
+        len += dsInt.map(e => e).queryExecution.toRdd.collect().length
         n += 1
       }
     }
     val primitiveDoubleArray = Array.fill[Double](count)(65535.0)
-    val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS
-    dsDouble.count  // force to build dataset
+    val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS()
+    dsDouble.count()  // force to build dataset
     val doubleArray = { i: Int =>
       var n = 0
       var len = 0
       while (n < iters) {
-        len += dsDouble.map(e => e).queryExecution.toRdd.collect.length
+        len += dsDouble.map(e => e).queryExecution.toRdd.collect().length
         n += 1
       }
     }
@@ -79,6 +79,6 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark("Write an array in Dataset", count * iters, output = output)
     benchmark.addCase("Int   ")(intArray)
     benchmark.addCase("Double")(doubleArray)
-    benchmark.run
+    benchmark.run()
   }
 }

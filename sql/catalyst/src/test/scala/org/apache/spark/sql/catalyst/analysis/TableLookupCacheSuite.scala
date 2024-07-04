@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.io.File
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -29,7 +29,8 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
@@ -60,8 +61,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
     when(catalogManager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
       invocation.getArgument[String](0) match {
         case CatalogManager.SESSION_CATALOG_NAME => v2Catalog
-        case name =>
-          throw new CatalogNotFoundException(s"No such catalog: $name")
+        case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
     when(catalogManager.v1SessionCatalog).thenReturn(v1Catalog)
@@ -74,7 +74,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
   test("table lookups to external catalog are cached") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val catalog = spy(inMemoryCatalog)
+      val catalog = spy[InMemoryCatalog](inMemoryCatalog)
       val analyzer = getAnalyzer(catalog, tempDir)
       reset(catalog)
       analyzer.execute(table("t1").join(table("t1")).join(table("t1")))
@@ -85,7 +85,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
   test("table lookups via nested views are cached") {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
-      val catalog = spy(inMemoryCatalog)
+      val catalog = spy[InMemoryCatalog](inMemoryCatalog)
       val analyzer = getAnalyzer(catalog, tempDir)
       val viewDef = CatalogTable(
         TableIdentifier("view", Some("default")),

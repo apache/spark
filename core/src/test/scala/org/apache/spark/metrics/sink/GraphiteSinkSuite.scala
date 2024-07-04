@@ -19,7 +19,7 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics._
 
@@ -88,9 +88,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       new GraphiteSink(props, registry)
     }
-    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
-    assert(e.getMessage ===
-      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'host' property.")
+    checkError(e, errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      parameters = Map("property" -> "host"))
   }
 
   test("GraphiteSink without port") {
@@ -101,9 +100,8 @@ class GraphiteSinkSuite extends SparkFunSuite {
     val e = intercept[SparkException] {
       new GraphiteSink(props, registry)
     }
-    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
-    assert(e.getMessage ===
-      "[GRAPHITE_SINK_PROPERTY_MISSING] Graphite sink requires 'port' property.")
+    checkError(e, errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
+      parameters = Map("property" -> "port"))
   }
 
   test("GraphiteSink with invalid protocol") {

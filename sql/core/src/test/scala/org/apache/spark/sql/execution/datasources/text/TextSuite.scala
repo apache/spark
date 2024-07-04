@@ -24,8 +24,9 @@ import java.nio.file.Files
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, NONE}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -92,7 +93,8 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = spark.read.text(testFile)
-    val extensionNameMap = Map("bzip2" -> ".bz2", "deflate" -> ".deflate", "gzip" -> ".gz")
+    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP)
+      .map(codec => codec.lowerCaseName() -> codec.getCompressionCodec.getDefaultExtension)
     extensionNameMap.foreach {
       case (codecName, extension) =>
         val tempDir = Utils.createTempDir()
@@ -103,12 +105,18 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
         verifyFrame(spark.read.text(tempDirPath))
     }
 
-    val errMsg = intercept[IllegalArgumentException] {
-      val tempDirPath = Utils.createTempDir().getAbsolutePath
-      testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
+    withTempDir { dir =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          testDf.write.option("compression", "illegal").mode(
+            SaveMode.Overwrite).text(dir.getAbsolutePath)
+        },
+        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "illegal",
+          "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")
+      )
     }
-    assert(errMsg.getMessage.contains("Codec [illegal] is not available. " +
-      "Known codecs are"))
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
@@ -122,7 +130,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
       val tempDirPath = dir.getAbsolutePath
-      testDf.write.option("compression", "none")
+      testDf.write.option("compression", NONE.lowerCaseName())
         .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
@@ -141,7 +149,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     withTempDir { dir =>
       val testDf = spark.read.text(testFile)
       val tempDirPath = dir.getAbsolutePath
-      testDf.write.option("CoMpReSsIoN", "none")
+      testDf.write.option("CoMpReSsIoN", NONE.lowerCaseName())
         .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
@@ -166,7 +174,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s")
-      df1.write.option("compression", "gzip").mode("overwrite").text(path)
+      df1.write.option("compression", GZIP.lowerCaseName()).mode("overwrite").text(path)
 
       val expected = df1.collect()
       Seq(10, 100, 1000).foreach { bytes =>

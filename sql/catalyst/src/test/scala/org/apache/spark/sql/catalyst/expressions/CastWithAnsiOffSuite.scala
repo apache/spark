@@ -507,6 +507,8 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
     checkEvaluation(cast(Float.NaN, TimestampType), null)
     checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+    checkEvaluation(cast(Literal(Long.MaxValue), TimestampType), Long.MaxValue)
+    checkEvaluation(cast(Literal(Long.MinValue), TimestampType), Long.MinValue)
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
@@ -514,9 +516,9 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
       assert(negativeTs.getTime < 0)
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
-      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
-      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
-      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, ByteType), null)
+      checkEvaluation(cast(negativeTs, ShortType), null)
+      checkEvaluation(cast(negativeTs, IntegerType), null)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }

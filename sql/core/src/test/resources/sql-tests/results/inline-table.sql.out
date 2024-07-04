@@ -111,9 +111,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "rand(5)"
+    "expr" : "\"rand(5)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -132,11 +133,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "1",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "1"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -155,9 +157,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2303",
+  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "name" : "b"
+    "colName" : "`b`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -176,11 +179,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2305",
+  "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "numCols" : "2",
-    "ri" : "0",
-    "rowSize" : "1"
+    "actualNumCols" : "1",
+    "expectedNumCols" : "2",
+    "rowIndex" : "0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -222,9 +226,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "sqlExpr" : "count(1)"
+    "expr" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -242,3 +247,43 @@ select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-
 struct<a:timestamp,b:array<timestamp>>
 -- !query output
 1991-12-06 00:00:00	[1991-12-06 01:00:00,1991-12-06 12:00:00]
+
+
+-- !query
+select * from values (try_add(5, 0))
+-- !query schema
+struct<col1:int>
+-- !query output
+5
+
+
+-- !query
+select * from values (try_divide(5, 0))
+-- !query schema
+struct<col1:double>
+-- !query output
+NULL
+
+
+-- !query
+select * from values (10 + try_divide(5, 0))
+-- !query schema
+struct<col1:double>
+-- !query output
+NULL
+
+
+-- !query
+select count(distinct ct) from values now(), now(), now() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1
+
+
+-- !query
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct)
+-- !query schema
+struct<count(DISTINCT ct):bigint>
+-- !query output
+1

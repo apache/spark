@@ -287,7 +287,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
     withTempDir { dir =>
       {
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(
             s"""
             |CREATE TABLE `d:b`.`t:a` (a int)
@@ -296,9 +296,9 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |  path '${dir.toURI}'
             |)
             """.stripMargin)
-        }.getMessage
-        assert(message.contains("`t:a` is not a valid name for tables/databases. " +
-          "Valid names only contain alphabet characters, numbers and _."))
+        }
+        checkError(e, errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+          parameters = Map("name" -> "`t:a`"))
       }
 
       {

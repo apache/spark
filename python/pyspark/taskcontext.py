@@ -14,11 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, Dict, List, Optional, Union, cast
+from typing import ClassVar, Type, Dict, List, Optional, Union, cast, TYPE_CHECKING
 
-from pyspark.java_gateway import local_connect_and_auth
-from pyspark.resource import ResourceInformation
+from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.errors import PySparkRuntimeError
+
+if TYPE_CHECKING:
+    from pyspark.resource import ResourceInformation
 
 
 class TaskContext:
@@ -126,7 +129,7 @@ class TaskContext:
     _taskAttemptId: Optional[int] = None
     _localProperties: Optional[Dict[str, str]] = None
     _cpus: Optional[int] = None
-    _resources: Optional[Dict[str, ResourceInformation]] = None
+    _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
     def __new__(cls: Type["TaskContext"]) -> "TaskContext":
         """
@@ -239,7 +242,7 @@ class TaskContext:
         """
         return cast(int, self._cpus)
 
-    def resources(self) -> Dict[str, ResourceInformation]:
+    def resources(self) -> Dict[str, "ResourceInformation"]:
         """
         Resources allocated to the task. The key is the resource name and the value is information
         about the resource.
@@ -249,7 +252,9 @@ class TaskContext:
         dict
             a dictionary of a string resource name, and :class:`ResourceInformation`.
         """
-        return cast(Dict[str, ResourceInformation], self._resources)
+        from pyspark.resource import ResourceInformation
+
+        return cast(Dict[str, "ResourceInformation"], self._resources)
 
 
 BARRIER_FUNCTION = 1
@@ -355,7 +360,10 @@ class BarrierTaskContext(TaskContext):
         This API is experimental
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            raise RuntimeError("It is not in a barrier stage")
+            raise PySparkRuntimeError(
+                error_class="NOT_IN_BARRIER_STAGE",
+                message_parameters={},
+            )
         return cls._taskContext
 
     @classmethod
@@ -386,8 +394,12 @@ class BarrierTaskContext(TaskContext):
         or a `SparkException` after timeout.
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call barrier() before initialize BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "barrier",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
@@ -411,8 +423,12 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call barrier() before initialize BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "allGather",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
@@ -438,8 +454,12 @@ class BarrierTaskContext(TaskContext):
         '...:...'
         """
         if self._port is None or self._secret is None:
-            raise RuntimeError(
-                "Not supported to call getTaskInfos() before initialize " + "BarrierTaskContext."
+            raise PySparkRuntimeError(
+                error_class="CALL_BEFORE_INITIALIZE",
+                message_parameters={
+                    "func_name": "getTaskInfos",
+                    "object": "BarrierTaskContext",
+                },
             )
         else:
             addresses = cast(Dict[str, str], self._localProperties).get("addresses", "")

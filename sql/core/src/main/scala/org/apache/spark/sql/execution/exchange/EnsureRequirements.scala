@@ -20,15 +20,18 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.collection.Utils
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -51,6 +54,7 @@ case class EnsureRequirements(
   extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(
+      parent: Option[SparkPlan],
       originalChildren: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution],
       requiredChildOrderings: Seq[Seq[SortOrder]],
@@ -149,82 +153,25 @@ case class EnsureRequirements(
         Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
-      // Retrieve the non-collection spec from the input
-      def getRootSpec(spec: ShuffleSpec): ShuffleSpec = spec match {
-        case ShuffleSpecCollection(specs) => getRootSpec(specs.head)
-        case spec => spec
-      }
-
-      // Populate the common partition values down to the scan nodes
-      def populatePartitionValues(plan: SparkPlan, values: Seq[InternalRow]): SparkPlan =
-        plan match {
-          case scan: BatchScanExec =>
-            scan.copy(commonPartitionValues = Some(values))
-          case node =>
-            node.mapChildren(child => populatePartitionValues(child, values))
-        }
-
       // Check if the following conditions are satisfied:
       //   1. There are exactly two children (e.g., join). Note that Spark doesn't support
       //      multi-way join at the moment, so this check should be sufficient.
       //   2. All children are of `KeyGroupedPartitioning`, and they are compatible with each other
       // If both are true, skip shuffle.
-      val allCompatible = childrenIndexes.length == 2 && {
-        val left = childrenIndexes.head
-        val right = childrenIndexes(1)
-        var isCompatible: Boolean = false
-
-        if (checkKeyGroupedSpec(specs(left)) && checkKeyGroupedSpec(specs(right))) {
-          isCompatible = specs(left).isCompatibleWith(specs(right))
-
-          // If `isCompatible` is false, it could mean:
-          //   1. Partition keys (expressions) are not compatible: we have to shuffle in this case.
-          //   2. Partition keys (expressions) are compatible, but partition values are not: in this
-          //      case we can compute a superset of partition values and push-down to respective
-          //      data sources, which can then adjust their respective output partitioning by
-          //      filling missing partition values with empty partitions. As result, Spark can still
-          //      avoid shuffle.
-          //
-          // For instance, if two sides of a join have partition expressions `day(a)` and `day(b)`
-          // respectively (the join query could be `SELECT ... FROM t1 JOIN t2 on t1.a = t2.b`),
-          // but with different partition values:
-          //   `day(a)`: [0, 1]
-          //   `day(b)`: [1, 2, 3]
-          // Following the case 2 above, we don't have to shuffle both sides, but instead can just
-          // push the common set of partition values: `[0, 1, 2, 3]` down to the two data sources.
-          if (!isCompatible && conf.v2BucketingPushPartValuesEnabled) {
-            (getRootSpec(specs(left)), getRootSpec(specs(right))) match {
-              case (leftSpec: KeyGroupedShuffleSpec, rightSpec: KeyGroupedShuffleSpec) =>
-                // Check if the two children are partition keys compatible. If so, find the
-                // common set of partition values, and adjust the plan accordingly.
-                if (leftSpec.areKeysCompatible(rightSpec)) {
-                  val leftPartValues = leftSpec.partitioning.partitionValues
-                  val rightPartValues = rightSpec.partitioning.partitionValues
-
-                  val mergedPartValues = Utils.mergeOrdered(
-                    Seq(leftPartValues, rightPartValues))(leftSpec.ordering).toSeq.distinct
-
-                  // Now we need to push-down the common partition key to the scan in each child
-                  children = children.zipWithIndex.map {
-                    case (child, idx) if childrenIndexes.contains(idx) =>
-                      populatePartitionValues(child, mergedPartValues)
-                    case (child, _) => child
-                  }
-
-                  isCompatible = true
-                }
-              case _ =>
-                // This case shouldn't happen since `checkKeyGroupedSpec` should've made
-                // sure that we only have `KeyGroupedShuffleSpec`
-            }
-          }
+      val isKeyGroupCompatible = parent.isDefined &&
+          children.length == 2 && childrenIndexes.length == 2 && {
+        val left = children.head
+        val right = children(1)
+        val newChildren = checkKeyGroupCompatible(
+          parent.get, left, right, requiredChildDistributions)
+        if (newChildren.isDefined) {
+          children = newChildren.get
         }
-
-        isCompatible
+        newChildren.isDefined
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if allCompatible || !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if isKeyGroupCompatible || !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
@@ -243,7 +190,8 @@ case class EnsureRequirements(
             }
 
             child match {
-              case ShuffleExchangeExec(_, c, so) => ShuffleExchangeExec(newPartitioning, c, so)
+              case ShuffleExchangeExec(_, c, so, ps) =>
+                ShuffleExchangeExec(newPartitioning, c, so, ps)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -261,26 +209,6 @@ case class EnsureRequirements(
     }
 
     children
-  }
-
-  private def checkKeyGroupedSpec(shuffleSpec: ShuffleSpec): Boolean = {
-    def check(spec: KeyGroupedShuffleSpec): Boolean = {
-      val attributes = spec.partitioning.expressions.flatMap(_.collectLeaves())
-      val clustering = spec.distribution.clustering
-
-      if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-        attributes.length == clustering.length && attributes.zip(clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
-      } else {
-        true // already validated in `KeyGroupedPartitioning.satisfies`
-      }
-    }
-    shuffleSpec match {
-      case spec: KeyGroupedShuffleSpec => check(spec)
-      case ShuffleSpecCollection(specs) => specs.exists(checkKeyGroupedSpec)
-      case _ => false
-    }
   }
 
   private def reorder(
@@ -362,12 +290,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyGroupedPartitioning(clustering, _, _)), _) =>
+      case (Some(KeyGroupedPartitioning(clustering, _, _, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyGroupedPartitioning(clustering, _, _))) =>
+      case (_, Some(KeyGroupedPartitioning(clustering, _, _, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
@@ -411,9 +339,297 @@ case class EnsureRequirements(
     }
   }
 
+  /**
+   * Checks whether two children, `left` and `right`, of a join operator have compatible
+   * `KeyGroupedPartitioning`, and can benefit from storage-partitioned join.
+   *
+   * Returns the updated new children if the check is successful, otherwise `None`.
+   */
+  private def checkKeyGroupCompatible(
+      parent: SparkPlan,
+      left: SparkPlan,
+      right: SparkPlan,
+      requiredChildDistribution: Seq[Distribution]): Option[Seq[SparkPlan]] = {
+    parent match {
+      case smj: SortMergeJoinExec =>
+        checkKeyGroupCompatible(left, right, smj.joinType, requiredChildDistribution)
+      case sj: ShuffledHashJoinExec =>
+        checkKeyGroupCompatible(left, right, sj.joinType, requiredChildDistribution)
+      case _ =>
+        None
+    }
+  }
+
+  private def checkKeyGroupCompatible(
+      left: SparkPlan,
+      right: SparkPlan,
+      joinType: JoinType,
+      requiredChildDistribution: Seq[Distribution]): Option[Seq[SparkPlan]] = {
+    assert(requiredChildDistribution.length == 2)
+
+    var newLeft = left
+    var newRight = right
+
+    val specs = Seq(left, right).zip(requiredChildDistribution).map { case (p, d) =>
+      if (!d.isInstanceOf[ClusteredDistribution]) return None
+      val cd = d.asInstanceOf[ClusteredDistribution]
+      val specOpt = createKeyGroupedShuffleSpec(p.outputPartitioning, cd)
+      if (specOpt.isEmpty) return None
+      specOpt.get
+    }
+
+    val leftSpec = specs.head
+    val rightSpec = specs(1)
+
+    var isCompatible = false
+    if (!conf.v2BucketingPushPartValuesEnabled &&
+        !conf.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
+      isCompatible = leftSpec.isCompatibleWith(rightSpec)
+    } else {
+      logInfo("Pushing common partition values for storage-partitioned join")
+      isCompatible = leftSpec.areKeysCompatible(rightSpec)
+
+      // Partition expressions are compatible. Regardless of whether partition values
+      // match from both sides of children, we can calculate a superset of partition values and
+      // push-down to respective data sources so they can adjust their output partitioning by
+      // filling missing partition keys with empty partitions. As result, we can still avoid
+      // shuffle.
+      //
+      // For instance, if two sides of a join have partition expressions
+      // `day(a)` and `day(b)` respectively
+      // (the join query could be `SELECT ... FROM t1 JOIN t2 on t1.a = t2.b`), but
+      // with different partition values:
+      //   `day(a)`: [0, 1]
+      //   `day(b)`: [1, 2, 3]
+      // Following the case 2 above, we don't have to shuffle both sides, but instead can
+      // just push the common set of partition values: `[0, 1, 2, 3]` down to the two data
+      // sources.
+      if (isCompatible) {
+        val leftPartValues = leftSpec.partitioning.partitionValues
+        val rightPartValues = rightSpec.partitioning.partitionValues
+
+        val numLeftPartValues = MDC(LogKeys.NUM_LEFT_PARTITION_VALUES, leftPartValues.size)
+        val numRightPartValues = MDC(LogKeys.NUM_RIGHT_PARTITION_VALUES, rightPartValues.size)
+        logInfo(
+          log"""
+              |Left side # of partitions: $numLeftPartValues
+              |Right side # of partitions: $numRightPartValues
+              |""".stripMargin)
+
+        // As partition keys are compatible, we can pick either left or right as partition
+        // expressions
+        val partitionExprs = leftSpec.partitioning.expressions
+
+        var mergedPartValues = InternalRowComparableWrapper
+            .mergePartitions(leftSpec.partitioning, rightSpec.partitioning, partitionExprs)
+            .map(v => (v, 1))
+
+        logInfo(log"After merging, there are " +
+          log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.size)} partitions")
+
+        var replicateLeftSide = false
+        var replicateRightSide = false
+        var applyPartialClustering = false
+
+        // This means we allow partitions that are not clustered on their values,
+        // that is, multiple partitions with the same partition value. In the
+        // following, we calculate how many partitions that each distinct partition
+        // value has, and pushdown the information to scans, so they can adjust their
+        // final input partitions respectively.
+        if (conf.v2BucketingPartiallyClusteredDistributionEnabled) {
+          logInfo("Calculating partially clustered distribution for " +
+              "storage-partitioned join")
+
+          // Similar to `OptimizeSkewedJoin`, we need to check join type and decide
+          // whether partially clustered distribution can be applied. For instance, the
+          // optimization cannot be applied to a left outer join, where the left hand
+          // side is chosen as the side to replicate partitions according to stats.
+          // Otherwise, query result could be incorrect.
+          val canReplicateLeft = canReplicateLeftSide(joinType)
+          val canReplicateRight = canReplicateRightSide(joinType)
+
+          if (!canReplicateLeft && !canReplicateRight) {
+            logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
+              log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
+          } else {
+            val leftLink = left.logicalLink
+            val rightLink = right.logicalLink
+
+            replicateLeftSide = if (
+              leftLink.isDefined && rightLink.isDefined &&
+                  leftLink.get.stats.sizeInBytes > 1 &&
+                  rightLink.get.stats.sizeInBytes > 1) {
+              val leftLinkStatsSizeInBytes = MDC(LogKeys.LEFT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                leftLink.get.stats.sizeInBytes)
+              val rightLinkStatsSizeInBytes = MDC(LogKeys.RIGHT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES,
+                rightLink.get.stats.sizeInBytes)
+              logInfo(
+                log"""
+                   |Using plan statistics to determine which side of join to fully
+                   |cluster partition values:
+                   |Left side size (in bytes): $leftLinkStatsSizeInBytes
+                   |Right side size (in bytes): $rightLinkStatsSizeInBytes
+                   |""".stripMargin)
+              leftLink.get.stats.sizeInBytes < rightLink.get.stats.sizeInBytes
+            } else {
+              // As a simple heuristic, we pick the side with fewer number of partitions
+              // to apply the grouping & replication of partitions
+              logInfo("Using number of partitions to determine which side of join " +
+                  "to fully cluster partition values")
+              leftPartValues.size < rightPartValues.size
+            }
+
+            replicateRightSide = !replicateLeftSide
+
+            // Similar to skewed join, we need to check the join type to see whether replication
+            // of partitions can be applied. For instance, replication should not be allowed for
+            // the left-hand side of a right outer join.
+            if (replicateLeftSide && !canReplicateLeft) {
+              logInfo(log"Left-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
+              replicateLeftSide = false
+            } else if (replicateRightSide && !canReplicateRight) {
+              logInfo(log"Right-hand side is picked but cannot be applied to join type " +
+                log"'${MDC(LogKeys.JOIN_TYPE, joinType)}'. Skipping partially clustered " +
+                log"distribution.")
+              replicateRightSide = false
+            } else {
+              // In partially clustered distribution, we should use un-grouped partition values
+              val spec = if (replicateLeftSide) rightSpec else leftSpec
+              val partValues = spec.partitioning.originalPartitionValues
+
+              val numExpectedPartitions = partValues
+                .map(InternalRowComparableWrapper(_, partitionExprs))
+                .groupBy(identity)
+                .transform((_, v) => v.size)
+
+              mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
+                (partVal, numExpectedPartitions.getOrElse(
+                  InternalRowComparableWrapper(partVal, partitionExprs), numParts))
+              }
+
+              logInfo(log"After applying partially clustered distribution, there are " +
+                log"${MDC(LogKeys.NUM_PARTITIONS, mergedPartValues.map(_._2).sum)} partitions.")
+              applyPartialClustering = true
+            }
+          }
+        }
+
+        // in case of compatible but not identical partition expressions, we apply 'reduce'
+        // transforms to group one side's partitions as well as the common partition values
+        val leftReducers = leftSpec.reducers(rightSpec)
+        val rightReducers = rightSpec.reducers(leftSpec)
+
+        if (leftReducers.isDefined || rightReducers.isDefined) {
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            leftSpec.partitioning.expressions,
+            leftReducers)
+          mergedPartValues = reduceCommonPartValues(mergedPartValues,
+            rightSpec.partitioning.expressions,
+            rightReducers)
+          val rowOrdering = RowOrdering
+            .createNaturalAscendingOrdering(partitionExprs.map(_.dataType))
+          mergedPartValues = mergedPartValues.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
+        }
+
+        // Now we need to push-down the common partition information to the scan in each child
+        newLeft = populateCommonPartitionInfo(left, mergedPartValues, leftSpec.joinKeyPositions,
+          leftReducers, applyPartialClustering, replicateLeftSide)
+        newRight = populateCommonPartitionInfo(right, mergedPartValues, rightSpec.joinKeyPositions,
+          rightReducers, applyPartialClustering, replicateRightSide)
+      }
+    }
+
+    if (isCompatible) Some(Seq(newLeft, newRight)) else None
+  }
+
+  // Similar to `OptimizeSkewedJoin.canSplitRightSide`
+  private def canReplicateLeftSide(joinType: JoinType): Boolean = {
+    joinType == Inner || joinType == Cross || joinType == RightOuter
+  }
+
+  // Similar to `OptimizeSkewedJoin.canSplitLeftSide`
+  private def canReplicateRightSide(joinType: JoinType): Boolean = {
+    joinType == Inner || joinType == Cross || joinType == LeftSemi ||
+        joinType == LeftAnti || joinType == LeftOuter
+  }
+
+  // Populate the common partition information down to the scan nodes
+  private def populateCommonPartitionInfo(
+      plan: SparkPlan,
+      values: Seq[(InternalRow, Int)],
+      joinKeyPositions: Option[Seq[Int]],
+      reducers: Option[Seq[Option[Reducer[_, _]]]],
+      applyPartialClustering: Boolean,
+      replicatePartitions: Boolean): SparkPlan = plan match {
+    case scan: BatchScanExec =>
+      scan.copy(
+        spjParams = scan.spjParams.copy(
+          commonPartitionValues = Some(values),
+          joinKeyPositions = joinKeyPositions,
+          reducers = reducers,
+          applyPartialClustering = applyPartialClustering,
+          replicatePartitions = replicatePartitions
+        )
+      )
+    case node =>
+      node.mapChildren(child => populateCommonPartitionInfo(
+        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
+  }
+
+  private def reduceCommonPartValues(
+      commonPartValues: Seq[(InternalRow, Int)],
+      expressions: Seq[Expression],
+      reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+    reducers match {
+      case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
+        KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
+      }.map{ case(wrapper, splits) => (wrapper.row, splits.map(_._2).sum) }.toSeq
+      case _ => commonPartValues
+    }
+  }
+
+  /**
+   * Tries to create a [[KeyGroupedShuffleSpec]] from the input partitioning and distribution, if
+   * the partitioning is a [[KeyGroupedPartitioning]] (either directly or indirectly), and
+   * satisfies the given distribution.
+   */
+  private def createKeyGroupedShuffleSpec(
+      partitioning: Partitioning,
+      distribution: ClusteredDistribution): Option[KeyGroupedShuffleSpec] = {
+    def check(partitioning: KeyGroupedPartitioning): Option[KeyGroupedShuffleSpec] = {
+      val attributes = partitioning.expressions.flatMap(_.collectLeaves())
+      val clustering = distribution.clustering
+
+      val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+        attributes.length == clustering.length && attributes.zip(clustering).forall {
+          case (l, r) => l.semanticEquals(r)
+        }
+      } else {
+        partitioning.satisfies(distribution)
+      }
+
+      if (satisfies) {
+        Some(partitioning.createShuffleSpec(distribution).asInstanceOf[KeyGroupedShuffleSpec])
+      } else {
+        None
+      }
+    }
+
+    partitioning match {
+      case p: KeyGroupedPartitioning => check(p)
+      case PartitioningCollection(partitionings) =>
+        val specs = partitionings.map(p => createKeyGroupedShuffleSpec(p, distribution))
+        assert(specs.forall(_.isEmpty) || specs.forall(_.isDefined))
+        specs.head
+      case _ => None
+    }
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
     val newPlan = plan.transformUp {
-      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
+      case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin, _)
           if optimizeOutRepartition &&
             (shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM) =>
         def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
@@ -433,6 +649,7 @@ case class EnsureRequirements(
       case operator: SparkPlan =>
         val reordered = reorderJoinPredicates(operator)
         val newChildren = ensureDistributionAndOrdering(
+          Some(reordered),
           reordered.children,
           reordered.requiredChildDistribution,
           reordered.requiredChildOrdering,
@@ -447,6 +664,7 @@ case class EnsureRequirements(
         REPARTITION_BY_COL
       }
       val finalPlan = ensureDistributionAndOrdering(
+        None,
         newPlan :: Nil,
         requiredDistribution.get :: Nil,
         Seq(Nil),

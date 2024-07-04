@@ -17,6 +17,29 @@
 
 /* global $, vis, uiRoot, appBasePath */
 /* eslint-disable no-unused-vars */
+const xAxisFormat = {
+  minorLabels: {
+    millisecond:'SSS',
+    second:     'ss',
+    minute:     'mm',
+    hour:       'HH',
+    weekday:    'DD',
+    day:        'DD',
+    month:      'MM',
+    year:       'YYYY'
+  },
+  majorLabels: {
+    millisecond:'YYYY/MM/DD HH:mm:ss',
+    second:     'YYYY/MM/DD HH:mm',
+    minute:     'YYYY/MM/DD HH',
+    hour:       'YYYY/MM/DD',
+    weekday:    'YYYY/MM',
+    day:        'YYYY/MM',
+    month:      'YYYY',
+    year:       ''
+  }
+}
+
 function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
@@ -33,14 +56,19 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
     locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-toggle', 'data-placement',
+          'data-html', 'data-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var applicationTimeline = new vis.Timeline(container);
-  applicationTimeline.setOptions(options);
-  applicationTimeline.setGroups(groups);
-  applicationTimeline.setItems(items);
-
+  var applicationTimeline = new vis.Timeline(container, items, groups, options);
   setupZoomable("#application-timeline-zoom-lock", applicationTimeline);
   setupExecutorEventAction();
 
@@ -121,13 +149,19 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
     locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-toggle', 'data-placement',
+          'data-html', 'data-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var jobTimeline = new vis.Timeline(container);
-  jobTimeline.setOptions(options);
-  jobTimeline.setGroups(groups);
-  jobTimeline.setItems(items);
+  var jobTimeline = new vis.Timeline(container, items, groups, options);
 
   setupZoomable("#job-timeline-zoom-lock", jobTimeline);
   setupExecutorEventAction();
@@ -214,13 +248,19 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     locale: "en",
     moment: function (date) {
       return vis.moment(date).utcOffset(offset);
+    },
+    format: xAxisFormat,
+    xss: {
+      disabled: false,
+      filterOptions: {
+        whiteList: { svg: ['width', 'height', 'class'], div: ['class', 'style', 'data-toggle', 'data-placement',
+          'data-html', 'data-container', 'data-title', 'data-original-title', 'title'],
+        text: ['x', 'y'], rect: ['x', 'y', 'class', 'width', 'height', 'rx', 'ry'],},
+      },
     }
   };
 
-  var taskTimeline = new vis.Timeline(container);
-  taskTimeline.setOptions(options);
-  taskTimeline.setGroups(groups);
-  taskTimeline.setItems(items);
+  var taskTimeline = new vis.Timeline(container, items, groups, options);
 
   // If a user zooms while a tooltip is displayed, the user may zoom such that the cursor is no
   // longer over the task that the tooltip corresponds to. So, when a user zooms, we should hide

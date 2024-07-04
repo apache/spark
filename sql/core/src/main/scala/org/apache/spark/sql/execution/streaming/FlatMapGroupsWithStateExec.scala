@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -90,18 +92,23 @@ trait FlatMapGroupsWithStateExecBase
 
   override def shortName: String = "flatMapGroupsWithState"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     timeoutConf match {
       case ProcessingTimeTimeout =>
         true  // Always run batches to process timeouts
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
         eventTimeWatermarkForEviction.isDefined &&
-          newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+          newInputWatermark > eventTimeWatermarkForEviction.get
       case _ =>
         false
     }
   }
+
+  // There is no guarantee that any of the column in the output is bound to the watermark. The
+  // user function is quite flexible. Hence Spark does not support the stateful operator(s) after
+  // (flat)MapGroupsWithState.
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = None
 
   /**
    * Process data by applying the user defined function on a per partition basis.
@@ -182,7 +189,13 @@ trait FlatMapGroupsWithStateExecBase
     })
   }
 
+  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
+    stateManager // force lazy init at driver
     metrics // force lazy init at driver
 
     // Throw errors early if parameters are not as expected
@@ -220,8 +233,10 @@ trait FlatMapGroupsWithStateExecBase
             storeProviderId,
             groupingAttributes.toStructType,
             stateManager.stateSchema,
-            numColsPrefixKey = 0,
-            stateInfo.get.storeVersion, storeConf, hadoopConfBroadcast.value.value)
+            NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
+            stateInfo.get.storeVersion,
+            useColumnFamilies = false,
+            storeConf, hadoopConfBroadcast.value.value)
           val processor = createInputProcessor(store)
           processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))
       }
@@ -230,7 +245,7 @@ trait FlatMapGroupsWithStateExecBase
         getStateInfo,
         groupingAttributes.toStructType,
         stateManager.stateSchema,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>

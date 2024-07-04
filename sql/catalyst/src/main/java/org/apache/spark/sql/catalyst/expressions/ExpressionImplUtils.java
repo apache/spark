@@ -17,30 +17,190 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.SparkBuildInfo;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.util.VersionUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.security.spec.AlgorithmParameterSpec;
+
 
 /**
- * An utility class for constructing expressions.
+ * A utility class for constructing expressions.
  */
 public class ExpressionImplUtils {
   private static final SecureRandom secureRandom = new SecureRandom();
+
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
+  private static final int CBC_IV_LEN = 16;
 
-  public static byte[] aesEncrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.ENCRYPT_MODE);
+  enum CipherMode {
+    ECB("ECB", 0, 0, "AES/ECB/PKCS5Padding", false, false),
+    CBC("CBC", CBC_IV_LEN, 0, "AES/CBC/PKCS5Padding", true, false),
+    GCM("GCM", GCM_IV_LEN, GCM_TAG_LEN, "AES/GCM/NoPadding", true, true);
+
+    private final String name;
+    final int ivLength;
+    final int tagLength;
+    final String transformation;
+    final boolean usesSpec;
+    final boolean supportsAad;
+
+    CipherMode(String name,
+               int ivLen,
+               int tagLen,
+               String transformation,
+               boolean usesSpec,
+               boolean supportsAad) {
+      this.name = name;
+      this.ivLength = ivLen;
+      this.tagLength = tagLen;
+      this.transformation = transformation;
+      this.usesSpec = usesSpec;
+      this.supportsAad = supportsAad;
+    }
+
+    static CipherMode fromString(String modeName, String padding) {
+      boolean isNone = padding.equalsIgnoreCase("NONE");
+      boolean isPkcs = padding.equalsIgnoreCase("PKCS");
+      boolean isDefault = padding.equalsIgnoreCase("DEFAULT");
+      if (modeName.equalsIgnoreCase(ECB.name) && (isPkcs || isDefault)) {
+        return ECB;
+      } else if (modeName.equalsIgnoreCase(CBC.name) && (isPkcs || isDefault)) {
+        return CBC;
+      } else if (modeName.equalsIgnoreCase(GCM.name) && (isNone || isDefault)) {
+        return GCM;
+      }
+      throw QueryExecutionErrors.aesModeUnsupportedError(modeName, padding);
+    }
   }
 
-  public static byte[] aesDecrypt(byte[] input, byte[] key, UTF8String mode, UTF8String padding) {
-    return aesInternal(input, key, mode.toString(), padding.toString(), Cipher.DECRYPT_MODE);
+  /**
+   * Function to check if a given number string is a valid Luhn number
+   * @param numberString
+   *  the number string to check
+   * @return
+   *  true if the number string is a valid Luhn number, false otherwise.
+   */
+  public static boolean isLuhnNumber(UTF8String numberString) {
+    String digits = numberString.toString();
+    // Empty string is not a valid Luhn number.
+    if (digits.isEmpty()) return false;
+    int checkSum = 0;
+    boolean isSecond = false;
+    for (int i = digits.length() - 1; i >= 0; i--) {
+      char ch = digits.charAt(i);
+      if (!Character.isDigit(ch)) return false;
+
+      int digit = Character.getNumericValue(ch);
+      // Double the digit if it's the second digit in the sequence.
+      int doubled = isSecond ? digit * 2 : digit;
+      // Add the two digits of the doubled number to the sum.
+      checkSum += doubled % 10 + doubled / 10;
+      // Toggle the isSecond flag for the next iteration.
+      isSecond = !isSecond;
+    }
+    // Check if the final sum is divisible by 10.
+    return checkSum % 10 == 0;
+  }
+
+  /**
+   * Function to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, throw exception otherwise.
+   */
+  public static UTF8String validateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else throw QueryExecutionErrors.invalidUTF8StringError(utf8String);
+  }
+
+  /**
+   * Function to try to validate a given UTF8 string according to Unicode rules.
+   *
+   * @param utf8String
+   *  the input string to validate against possible invalid byte sequences
+   * @return
+   *  the original string if the input string is a valid UTF8String, null otherwise.
+   */
+  public static UTF8String tryValidateUTF8String(UTF8String utf8String) {
+    if (utf8String.isValid()) return utf8String;
+    else return null;
+  }
+
+  public static byte[] aesEncrypt(byte[] input,
+                                  byte[] key,
+                                  UTF8String mode,
+                                  UTF8String padding,
+                                  byte[] iv,
+                                  byte[] aad) {
+    return aesInternal(
+            input,
+            key,
+            mode.toString(),
+            padding.toString(),
+            Cipher.ENCRYPT_MODE,
+            iv,
+            aad
+    );
+  }
+
+  public static byte[] aesDecrypt(byte[] input,
+                                  byte[] key,
+                                  UTF8String mode,
+                                  UTF8String padding,
+                                  byte[] aad) {
+    return aesInternal(
+            input,
+            key,
+            mode.toString(),
+            padding.toString(),
+            Cipher.DECRYPT_MODE,
+            null,
+            aad
+    );
+  }
+
+  /**
+   * Function to return the Spark version.
+   * @return
+   *  Space separated version and revision.
+   */
+  public static UTF8String getSparkVersion() {
+    String shortVersion = VersionUtils.shortVersion(SparkBuildInfo.spark_version());
+    String revision = SparkBuildInfo.spark_revision();
+    return UTF8String.fromString(shortVersion + " " + revision);
+  }
+
+  private static SecretKeySpec getSecretKeySpec(byte[] key) {
+    return switch (key.length) {
+      case 16, 24, 32 -> new SecretKeySpec(key, 0, key.length, "AES");
+      default -> throw QueryExecutionErrors.invalidAesKeyLengthError(key.length);
+    };
+  }
+
+  private static byte[] generateIv(CipherMode mode) {
+    byte[] iv = new byte[mode.ivLength];
+    secureRandom.nextBytes(iv);
+    return iv;
+  }
+
+  private static AlgorithmParameterSpec getParamSpec(CipherMode mode, byte[] input) {
+    return switch (mode) {
+      case CBC -> new IvParameterSpec(input, 0, mode.ivLength);
+      case GCM -> new GCMParameterSpec(mode.tagLength, input, 0, mode.ivLength);
+      default -> null;
+    };
   }
 
   private static byte[] aesInternal(
@@ -48,46 +208,65 @@ public class ExpressionImplUtils {
       byte[] key,
       String mode,
       String padding,
-      int opmode) {
-    SecretKeySpec secretKey;
-
-    switch (key.length) {
-      case 16:
-      case 24:
-      case 32:
-        secretKey = new SecretKeySpec(key, 0, key.length, "AES");
-        break;
-      default:
-        throw QueryExecutionErrors.invalidAesKeyLengthError(key.length);
-      }
-
+      int opmode,
+      byte[] iv,
+      byte[] aad) {
     try {
-      if (mode.equalsIgnoreCase("ECB") &&
-          (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
-        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        cipher.init(opmode, secretKey);
-        return cipher.doFinal(input, 0, input.length);
-      } else if (mode.equalsIgnoreCase("GCM") &&
-          (padding.equalsIgnoreCase("NONE") || padding.equalsIgnoreCase("DEFAULT"))) {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        if (opmode == Cipher.ENCRYPT_MODE) {
-          byte[] iv = new byte[GCM_IV_LEN];
-          secureRandom.nextBytes(iv);
-          GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LEN, iv);
-          cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
-          byte[] encrypted = cipher.doFinal(input, 0, input.length);
+      SecretKeySpec secretKey = getSecretKeySpec(key);
+      CipherMode cipherMode = CipherMode.fromString(mode, padding);
+      Cipher cipher = Cipher.getInstance(cipherMode.transformation);
+      if (opmode == Cipher.ENCRYPT_MODE) {
+        // This may be 0-length for ECB
+        if (iv == null || iv.length == 0) {
+          iv = generateIv(cipherMode);
+        } else if (!cipherMode.usesSpec) {
+          // If the caller passes an IV, ensure the mode actually uses it.
+          throw QueryExecutionErrors.aesUnsupportedIv(mode);
+        }
+        if (iv.length != cipherMode.ivLength) {
+          throw QueryExecutionErrors.invalidAesIvLengthError(mode, iv.length);
+        }
+
+        if (cipherMode.usesSpec) {
+          AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, iv);
+          cipher.init(opmode, secretKey, algSpec);
+        } else {
+          cipher.init(opmode, secretKey);
+        }
+
+        // If the cipher mode supports additional authenticated data and it is provided, update it
+        if (aad != null && aad.length != 0) {
+          if (cipherMode.supportsAad != true) {
+            throw QueryExecutionErrors.aesUnsupportedAad(mode);
+          }
+          cipher.updateAAD(aad);
+        }
+
+        byte[] encrypted = cipher.doFinal(input, 0, input.length);
+        if (iv.length > 0) {
           ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + encrypted.length);
           byteBuffer.put(iv);
           byteBuffer.put(encrypted);
           return byteBuffer.array();
         } else {
-          assert(opmode == Cipher.DECRYPT_MODE);
-          GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LEN, input, 0, GCM_IV_LEN);
-          cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
-          return cipher.doFinal(input, GCM_IV_LEN, input.length - GCM_IV_LEN);
+          return encrypted;
         }
       } else {
-        throw QueryExecutionErrors.aesModeUnsupportedError(mode, padding);
+        assert(opmode == Cipher.DECRYPT_MODE);
+        if (cipherMode.usesSpec) {
+          AlgorithmParameterSpec algSpec = getParamSpec(cipherMode, input);
+          cipher.init(opmode, secretKey, algSpec);
+          if (aad != null && aad.length != 0) {
+            if (cipherMode.supportsAad != true) {
+              throw QueryExecutionErrors.aesUnsupportedAad(mode);
+            }
+            cipher.updateAAD(aad);
+          }
+          return cipher.doFinal(input, cipherMode.ivLength, input.length - cipherMode.ivLength);
+        } else {
+          cipher.init(opmode, secretKey);
+          return cipher.doFinal(input, 0, input.length);
+        }
       }
     } catch (GeneralSecurityException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());

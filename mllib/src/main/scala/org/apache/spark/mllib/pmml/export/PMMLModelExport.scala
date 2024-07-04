@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 import scala.beans.BeanProperty
 
 import org.dmg.pmml.{Application, Header, PMML, Timestamp}
 
 private[mllib] trait PMMLModelExport {
+
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   /**
    * Holder of the exported model in PMML format
@@ -34,7 +40,7 @@ private[mllib] trait PMMLModelExport {
     val version = getClass.getPackage.getImplementationVersion
     val app = new Application("Apache Spark MLlib").setVersion(version)
     val timestamp = new Timestamp()
-      .addContent(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(new Date()))
+      .addContent(DATE_TIME_FORMATTER.format(Instant.now()))
     val header = new Header()
       .setApplication(app)
       .setTimestamp(timestamp)

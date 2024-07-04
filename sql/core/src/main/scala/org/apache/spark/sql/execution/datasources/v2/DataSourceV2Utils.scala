@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -106,7 +108,7 @@ private[sql] object DataSourceV2Utils extends Logging {
 
     val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)
 
-    val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+    val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
     val (table, catalog, ident) = provider match {
@@ -133,7 +135,8 @@ private[sql] object DataSourceV2Utils extends Logging {
         } else {
           None
         }
-        val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion, conf)
+        val timeTravel = TimeTravelSpec.create(
+          timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
         (CatalogV2Util.getTable(catalog, ident, timeTravel), Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
@@ -150,8 +153,22 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
+  /**
+   * Returns the table provider for the given format, or None if it cannot be found.
+   */
+  def getTableProvider(provider: String, conf: SQLConf): Option[TableProvider] = {
+    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
+    // `HiveFileFormat`, when running tests in sql/core.
+    if (DDLUtils.isHiveTable(Some(provider))) return None
+    DataSource.lookupDataSourceV2(provider, conf) match {
+      // TODO(SPARK-28396): Currently file source v2 can't work with tables.
+      case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
+      case _ => None
+    }
+  }
+
   private lazy val objectMapper = new ObjectMapper()
-  private def getOptionsWithPaths(
+  def getOptionsWithPaths(
       extraOptions: CaseInsensitiveMap[String],
       paths: String*): CaseInsensitiveMap[String] = {
     if (paths.isEmpty) {

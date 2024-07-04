@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -373,7 +374,7 @@ case class ScalaUDAF(
 
   override val aggBufferSchema: StructType = udaf.bufferSchema
 
-  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+  override val aggBufferAttributes: Seq[AttributeReference] = toAttributes(aggBufferSchema)
 
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
@@ -389,7 +390,7 @@ case class ScalaUDAF(
   }
 
   private lazy val inputProjection = {
-    val inputAttributes = childrenSchema.toAttributes
+    val inputAttributes = toAttributes(childrenSchema)
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
     MutableProjection.create(children, inputAttributes)

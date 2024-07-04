@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, Rand}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -126,5 +126,39 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
           sortAnswers = false)
       }
     }
+  }
+
+  test("SPARK-47104: Non-deterministic expressions in projection") {
+    val expected = (input: SparkPlan) => {
+      GlobalLimitExec(limit,
+        LocalLimitExec(limit,
+          SortExec(sortOrder, true, input)))
+    }
+    val schema = StructType.fromDDL("a int, b int, c double")
+    val rdd = sparkContext.parallelize(
+      Seq(Row(1, 2, 0.0953472826424725d),
+        Row(2, 3, 0.5234194256885571d),
+        Row(3, 4, 0.7604953758285915d)), 1)
+    val df = spark.createDataFrame(rdd, schema)
+    val projection = df.queryExecution.sparkPlan.output.take(2) :+
+      Alias(Rand(Literal(0, IntegerType)), "_uuid")()
+
+    // test executeCollect
+    checkThatPlansAgree(
+      df,
+      input =>
+        TakeOrderedAndProjectExec(limit, sortOrder, projection,
+          SortExec(sortOrder, false, input)),
+      input => expected(input),
+      sortAnswers = false)
+
+    // test doExecute
+    checkThatPlansAgree(
+      df,
+      input =>
+        noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, projection,
+          SortExec(sortOrder, false, input))),
+      input => expected(input),
+      sortAnswers = false)
   }
 }

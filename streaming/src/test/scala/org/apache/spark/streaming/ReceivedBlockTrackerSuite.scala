@@ -139,7 +139,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
   }
 
   test("block allocation to batch should not loose blocks from received queue") {
-    val tracker1 = spy(createTracker())
+    val tracker1 = spy[ReceivedBlockTracker](createTracker())
     tracker1.isWriteAheadLogEnabled should be (true)
     tracker1.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
 
@@ -385,7 +385,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
   /** Generate blocks infos using random ids */
   def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
     List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
-      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
+      BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt())), Some(0L))))
   }
 
   /**
@@ -395,7 +395,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
     val writer = HdfsUtils.getOutputStream(filePath, hadoopConf)
     events.foreach { event =>
       val bytes = Utils.serialize(event)
-      writer.writeInt(bytes.size)
+      writer.writeInt(bytes.length)
       writer.write(bytes)
     }
     writer.close()
@@ -416,7 +416,7 @@ class ReceivedBlockTrackerSuite extends SparkFunSuite with BeforeAndAfter with M
    * Get all the data written in the given write ahead log files. By default, it will read all
    * files in the test log directory.
    */
-  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles)
+  def getWrittenLogData(logFiles: Seq[String] = getWriteAheadLogFiles())
     : Seq[ReceivedBlockTrackerLogEvent] = {
     logFiles.flatMap {
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq

@@ -21,7 +21,7 @@ import java.time.LocalDateTime
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.functions._
@@ -480,7 +480,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, ExpressionEncoder(
         StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // session window without dynamic gap
       val windowedProject = dfWithDesiredNullability

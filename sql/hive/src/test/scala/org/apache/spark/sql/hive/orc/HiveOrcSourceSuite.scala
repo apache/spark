@@ -112,43 +112,67 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     withTempDir { dir =>
       val orcDir = new File(dir, "orc").getCanonicalPath
 
-      def validateErrorMessage(msg: String, column: String, dt: String, format: String): Unit = {
-        val excepted = s"Column `$column` has a data type of $dt, " +
-          s"which is not supported by $format."
-        assert(msg.contains(excepted))
-      }
-
       // write path
-      var msg = intercept[AnalysisException] {
-        sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      validateErrorMessage(msg, "INTERVAL '1' DAY", "interval day", "ORC")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`INTERVAL '1' DAY`",
+          "columnType" -> "\"INTERVAL DAY\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        sql("select null").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      validateErrorMessage(msg, "NULL", "void", "ORC")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select null").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`NULL`",
+          "columnType" -> "\"VOID\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        spark.udf.register("testType", () => new IntervalData())
-        sql("select testType()").write.mode("overwrite").orc(orcDir)
-      }.getMessage
-      validateErrorMessage(msg, "testType()", "interval", "ORC")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.udf.register("testType", () => new IntervalData())
+          sql("select testType()").write.mode("overwrite").orc(orcDir)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`testType()`",
+          "columnType" -> "UDT(\"INTERVAL\")",
+          "format" -> "ORC")
+      )
 
       // read path
-      msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      validateErrorMessage(msg, "a", "interval", "ORC")
+      checkError(
+        exception = intercept[AnalysisException] {
+          val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+          spark.range(1).write.mode("overwrite").orc(orcDir)
+          spark.read.schema(schema).orc(orcDir).collect()
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "\"INTERVAL\"",
+          "format" -> "ORC")
+      )
 
-      msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
-        spark.range(1).write.mode("overwrite").orc(orcDir)
-        spark.read.schema(schema).orc(orcDir).collect()
-      }.getMessage
-      validateErrorMessage(msg, "a", "interval", "ORC")
+      checkError(
+        exception = intercept[AnalysisException] {
+          val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
+          spark.range(1).write.mode("overwrite").orc(orcDir)
+          spark.read.schema(schema).orc(orcDir).collect()
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`a`",
+          "columnType" -> "UDT(\"INTERVAL\")",
+          "format" -> "ORC")
+      )
     }
   }
 
@@ -326,5 +350,29 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
+  }
+
+  Seq("NONE", "SNAPPY", "ZLIB", "LZ4", "LZO", "ZSTD").foreach { compression =>
+    test(s"SPARK-46742: Read and write with $compression compressions") {
+      Seq(true, false).foreach { convertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+          withTempDir { dir =>
+            withTable("orc_tbl1") {
+              val orcTblStatement1 =
+                s"""
+                   |CREATE TABLE orc_tbl1(
+                   |  c1 int,
+                   |  c2 string)
+                   |STORED AS orc
+                   |TBLPROPERTIES ("orc.compress"="$compression")
+                   |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
+              sql(orcTblStatement1)
+              sql("INSERT INTO TABLE orc_tbl1 VALUES (1, 'orc1'), (2, 'orc2')")
+              checkAnswer(sql("SELECT * FROM orc_tbl1"), (1 to 2).map(i => Row(i, s"orc$i")))
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -248,15 +248,15 @@ Input [2]: [ca_state#18, count#22]
 Keys [1]: [ca_state#18]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#23]
-Results [3]: [ca_state#18 AS state#24, count(1)#23 AS cnt#25, ca_state#18]
+Results [2]: [ca_state#18 AS state#24, count(1)#23 AS cnt#25]
 
 (44) Filter [codegen id : 14]
-Input [3]: [state#24, cnt#25, ca_state#18]
+Input [2]: [state#24, cnt#25]
 Condition : (cnt#25 >= 10)
 
 (45) TakeOrderedAndProject
-Input [3]: [state#24, cnt#25, ca_state#18]
-Arguments: 100, [cnt#25 ASC NULLS FIRST, ca_state#18 ASC NULLS FIRST], [state#24, cnt#25]
+Input [2]: [state#24, cnt#25]
+Arguments: 100, [cnt#25 ASC NULLS FIRST, state#24 ASC NULLS FIRST], [state#24, cnt#25]
 
 ===== Subqueries =====
 
@@ -272,7 +272,7 @@ BroadcastExchange (50)
 Output [2]: [d_date_sk#16, d_month_seq#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_month_seq), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_month_seq), EqualTo(d_month_seq,ScalarSubquery#27), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_month_seq:int>
 
 (47) ColumnarToRow [codegen id : 1]
@@ -280,7 +280,7 @@ Input [2]: [d_date_sk#16, d_month_seq#26]
 
 (48) Filter [codegen id : 1]
 Input [2]: [d_date_sk#16, d_month_seq#26]
-Condition : ((isnotnull(d_month_seq#26) AND (d_month_seq#26 = Subquery scalar-subquery#27, [id=#28])) AND isnotnull(d_date_sk#16))
+Condition : ((isnotnull(d_month_seq#26) AND (d_month_seq#26 = ReusedSubquery Subquery scalar-subquery#27, [id=#28])) AND isnotnull(d_date_sk#16))
 
 (49) Project [codegen id : 1]
 Output [1]: [d_date_sk#16]
@@ -290,7 +290,9 @@ Input [2]: [d_date_sk#16, d_month_seq#26]
 Input [1]: [d_date_sk#16]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=9]
 
-Subquery:2 Hosting operator id = 48 Hosting Expression = Subquery scalar-subquery#27, [id=#28]
+Subquery:2 Hosting operator id = 48 Hosting Expression = ReusedSubquery Subquery scalar-subquery#27, [id=#28]
+
+Subquery:3 Hosting operator id = 46 Hosting Expression = Subquery scalar-subquery#27, [id=#28]
 * HashAggregate (57)
 +- Exchange (56)
    +- * HashAggregate (55)

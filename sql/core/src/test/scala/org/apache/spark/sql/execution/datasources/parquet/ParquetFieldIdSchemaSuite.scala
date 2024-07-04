@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -39,16 +39,14 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: String,
       caseSensitive: Boolean = true,
-      useFieldId: Boolean = true,
-      timestampNTZEnabled: Boolean = true): Unit = {
+      useFieldId: Boolean = true): Unit = {
     test(s"Clipping with field id - $testName") {
       val fileSchema = MessageTypeParser.parseMessageType(parquetSchema)
       val actual = ParquetReadSupport.clipParquetSchema(
         fileSchema,
         catalystSchema,
         caseSensitive = caseSensitive,
-        useFieldId = useFieldId,
-        timestampNTZEnabled = timestampNTZEnabled)
+        useFieldId = useFieldId)
 
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))

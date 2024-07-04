@@ -45,7 +45,7 @@ def run_cmd(cmd):
 
 def check_connect_protos():
     print("Start checking the generated codes in pyspark-connect.")
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(prefix="check_connect_protos") as tmp:
         run_cmd(f"{SPARK_HOME}/dev/connect-gen-protos.sh {tmp}")
         result = filecmp.dircmp(
             f"{SPARK_HOME}/python/pyspark/sql/connect/proto/",
@@ -75,12 +75,10 @@ def check_connect_protos():
         else:
             fail(
                 "Generated files for pyspark-connect are out of sync! "
-                "If you have touched files under connector/connect/src/main/protobuf, "
+                "If you have touched files under connector/connect/common/src/main/protobuf/, "
                 "please run ./dev/connect-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
             )
 
 
 check_connect_protos()
-
-# TODO: also check generated code in pyspark-ml and pyspark-mllib.

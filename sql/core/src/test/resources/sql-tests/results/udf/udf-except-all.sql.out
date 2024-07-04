@@ -137,16 +137,17 @@ SELECT array(1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2430",
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
   "messageParameters" : {
-    "ci" : "first",
-    "dt1" : "array<int>",
-    "dt2" : "int",
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"ARRAY<INT>\"",
+    "dataType2" : "\"INT\"",
     "hint" : "",
     "operator" : "EXCEPT ALL",
-    "ti" : "second"
+    "tableOrdinalNumber" : "second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -226,7 +227,7 @@ SELECT k, v FROM tab4
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",

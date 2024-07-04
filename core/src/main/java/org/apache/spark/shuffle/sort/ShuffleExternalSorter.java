@@ -23,17 +23,19 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.zip.Checksum;
 
-import org.apache.spark.SparkException;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -70,7 +72,8 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleChecksumSupport {
 
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -150,11 +153,21 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
    * Sorts the in-memory records and writes the sorted records to an on-disk file.
    * This method does not free the sort data structures.
    *
-   * @param isLastFile if true, this indicates that we're writing the final output file and that the
-   *                   bytes written should be counted towards shuffle spill metrics rather than
-   *                   shuffle write metrics.
+   * @param isFinalFile if true, this indicates that we're writing the final output file and that
+   *                    the bytes written should be counted towards shuffle write metrics rather
+   *                    than shuffle spill metrics.
    */
-  private void writeSortedFile(boolean isLastFile) {
+  private void writeSortedFile(boolean isFinalFile) {
+    // Only emit the log if this is an actual spilling.
+    if (!isFinalFile) {
+      logger.info(
+        "Task {} on Thread {} spilling sort data of {} to disk ({} {} so far)",
+        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskContext.taskAttemptId()),
+        MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
+        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
+        MDC.of(LogKeys.NUM_SPILL_INFOS$.MODULE$, spills.size()),
+        MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spills.size() != 1 ? "times" : "time"));
+    }
 
     // This call performs the actual sort.
     final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
@@ -167,13 +180,14 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
 
     final ShuffleWriteMetricsReporter writeMetricsToUse;
 
-    if (isLastFile) {
+    if (isFinalFile) {
       // We're writing the final non-spill file, so we _do_ want to count this as shuffle bytes.
       writeMetricsToUse = writeMetrics;
     } else {
       // We're spilling, so bytes written should be counted towards spill rather than write.
       // Create a dummy WriteMetrics object to absorb these metrics, since we don't want to count
       // them towards shuffle bytes written.
+      // The actual shuffle bytes written will be counted when we merge the spill files.
       writeMetricsToUse = new ShuffleWriteMetrics();
     }
 
@@ -246,7 +260,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       spills.add(spillInfo);
     }
 
-    if (!isLastFile) {  // i.e. this is a spill file
+    if (!isFinalFile) {  // i.e. this is a spill file
       // The current semantics of `shuffleRecordsWritten` seem to be that it's updated when records
       // are written to disk, not when they enter the shuffle sorting code. DiskBlockObjectWriter
       // relies on its `recordWritten()` method being called in order to trigger periodic updates to
@@ -280,12 +294,6 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     if (trigger != this || inMemSorter == null || inMemSorter.numRecords() == 0) {
       return 0L;
     }
-
-    logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
-      Thread.currentThread().getId(),
-      Utils.bytesToString(getMemoryUsage()),
-      spills.size(),
-      spills.size() > 1 ? " times" : " time");
 
     writeSortedFile(false);
     final long spillSize = freeMemory();
@@ -344,7 +352,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
-        logger.error("Unable to delete spill file {}", spill.file.getPath());
+        logger.error("Unable to delete spill file {}",
+          MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
       }
     }
   }
@@ -411,8 +420,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     // for tests
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
-        numElementsForSpillThreshold);
+      logger.info("Spilling data because number of spilledRecords crossed the threshold {}" +
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
       spill();
     }
 
@@ -440,8 +449,9 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
    */
   public SpillInfo[] closeAndGetSpills() throws IOException {
     if (inMemSorter != null) {
-      // Do not count the final file towards the spill count.
-      writeSortedFile(true);
+      // Here we are spilling the remaining data in the buffer. If there is no spill before, this
+      // final spill file will be the final shuffle output file.
+      writeSortedFile(/* isFinalFile = */spills.isEmpty());
       freeMemory();
       inMemSorter.free();
       inMemSorter = null;

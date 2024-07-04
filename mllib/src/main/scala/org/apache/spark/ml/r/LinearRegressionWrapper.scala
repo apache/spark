@@ -29,6 +29,7 @@ import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class LinearRegressionWrapper private (
     val pipeline: PipelineModel,
@@ -124,7 +125,7 @@ private[r] object LinearRegressionWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 

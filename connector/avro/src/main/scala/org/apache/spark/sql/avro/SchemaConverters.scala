@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.avro
 
-import scala.collection.JavaConverters._
+import java.util.Locale
+
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
@@ -46,16 +49,41 @@ object SchemaConverters {
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
    *
+   * @since 4.0.0
+   */
+  def toSqlType(
+      avroSchema: Schema,
+      useStableIdForUnionType: Boolean,
+      stableIdPrefixForUnionType: String): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty, useStableIdForUnionType, stableIdPrefixForUnionType)
+  }
+  /**
+   * Converts an Avro schema to a corresponding Spark SQL schema.
+   *
    * @since 2.4.0
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty)
+    toSqlType(avroSchema, false, "")
+  }
+
+  @deprecated("using toSqlType(..., useStableIdForUnionType: Boolean) instead", "4.0.0")
+  def toSqlType(avroSchema: Schema, options: Map[String, String]): SchemaType = {
+    val avroOptions = AvroOptions(options)
+    toSqlTypeHelper(
+      avroSchema,
+      Set.empty,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType)
   }
 
   // The property specifies Catalyst type of the given field
   private val CATALYST_TYPE_PROP_NAME = "spark.sql.catalyst.type"
 
-  private def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
+  private def toSqlTypeHelper(
+      avroSchema: Schema,
+      existingRecordNames: Set[String],
+      useStableIdForUnionType: Boolean,
+      stableIdPrefixForUnionType: String): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -80,6 +108,8 @@ object SchemaConverters {
       case DOUBLE => SchemaType(DoubleType, nullable = false)
       case FLOAT => SchemaType(FloatType, nullable = false)
       case LONG => avroSchema.getLogicalType match {
+        case d: CustomDecimal =>
+          SchemaType(DecimalType(d.precision, d.scale), nullable = false)
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _: LocalTimestampMillis | _: LocalTimestampMicros =>
           SchemaType(TimestampNTZType, nullable = false)
@@ -106,20 +136,29 @@ object SchemaConverters {
         }
         val newRecordNames = existingRecordNames + avroSchema.getFullName
         val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames)
+          val schemaType = toSqlTypeHelper(
+            f.schema(),
+            newRecordNames,
+            useStableIdForUnionType,
+            stableIdPrefixForUnionType)
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
         SchemaType(StructType(fields.toArray), nullable = false)
 
       case ARRAY =>
-        val schemaType = toSqlTypeHelper(avroSchema.getElementType, existingRecordNames)
+        val schemaType = toSqlTypeHelper(
+          avroSchema.getElementType,
+          existingRecordNames,
+          useStableIdForUnionType,
+          stableIdPrefixForUnionType)
         SchemaType(
           ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
           nullable = false)
 
       case MAP =>
-        val schemaType = toSqlTypeHelper(avroSchema.getValueType, existingRecordNames)
+        val schemaType = toSqlTypeHelper(avroSchema.getValueType,
+          existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType)
         SchemaType(
           MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
           nullable = false)
@@ -127,28 +166,61 @@ object SchemaConverters {
       case UNION =>
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
           // In case of a union with null, eliminate it and make a recursive call
-          val remainingUnionTypes = avroSchema.getTypes.asScala.filterNot(_.getType == NULL)
+          val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
           if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames).copy(nullable = true)
+            toSqlTypeHelper(
+              remainingUnionTypes.head,
+              existingRecordNames,
+              useStableIdForUnionType,
+              stableIdPrefixForUnionType).copy(nullable = true)
           } else {
-            toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava), existingRecordNames)
-              .copy(nullable = true)
+            toSqlTypeHelper(
+              Schema.createUnion(remainingUnionTypes.asJava),
+              existingRecordNames,
+              useStableIdForUnionType,
+              stableIdPrefixForUnionType).copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
-            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames)
+            toSqlTypeHelper(avroSchema.getTypes.get(0),
+              existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
             SchemaType(DoubleType, nullable = false)
           case _ =>
-            // Convert complex unions to struct types where field names are member0, member1, etc.
-            // This is consistent with the behavior when converting between Avro and Parquet.
+            // When avroOptions.useStableIdForUnionType is false, convert complex unions to struct
+            // types where field names are member0, member1, etc. This is consistent with the
+            // behavior when converting between Avro and Parquet.
+            // If avroOptions.useStableIdForUnionType is true, include type name in field names
+            // so that users can drop or add fields and keep field name stable.
+            val fieldNameSet : mutable.Set[String] = mutable.Set()
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
-                val schemaType = toSqlTypeHelper(s, existingRecordNames)
+                val schemaType = toSqlTypeHelper(
+                  s,
+                  existingRecordNames,
+                  useStableIdForUnionType,
+                  stableIdPrefixForUnionType)
+
+                val fieldName = if (useStableIdForUnionType) {
+                  // Avro's field name may be case sensitive, so field names for two named type
+                  // could be "a" and "A" and we need to distinguish them. In this case, we throw
+                  // an exception.
+                  // Stable id prefix can be empty so the name of the field can be just the type.
+                  val tempFieldName = s"${stableIdPrefixForUnionType}${s.getName}"
+                  if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
+                    throw new IncompatibleSchemaException(
+                      "Cannot generate stable identifier for Avro union type due to name " +
+                      s"conflict of type name ${s.getName}")
+                  }
+                  tempFieldName
+                } else {
+                  s"member$i"
+                }
+
                 // All fields are nullable because only one of them is set at a time
-                StructField(s"member$i", schemaType.dataType, nullable = true)
+                StructField(fieldName, schemaType.dataType, nullable = true)
             }
 
             SchemaType(StructType(fields.toArray), nullable = false)

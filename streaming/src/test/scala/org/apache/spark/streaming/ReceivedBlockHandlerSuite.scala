@@ -288,7 +288,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(blockManager.memoryStore)
@@ -360,7 +361,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     }
 
     def dataToByteBuffer(b: Seq[String]) =
-      serializerManager.dataSerialize(generateBlockId, b.iterator)
+      serializerManager.dataSerialize(generateBlockId(), b.iterator)
 
     val blocks = data.grouped(10).toSeq
 
@@ -424,7 +425,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       handler: ReceivedBlockHandler,
       block: ReceivedBlock
     ): (StreamBlockId, ReceivedBlockStoreResult) = {
-    val blockId = generateBlockId
+    val blockId = generateBlockId()
     val blockStoreResult = handler.storeBlock(blockId, block)
     logDebug("Done inserting")
     (blockId, blockStoreResult)
@@ -434,7 +435,8 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
     getLogFilesInDirectory(checkpointDirToLogDir(tempDirectory.toString, streamId))
   }
 
-  private def generateBlockId(): StreamBlockId = StreamBlockId(streamId, scala.util.Random.nextLong)
+  private def generateBlockId(): StreamBlockId =
+    StreamBlockId(streamId, scala.util.Random.nextLong())
 }
 
 class ReceivedBlockHandlerSuite extends BaseReceivedBlockHandlerSuite(false)

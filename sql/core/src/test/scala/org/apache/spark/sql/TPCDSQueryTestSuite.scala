@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.nio.file.{Files, Paths}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.util.{fileToString, resourceToString, stringToFile}
@@ -107,7 +107,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
     val shouldSortResults = sortMergeJoinConf != conf  // Sort for other joins
     withSQLConf(conf.toSeq: _*) {
       try {
-        val (schema, output) = handleExceptions(getNormalizedResult(spark, query))
+        val (schema, output) = handleExceptions(getNormalizedQueryExecutionResult(spark, query))
         val queryString = query.trim
         val outputString = output.mkString("\n").replaceAll("\\s+$", "")
         if (regenerateGoldenFiles) {
@@ -139,7 +139,14 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           (segments(1).trim, segments(2).replaceAll("\\s+$", ""))
         }
 
-        assertResult(expectedSchema, s"Schema did not match\n$queryString") {
+        val notMatchedSchemaOutput = if (schema == emptySchema) {
+          // There might be exception. See `handleExceptions`.
+          s"Schema did not match\n$queryString\nOutput/Exception: $outputString"
+        } else {
+          s"Schema did not match\n$queryString"
+        }
+
+        assertResult(expectedSchema, notMatchedSchemaOutput) {
           schema
         }
         if (shouldSortResults) {

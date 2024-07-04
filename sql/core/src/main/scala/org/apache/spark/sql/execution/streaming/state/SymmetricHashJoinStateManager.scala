@@ -19,12 +19,16 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.Locale
 
+import scala.annotation.tailrec
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
@@ -47,6 +51,12 @@ import org.apache.spark.util.NextIterator
  * @param hadoopConf            Hadoop configuration for reading state data from storage
  * @param partitionId           A partition ID of source RDD.
  * @param stateFormatVersion    The version of format for state.
+ * @param skippedNullValueCount The instance of SQLMetric tracking the number of skipped null
+ *                              values.
+ * @param useStateStoreCoordinator  Whether to use a state store coordinator to maintain the state
+ *                                  store providers being used in this class. If true, Spark will
+ *                                  take care of management for state store providers, e.g. running
+ *                                  maintenance task for these providers.
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -76,7 +86,9 @@ class SymmetricHashJoinStateManager(
     hadoopConf: Configuration,
     partitionId: Int,
     stateFormatVersion: Int,
-    skippedNullValueCount: Option[SQLMetric] = None) extends Logging {
+    skippedNullValueCount: Option[SQLMetric] = None,
+    useStateStoreCoordinator: Boolean = true,
+    snapshotStartVersion: Option[Long] = None) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -181,6 +193,57 @@ class SymmetricHashJoinStateManager(
       }
 
       override def close(): Unit = {}
+    }
+  }
+
+  /**
+   * Perform a full scan to provide all available data.
+   *
+   * This produces an iterator over the (key, value, match) tuples. Callers are expected
+   * to consume fully to clean up underlying iterators correctly.
+   */
+  def iterator: Iterator[KeyToValuePair] = {
+    new NextIterator[KeyToValuePair] {
+      // Reuse this object to avoid creation+GC overhead.
+      private val reusedRet = new KeyToValuePair()
+
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKey: UnsafeRow = null
+      private var numValues: Long = 0L
+      private var index: Long = 0L
+
+      @tailrec
+      override def getNext(): KeyToValuePair = {
+        if (currentKey != null) {
+          assert(index < numValues)
+
+          val valueAndMatched = keyWithIndexToValue.get(currentKey, index)
+          index += 1
+
+          reusedRet.withNew(currentKey, valueAndMatched)
+
+          if (index == numValues) {
+            currentKey = null
+            numValues = 0L
+            index = 0L
+          }
+
+          reusedRet
+        } else if (allKeyToNumValues.hasNext) {
+          val newKeyToNumValues = allKeyToNumValues.next()
+          currentKey = newKeyToNumValues.key
+          numValues = newKeyToNumValues.numValue
+          index = 0L
+
+          getNext()
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {}
     }
   }
 
@@ -305,9 +368,9 @@ class SymmetricHashJoinStateManager(
 
             // If nulls were found at the end, log a warning for the range of null indices.
             if (nonNullIndex != numValues - 1) {
-              logWarning(s"`keyWithIndexToValue` returns a null value for indices " +
-                s"with range from startIndex=${nonNullIndex + 1} " +
-                s"and endIndex=${numValues - 1}.")
+              logWarning(log"`keyWithIndexToValue` returns a null value for indices " +
+                log"with range from startIndex=${MDC(START_INDEX, nonNullIndex + 1)} " +
+                log"and endIndex=${MDC(END_INDEX, numValues - 1)}.")
             }
 
             // Remove all null values from nonNullIndex + 1 onwards
@@ -380,7 +443,7 @@ class SymmetricHashJoinStateManager(
 
   private val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
-  private val keyAttributes = keySchema.toAttributes
+  private val keyAttributes = toAttributes(keySchema)
   private val keyToNumValues = new KeyToNumValuesStore()
   private val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
 
@@ -389,6 +452,7 @@ class SymmetricHashJoinStateManager(
 
   /** Helper trait for invoking common functionalities of a state store. */
   private abstract class StateStoreHandler(stateStoreType: StateStoreType) extends Logging {
+    private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
     protected def stateStore: StateStore
@@ -400,8 +464,13 @@ class SymmetricHashJoinStateManager(
 
     def abortIfNeeded(): Unit = {
       if (!stateStore.hasCommitted) {
-        logInfo(s"Aborted store ${stateStore.id}")
+        logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
+      }
+      // If this class manages a state store provider by itself, it should take care of closing
+      // provider instance as well.
+      if (stateStoreProvider != null) {
+        stateStoreProvider.close()
       }
     }
 
@@ -411,10 +480,30 @@ class SymmetricHashJoinStateManager(
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
-      val store = StateStore.get(
-        storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
-        stateInfo.get.storeVersion, storeConf, hadoopConf)
-      logInfo(s"Loaded store ${store.id}")
+      val store = if (useStateStoreCoordinator) {
+        assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
+          "when reading state as data source.")
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
+      } else {
+        // This class will manage the state store provider by itself.
+        stateStoreProvider = StateStoreProvider.createAndInit(
+          storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          useColumnFamilies = false, storeConf, hadoopConf,
+          useMultipleValuesPerKey = false)
+        if (snapshotStartVersion.isDefined) {
+          if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
+            throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+              stateStoreProvider.getClass.toString)
+          }
+          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+            .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
+        } else {
+          stateStoreProvider.getStore(stateInfo.get.storeVersion)
+        }
+      }
+      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
       store
     }
   }
@@ -688,6 +777,35 @@ object SymmetricHashJoinStateManager {
     for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
       getStateStoreName(joinSide, stateStoreType)
     }
+  }
+
+  def getSchemaForStateStores(
+      joinSide: JoinSide,
+      inputValueAttributes: Seq[Attribute],
+      joinKeys: Seq[Expression],
+      stateFormatVersion: Int): Map[String, (StructType, StructType)] = {
+    var result: Map[String, (StructType, StructType)] = Map.empty
+
+    // get the key and value schema for the KeyToNumValues state store
+    val keySchema = StructType(
+      joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
+    val longValueSchema = new StructType().add("value", "long")
+    result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
+
+    // get the key and value schema for the KeyWithIndexToValue state store
+    val keyWithIndexSchema = keySchema.add("index", LongType)
+    val valueSchema = if (stateFormatVersion == 1) {
+      inputValueAttributes
+    } else if (stateFormatVersion == 2) {
+      inputValueAttributes :+ AttributeReference("matched", BooleanType)()
+    } else {
+      throw new IllegalArgumentException("Incorrect state format version! " +
+        s"version=$stateFormatVersion")
+    }
+    result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
+      (keyWithIndexSchema, valueSchema.toStructType))
+
+    result
   }
 
   private sealed trait StateStoreType

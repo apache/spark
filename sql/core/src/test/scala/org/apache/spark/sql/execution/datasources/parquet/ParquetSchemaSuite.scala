@@ -27,8 +27,10 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -45,15 +47,17 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
-      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None,
+      nanosAsLong: Boolean = false): Unit = {
     testSchema(
       testName,
-      StructType.fromAttributes(ScalaReflection.attributesFor[T]),
+      schemaFor[T],
       messageType,
       binaryAsString,
       int96AsTimestamp,
       writeLegacyParquetFormat,
-      expectedParquetColumn = expectedParquetColumn)
+      expectedParquetColumn = expectedParquetColumn,
+      nanosAsLong = nanosAsLong)
   }
 
   protected def testParquetToCatalyst(
@@ -63,14 +67,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       caseSensitive: Boolean = false,
-      timestampNTZEnabled: Boolean = true,
+      inferTimestampNTZ: Boolean = true,
       sparkReadSchema: Option[StructType] = None,
-      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None,
+      nanosAsLong: Boolean = false): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
-      timestampNTZEnabled = timestampNTZEnabled)
+      inferTimestampNTZ = inferTimestampNTZ,
+      nanosAsLong = nanosAsLong)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -97,11 +103,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
-      timestampNTZEnabled: Boolean = true): Unit = {
+      inferTimestampNTZ: Boolean = true): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      outputTimestampType = outputTimestampType,
-      timestampNTZEnabled = timestampNTZEnabled)
+      outputTimestampType = outputTimestampType)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -120,7 +125,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
-      expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
+      expectedParquetColumn: Option[ParquetColumn] = None,
+      nanosAsLong: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -135,7 +141,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      expectedParquetColumn = expectedParquetColumn)
+      expectedParquetColumn = expectedParquetColumn,
+      nanosAsLong = nanosAsLong)
   }
 
   protected def compareParquetColumn(actual: ParquetColumn, expected: ParquetColumn): Unit = {
@@ -150,7 +157,14 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       val expectedDesc = expected.descriptor.get
       assert(actualDesc.getMaxRepetitionLevel == expectedDesc.getMaxRepetitionLevel)
       assert(actualDesc.getMaxRepetitionLevel == expectedDesc.getMaxRepetitionLevel)
-      assert(actualDesc.getPrimitiveType === expectedDesc.getPrimitiveType)
+
+      actualDesc.getPrimitiveType.getLogicalTypeAnnotation match {
+        case timestamp: LogicalTypeAnnotation.TimestampLogicalTypeAnnotation
+          if timestamp.getUnit == LogicalTypeAnnotation.TimeUnit.NANOS =>
+          assert(actual.sparkType == expected.sparkType)
+        case _ =>
+          assert(actualDesc.getPrimitiveType === expectedDesc.getPrimitiveType)
+      }
     }
 
     assert(actual.repetitionLevel == expected.repetitionLevel, "repetition level mismatch: " +
@@ -198,6 +212,31 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
 }
 
 class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
+  testSchemaInference[Tuple1[Long]](
+    "timestamp nanos",
+    """
+      |message root {
+      |  required int64 _1 (TIMESTAMP(NANOS,true));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true,
+    expectedParquetColumn = Some(
+      ParquetColumn(
+        sparkType = schemaFor[Tuple1[Long]],
+        descriptor = None,
+        repetitionLevel = 0,
+        definitionLevel = 0,
+        required = false,
+        path = Seq(),
+        children = Seq(
+          primitiveParquetColumn(LongType, PrimitiveTypeName.INT64, Repetition.REQUIRED,
+            0, 0, Seq("_1"), logicalTypeAnnotation = Some(LogicalTypeAnnotation.intType(64, false)))
+        ))),
+    nanosAsLong = true
+  )
+
   testSchemaInference[(Boolean, Int, Long, Float, Double, Array[Byte])](
     "basic types",
     """
@@ -215,8 +254,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Boolean, Int, Long, Float, Double, Array[Byte])]),
+        sparkType = schemaFor[(Boolean, Int, Long, Float, Double, Array[Byte])],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -254,8 +292,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[(Byte, Short, Int, Long, java.sql.Date)]),
+        sparkType = schemaFor[(Byte, Short, Int, Long, java.sql.Date)],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -286,8 +323,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -310,8 +346,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true,
     expectedParquetColumn = Some(
       ParquetColumn(
-        sparkType = StructType.fromAttributes(
-          ScalaReflection.attributesFor[Tuple1[String]]),
+        sparkType = schemaFor[Tuple1[String]],
         descriptor = None,
         repetitionLevel = 0,
         definitionLevel = 0,
@@ -934,27 +969,52 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     val fromCaseClassString = StructType.fromString(caseClassString)
     val fromJson = StructType.fromString(jsonString)
 
-    (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
+    fromCaseClassString.lazyZip(fromJson).foreach { (a, b) =>
       assert(a.name == b.name)
       assert(a.dataType === b.dataType)
       assert(a.nullable === b.nullable)
     }
   }
 
-  test("schema merging failure error message") {
+  test("CANNOT_MERGE_SCHEMAS: Failed merging schemas") {
     import testImplicits._
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).select($"id" cast IntegerType as Symbol("id"))
-        .write.parquet(s"$path/p=2")
+      val df1 = spark.range(3)
+      df1.write.parquet(s"$path/p=1")
+      val df2 = spark.range(3).select($"id" cast IntegerType as Symbol("id"))
+      df2.write.parquet(s"$path/p=2")
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.option("mergeSchema", "true").parquet(path)
+        },
+        errorClass = "CANNOT_MERGE_SCHEMAS",
+        sqlState = "42KD9",
+        parameters = Map(
+          "left" -> toSQLType(df1.schema),
+          "right" -> toSQLType(df2.schema)))
+    }
+  }
 
-      val message = intercept[SparkException] {
-        spark.read.option("mergeSchema", "true").parquet(path).schema
-      }.getMessage
-
-      assert(message.contains("Failed merging schema"))
+  test("SPARK-45346: merge schema should respect case sensitivity") {
+    import testImplicits._
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          Seq(1).toDF("col").write.mode("append").parquet(path.getCanonicalPath)
+          Seq(2).toDF("COL").write.mode("append").parquet(path.getCanonicalPath)
+          val df = spark.read.option("mergeSchema", "true").parquet(path.getCanonicalPath)
+          if (caseSensitive) {
+            assert(df.columns.toSeq.sorted == Seq("COL", "col"))
+            assert(df.collect().length == 2)
+          } else {
+            // The final column name depends on which file is listed first, and is a bit random.
+            assert(df.columns.toSeq.map(_.toLowerCase(java.util.Locale.ROOT)) == Seq("col"))
+            assert(df.collect().length == 2)
+          }
+        }
+      }
     }
   }
 
@@ -981,51 +1041,80 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
       val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
-      assert(e.getCause.getMessage.contains(expectedMessage))
+      assert(e.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getMessage.contains(expectedMessage))
     }
   }
 
   test("schema mismatch failure error message for parquet vectorized reader") {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
-
-      // Check if the physical type is reporting correctly
-      val errMsg = e.getCause.getMessage
-      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
-      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
-        errMsg.indexOf(". "))
+      assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      val file = e.getMessageParameters.get("path")
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
-          errorClass = "_LEGACY_ERROR_TEMP_2063",
+        checkErrorMatchPVals(
+          exception = e,
+          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
-            "filePath" ->
-              s".*${dir.getCanonicalPath}.*",
+            "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "logicalType" -> "int",
-            "physicalType" -> "BINARY"),
-          matchPVals = true
+            "expectedType" -> "int",
+            "actualType" -> "BINARY"
+          )
         )
       } else {
-        checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
-          errorClass = "_LEGACY_ERROR_TEMP_2063",
+        checkErrorMatchPVals(
+          exception = e,
+          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
           parameters = Map(
-            "filePath" ->
-              s".*${dir.getCanonicalPath}.*",
+            "path" -> s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "logicalType" -> "string",
-            "physicalType" -> "INT32"),
-          matchPVals = true
+            "expectedType" -> "string",
+            "actualType" -> "INT32"
+          )
         )
       }
     }
+  }
+
+  test("SPARK-45604: schema mismatch failure error on timestamp_ntz to array<timestamp_ntz>") {
+    import testImplicits._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val timestamp = java.time.LocalDateTime.of(1, 2, 3, 4, 5)
+      val df1 = Seq((1, timestamp)).toDF()
+      val df2 = Seq((2, Array(timestamp))).toDF()
+      df1.write.mode("overwrite").parquet(s"$path/parquet")
+      df2.write.mode("append").parquet(s"$path/parquet")
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val e = intercept[SparkException] {
+          spark.read.schema(df2.schema).parquet(s"$path/parquet").collect()
+        }
+        assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      }
+    }
+  }
+
+  test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with nanosAsLong=true)") {
+    val tsAttribute = "birthday"
+    withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+      val testDataPath = testFile("test-data/timestamp-nanos.parquet")
+      val data = spark.read.parquet(testDataPath).select(tsAttribute)
+      assert(data.schema.fields.head.dataType == LongType)
+      assert(data.orderBy(desc(tsAttribute)).take(1).head.getAs[Long](0) == 1668537129123534758L)
+    }
+  }
+
+  test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
+    val testDataPath = testFile("test-data/timestamp-nanos.parquet")
+    val e = intercept[AnalysisException] {
+      spark.read.parquet(testDataPath).collect()
+    }
+    assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))."))
   }
 
   // =======================================================
@@ -2261,7 +2350,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         """.stripMargin,
       binaryAsString = true,
       int96AsTimestamp = int96AsTimestamp,
-      timestampNTZEnabled = true)
+      inferTimestampNTZ = true)
   }
 
   testCatalystToParquet(
@@ -2286,14 +2375,14 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
       """.stripMargin,
     writeLegacyParquetFormat = false,
-    timestampNTZEnabled = true)
+    inferTimestampNTZ = true)
 
-  for (timestampNTZEnabled <- Seq(true, false)) {
-    val dataType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
+  for (inferTimestampNTZ <- Seq(true, false)) {
+    val dataType = if (inferTimestampNTZ) TimestampNTZType else TimestampType
 
     testParquetToCatalyst(
       "TimestampNTZ Parquet to Spark conversion for complex types, " +
-        s"timestampNTZEnabled: $timestampNTZEnabled",
+        s"inferTimestampNTZ: $inferTimestampNTZ",
       StructType(
         Seq(
           StructField("f1", dataType),
@@ -2315,10 +2404,42 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         """.stripMargin,
       binaryAsString = true,
       int96AsTimestamp = false,
-      timestampNTZEnabled = timestampNTZEnabled)
+      inferTimestampNTZ = inferTimestampNTZ)
   }
 
-  private def testSchemaClipping(
+  test("SPARK-46056: " +
+    "schema with default existence value and binary array decimal type") {
+    import scala.jdk.CollectionConverters._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = Seq(Row(Decimal("13.0")))
+
+      // decimal type does not fit in int or long
+      val wideDecimal = DecimalType(32, 10)
+      val initialSchema = StructType(Seq(
+        StructField("f1", wideDecimal)
+      ))
+
+      val evolvedSchemaWithDefaultValue = StructType(Seq(
+        StructField("f1", wideDecimal),
+        StructField("f2", wideDecimal).withExistenceDefaultValue("42.0")
+      ))
+
+      val df = spark.createDataFrame(data.asJava, initialSchema)
+      df.write.mode("overwrite").parquet(s"$path/parquet")
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val res = spark.read.schema(evolvedSchemaWithDefaultValue)
+          .parquet(s"$path/parquet").collect()
+        assert(res.length == 1)
+        assert(res(0).getDecimal(0).toBigInteger.longValueExact() == 13)
+        assert(res(0).getDecimal(1).toBigInteger.longValueExact() == 42)
+      }
+    }
+  }
+
+    private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
@@ -2339,8 +2460,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false,
-        timestampNTZEnabled = true)
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2907,8 +3027,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false,
-          timestampNTZEnabled = false)
+          useFieldId = false)
       }
     }
 }

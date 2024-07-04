@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import K8SSparkSubmitOperation.getGracePeriod
 import io.fabric8.kubernetes.api.model.Pod
@@ -120,7 +120,6 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
           KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
           SparkKubernetesClientFactory.ClientType.Submission,
           sparkConf,
-          None,
           None)
         ) { kubernetesClient =>
           implicit val client: KubernetesClient = kubernetesClient

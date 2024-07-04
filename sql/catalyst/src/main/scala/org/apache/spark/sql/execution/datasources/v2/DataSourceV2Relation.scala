@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -30,21 +32,21 @@ import org.apache.spark.util.Utils
 /**
  * A logical plan representing a data source v2 table.
  *
- * @param table   The table that this relation represents.
- * @param output the output attributes of this relation.
+ * @param table  The table that this relation represents.
+ * @param output The output attributes of this relation.
  * @param catalog catalogPlugin for the table. None if no catalog is specified.
- * @param identifier the identifier for the table. None if no identifier is defined.
+ * @param identifier The identifier for the table. None if no identifier is defined.
  * @param options The options for this table operation. It's used to create fresh
  *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
  *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
-case class DataSourceV2Relation(
+abstract class DataSourceV2RelationBase(
     table: Table,
     output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap)
-  extends LeafNode with MultiInstanceRelation with NamedRelation with ExposesMetadataColumns {
+  extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
 
@@ -52,22 +54,13 @@ case class DataSourceV2Relation(
     case c: FunctionCatalog => c
   }
 
-  override lazy val metadataOutput: Seq[AttributeReference] = table match {
-    case hasMeta: SupportsMetadataColumns =>
-      val resolve = conf.resolver
-      val outputNames = outputSet.map(_.name)
-      def isOutputColumn(col: MetadataColumn): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
-      }
-      // filter out metadata columns that have names conflicting with output columns. if the table
-      // has a column "line" and the table can produce a metadata column called "line", then the
-      // data column should be returned, not the metadata column.
-      hasMeta.metadataColumns.filterNot(isOutputColumn).toAttributes
-    case _ =>
-      Nil
+  override def name: String = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    (catalog, identifier) match {
+      case (Some(cat), Some(ident)) => s"${quoteIfNeeded(cat.name())}.${ident.quoted}"
+      case _ => table.name()
+    }
   }
-
-  override def name: String = table.name()
 
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
@@ -84,7 +77,7 @@ case class DataSourceV2Relation(
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
@@ -97,14 +90,38 @@ case class DataSourceV2Relation(
       }
     }
   }
+}
+
+/**
+ * A specialization of [[DataSourceV2RelationBase]] that supports batch scan.
+ */
+case class DataSourceV2Relation(
+    table: Table,
+    override val output: Seq[AttributeReference],
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
+    options: CaseInsensitiveStringMap)
+  extends DataSourceV2RelationBase(table, output, catalog, identifier, options)
+  with ExposesMetadataColumns {
+
+  import DataSourceV2Implicits._
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
   }
 
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
+    case _ =>
+      Nil
+  }
+
   def withMetadataColumns(): DataSourceV2Relation = {
-    if (metadataOutput.nonEmpty) {
-      DataSourceV2Relation(table, output ++ metadataOutput, catalog, identifier, options)
+    val newMetadata = metadataOutput.filterNot(outputSet.contains)
+    if (newMetadata.nonEmpty) {
+      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
     } else {
       this
     }
@@ -132,7 +149,7 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None) extends LeafNode with NamedRelation {
 
-  override def name: String = relation.table.name()
+  override def name: String = relation.name
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
@@ -150,21 +167,45 @@ case class DataSourceV2ScanRelation(
 }
 
 /**
- * A specialization of [[DataSourceV2Relation]] with the streaming bit set to true.
- *
- * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this plan,
- * to avoid making the plan mutable. We should consolidate this plan and [[DataSourceV2Relation]]
- * after we figure out how to apply operator push-down for streaming data sources.
+ * A specialization of [[DataSourceV2RelationBase]] that supports streaming scan.
+ * It will be transformed to [[StreamingDataSourceV2ScanRelation]] during the planning phase of
+ * [[MicrobatchExecution]].
  */
 case class StreamingDataSourceV2Relation(
-    output: Seq[Attribute],
-    scan: Scan,
-    stream: SparkDataStream,
+    table: Table,
+    override val output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
+    options: CaseInsensitiveStringMap,
+    metadataPath: String)
+  extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
+
+  override def isStreaming: Boolean = true
+
+  override def newInstance(): StreamingDataSourceV2Relation = {
+    copy(output = output.map(_.newInstance()))
+  }
+}
+/**
+ * A specialization of [[DataSourceV2ScanRelation]] with the streaming bit set to true, as well
+ * as start and end offsets for Microbatch processing.
+ */
+case class StreamingDataSourceV2ScanRelation(
+    relation: StreamingDataSourceV2Relation,
+    scan: Scan,
+    output: Seq[AttributeReference],
+    stream: SparkDataStream,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with NamedRelation  {
+
+  val (catalog, identifier) = (relation.catalog, relation.identifier)
+
+  override def name: String = relation.table.name()
+
+  override def simpleString(maxFields: Int): String = {
+    s"StreamingDataSourceV2ScanRelation${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+  }
 
   override def isStreaming: Boolean = true
 
@@ -196,10 +237,11 @@ object DataSourceV2Relation {
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
-    DataSourceV2Relation(table, schema.toAttributes, catalog, identifier, options)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
   }
 
   def create(

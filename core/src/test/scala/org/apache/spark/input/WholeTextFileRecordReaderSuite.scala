@@ -21,8 +21,6 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
-import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
@@ -97,7 +95,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite {
 
       val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
-      assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
+      assert(res.length === WholeTextFileRecordReaderSuite.fileNames.length,
         "Number of files read out does not fit with the actual value.")
 
       for ((filename, contents) <- res) {
@@ -120,7 +118,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite {
 
       val res = sc.wholeTextFiles(dir.toString, 3).collect()
 
-      assert(res.size === WholeTextFileRecordReaderSuite.fileNames.size,
+      assert(res.length === WholeTextFileRecordReaderSuite.fileNames.length,
         "Number of files read out does not fit with the actual value.")
 
       for ((filename, contents) <- res) {
@@ -145,6 +143,6 @@ object WholeTextFileRecordReaderSuite {
   private val fileLengths = Array(10, 100, 1000)
 
   private val files = fileLengths.zip(fileNames).map { case (upperBound, filename) =>
-    filename -> Stream.continually(testWords.toList.toStream).flatten.take(upperBound).toArray
+    filename -> LazyList.continually(testWords.toList.to(LazyList)).flatten.take(upperBound).toArray
   }.toMap
 }

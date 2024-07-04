@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Map;
+
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Experimental;
 
 /**
@@ -28,6 +31,7 @@ import org.apache.spark.annotation.Experimental;
 public interface DeltaWriteBuilder extends WriteBuilder {
   @Override
   default DeltaWrite build() {
-    throw new UnsupportedOperationException(getClass().getName() + " does not implement build");
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3140", Map.of("class", getClass().getName()));
   }
 }

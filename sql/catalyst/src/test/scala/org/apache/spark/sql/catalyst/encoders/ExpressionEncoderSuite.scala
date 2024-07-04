@@ -24,19 +24,21 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{Encoder, Encoders}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.{SparkClosureCleaner, Utils}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -137,7 +139,8 @@ case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
 
-class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
+class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
+  with QueryErrorsBase {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
@@ -245,77 +248,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       useFallback = true)
   }
 
-  object OuterLevelWithVeryVeryVeryLongClassName1 {
-    object OuterLevelWithVeryVeryVeryLongClassName2 {
-      object OuterLevelWithVeryVeryVeryLongClassName3 {
-        object OuterLevelWithVeryVeryVeryLongClassName4 {
-          object OuterLevelWithVeryVeryVeryLongClassName5 {
-            object OuterLevelWithVeryVeryVeryLongClassName6 {
-              object OuterLevelWithVeryVeryVeryLongClassName7 {
-                object OuterLevelWithVeryVeryVeryLongClassName8 {
-                  object OuterLevelWithVeryVeryVeryLongClassName9 {
-                    object OuterLevelWithVeryVeryVeryLongClassName10 {
-                      object OuterLevelWithVeryVeryVeryLongClassName11 {
-                        object OuterLevelWithVeryVeryVeryLongClassName12 {
-                          object OuterLevelWithVeryVeryVeryLongClassName13 {
-                            object OuterLevelWithVeryVeryVeryLongClassName14 {
-                              object OuterLevelWithVeryVeryVeryLongClassName15 {
-                                object OuterLevelWithVeryVeryVeryLongClassName16 {
-                                  object OuterLevelWithVeryVeryVeryLongClassName17 {
-                                    object OuterLevelWithVeryVeryVeryLongClassName18 {
-                                      object OuterLevelWithVeryVeryVeryLongClassName19 {
-                                        object OuterLevelWithVeryVeryVeryLongClassName20 {
-                                          case class MalformedNameExample(x: Int)
-                                        }}}}}}}}}}}}}}}}}}}}
-
-  {
-    OuterScopes.addOuterScope(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20)
-    encodeDecodeTest(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20
-        .MalformedNameExample(42),
-      "deeply nested Scala class should work",
-      useFallback = true)
-  }
-
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(
@@ -387,28 +319,28 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     1 -> 10L,
     "tuple with 2 flat encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[Long]))
+    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[Long]()))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[(Int, Long)]))
+    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[(Int, Long)]()))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[Int]))
+    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[Int]()))
 
   encodeDecodeTest(
     (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[PrimitiveData]))
+    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[PrimitiveData]()))
 
   encodeDecodeTest(
     (1, (10, 100L)),
     "nested tuple encoder") {
-    val intEnc = ExpressionEncoder[Int]
-    val longEnc = ExpressionEncoder[Long]
+    val intEnc = ExpressionEncoder[Int]()
+    val longEnc = ExpressionEncoder[Long]()
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
@@ -476,6 +408,18 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Option.empty[Int], "empty option of int")
   encodeDecodeTest(Option("abc"), "option of string")
   encodeDecodeTest(Option.empty[String], "empty option of string")
+  encodeDecodeTest(Seq(Some(Seq(0))), "SPARK-45896: seq of option of seq")
+  encodeDecodeTest(Map(0 -> Some(Seq(0))), "SPARK-45896: map of option of seq")
+  encodeDecodeTest(Seq(Some(Timestamp.valueOf("2023-01-01 00:00:00"))),
+    "SPARK-45896: seq of option of timestamp")
+  encodeDecodeTest(Map(0 -> Some(Timestamp.valueOf("2023-01-01 00:00:00"))),
+    "SPARK-45896: map of option of timestamp")
+  encodeDecodeTest(Seq(Some(Date.valueOf("2023-01-01"))),
+    "SPARK-45896: seq of option of date")
+  encodeDecodeTest(Map(0 -> Some(Date.valueOf("2023-01-01"))),
+    "SPARK-45896: map of option of date")
+  encodeDecodeTest(Seq(Some(BigDecimal(200))), "SPARK-45896: seq of option of bigdecimal")
+  encodeDecodeTest(Map(0 -> Some(BigDecimal(200))), "SPARK-45896: map of option of bigdecimal")
 
   encodeDecodeTest(ScroogeLikeExample(1),
     "SPARK-40385 class with only a companion object constructor")
@@ -490,7 +434,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     checkError(
       exception = exception,
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "Any")
+      parameters = Map(
+        "typeName" -> "Any",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
@@ -511,7 +457,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     // test for nested product encoders
     {
-      val schema = ExpressionEncoder[(Int, (String, Int))].schema
+      val schema = ExpressionEncoder[(Int, (String, Int))]().schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -521,8 +467,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     // test for tupled encoders
     {
       val schema = ExpressionEncoder.tuple(
-        ExpressionEncoder[Int],
-        ExpressionEncoder[(String, Int)]).schema
+        ExpressionEncoder[Int](),
+        ExpressionEncoder[(String, Int)]()).schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -567,10 +513,31 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   test("throw exception for tuples with more than 22 elements") {
     val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
 
-    val e = intercept[UnsupportedOperationException] {
-      ExpressionEncoder.tuple(encoders)
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        ExpressionEncoder.tuple(encoders)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2150",
+      parameters = Map.empty)
+  }
+
+  test("throw exception for unexpected serializer") {
+    val schema = new StructType()
+      .add("key", StringType)
+      .add("value", BinaryType)
+
+    val encoder = ExpressionEncoder(schema, lenient = true)
+    val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
+    val exception = intercept[org.apache.spark.SparkRuntimeException] {
+      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
     }
-    assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+    checkError(
+      exception = exception,
+      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      parameters = Map(
+        "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
+        "expr" -> toSQLExpr(unexpectedSerializer))
+    )
   }
 
   encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
@@ -649,7 +616,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
             val e = intercept[RuntimeException] {
               toRow(bigNumeric)
             }
-            assert(e.getMessage.contains("Error while encoding"))
+            assert(e.getMessage.contains("Failed to encode a value of the expressions:"))
             assert(e.getCause.getClass === classOf[SparkArithmeticException])
           }
         }
@@ -665,10 +632,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val encoder = implicitly[ExpressionEncoder[T]]
 
       // Make sure encoder is serializable.
-      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+      SparkClosureCleaner.clean((s: String) => encoder.getClass.getName)
 
       val row = encoder.createSerializer().apply(input)
-      val schema = encoder.schema.toAttributes
+      val schema = toAttributes(encoder.schema)
       val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.createDeserializer().apply(row) catch {
         case e: Exception =>

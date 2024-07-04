@@ -135,7 +135,8 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
   @Since("2.4.0")
   def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = instrumented { instr =>
     instr.logDataset(dataset)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
 
     val sequenceColParam = $(sequenceCol)
     val inputType = dataset.schema(sequenceColParam).dataType

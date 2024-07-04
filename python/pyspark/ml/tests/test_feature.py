@@ -367,7 +367,6 @@ class FeatureTests(SparkSessionTestCase):
 
 class HashingTFTest(SparkSessionTestCase):
     def test_apply_binary_term_freqs(self):
-
         df = self.spark.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
         n = 10
         hashingTF = HashingTF()

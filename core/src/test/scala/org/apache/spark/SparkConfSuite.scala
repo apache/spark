@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -341,7 +341,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
-  test("SPARK-26998: SSL configuration not needed on executors") {
+  test("SPARK-26998: SSL passwords not needed on executors") {
     val conf = new SparkConf(false)
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyPassword", "password")
@@ -349,7 +349,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.ssl.trustStorePassword", "password")
 
     val filtered = conf.getAll.filter { case (k, _) => SparkConf.isExecutorStartupConf(k) }
-    assert(filtered.isEmpty)
+    // Only the enabled flag should propagate
+    assert(filtered.length == 1)
+    assert(filtered(0)._1 == "spark.ssl.enabled")
   }
 
   test("SPARK-27244 toDebugString redacts sensitive information") {
@@ -463,7 +465,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       case (ratio, slots) =>
         val conf = new SparkConf()
         conf.set(TASK_GPU_ID.amountConf, ratio.toString)
-        if (ratio > 0.5 && ratio % 1 != 0) {
+        if (ratio > 1.0 && ratio % 1 != 0) {
           assertThrows[SparkException] {
             parseResourceRequirements(conf, SPARK_TASK_PREFIX)
           }
@@ -496,6 +498,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
           assert(reqs.head.amount == slots)
           assert(reqs.head.numParts == 1)
         }
+    }
+  }
+
+  test("SPARK-44650: spark.executor.defaultJavaOptions Check illegal java options") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+    conf.set(EXECUTOR_JAVA_OPTIONS.key, "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
+    }
+    conf.remove(EXECUTOR_JAVA_OPTIONS.key)
+    conf.set("spark.executor.defaultJavaOptions", "-Dspark.foo=bar")
+    intercept[Exception] {
+      conf.validateSettings()
     }
   }
 }

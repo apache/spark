@@ -20,15 +20,14 @@ import java.io.{File, FileInputStream}
 import java.time.Instant
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, Pod, Quantity}
-import io.fabric8.kubernetes.client.NamespacedKubernetesClient
 import io.fabric8.volcano.client.VolcanoClient
 import io.fabric8.volcano.scheduling.v1beta1.{Queue, QueueBuilder}
 import org.scalatest.BeforeAndAfterEach
@@ -46,9 +45,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT,
     SPARK_DRIVER_MAIN_CLASS}
 
-  lazy val volcanoClient: VolcanoClient
-    = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
-  lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
   private val testGroups: mutable.Set[String] = mutable.Set.empty
   private val testYAMLPaths: mutable.Set[String] = mutable.Set.empty
   private val testResources: mutable.Set[HasMetadata] = mutable.Set.empty
@@ -58,9 +54,19 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   private def deletePodInTestGroup(): Unit = {
     testGroups.foreach { g =>
-      k8sClient.pods().withLabel("spark-group-locator", g).delete()
+      kubernetesTestComponents.kubernetesClient
+        .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .withLabel("spark-group-locator", g)
+        .delete()
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        assert(k8sClient.pods().withLabel("spark-group-locator", g).list().getItems.isEmpty)
+        assert(kubernetesTestComponents.kubernetesClient
+          .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
+          .withLabel("spark-group-locator", g)
+          .list()
+          .getItems
+          .isEmpty)
       }
     }
     testGroups.clear()
@@ -70,7 +76,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     testYAMLPaths.foreach { yaml =>
       deleteYAMLResource(yaml)
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        val resources = k8sClient.load(new FileInputStream(yaml)).fromServer.get.asScala
+        val resources = kubernetesTestComponents.kubernetesClient
+          .load(new FileInputStream(yaml))
+          .inNamespace(kubernetesTestComponents.namespace)
+          .get.asScala
         // Make sure all elements are null (no specific resources in cluster)
         resources.foreach { r => assert(r === null) }
       }
@@ -80,9 +89,15 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   private def deleteResources(): Unit = {
     testResources.foreach { _ =>
-      k8sClient.resourceList(testResources.toSeq: _*).delete()
+      kubernetesTestComponents.kubernetesClient
+        .resourceList(testResources.toSeq: _*)
+        .inNamespace(kubernetesTestComponents.namespace)
+        .delete()
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        val resources = k8sClient.resourceList(testResources.toSeq: _*).fromServer.get.asScala
+        val resources = kubernetesTestComponents.kubernetesClient
+          .resourceList(testResources.toSeq: _*)
+          .inNamespace(kubernetesTestComponents.namespace)
+          .get().asScala
         // Make sure all elements are null (no specific resources in cluster)
         resources.foreach { r => assert(r === null) }
       }
@@ -108,7 +123,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     assert(pod.getSpec.getSchedulerName === "volcano")
   }
 
-  protected def checkAnnotaion(pod: Pod): Unit = {
+  protected def checkAnnotation(pod: Pod): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
     val annotations = pod.getMetadata.getAnnotations
     assert(annotations.get("scheduling.k8s.io/group-name") === s"$appId-podgroup")
@@ -120,7 +135,11 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       priorityClassName: Option[String] = None): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
     val podGroupName = s"$appId-podgroup"
-    val podGroup = volcanoClient.podGroups().withName(podGroupName).get()
+    val podGroup = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
+      .podGroups()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withName(podGroupName)
+      .get()
     assert(podGroup.getMetadata.getOwnerReferences.get(0).getName === pod.getMetadata.getName)
     queue.foreach(q => assert(q === podGroup.getSpec.getQueue))
     priorityClassName.foreach(_ =>
@@ -128,7 +147,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   }
 
   private def createOrReplaceResource(resource: Queue): Unit = {
-    volcanoClient.queues().createOrReplace(resource)
+    kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
+      .queues()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .createOrReplace(resource)
     testResources += resource
   }
 
@@ -152,20 +174,27 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   }
 
   private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
-    k8sClient.load(new FileInputStream(yamlPath)).createOrReplace()
+    kubernetesTestComponents.kubernetesClient
+      .load(new FileInputStream(yamlPath))
+      .inNamespace(kubernetesTestComponents.namespace)
+      .createOrReplace()
     testYAMLPaths += yamlPath
   }
 
   private def deleteYAMLResource(yamlPath: String): Unit = {
-    k8sClient.load(new FileInputStream(yamlPath)).delete()
+    kubernetesTestComponents.kubernetesClient
+      .load(new FileInputStream(yamlPath))
+      .inNamespace(kubernetesTestComponents.namespace)
+      .delete()
   }
 
   private def getPods(
       role: String,
       groupLocator: String,
       statusPhase: String): mutable.Buffer[Pod] = {
-    k8sClient
+    kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-group-locator", groupLocator)
       .withLabel("spark-role", role)
       .withField("status.phase", statusPhase)
@@ -189,7 +218,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       runSparkDriverSubmissionAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
-          checkAnnotaion(driverPod)
+          checkAnnotation(driverPod)
           checkPodGroup(driverPod, queue)
         },
         customSparkConf = Option(conf),
@@ -199,12 +228,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
-          checkAnnotaion(driverPod)
+          checkAnnotation(driverPod)
           checkPodGroup(driverPod, queue)
         },
         executorPodChecker = (executorPod: Pod) => {
           checkScheduler(executorPod)
-          checkAnnotaion(executorPod)
+          checkAnnotation(executorPod)
         },
         customSparkConf = Option(conf),
         customAppLocator = Option(appLoc)
@@ -285,13 +314,13 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       driverPodChecker = (driverPod: Pod) => {
         doBasicDriverPodCheck(driverPod)
         checkScheduler(driverPod)
-        checkAnnotaion(driverPod)
+        checkAnnotation(driverPod)
         checkPodGroup(driverPod)
       },
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
         checkScheduler(executorPod)
-        checkAnnotaion(executorPod)
+        checkAnnotation(executorPod)
       }
     )
   }
@@ -467,8 +496,8 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val DRIVER_PG_TEMPLATE_MEMORY_3G = new File(
     getClass.getResource("/volcano/driver-podgroup-template-memory-3g.yml").getFile
   ).getAbsolutePath
-  val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("1")
-  val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("1")
+  val DRIVER_REQUEST_CORES = sys.props.get(CONFIG_DRIVER_REQUEST_CORES).getOrElse("0.2")
+  val EXECUTOR_REQUEST_CORES = sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).getOrElse("0.2")
   val VOLCANO_MAX_JOB_NUM = sys.props.get(CONFIG_KEY_VOLCANO_MAX_JOB_NUM).getOrElse("2")
   val TEMP_DIR = "/tmp/"
 }

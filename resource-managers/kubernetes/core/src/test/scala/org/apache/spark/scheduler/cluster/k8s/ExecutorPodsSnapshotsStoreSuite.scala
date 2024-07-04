@@ -19,10 +19,11 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable
+
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.scalatest.BeforeAndAfter
-import scala.collection.mutable
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Constants._

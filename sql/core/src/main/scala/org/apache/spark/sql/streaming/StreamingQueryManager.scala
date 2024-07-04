@@ -21,11 +21,12 @@ import java.util.UUID
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
@@ -77,7 +78,7 @@ class StreamingQueryManager private[sql] (
         Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
           sparkSession.sparkContext.conf).foreach { listener =>
           addListener(listener)
-          logInfo(s"Registered listener ${listener.getClass.getName}")
+          logInfo(log"Registered listener ${MDC(CLASS_NAME, listener.getClass.getName)}")
         }
       }
     }
@@ -367,8 +368,8 @@ class StreamingQueryManager private[sql] (
       if (activeOption.isDefined) {
         if (shouldStopActiveRun) {
           val oldQuery = activeOption.get
-          logWarning(s"Stopping existing streaming query [id=${query.id}, " +
-            s"runId=${oldQuery.runId}], as a new run is being started.")
+          logWarning(log"Stopping existing streaming query [id=${MDC(QUERY_ID, query.id)}, " +
+            log"runId=${MDC(RUN_ID, oldQuery.runId)}], as a new run is being started.")
           Some(oldQuery)
         } else {
           throw new IllegalStateException(

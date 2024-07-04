@@ -69,7 +69,7 @@ private[io] class ChunkedByteBufferFileRegion(
       if (keepGoing) {
         // advance to the next chunk (if there are any more)
         currentChunkIdx += 1
-        if (currentChunkIdx == chunks.size) {
+        if (currentChunkIdx == chunks.length) {
           keepGoing = false
         } else {
           currentChunk = chunks(currentChunkIdx)

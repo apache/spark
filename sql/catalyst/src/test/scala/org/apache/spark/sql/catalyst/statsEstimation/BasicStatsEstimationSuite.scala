@@ -23,11 +23,12 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
+import org.apache.spark.util.ArrayImplicits._
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
@@ -176,6 +177,22 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
         expectedStatsCboOff = rangeStats, extraConfig)
   }
 
+test("range with invalid long value") {
+  val numElements = BigInt(Long.MaxValue) - BigInt(Long.MinValue)
+  val range = Range(Long.MinValue, Long.MaxValue, 1, None)
+  val rangeAttrs = AttributeMap(range.output.map(attr =>
+    (attr, ColumnStat(
+      distinctCount = Some(numElements),
+      nullCount = Some(0),
+      maxLen = Some(LongType.defaultSize),
+      avgLen = Some(LongType.defaultSize)))))
+  val rangeStats = Statistics(
+    sizeInBytes = numElements * 8,
+    rowCount = Some(numElements),
+    attributeStats = rangeAttrs)
+  checkStats(range, rangeStats, rangeStats)
+}
+
   test("windows") {
     val windows = plan.window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
@@ -232,14 +249,14 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("sample estimation") {
-    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)
+    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random() * 1000).toLong, plan)
     checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
 
     // Child doesn't have rowCount in stats
     val childStats = Statistics(sizeInBytes = 120)
     val childPlan = DummyLogicalPlan(childStats, childStats)
     val sample2 =
-      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)
+      Sample(0.0, 0.11, withReplacement = false, (math.random() * 1000).toLong, childPlan)
     checkStats(sample2, Statistics(sizeInBytes = 14))
   }
 
@@ -268,7 +285,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("command should report a dummy stats") {
     val plan = CommentOnNamespace(
-      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
+      ResolvedNamespace(mock(classOf[SupportsNamespaces]),
+        Array("ns").toImmutableArraySeq), "comment")
     checkStats(
       plan,
       expectedStatsCboOn = Statistics.DUMMY,
@@ -326,6 +344,37 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       distinct,
       expectedStatsCboOn = Statistics(sizeInBytes, Some(plan.rowCount), plan.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("SPARK-39851: Improve join stats estimation if one side can keep uniqueness") {
+    val brandId = attr("brand_id")
+    val classId = attr("class_id")
+    val aliasedBrandId = brandId.as("new_brand_id")
+    val aliasedClassId = classId.as("new_class_id")
+
+    val tableSize = 4059900
+    val tableRowCnt = 202995
+
+    val tbl = StatsTestPlan(
+      outputList = Seq(brandId, classId),
+      size = Some(tableSize),
+      rowCount = tableRowCnt,
+      attributeStats =
+        AttributeMap(Seq(
+          brandId -> ColumnStat(Some(858), Some(101001), Some(1016017), Some(0), Some(4), Some(4)),
+          classId -> ColumnStat(Some(16), Some(1), Some(16), Some(0), Some(4), Some(4)))))
+
+    val join = Join(
+      tbl,
+      tbl.groupBy(brandId, classId)(aliasedBrandId, aliasedClassId),
+      Inner,
+      Some(brandId === aliasedBrandId.toAttribute && classId === aliasedClassId.toAttribute),
+      JoinHint.NONE)
+
+    checkStats(
+      join,
+      expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
+      expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
   }
 
   test("row size and column stats estimation for sort") {

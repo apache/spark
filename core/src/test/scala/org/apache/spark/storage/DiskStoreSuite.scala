@@ -117,7 +117,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     val chunkedByteBuffer = blockData.toChunkedByteBuffer(ByteBuffer.allocate)
     val chunks = chunkedByteBuffer.chunks
-    assert(chunks.size === 2)
+    assert(chunks.length === 2)
     for (chunk <- chunks) {
       assert(chunk.limit() === 10 * 1024)
     }

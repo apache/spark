@@ -22,9 +22,11 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.apache.spark.network.TransportContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
@@ -51,7 +53,8 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
 public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
-  private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
   private final TransportResponseHandler responseHandler;
@@ -84,8 +87,8 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    logger.warn("Exception in connection from " + getRemoteAddress(ctx.channel()),
-      cause);
+    logger.warn("Exception in connection from {}", cause,
+      MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(ctx.channel())));
     requestHandler.exceptionCaught(cause);
     responseHandler.exceptionCaught(cause);
     ctx.close();
@@ -136,10 +139,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
-    if (request instanceof RequestMessage) {
-      requestHandler.handle((RequestMessage) request);
-    } else if (request instanceof ResponseMessage) {
-      responseHandler.handle((ResponseMessage) request);
+    if (request instanceof RequestMessage msg) {
+      requestHandler.handle(msg);
+    } else if (request instanceof ResponseMessage msg) {
+      responseHandler.handle(msg);
     } else {
       ctx.fireChannelRead(request);
     }
@@ -148,8 +151,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   /** Triggered based on events from an {@link io.netty.handler.timeout.IdleStateHandler}. */
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-    if (evt instanceof IdleStateEvent) {
-      IdleStateEvent e = (IdleStateEvent) evt;
+    if (evt instanceof IdleStateEvent e) {
       // See class comment for timeout semantics. In addition to ensuring we only timeout while
       // there are outstanding requests, we also do a secondary consistency check to ensure
       // there's no race between the idle timeout and incrementing the numOutstandingRequests
@@ -166,7 +168,9 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust" +
               " spark.{}.io.connectionTimeout if this is wrong.",
-              address, requestTimeoutNs / 1000 / 1000, transportContext.getConf().getModuleName());
+              MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
+              MDC.of(LogKeys.TIMEOUT$.MODULE$, requestTimeoutNs / 1000 / 1000),
+              MDC.of(LogKeys.MODULE_NAME$.MODULE$, transportContext.getConf().getModuleName()));
             client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {
@@ -182,6 +186,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   public TransportResponseHandler getResponseHandler() {
     return responseHandler;
+  }
+
+  public TransportRequestHandler getRequestHandler() {
+    return requestHandler;
   }
 
   @Override

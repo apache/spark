@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -287,7 +288,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
@@ -300,8 +301,7 @@ object PhysicalAggregation {
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case a
-            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
+          case a: AggregateExpression if !equivalentAggregateExpressions.addExpr(a) =>
             a
         }
       }
@@ -330,10 +330,6 @@ object PhysicalAggregation {
             // so replace each aggregate expression by its corresponding attribute in the set:
             equivalentAggregateExpressions.getExprState(ae).map(_.expr)
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
-            // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
-            equivalentAggregateExpressions.getExprState(ue).map(_.expr)
-              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
@@ -432,16 +428,20 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  * This class extracts the following entities:
  *  - the group-based rewrite plan;
  *  - the condition that defines matching groups;
+ *  - the group filter condition;
  *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
  *  depending on whether the planning has already happened;
  */
 object GroupBasedRowLevelOperation {
-  type ReturnType = (ReplaceData, Expression, LogicalPlan)
+  type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _), cond, query, _, _) =>
-      val readRelation = findReadRelation(table, query)
-      readRelation.map((rd, cond, _))
+    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
+        cond, query, _, groupFilterCond, _) =>
+      // group-based UPDATEs that are rewritten as UNION read the table twice
+      val allowMultipleReads = rd.operation.command == UPDATE
+      val readRelation = findReadRelation(table, query, allowMultipleReads)
+      readRelation.map((rd, cond, groupFilterCond, _))
 
     case _ =>
       None
@@ -449,7 +449,8 @@ object GroupBasedRowLevelOperation {
 
   private def findReadRelation(
       table: Table,
-      plan: LogicalPlan): Option[LogicalPlan] = {
+      plan: LogicalPlan,
+      allowMultipleReads: Boolean): Option[LogicalPlan] = {
 
     val readRelations = plan.collect {
       case r: DataSourceV2Relation if r.table eq table => r
@@ -467,8 +468,20 @@ object GroupBasedRowLevelOperation {
       case Seq(relation) =>
         Some(relation)
 
-      case relations =>
-        throw new AnalysisException(s"Expected only one row-level read relation: $relations")
+      case Seq(relation1: DataSourceV2Relation, relation2: DataSourceV2Relation)
+          if allowMultipleReads && (relation1.table eq relation2.table) =>
+        Some(relation1)
+
+      case Seq(relation1: DataSourceV2ScanRelation, relation2: DataSourceV2ScanRelation)
+          if allowMultipleReads && (relation1.scan eq relation2.scan) =>
+        Some(relation1)
+
+      case other =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3056",
+          messageParameters = Map(
+            "allowMultipleReads" -> allowMultipleReads.toString,
+            "other" -> other.toString))
     }
   }
 }

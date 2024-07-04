@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -32,6 +33,7 @@ import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteT
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A rule that constructs logical writes.
@@ -90,13 +92,13 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId)
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
-      val customMetrics = write.supportedCustomMetrics.toSeq
+      val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
       val funCatalogOpt = relation.flatMap(_.funCatalog)
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
       WriteToDataSourceV2(relation, microBatchWrite, newQuery, customMetrics)
 
-    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, None) =>
-      val rowSchema = StructType.fromAttributes(rd.dataInput)
+    case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, _, None) =>
+      val rowSchema = DataTypeUtils.fromAttributes(rd.dataInput)
       val writeBuilder = newWriteBuilder(r.table, Map.empty, rowSchema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)

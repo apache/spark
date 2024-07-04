@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -127,7 +128,7 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       createFunction(f)
       QueryTest.checkAnswer(
         sql(s"SHOW ALL FUNCTIONS IN $ns"),
-        allFuns :+ Row(qualifiedFunName("ns", "current_datei")))
+        (allFuns :+ Row(qualifiedFunName("ns", "current_datei"))).toImmutableArraySeq)
     }
   }
 

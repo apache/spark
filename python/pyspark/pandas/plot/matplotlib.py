@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
+from typing import final
+
+from pyspark.loose_version import LooseVersion
 
 import matplotlib as mat
 import numpy as np
-from matplotlib.axes._base import _process_plot_format
+from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
+from matplotlib.figure import Figure
 from pandas.core.dtypes.inference import is_list_like
 from pandas.io.formats.printing import pprint_thing
-
 from pandas.plotting._matplotlib import (  # type: ignore[attr-defined]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,
@@ -45,8 +47,27 @@ from pyspark.pandas.plot import (
     unsupported_function,
     KdePlotBase,
 )
+from pyspark.pandas.series import Series, first_series
 
 _all_kinds = PlotAccessor._all_kinds  # type: ignore[attr-defined]
+
+
+def _set_ticklabels(ax, labels, is_vertical, **kwargs) -> None:
+    """Set the tick labels of a given axis.
+
+    Due to https://github.com/matplotlib/matplotlib/pull/17266, we need to handle the
+    case of repeated ticks (due to `FixedLocator`) and thus we duplicate the number of
+    labels.
+    """
+    ticks = ax.get_xticks() if is_vertical else ax.get_yticks()
+    if len(ticks) != len(labels):
+        i, remainder = divmod(len(ticks), len(labels))
+        assert remainder == 0, remainder
+        labels *= i
+    if is_vertical:
+        ax.set_xticklabels(labels, **kwargs)
+    else:
+        ax.set_yticklabels(labels, **kwargs)
 
 
 class PandasOnSparkBarPlot(PandasBarPlot, TopNPlotBase):
@@ -232,10 +253,23 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         else:
             return ax, bp
 
+    @final
+    def _ensure_frame(self, data):
+        if isinstance(data, Series):
+            label = self.label
+            if label is None and data.name is None:
+                label = ""
+            if label is None:
+                data = data.to_frame()
+            else:
+                data = data.to_frame(name=label)
+        return data
+
     def _compute_plot_data(self):
-        colname = self.data.name
-        spark_column_name = self.data._internal.spark_column_name_for(self.data._column_label)
         data = self.data
+        data = first_series(data) if not isinstance(data, Series) else data
+        colname = data.name
+        spark_column_name = data._internal.spark_column_name_for(data._column_label)
 
         # Updates all props with the rc defaults from matplotlib
         self.kwds.update(PandasOnSparkBoxPlot.rc_defaults(**self.kwds))
@@ -278,7 +312,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
 
         self.data = {labels[0]: stats}
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         bxpstats = list(self.data.values())[0]
         ax = self._get_ax(0)
         kwds = self.kwds.copy()
@@ -304,7 +338,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         labels = [pprint_thing(lbl) for lbl in labels]
         if not self.use_index:
             labels = [pprint_thing(key) for key in range(len(labels))]
-        self._set_ticklabels(ax, labels)
+        _set_ticklabels(ax, labels, self.orientation == "vertical")
 
     @staticmethod
     def rc_defaults(
@@ -364,10 +398,32 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
         if is_list_like(self.bottom):
             self.bottom = np.array(self.bottom)
 
+    @final
+    def _ensure_frame(self, data):
+        if isinstance(data, Series):
+            label = self.label
+            if label is None and data.name is None:
+                label = ""
+            if label is None:
+                data = data.to_frame()
+            else:
+                data = data.to_frame(name=label)
+        return data
+
+    def _calculate_bins(self, data, bins):
+        return bins
+
     def _compute_plot_data(self):
         self.data, self.bins = HistogramPlotBase.prepare_hist_data(self.data, self.bins)
 
-    def _make_plot(self):
+    def _make_plot_keywords(self, kwds, y):
+        """merge BoxPlot/KdePlot properties to passed kwds"""
+        # y is required for KdePlot
+        kwds["bottom"] = self.bottom
+        kwds["bins"] = self.bins
+        return kwds
+
+    def _make_plot(self, fig: Figure):
         # TODO: this logic is similar to KdePlot. Might have to deduplicate it.
         # 'num_colors' requires to calculate `shape` which has to count all.
         # Use 1 for now to save the computation.
@@ -424,9 +480,9 @@ class PandasOnSparkPiePlot(PandasPiePlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         self.set_result_text(self._get_ax(0))
-        super()._make_plot()
+        super()._make_plot(fig)
 
 
 class PandasOnSparkAreaPlot(PandasAreaPlot, SampledPlotBase):
@@ -435,9 +491,9 @@ class PandasOnSparkAreaPlot(PandasAreaPlot, SampledPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         self.set_result_text(self._get_ax(0))
-        super()._make_plot()
+        super()._make_plot(fig)
 
 
 class PandasOnSparkLinePlot(PandasLinePlot, SampledPlotBase):
@@ -446,9 +502,9 @@ class PandasOnSparkLinePlot(PandasLinePlot, SampledPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_sampled(data), **kwargs)
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         self.set_result_text(self._get_ax(0))
-        super()._make_plot()
+        super()._make_plot(fig)
 
 
 class PandasOnSparkBarhPlot(PandasBarhPlot, TopNPlotBase):
@@ -457,9 +513,9 @@ class PandasOnSparkBarhPlot(PandasBarhPlot, TopNPlotBase):
     def __init__(self, data, **kwargs):
         super().__init__(self.get_top_n(data), **kwargs)
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         self.set_result_text(self._get_ax(0))
-        super()._make_plot()
+        super()._make_plot(fig)
 
 
 class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
@@ -468,9 +524,9 @@ class PandasOnSparkScatterPlot(PandasScatterPlot, TopNPlotBase):
     def __init__(self, data, x, y, **kwargs):
         super().__init__(self.get_top_n(data), x, y, **kwargs)
 
-    def _make_plot(self):
+    def _make_plot(self, fig: Figure):
         self.set_result_text(self._get_ax(0))
-        super()._make_plot()
+        super()._make_plot(fig)
 
 
 class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
@@ -479,7 +535,12 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
     def _compute_plot_data(self):
         self.data = KdePlotBase.prepare_kde_data(self.data)
 
-    def _make_plot(self):
+    def _make_plot_keywords(self, kwds, y):
+        kwds["bw_method"] = self.bw_method
+        kwds["ind"] = type(self)._get_ind(y, ind=self.ind)
+        return kwds
+
+    def _make_plot(self, fig: Figure):
         # 'num_colors' requires to calculate `shape` which has to count all.
         # Use 1 for now to save the computation.
         colors = self._get_colors(num_colors=1)
@@ -516,8 +577,9 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
                 self, "_append_legend_handles_labels"
             ) else self._add_legend_handle(artists[0], label, index=i)
 
-    def _get_ind(self, y):
-        return KdePlotBase.get_ind(y, self.ind)
+    @staticmethod
+    def _get_ind(y, ind):
+        return KdePlotBase.get_ind(y, ind)
 
     @classmethod
     def _plot(
@@ -749,7 +811,6 @@ def plot_frame(
     yerr=None,
     xerr=None,
     secondary_y=False,
-    sort_columns=False,
     **kwds,
 ):
     """
@@ -835,8 +896,6 @@ def plot_frame(
     mark_right : boolean, default True
         When using a secondary_y axis, automatically mark the column
         labels with "(right)" in the legend
-    sort_columns: bool, default is False
-        When True, will sort values on plots.
     **kwds : keywords
         Options to pass to matplotlib plotting method
 
@@ -852,7 +911,6 @@ def plot_frame(
       for bar plot layout by `position` keyword.
       From 0 (left/bottom-end) to 1 (right/top-end). Default is 0.5 (center)
     """
-
     return _plot(
         data,
         kind=kind,
@@ -883,7 +941,6 @@ def plot_frame(
         sharey=sharey,
         secondary_y=secondary_y,
         layout=layout,
-        sort_columns=sort_columns,
         **kwds,
     )
 
@@ -905,7 +962,6 @@ def _plot(data, x=None, y=None, subplots=False, ax=None, kind="line", **kwds):
     if kind in ("scatter", "hexbin"):
         plot_obj = klass(data, x, y, subplots=subplots, ax=ax, kind=kind, **kwds)
     else:
-
         # check data type and do preprocess before applying plot
         if isinstance(data, DataFrame):
             if x is not None:

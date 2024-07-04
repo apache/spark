@@ -111,7 +111,7 @@ sparkR.conf <- function(key, defaultValue) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
                 estr <- as.character(e)
-                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                if (any(grepl("SQL_CONF_NOT_FOUND", estr, fixed = TRUE))) {
                   stop("Config '", key, "' is not set")
                 } else {
                   stop("Unknown error: ", estr)
@@ -153,7 +153,9 @@ writeToFileInArrow <- function(fileName, rdf, numPartitions) {
     numPartitions <- if (!is.null(numPartitions)) {
       numToInt(numPartitions)
     } else {
-      1
+      # If numPartitions is not set, chunk the R DataFrame based on the batch size.
+      ceiling(
+        nrow(rdf) / as.numeric(sparkR.conf("spark.sql.execution.arrow.maxRecordsPerBatch")[[1]]))
     }
 
     rdf_slices <- if (numPartitions > 1) {

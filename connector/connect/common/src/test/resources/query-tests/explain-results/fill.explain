@@ -1,0 +1,2 @@
+Project [coalesce(id#0L, cast(8 as bigint)) AS id#0L, a#0, b#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

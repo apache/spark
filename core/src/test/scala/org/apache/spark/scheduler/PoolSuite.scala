@@ -353,7 +353,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       Utils.getSparkClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile)
     TestUtils.withHttpServer(xmlPath.getParent.toUri.getPath) { baseURL =>
       val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE,
-        baseURL + "fairscheduler-with-valid-data.xml")
+        baseURL.toString + "fairscheduler-with-valid-data.xml")
       sc = new SparkContext(LOCAL, APP_NAME, conf)
 
       val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)

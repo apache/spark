@@ -22,8 +22,7 @@ import java.time.{DateTimeException, LocalDate}
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 class DateFormatterSuite extends DatetimeFormatterSuite {
 
@@ -186,7 +185,7 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     val formatter = DateFormatter("MM-dd")
     // The date parser in 2.4 accepts 1970-02-29 and turn it into 1970-03-01, so we should get a
     // SparkUpgradeException here.
-    intercept[SparkUpgradeException](formatter.parse("02-29"))
+    intercept[DateTimeException](formatter.parse("02-29"))
   }
 
   test("SPARK-36418: default parsing w/o pattern") {

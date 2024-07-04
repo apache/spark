@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{RDD_LIMIT_INITIAL_NUM_PARTITIONS, RDD_LIMIT_SCALE_UP_FACTOR}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -59,14 +60,14 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
   def collectAsync(): FutureAction[Seq[T]] = self.withScope {
     val results = new Array[Array[T]](self.partitions.length)
     self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.length),
-      (index, data) => results(index) = data, results.flatten.toSeq)
+      (index, data) => results(index) = data, results.flatten.toImmutableArraySeq)
   }
 
   /**
    * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
-    val callSite = self.context.getCallSite
+    val callSite = self.context.getCallSite()
     val localProperties = self.context.getLocalProperties
     // Cached thread pool to handle aggregation of subtasks.
     implicit val executionContext = AsyncRDDActions.futureExecutionContext
@@ -103,7 +104,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
 
         val left = num - results.size
-        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts))
 
         val buf = new Array[Array[T]](p.size)
         self.context.setCallSite(callSite)

@@ -49,7 +49,7 @@ show create table char_tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.char_tbl (
+CREATE TABLE spark_catalog.default.char_tbl (
   c CHAR(5),
   v VARCHAR(6))
 USING parquet
@@ -68,7 +68,7 @@ show create table char_tbl2
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.char_tbl2 (
+CREATE TABLE spark_catalog.default.char_tbl2 (
   c CHAR(5),
   v VARCHAR(6))
 USING parquet
@@ -161,7 +161,7 @@ show create table char_tbl3
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.char_tbl3 (
+CREATE TABLE spark_catalog.default.char_tbl3 (
   c CHAR(5),
   v VARCHAR(6))
 USING parquet
@@ -193,6 +193,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl	                    
 View Original Text  	select * from char_tbl	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 
@@ -222,6 +223,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.char_view (
   c,
   v)
+WITH SCHEMA COMPENSATION
 AS select * from char_tbl
 
 
@@ -260,13 +262,22 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1245",
+  "errorClass" : "NOT_SUPPORTED_CHANGE_COLUMN",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "newName" : "c",
-    "newType" : "CharType(6)",
-    "originName" : "c",
-    "originType" : "CharType(5)"
-  }
+    "newName" : "`c`",
+    "newType" : "\"CHAR(6)\"",
+    "originName" : "`c`",
+    "originType" : "\"CHAR(5)\"",
+    "table" : "`spark_catalog`.`default`.`char_tbl1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "alter table char_tbl1 change column c type char(6)"
+  } ]
 }
 
 
@@ -353,6 +364,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 
@@ -413,6 +425,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
 Table Properties    	[yes=no]
@@ -473,6 +486,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	select * from char_tbl2	                    
 View Original Text  	select * from char_tbl2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]
 
@@ -1200,3 +1214,27 @@ select chr(167), chr(247), chr(215)
 struct<chr(167):string,chr(247):string,chr(215):string>
 -- !query output
 §	÷	×
+
+
+-- !query
+SELECT to_varchar(78.12, '$99.99')
+-- !query schema
+struct<to_char(78.12, $99.99):string>
+-- !query output
+$78.12
+
+
+-- !query
+SELECT to_varchar(111.11, '99.9')
+-- !query schema
+struct<to_char(111.11, 99.9):string>
+-- !query output
+##.#
+
+
+-- !query
+SELECT to_varchar(12454.8, '99,999.9S')
+-- !query schema
+struct<to_char(12454.8, 99,999.9S):string>
+-- !query output
+12,454.8+

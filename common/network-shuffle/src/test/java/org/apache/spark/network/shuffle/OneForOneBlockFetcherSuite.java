@@ -25,9 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;

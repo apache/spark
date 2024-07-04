@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -150,7 +151,7 @@ object NestedColumnAliasing {
 
     // A reference attribute can have multiple aliases for nested fields.
     val attrToAliases =
-      AttributeMap(attributeToExtractValuesAndAliases.mapValues(_.map(_._2)))
+      AttributeMap(attributeToExtractValuesAndAliases.transform((_, v) => v.map(_._2)))
 
     plan match {
       case Project(projectList, child) =>
@@ -217,6 +218,11 @@ object NestedColumnAliasing {
     case _ => false
   }
 
+  private def canAlias(ev: Expression): Boolean = {
+    // we can not alias the attr from lambda variable whose expr id is not available
+    !ev.exists(_.isInstanceOf[NamedLambdaVariable]) && ev.references.size == 1
+  }
+
   /**
    * Returns two types of expressions:
    * - Root references that are individually accessed
@@ -225,11 +231,11 @@ object NestedColumnAliasing {
    */
   private def collectRootReferenceAndExtractValue(e: Expression): Seq[Expression] = e match {
     case _: AttributeReference => Seq(e)
-    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) => Seq(e)
+    case GetStructField(_: ExtractValue | _: AttributeReference, _, _) if canAlias(e) => Seq(e)
     case GetArrayStructFields(_: MapValues |
                               _: MapKeys |
                               _: ExtractValue |
-                              _: AttributeReference, _, _, _, _) => Seq(e)
+                              _: AttributeReference, _, _, _, _) if canAlias(e) => Seq(e)
     case es if es.children.nonEmpty => es.children.flatMap(collectRootReferenceAndExtractValue)
     case _ => Seq.empty
   }
@@ -248,13 +254,8 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       extractor(e).foreach {
-        // we can not alias the attr from lambda variable whose expr id is not available
-        case ev: ExtractValue if !ev.exists(_.isInstanceOf[NamedLambdaVariable]) =>
-          if (ev.references.size == 1) {
-            nestedFieldReferences.append(ev)
-          }
+        case ev: ExtractValue => nestedFieldReferences.append(ev)
         case ar: AttributeReference => otherRootReferences.append(ar)
-        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
@@ -433,7 +434,7 @@ object GeneratorNestedColumnAliasing {
 
             // As we change the child of the generator, its output data type must be updated.
             val updatedGeneratorOutput = rewrittenG.generatorOutput
-              .zip(rewrittenG.generator.elementSchema.toAttributes)
+              .zip(toAttributes(rewrittenG.generator.elementSchema))
               .map { case (oldAttr, newAttr) =>
                 newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
               }
@@ -454,7 +455,7 @@ object GeneratorNestedColumnAliasing {
 
           case other =>
             // We should not reach here.
-            throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
+            throw SparkException.internalError(s"Unreasonable plan after optimization: $other")
         }
       }
 

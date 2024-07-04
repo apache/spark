@@ -32,8 +32,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -52,8 +51,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -67,8 +65,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false)
@@ -81,8 +78,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("p" -> "1"))),
       ifExists = false,
       purge = true)
@@ -94,8 +90,8 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val sql = "ALTER VIEW table_name DROP PARTITION (p=1)"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER VIEW ... DROP PARTITION"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER VIEW ... DROP PARTITION"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,

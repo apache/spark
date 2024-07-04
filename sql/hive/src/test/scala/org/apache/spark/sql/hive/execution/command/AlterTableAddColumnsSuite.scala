@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -29,10 +31,13 @@ class AlterTableAddColumnsSuite
 
   test("SPARK-36949: Disallow tables with ANSI intervals when the provider is Hive") {
     def check(tbl: String): Unit = {
-      val errMsg = intercept[UnsupportedOperationException] {
-        sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
-      }.getMessage
-      assert(errMsg.contains("ANSI intervals is not supported"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
+        parameters = Map("tableName" -> toSQLId(tbl))
+      )
     }
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"CREATE TABLE $tbl (id INT) $defaultUsing")

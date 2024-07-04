@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -79,7 +80,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           None
         }
       case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
-        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
+        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](
+          scan.filterAttributes.toImmutableArraySeq, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
           Some(r)
         } else {
@@ -101,13 +103,16 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   private def insertPredicate(
       pruningKey: Expression,
       pruningPlan: LogicalPlan,
-      filteringKey: Expression,
+      filteringKeys: Seq[Expression],
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       partScan: LogicalPlan): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
-    val index = joinKeys.indexOf(filteringKey)
-    lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
+    require(filteringKeys.size == 1, "DPP Filters should only have a single broadcasting key " +
+      "since there are no usage for multiple broadcasting keys at the moment.")
+    val indices = Seq(joinKeys.indexOf(filteringKeys.head))
+    lazy val hasBenefit = pruningHasBenefit(
+      pruningKey, partScan, filteringKeys.head, filteringPlan)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -115,7 +120,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           pruningKey,
           filteringPlan,
           joinKeys,
-          index,
+          indices,
           conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
@@ -253,12 +258,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get)
+              newLeft = insertPredicate(l, newLeft, Seq(r), right, rightKeys, filterableScan.get)
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get)
+                newRight = insertPredicate(r, newRight, Seq(l), left, leftKeys, filterableScan.get)
               }
             }
           case _ =>

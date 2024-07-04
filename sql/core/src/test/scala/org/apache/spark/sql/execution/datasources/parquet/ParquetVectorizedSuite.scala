@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordR
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
@@ -419,7 +420,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       Seq(true, false).foreach { dictionaryEnabled =>
         val pageSizes = Seq(4, 4, 4, 4)
-        var firstRowIndexes = Seq(10L, 20, 30, 40)
+        val firstRowIndexes = Seq(10L, 20, 30, 40)
         var ranges = Seq((0L, 5L))
         testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),
@@ -501,7 +502,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
     val repetitionLevels = Array.fill[Int](inputValues.length)(0)
-    val definitionLevels = inputValues.map(v => if (v == null) 0 else 1)
+    val definitionLevels = inputValues.map(v => if (v == null) 0 else maxDef)
 
     val memPageStore = new MemPageStore(expectedValues.length)
 
@@ -509,7 +510,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val pageFirstRowIndexes = ArrayBuffer.empty[Long]
     pageSizes.foreach { size =>
       pageFirstRowIndexes += i
-      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size),
+      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size).toImmutableArraySeq,
         definitionLevels.slice(i, i + size), inputValues.slice(i, i + size), maxDef,
         dictionaryEnabled)
       i += size
@@ -620,7 +621,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       readStore: PageReadStore,
       expected: Seq[Row],
       batchSize: Int = NUM_VALUES): Unit = {
-    import collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     val recordReader = new VectorizedParquetRecordReader(
       DateTimeUtils.getZoneId("EST"),

@@ -19,8 +19,8 @@ package org.apache.spark.mllib.feature
 
 import java.lang.{Iterable => JavaIterable}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since

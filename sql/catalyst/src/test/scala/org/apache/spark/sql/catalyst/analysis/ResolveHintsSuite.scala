@@ -352,11 +352,11 @@ class ResolveHintsSuite extends AnalysisTest {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
       Seq(
         Nil -> 3,
-        Seq(1) -> 1,
+        Seq(Literal(1)) -> 1,
         Seq(UnresolvedAttribute("a")) -> 3,
-        Seq(1, UnresolvedAttribute("a")) -> 1).foreach { case (param, initialNumPartitions) =>
+        Seq(Literal(1), UnresolvedAttribute("a")) -> 1).foreach { case (param, numberPartitions) =>
         assert(UnresolvedHint("REBALANCE", param, testRelation).analyze
-          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == initialNumPartitions)
+          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == numberPartitions)
       }
     }
   }

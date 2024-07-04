@@ -16,15 +16,13 @@
 #
 
 import sys
-
 from typing import Optional, Tuple, TYPE_CHECKING
 
-
-from pyspark import since, SparkContext
+from pyspark import since
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.linalg import Matrix, Vector
 from pyspark.ml.wrapper import JavaWrapper, _jvm
-from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 
@@ -104,6 +102,8 @@ class ChiSquareTest:
         >>> row[0].statistic
         4.0
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -173,6 +173,8 @@ class Correlation:
                      [        NaN,         NaN,  1.        ,         NaN],
                      [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -241,6 +243,8 @@ class KolmogorovSmirnovTest:
         >>> round(ksResult.statistic, 3)
         0.175
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -401,8 +405,8 @@ class Summarizer:
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
          - sum: a vector that contains the coefficient-wise sum.
-         - variance: a vector tha contains the coefficient-wise variance.
-         - std: a vector tha contains the coefficient-wise standard deviation.
+         - variance: a vector that contains the coefficient-wise variance.
+         - std: a vector that contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
@@ -426,6 +430,9 @@ class Summarizer:
         -------
         :py:class:`pyspark.ml.stat.SummaryBuilder`
         """
+        from pyspark.core.context import SparkContext
+        from pyspark.sql.classic.column import _to_seq
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 

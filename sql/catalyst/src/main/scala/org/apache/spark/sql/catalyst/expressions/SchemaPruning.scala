@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
@@ -126,7 +127,7 @@ object SchemaPruning extends SQLConfHelper {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          merged.sameType(optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType)
         }
       }
     } ++ rootFields

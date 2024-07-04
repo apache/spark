@@ -158,22 +158,45 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
-    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
-    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
-    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType)), null)
-    checkEvaluation(
-      Conv(Literal("1234"), Literal(10), Literal(37)), null)
-    checkEvaluation(
-      Conv(Literal(""), Literal(10), Literal(16)), null)
-    checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
-    // If there is an invalid digit in the number, the longest valid prefix should be converted.
-    checkEvaluation(
-      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+    Seq(true, false).foreach { ansiEnabled =>
+      checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2), ansiEnabled), "11")
+      checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16), ansiEnabled), "-F")
+      checkEvaluation(
+        Conv(Literal("-15"), Literal(10), Literal(16), ansiEnabled), "FFFFFFFFFFFFFFF1")
+      checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16), ansiEnabled), "3A48")
+      checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16), ansiEnabled),
+        null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("1234"), Literal(10), Literal(37), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal(""), Literal(10), Literal(16), ansiEnabled), null)
+
+      // If there is an invalid digit in the number, the longest valid prefix should be converted.
+      checkEvaluation(
+        Conv(Literal("11abc"), Literal(10), Literal(16), ansiEnabled), "B")
+    }
+  }
+
+  test("conv overflow") {
+    Seq(
+      ("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF"),
+      ("92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("-92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 10,
+        "18446744073709551615"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 8,
+        "1777777777777777777777")
+    ).foreach { case (numExpr, fromBase, toBase, expected) =>
+      checkEvaluation(
+       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false), expected)
+      checkExceptionInExpression[SparkArithmeticException](
+        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = true),
+        "Overflow in function conv()")
+    }
   }
 
   test("e") {
@@ -592,6 +615,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("GG")), null)
     checkEvaluation(Unhex(Literal("123")), Array[Byte](1, 35))
     checkEvaluation(Unhex(Literal("12345")), Array[Byte](1, 35, 69))
+
+    // failOnError
+    checkEvaluation(Unhex(Literal("12345"), true), Array[Byte](1, 35, 69))
     // scalastyle:off
     // Turn off scala style for non-ascii chars
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))

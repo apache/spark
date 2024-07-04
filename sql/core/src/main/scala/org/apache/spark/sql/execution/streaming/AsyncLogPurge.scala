@@ -29,10 +29,7 @@ import org.apache.spark.util.ThreadUtils
  */
 trait AsyncLogPurge extends Logging {
 
-  protected var currentBatchId: Long
-
   protected val minLogEntriesToMaintain: Int
-
 
   protected[sql] val errorNotifier: ErrorNotifier
 
@@ -47,15 +44,11 @@ trait AsyncLogPurge extends Logging {
 
   protected lazy val useAsyncPurge: Boolean = sparkSession.conf.get(SQLConf.ASYNC_LOG_PURGE)
 
-  protected def purgeAsync(): Unit = {
+  protected def purgeAsync(batchId: Long): Unit = {
     if (purgeRunning.compareAndSet(false, true)) {
-      // save local copy because currentBatchId may get updated.  There are not really
-      // any concurrency issues here in regards to calculating the purge threshold
-      // but for the sake of defensive coding lets make a copy
-      val currentBatchIdCopy: Long = currentBatchId
       asyncPurgeExecutorService.execute(() => {
         try {
-          purge(currentBatchIdCopy - minLogEntriesToMaintain)
+          purge(batchId - minLogEntriesToMaintain)
         } catch {
           case throwable: Throwable =>
             logError("Encountered error while performing async log purge", throwable)

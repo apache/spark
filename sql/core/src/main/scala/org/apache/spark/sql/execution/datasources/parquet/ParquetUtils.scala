@@ -32,8 +32,9 @@ import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,9 +43,10 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType}
+import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
 
@@ -141,11 +143,13 @@ object ParquetUtils extends Logging {
     val leaves = allFiles.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
-      data = leaves.filterNot(f => isSummaryFile(f.getPath)),
+      data = leaves.filterNot(f => isSummaryFile(f.getPath)).toImmutableArraySeq,
       metadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
+        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+          .toImmutableArraySeq,
       commonMetadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
+        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
+          .toImmutableArraySeq)
   }
 
   private def isSummaryFile(file: Path): Boolean = {
@@ -376,7 +380,7 @@ object ParquetUtils extends Logging {
           .named(schemaName)
       }
     }
-    (primitiveTypeBuilder.result, valuesBuilder.result)
+    (primitiveTypeBuilder.result(), valuesBuilder.result())
   }
 
   /**
@@ -391,8 +395,11 @@ object ParquetUtils extends Logging {
       isMax: Boolean): Any = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
-      throw new UnsupportedOperationException(s"No min/max found for Parquet file $filePath. " +
-        s"Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3172",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     } else {
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
@@ -404,9 +411,11 @@ object ParquetUtils extends Logging {
       i: Int): Long = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.isNumNullsSet) {
-      throw new UnsupportedOperationException(s"Number of nulls not set for Parquet file" +
-        s" $filePath. Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute" +
-        s" again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3171",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     }
     statistics.getNumNulls;
   }
@@ -425,10 +434,11 @@ object ParquetUtils extends Logging {
         classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
-      logInfo("Using default output committer for Parquet: " +
-        classOf[ParquetOutputCommitter].getCanonicalName)
+      logInfo(log"Using default output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, classOf[ParquetOutputCommitter].getCanonicalName)}")
     } else {
-      logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
+      logInfo(log"Using user defined output committer for Parquet: " +
+        log"${MDC(CLASS_NAME, committerClass.getCanonicalName)}")
     }
 
     conf.setClass(
@@ -462,8 +472,8 @@ object ParquetUtils extends Logging {
       sqlConf.parquetFieldIdWriteEnabled.toString)
 
     conf.set(
-      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
-      sqlConf.parquetTimestampNTZEnabled.toString)
+      SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
+      sqlConf.legacyParquetNanosAsLong.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
@@ -477,9 +487,9 @@ object ParquetUtils extends Logging {
     if (ParquetOutputFormat.getJobSummaryLevel(conf) != JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
-      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
-        s" create job summaries. " +
-        s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
+      logWarning(log"Committer ${MDC(CLASS_NAME, committerClass)} is not a " +
+        log"ParquetOutputCommitter and cannot create job summaries. Set Parquet option " +
+        log"${MDC(CONFIG, ParquetOutputFormat.JOB_SUMMARY_LEVEL)} to NONE.")
     }
 
     new OutputWriterFactory {

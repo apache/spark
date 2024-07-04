@@ -20,16 +20,17 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
-import java.util.Calendar
+import java.time.Instant
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.json4s.{DefaultFormats, NoTypeHints}
+import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -56,8 +57,8 @@ class TextSocketContinuousStream(
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String],
-    ExpressionEncoder[Timestamp])
+  private val encoder = ExpressionEncoder.tuple(ExpressionEncoder[String](),
+    ExpressionEncoder[Timestamp]())
 
   @GuardedBy("this")
   private var socket: Socket = _
@@ -144,7 +145,7 @@ class TextSocketContinuousStream(
           " for partition " + partition + ". Max valid offset: " + max)
         }
         val n = offset - startOffset.offsets(partition)
-        buckets(partition).trimStart(n)
+        buckets(partition).dropInPlace(n)
     }
     startOffset = endOffset
     recordEndpoint.setStartOffsets(startOffset.offsets)
@@ -179,14 +180,13 @@ class TextSocketContinuousStream(
             val line = reader.readLine()
             if (line == null) {
               // End of file reached
-              logWarning(s"Stream closed by $host:$port")
+              logWarning(log"Stream closed by ${MDC(HOST, host)}:${MDC(PORT, port)}")
               return
             }
             TextSocketContinuousStream.this.synchronized {
               currentOffset += 1
               val newData = (line,
-                Timestamp.valueOf(
-                  TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                Timestamp.valueOf(TextSocketReader.DATE_TIME_FORMATTER.format(Instant.now()))
               )
               buckets(currentOffset % numPartitions) += toRow(newData)
                 .copy().asInstanceOf[UnsafeRow]
@@ -286,6 +286,6 @@ class TextSocketContinuousPartitionReader(
 }
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
   override def json: String = Serialization.write(offsets)
 }

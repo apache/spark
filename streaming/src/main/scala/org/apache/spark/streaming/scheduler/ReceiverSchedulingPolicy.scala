@@ -184,7 +184,7 @@ private[streaming] class ReceiverSchedulingPolicy {
 
     val executorWeights: Map[ExecutorCacheTaskLocation, Double] = {
       receiverTrackingInfoMap.values.flatMap(convertReceiverTrackingInfoToExecutorWeights)
-        .groupBy(_._1).mapValues(_.map(_._2).sum).toMap // Sum weights for each executor
+        .groupBy(_._1).transform((_, v) => v.map(_._2).sum) // Sum weights for each executor
     }
 
     val idleExecutors = executors.toSet -- executorWeights.keys

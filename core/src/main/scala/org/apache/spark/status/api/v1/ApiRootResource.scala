@@ -17,11 +17,11 @@
 package org.apache.spark.status.api.v1
 
 import java.util.zip.ZipOutputStream
-import javax.servlet.ServletContext
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs._
-import javax.ws.rs.core.{Context, Response}
 
+import jakarta.servlet.ServletContext
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.{Context, Response}
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties

@@ -17,15 +17,9 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.python.PandasGroupUtils._
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.execution.SparkPlan
 
 
 /**
@@ -50,51 +44,9 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends SparkPlan with UnaryExecNode with PythonSQLMetrics {
+  extends FlatMapGroupsInBatchExec {
 
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
-  private val pandasFunction = func.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    if (groupingAttributes.isEmpty) {
-      AllTuples :: Nil
-    } else {
-      ClusteredDistribution(groupingAttributes) :: Nil
-    }
-  }
-
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute()
-
-    val (dedupAttributes, argOffsets) = resolveArgOffsets(child.output, groupingAttributes)
-
-    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
-    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
-
-      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
-        .map { case (_, x) => x }
-
-      val runner = new ArrowPythonRunner(
-        chainedFunc,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        Array(argOffsets),
-        StructType.fromAttributes(dedupAttributes),
-        sessionLocalTimeZone,
-        pythonRunnerConf,
-        pythonMetrics)
-
-      executePython(data, output, runner)
-    }}
-  }
+  protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
   override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInPandasExec =
     copy(child = newChild)

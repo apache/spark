@@ -99,7 +99,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "nb",
+          "inputName" -> "`nb`",
           "inputType" -> "\"INT\"",
           "inputExpr" -> "\"b\""
         )

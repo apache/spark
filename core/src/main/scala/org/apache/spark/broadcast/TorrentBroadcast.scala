@@ -22,12 +22,13 @@ import java.lang.ref.{Reference, SoftReference, WeakReference}
 import java.nio.ByteBuffer
 import java.util.zip.Adler32
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
@@ -152,7 +153,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
       // Store a copy of the broadcast variable in the driver so that tasks run on the driver
       // do not create a duplicate copy of the broadcast variable's value.
       if (!blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
-        throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+        throw SparkException.internalError(
+          s"Failed to store $broadcastId in BlockManager", category = "BROADCAST")
       }
     }
     try {
@@ -168,14 +170,16 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
         val pieceId = BroadcastBlockId(id, "piece" + i)
         val bytes = new ChunkedByteBuffer(block.duplicate())
         if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
-          throw new SparkException(s"Failed to store $pieceId of $broadcastId " +
-            s"in local BlockManager")
+          throw SparkException.internalError(s"Failed to store $pieceId of $broadcastId " +
+            s"in local BlockManager", category = "BROADCAST")
         }
       }
       blocks.length
     } catch {
       case t: Throwable =>
-        logError(s"Store broadcast $broadcastId fail, remove all pieces of the broadcast")
+        // scalastyle:off line.size.limit
+        logError(log"Store broadcast ${MDC(BROADCAST_ID, broadcastId)} fail, remove all pieces of the broadcast")
+        // scalastyle:on
         blockManager.removeBroadcast(id, tellMaster = true)
         throw t
     }
@@ -204,19 +208,22 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
               if (checksumEnabled) {
                 val sum = calcChecksum(b.chunks(0))
                 if (sum != checksums(pid)) {
-                  throw new SparkException(s"corrupt remote block $pieceId of $broadcastId:" +
-                    s" $sum != ${checksums(pid)}")
+                  throw SparkException.internalError(
+                    s"corrupt remote block $pieceId of $broadcastId: $sum != ${checksums(pid)}",
+                    category = "BROADCAST")
                 }
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
               if (!bm.putBytes(pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
-                throw new SparkException(
-                  s"Failed to store $pieceId of $broadcastId in local BlockManager")
+                throw SparkException.internalError(
+                  s"Failed to store $pieceId of $broadcastId in local BlockManager",
+                  category = "BROADCAST")
               }
               blocks(pid) = new ByteBufferBlockData(b, true)
             case None =>
-              throw new SparkException(s"Failed to get $pieceId of $broadcastId")
+              throw SparkException.internalError(
+                s"Failed to get $pieceId of $broadcastId", category = "BROADCAST")
           }
       }
     }
@@ -265,15 +272,18 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
 
               x
             } else {
-              throw new SparkException(s"Failed to get locally stored broadcast data: $broadcastId")
+              throw SparkException.internalError(
+                s"Failed to get locally stored broadcast data: $broadcastId",
+                category = "BROADCAST")
             }
           case None =>
             val estimatedTotalSize = Utils.bytesToString(numBlocks.toLong * blockSize)
-            logInfo(s"Started reading broadcast variable $id with $numBlocks pieces " +
-              s"(estimated total size $estimatedTotalSize)")
+            logInfo(log"Started reading broadcast variable ${MDC(BROADCAST_ID, id)} with ${MDC(NUM_BROADCAST_BLOCK, numBlocks)} pieces " +
+              log"(estimated total size ${MDC(NUM_BYTES, estimatedTotalSize)})")
             val startTimeNs = System.nanoTime()
             val blocks = readBlocks()
-            logInfo(s"Reading broadcast variable $id took ${Utils.getUsedTimeNs(startTimeNs)}")
+            logInfo(log"Reading broadcast variable ${MDC(BROADCAST_ID, id)}" +
+              log" took ${MDC(TOTAL_TIME, Utils.getUsedTimeNs(startTimeNs))}")
 
             try {
               val obj = TorrentBroadcast.unBlockifyObject[T](
@@ -284,7 +294,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long, serializedO
                 // need to re-fetch it.
                 val storageLevel = StorageLevel.MEMORY_AND_DISK
                 if (!blockManager.putSingle(broadcastId, obj, storageLevel, tellMaster = false)) {
-                  throw new SparkException(s"Failed to store $broadcastId in BlockManager")
+                  throw SparkException.internalError(
+                    s"Failed to store $broadcastId in BlockManager", category = "BROADCAST")
                 }
               }
 

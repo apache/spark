@@ -21,9 +21,9 @@ import java.util.Arrays;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertArrayEquals;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import org.junit.jupiter.api.Test;
 
 public class AuthMessagesSuite {
 
@@ -46,8 +46,8 @@ public class AuthMessagesSuite {
     msg.encode(buf);
     AuthMessage decoded = AuthMessage.decodeMessage(buf.nioBuffer());
 
-    assertEquals(msg.appId, decoded.appId);
-    assertArrayEquals(msg.salt, decoded.salt);
-    assertArrayEquals(msg.ciphertext, decoded.ciphertext);
+    assertEquals(msg.appId(), decoded.appId());
+    assertArrayEquals(msg.salt(), decoded.salt());
+    assertArrayEquals(msg.ciphertext(), decoded.ciphertext());
   }
 }

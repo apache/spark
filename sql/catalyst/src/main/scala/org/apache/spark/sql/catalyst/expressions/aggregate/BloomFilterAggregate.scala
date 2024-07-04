@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{RUNTIME_BLOOM_FILTER_MAX_NUM_BITS, RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
@@ -78,12 +78,12 @@ case class BloomFilterAggregate(
             "exprName" -> "estimatedNumItems or numBits"
           )
         )
-      case (LongType, LongType, LongType) =>
+      case (LongType | IntegerType | ShortType | ByteType | _: StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "estimatedNumItems",
+              "inputName" -> toSQLId("estimatedNumItems"),
               "inputType" -> toSQLType(estimatedNumItemsExpression.dataType),
               "inputExpr" -> toSQLExpr(estimatedNumItemsExpression)
             )
@@ -101,7 +101,7 @@ case class BloomFilterAggregate(
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
             messageParameters = Map(
-              "inputName" -> "numBitsExpression",
+              "inputName" -> toSQLId("numBitsExpression"),
               "inputType" -> toSQLType(numBitsExpression.dataType),
               "inputExpr" -> toSQLExpr(numBitsExpression)
             )
@@ -150,6 +150,15 @@ case class BloomFilterAggregate(
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
+  // Mark as lazy so that `updater` is not evaluated during tree transformation.
+  private lazy val updater: BloomFilterUpdater = child.dataType match {
+    case LongType => LongUpdater
+    case IntegerType => IntUpdater
+    case ShortType => ShortUpdater
+    case ByteType => ByteUpdater
+    case _: StringType => BinaryUpdater
+  }
+
   override def first: Expression = child
 
   override def second: Expression = estimatedNumItemsExpression
@@ -174,7 +183,7 @@ case class BloomFilterAggregate(
     if (value == null) {
       return buffer
     }
-    buffer.putLong(value.asInstanceOf[Long])
+    updater.update(buffer, value)
     buffer
   }
 
@@ -217,10 +226,34 @@ object BloomFilterAggregate {
     out.toByteArray
   }
 
-  final def deserialize(bytes: Array[Byte]): BloomFilter = {
-    val in = new ByteArrayInputStream(bytes)
-    val bloomFilter = BloomFilter.readFrom(in)
-    in.close()
-    bloomFilter
-  }
+  final def deserialize(bytes: Array[Byte]): BloomFilter = BloomFilter.readFrom(bytes)
+}
+
+private trait BloomFilterUpdater {
+  def update(bf: BloomFilter, v: Any): Boolean
+}
+
+private object LongUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Long])
+}
+
+private object IntUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Int])
+}
+
+private object ShortUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Short])
+}
+
+private object ByteUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Byte])
+}
+
+private object BinaryUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putBinary(v.asInstanceOf[UTF8String].getBytes)
 }

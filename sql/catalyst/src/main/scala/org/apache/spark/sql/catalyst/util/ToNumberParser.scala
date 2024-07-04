@@ -334,7 +334,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       )
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
-    val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
+    val inputTokenCounts = formatTokens.groupBy(identity).transform((_, v) => v.size)
     Seq(DecimalPoint(),
       OptionalPlusOrMinusSign(),
       OptionalMinusSign(),
@@ -594,14 +594,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   private def formatMatchFailure(input: UTF8String, originNumberFormat: String): Decimal = {
     if (errorOnFail) {
       throw QueryExecutionErrors.invalidNumberFormatError(
-        "string", input.toString, originNumberFormat)
+        StringType, input.toString, originNumberFormat)
     }
     null
   }
   private def formatMatchFailure(input: Decimal, originNumberFormat: String): UTF8String = {
     if (errorOnFail) {
       throw QueryExecutionErrors.invalidNumberFormatError(
-        "Decimal value", input.toString, originNumberFormat)
+        DecimalType.fromDecimal(input), input.toString, originNumberFormat)
     }
     null
   }

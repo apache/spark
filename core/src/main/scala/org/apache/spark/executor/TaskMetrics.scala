@@ -17,8 +17,10 @@
 
 package org.apache.spark.executor
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.CopyOnWriteArrayList
+
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -262,10 +264,12 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+
+  private[spark] def externalAccums = _externalAccums.asScala
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    externalAccums += a
+    _externalAccums.add(a)
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
@@ -324,16 +328,19 @@ private[spark] object TaskMetrics extends Logging {
    */
   def fromAccumulators(accums: Seq[AccumulatorV2[_, _]]): TaskMetrics = {
     val tm = new TaskMetrics
+    val externalAccums = new java.util.ArrayList[AccumulatorV2[Any, Any]]()
     for (acc <- accums) {
       val name = acc.name
+      val tmpAcc = acc.asInstanceOf[AccumulatorV2[Any, Any]]
       if (name.isDefined && tm.nameToAccums.contains(name.get)) {
         val tmAcc = tm.nameToAccums(name.get).asInstanceOf[AccumulatorV2[Any, Any]]
         tmAcc.metadata = acc.metadata
-        tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
+        tmAcc.merge(tmpAcc)
       } else {
-        tm.externalAccums += acc
+        externalAccums.add(tmpAcc)
       }
     }
+    tm._externalAccums.addAll(externalAccums)
     tm
   }
 }

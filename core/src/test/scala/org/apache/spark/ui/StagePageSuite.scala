@@ -17,10 +17,9 @@
 
 package org.apache.spark.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark._
@@ -30,7 +29,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
-import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
+import org.apache.spark.ui.jobs.{StagePage, StagesTab}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -110,16 +109,6 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         isShufflePushEnabled = false,
         shuffleMergersCount = 0
       )
-      val taskTable = new TaskPagedTable(
-        stageData,
-        basePath = "/a/b/c",
-        pageSize = 10,
-        sortColumn = "Index",
-        desc = false,
-        store = statusStore
-      )
-      val columnNames = (taskTable.headers \ "th" \ "a").map(_.child(1).text).toSet
-      assert(columnNames === ApiHelper.COLUMN_TO_INDEX.keySet)
     } finally {
       statusStore.close()
     }

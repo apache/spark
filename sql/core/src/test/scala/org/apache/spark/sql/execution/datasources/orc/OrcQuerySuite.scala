@@ -190,7 +190,7 @@ abstract class OrcQueryTest extends OrcTest {
     // Respect `orc.compress` (i.e., OrcConf.COMPRESS).
     withTempPath { file =>
       spark.range(0, 10).write
-        .option(COMPRESS.getAttribute, "ZLIB")
+        .option(COMPRESS.getAttribute, OrcCompressionCodec.ZLIB.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
@@ -199,15 +199,15 @@ abstract class OrcQueryTest extends OrcTest {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("ZLIB" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.ZLIB.name() === reader.getCompressionKind.name)
       }
     }
 
     // `compression` overrides `orc.compress`.
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("compression", "ZLIB")
-        .option(COMPRESS.getAttribute, "SNAPPY")
+        .option("compression", OrcCompressionCodec.ZLIB.name())
+        .option(COMPRESS.getAttribute, OrcCompressionCodec.SNAPPY.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
@@ -216,7 +216,7 @@ abstract class OrcQueryTest extends OrcTest {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("ZLIB" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.ZLIB.name() === reader.getCompressionKind.name)
       }
     }
   }
@@ -224,7 +224,7 @@ abstract class OrcQueryTest extends OrcTest {
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("compression", "ZLIB")
+        .option("compression", OrcCompressionCodec.ZLIB.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".zlib.orc"))
@@ -233,13 +233,13 @@ abstract class OrcQueryTest extends OrcTest {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("ZLIB" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.ZLIB.name() === reader.getCompressionKind.name)
       }
     }
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("compression", "SNAPPY")
+        .option("compression", OrcCompressionCodec.SNAPPY.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".snappy.orc"))
@@ -248,13 +248,13 @@ abstract class OrcQueryTest extends OrcTest {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("SNAPPY" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.SNAPPY.name() === reader.getCompressionKind.name)
       }
     }
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("compression", "NONE")
+        .option("compression", OrcCompressionCodec.NONE.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".orc"))
@@ -263,7 +263,7 @@ abstract class OrcQueryTest extends OrcTest {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("NONE" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.NONE.name() === reader.getCompressionKind.name)
       }
     }
   }
@@ -413,7 +413,7 @@ abstract class OrcQueryTest extends OrcTest {
           // results. So, this checks if the number of result is less than the original count
           // of data, and then checks if it contains the expected data.
           assert(
-            sourceDf.count < 10 && expectedData.subsetOf(data),
+            sourceDf.count() < 10 && expectedData.subsetOf(data),
             s"No data was filtered for predicate: $pred")
         }
 
@@ -508,7 +508,7 @@ abstract class OrcQueryTest extends OrcTest {
       conf.setBoolean("hive.io.file.read.all.columns", false)
 
       val orcRecordReader = {
-        val file = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc")).head
+        val file = new File(path).listFiles().find(_.getName.endsWith(".orc")).head
         val split = new FileSplit(new Path(file.toURI), 0, file.length, Array.empty[String])
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
@@ -590,10 +590,13 @@ abstract class OrcQueryTest extends OrcTest {
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
       testIgnoreCorruptFilesWithoutSchemaInfer()
-      val m1 = intercept[AnalysisException] {
-        testAllCorruptFiles()
-      }.getMessage
-      assert(m1.contains("Unable to infer schema for ORC"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testAllCorruptFiles()
+        },
+        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "ORC")
+      )
       testAllCorruptFilesWithoutSchemaInfer()
     }
 
@@ -601,19 +604,31 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(e1.getMessage.contains("Malformed ORC file"))
+      assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assert(e2.getMessage.contains("Malformed ORC file"))
-      val e3 = intercept[SparkException] {
-        testAllCorruptFiles()
-      }
-      assert(e3.getMessage.contains("Could not read footer for file"))
+      assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          testAllCorruptFiles()
+        },
+        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
+      )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assert(e4.getMessage.contains("Malformed ORC file"))
+      assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
     }
   }
 
@@ -640,7 +655,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   test("LZO compression options for writing to an ORC file") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("compression", "LZO")
+        .option("compression", OrcCompressionCodec.LZO.name())
         .orc(file.getCanonicalPath)
 
       val maybeOrcFile = file.listFiles().find(_.getName.endsWith(".lzo.orc"))
@@ -649,7 +664,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
       val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
       val conf = OrcFile.readerOptions(new Configuration())
       Utils.tryWithResource(OrcFile.createReader(orcFilePath, conf)) { reader =>
-        assert("LZO" === reader.getCompressionKind.name)
+        assert(OrcCompressionCodec.LZO.name() === reader.getCompressionKind.name)
       }
     }
   }

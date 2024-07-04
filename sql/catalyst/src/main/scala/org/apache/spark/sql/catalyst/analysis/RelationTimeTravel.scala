@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, TreePattern}
 
 /**
@@ -29,8 +29,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, Tr
 case class RelationTimeTravel(
     relation: LogicalPlan,
     timestamp: Option[Expression],
-    version: Option[String]) extends LeafNode {
-  override def output: Seq[Attribute] = Nil
-  override lazy val resolved: Boolean = false
+    version: Option[String]) extends UnresolvedLeafNode {
   override val nodePatterns: Seq[TreePattern] = Seq(RELATION_TIME_TRAVEL)
 }

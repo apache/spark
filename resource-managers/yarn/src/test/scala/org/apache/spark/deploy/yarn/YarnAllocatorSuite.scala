@@ -19,9 +19,10 @@ package org.apache.spark.deploy.yarn
 
 import java.util
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
@@ -33,6 +34,7 @@ import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -47,7 +49,8 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
-import org.apache.spark.util.{ManualClock, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -60,7 +63,10 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
 }
 
-class YarnAllocatorSuite extends SparkFunSuite with Matchers {
+class YarnAllocatorSuite extends SparkFunSuite
+    with Matchers
+    with PrivateMethodTester
+    with ResourceRequestTestHelper {
   val conf = new YarnConfiguration()
   val sparkConf = new SparkConf()
   sparkConf.set(DRIVER_HOST_ADDRESS, "localhost")
@@ -176,7 +182,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     handler.getNumContainersPendingAllocate should be (1)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -188,144 +194,146 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("single container allocated with ResourceProfile") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE))
-    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
-    // create default profile so we get a different id to test below
-    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    val execReq = new ExecutorResourceRequests().resource("gpu", 6)
-    val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
-    // request a single container and receive it
-    val (handler, _) = createAllocator(0)
+    withResourceTypes(yarnResources) {
+      // create default profile so we get a different id to test below
+      val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+      val execReq = new ExecutorResourceRequests().resource("gpu", 6)
+      val taskReq = new TaskResourceRequests().resource("gpu", 1)
+      val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
+      // request a single container and receive it
+      val (handler, _) = createAllocator(0)
 
-    val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1)
-    val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0)
-    handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
+      val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1)
+      val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0)
+      handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
+        numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
 
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (1)
+      handler.updateResourceRequests()
+      handler.getNumExecutorsRunning should be (0)
+      handler.getNumContainersPendingAllocate should be (1)
 
-    val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
-    handler.handleAllocatedContainers(Array(container))
+      val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
+      handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
-    handler.getNumExecutorsRunning should be (1)
-    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
-    val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(rprof.id)
-    hostTocontainer.get("host1").get should contain(container.getId)
+      handler.getNumExecutorsRunning should be (1)
+      handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+      val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(rprof.id)
+      hostTocontainer.get("host1").get should contain(container.getId)
 
-    val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
-    size should be (0)
+      val size =
+        rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
+      size should be (0)
 
-    ResourceProfile.reInitDefaultProfile(sparkConf)
+      ResourceProfile.reInitDefaultProfile(sparkConf)
+    }
   }
 
   test("multiple containers allocated with ResourceProfiles") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE))
-    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
-    // create default profile so we get a different id to test below
-    val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
-    val execReq = new ExecutorResourceRequests().resource("gpu", 6)
-    val taskReq = new TaskResourceRequests().resource("gpu", 1)
-    val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
+    withResourceTypes(yarnResources) {
+      // create default profile so we get a different id to test below
+      val defaultRProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+      val execReq = new ExecutorResourceRequests().resource("gpu", 6)
+      val taskReq = new TaskResourceRequests().resource("gpu", 1)
+      val rprof = new ResourceProfile(execReq.requests, taskReq.requests)
 
-    val execReq2 = new ExecutorResourceRequests().memory("8g").resource("fpga", 2)
-    val taskReq2 = new TaskResourceRequests().resource("fpga", 1)
-    val rprof2 = new ResourceProfile(execReq2.requests, taskReq2.requests)
+      val execReq2 = new ExecutorResourceRequests().memory("8g").resource("fpga", 2)
+      val taskReq2 = new TaskResourceRequests().resource("fpga", 1)
+      val rprof2 = new ResourceProfile(execReq2.requests, taskReq2.requests)
 
 
-    // request a single container and receive it
-    val (handler, _) = createAllocator(1)
-    val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1, rprof2 -> 2)
-    val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0, rprof2.id -> 0)
-    handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
+      // request a single container and receive it
+      val (handler, _) = createAllocator(1)
+      val resourceProfileToTotalExecs = mutable.HashMap(defaultRProf -> 0, rprof -> 1, rprof2 -> 2)
+      val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(rprof.id -> 0, rprof2.id -> 0)
+      handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
+        numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set.empty)
 
-    handler.updateResourceRequests()
-    handler.getNumExecutorsRunning should be (0)
-    handler.getNumContainersPendingAllocate should be (3)
+      handler.updateResourceRequests()
+      handler.getNumExecutorsRunning should be (0)
+      handler.getNumContainersPendingAllocate should be (3)
 
-    val containerResourcerp2 = Resource.newInstance(10240, 5)
+      val containerResourcerp2 = Resource.newInstance(10240, 5)
 
-    val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
-    val container2 = createContainer("host2", resource = containerResourcerp2,
-      priority = Priority.newInstance(rprof2.id))
-    val container3 = createContainer("host3", resource = containerResourcerp2,
-      priority = Priority.newInstance(rprof2.id))
-    handler.handleAllocatedContainers(Array(container, container2, container3))
+      val container = createContainer("host1", priority = Priority.newInstance(rprof.id))
+      val container2 = createContainer("host2", resource = containerResourcerp2,
+        priority = Priority.newInstance(rprof2.id))
+      val container3 = createContainer("host3", resource = containerResourcerp2,
+        priority = Priority.newInstance(rprof2.id))
+      handler.handleAllocatedContainers(
+        Array(container, container2, container3).toImmutableArraySeq)
 
-    handler.getNumExecutorsRunning should be (3)
-    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
-    handler.allocatedContainerToHostMap.get(container2.getId).get should be ("host2")
-    handler.allocatedContainerToHostMap.get(container3.getId).get should be ("host3")
+      handler.getNumExecutorsRunning should be (3)
+      handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+      handler.allocatedContainerToHostMap.get(container2.getId).get should be ("host2")
+      handler.allocatedContainerToHostMap.get(container3.getId).get should be ("host3")
 
-    val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(rprof.id)
-    hostTocontainer.get("host1").get should contain(container.getId)
-    val hostTocontainer2 = handler.allocatedHostToContainersMapPerRPId(rprof2.id)
-    hostTocontainer2.get("host2").get should contain(container2.getId)
-    hostTocontainer2.get("host3").get should contain(container3.getId)
+      val hostTocontainer = handler.allocatedHostToContainersMapPerRPId(rprof.id)
+      hostTocontainer.get("host1").get should contain(container.getId)
+      val hostTocontainer2 = handler.allocatedHostToContainersMapPerRPId(rprof2.id)
+      hostTocontainer2.get("host2").get should contain(container2.getId)
+      hostTocontainer2.get("host3").get should contain(container3.getId)
 
-    val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
-    size should be (0)
+      val size =
+        rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
+      size should be (0)
 
-    ResourceProfile.reInitDefaultProfile(sparkConf)
+      ResourceProfile.reInitDefaultProfile(sparkConf)
+    }
   }
 
   test("custom resource requested from yarn") {
-    assume(isYarnResourceTypesAvailable())
-    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
+    withResourceTypes(List("gpu")) {
+      val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+      val (handler, _) = createAllocator(1, mockAmClient,
+        Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
-    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val (handler, _) = createAllocator(1, mockAmClient,
-      Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
+      handler.updateResourceRequests()
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val container = createContainer("host1", resource = defaultResource)
+      handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
-    handler.updateResourceRequests()
-    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-    val container = createContainer("host1", resource = defaultResource)
-    handler.handleAllocatedContainers(Array(container))
+      // get amount of memory and vcores from resource, so effectively skipping their validation
+      val expectedResources = Resource.newInstance(defaultResource.getMemorySize(),
+        defaultResource.getVirtualCores)
+      setResourceRequests(Map("gpu" -> "2G"), expectedResources)
+      val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
 
-    // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(defaultResource.getMemory(),
-      defaultResource.getVirtualCores)
-    setResourceRequests(Map("gpu" -> "2G"), expectedResources)
-    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
-
-    verify(mockAmClient).addContainerRequest(captor.capture())
-    val containerRequest: ContainerRequest = captor.getValue
-    assert(containerRequest.getCapability === expectedResources)
+      verify(mockAmClient).addContainerRequest(captor.capture())
+      val containerRequest: ContainerRequest = captor.getValue
+      assert(containerRequest.getCapability === expectedResources)
+    }
   }
 
   test("custom spark resource mapped to yarn resource configs") {
-    assume(isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE),
       yarnMadeupResource)
-    ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
-    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val madeupConfigName = s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
-    val sparkResources =
-      Map(EXECUTOR_GPU_ID.amountConf -> "3",
-        EXECUTOR_FPGA_ID.amountConf -> "2",
-        madeupConfigName -> "5")
-    val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
+    withResourceTypes(yarnResources) {
+      val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+      val madeupConfigName =
+        s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}"
+      val sparkResources =
+        Map(EXECUTOR_GPU_ID.amountConf -> "3",
+          EXECUTOR_FPGA_ID.amountConf -> "2",
+          madeupConfigName -> "5")
+      val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
 
-    handler.updateResourceRequests()
-    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-    val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
-    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
-    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).nonEmpty)
-    assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).get === 3)
-    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).nonEmpty)
-    assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).get === 2)
-    assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
-    assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+      handler.updateResourceRequests()
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val yarnRInfo = defaultResource.getResources
+      val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName -> rInfo.getValue) ).toMap
+      assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).nonEmpty)
+      assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).get === 3)
+      assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).nonEmpty)
+      assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).get === 2)
+      assert(allResourceInfo.get(yarnMadeupResource).nonEmpty)
+      assert(allResourceInfo.get(yarnMadeupResource).get === 5)
+    }
   }
 
   test("gpu/fpga spark resource mapped to custom yarn resource") {
-    assume(isYarnResourceTypesAvailable())
     val gpuCustomName = "custom/gpu"
     val fpgaCustomName = "custom/fpga"
     val originalGpu = sparkConf.get(YARN_GPU_DEVICE)
@@ -334,21 +342,22 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       sparkConf.set(YARN_GPU_DEVICE.key, gpuCustomName)
       sparkConf.set(YARN_FPGA_DEVICE.key, fpgaCustomName)
       val yarnResources = Seq(gpuCustomName, fpgaCustomName)
-      ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
-      val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-      val sparkResources =
-        Map(EXECUTOR_GPU_ID.amountConf -> "3",
-          EXECUTOR_FPGA_ID.amountConf -> "2")
-      val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
+      withResourceTypes(yarnResources) {
+        val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+        val sparkResources =
+          Map(EXECUTOR_GPU_ID.amountConf -> "3",
+            EXECUTOR_FPGA_ID.amountConf -> "2")
+        val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
 
-      handler.updateResourceRequests()
-      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
-      val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
-      assert(allResourceInfo.get(gpuCustomName).nonEmpty)
-      assert(allResourceInfo.get(gpuCustomName).get === 3)
-      assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
-      assert(allResourceInfo.get(fpgaCustomName).get === 2)
+        handler.updateResourceRequests()
+        val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+        val yarnRInfo = defaultResource.getResources
+        val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
+        assert(allResourceInfo.get(gpuCustomName).nonEmpty)
+        assert(allResourceInfo.get(gpuCustomName).get === 3)
+        assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
+        assert(allResourceInfo.get(fpgaCustomName).get === 2)
+      }
     } finally {
       sparkConf.set(YARN_GPU_DEVICE.key, originalGpu)
       sparkConf.set(YARN_FPGA_DEVICE.key, originalFpga)
@@ -363,7 +372,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     handler.getNumContainersPendingAllocate should be (1)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -371,7 +380,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     hostTocontainer.get("host1").get should contain(container.getId)
 
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container2))
+    handler.handleAllocatedContainers(Array(container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (1)
   }
 
@@ -385,7 +394,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     val container1 = createContainer("host1")
     val container2 = createContainer("host1")
     val container3 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2, container3))
+    handler.handleAllocatedContainers(Array(container1, container2, container3).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (3)
     handler.allocatedContainerToHostMap.get(container1.getId).get should be ("host1")
@@ -406,7 +415,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
     val container3 = createContainer("host4")
-    handler.handleAllocatedContainers(Array(container1, container2, container3))
+    handler.handleAllocatedContainers(Array(container1, container2, container3).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (2)
     handler.allocatedContainerToHostMap.get(container1.getId).get should be ("host1")
@@ -432,7 +441,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     handler.getNumContainersPendingAllocate should be (3)
 
     val container = createContainer("host1")
-    handler.handleAllocatedContainers(Array(container))
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (1)
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
@@ -461,7 +470,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     handler.getNumExecutorsRunning should be (2)
 
@@ -481,7 +490,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
@@ -506,7 +515,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (2)
     handler.getNumContainersPendingAllocate should be (0)
 
@@ -533,7 +542,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
     handler.getNumExecutorsRunning should be (2)
     handler.getNumContainersPendingAllocate should be (0)
 
@@ -553,7 +562,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
-    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.handleAllocatedContainers(Array(container1, container2).toImmutableArraySeq)
 
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 2)
     val numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
@@ -643,7 +652,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val maxExecutors = 11
 
     val (handler, _) = createAllocator(
@@ -722,15 +731,16 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
     val offHeapMemoryInMB = 1024L
     val offHeapMemoryInByte = offHeapMemoryInMB * 1024 * 1024
+    val clientModeMinOffHeapMemory = 384L
     try {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, true)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
+        executorMemory + offHeapMemoryInMB + clientModeMinOffHeapMemory)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
@@ -744,7 +754,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory * 1.5).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
@@ -759,17 +769,49 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val memory = defaultResource.getMemory
+      val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory * 1.4).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
+    }
+  }
+
+  test("SPARK-47208: User can override the minimum memory overhead of the executor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 500))
+    } finally {
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
+    }
+  }
+
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+        .set(EXECUTOR_MEMORY_OVERHEAD, 100L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 100))
+    } finally {
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 
   test("Test YARN container decommissioning") {
-    assume(VersionUtils.isHadoop3)
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
-    val rmClientSpy = spy(rmClient)
+    val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
     val (handler, sparkConfClone) = createAllocator(3, rmClientSpy)
 
@@ -816,7 +858,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     // host1 is now in DECOMMISSIONING state
     val httpAddress1 = "host1:420"
-    when(nodeReport.getNodeState).thenReturn(NodeState.valueOf("DECOMMISSIONING"))
+    when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
@@ -837,5 +879,29 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     // No DecommissionExecutor message should be sent when config is set to false
     verify(rpcEndPoint, times(1)).
       send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
+  }
+
+  test("SPARK-43510: Running executors should be none when YarnAllocator adds running executors " +
+    "after processing completed containers") {
+    val (handler, _) = createAllocator(1)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumContainersPendingAllocate should be(1)
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
+    handler.getNumExecutorsRunning should be(1)
+    handler.getNumContainersPendingAllocate should be(0)
+
+    val status = ContainerStatus.newInstance(
+      container.getId, ContainerState.COMPLETE, "Finished", 0)
+    val getOrUpdateNumExecutorsStartingForRPId = PrivateMethod[AtomicInteger](
+      Symbol("getOrUpdateNumExecutorsStartingForRPId"))
+    handler.invokePrivate(getOrUpdateNumExecutorsStartingForRPId(0)).incrementAndGet()
+    handler.processCompletedContainers(Seq(status))
+    val updateInternalState = PrivateMethod[Unit](Symbol("updateInternalState"))
+    handler.invokePrivate(updateInternalState(0, "1", container))
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumExecutorsStarting should be(0)
   }
 }

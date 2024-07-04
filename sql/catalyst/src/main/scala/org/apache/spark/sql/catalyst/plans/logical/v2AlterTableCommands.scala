@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The base trait for commands that need to alter a v2 table with [[TableChange]]s.
@@ -120,7 +122,7 @@ case class AddColumns(
         col.nullable,
         col.comment.orNull,
         col.position.map(_.position).orNull,
-        col.default.orNull)
+        col.getV2Default)
     }
   }
 
@@ -156,9 +158,9 @@ case class ReplaceColumns(
         col.nullable,
         col.comment.orNull,
         null,
-        col.default.orNull)
+        col.getV2Default)
     }
-    deleteChanges ++ addChanges
+    (deleteChanges ++ addChanges).toImmutableArraySeq
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
@@ -228,6 +230,13 @@ case class AlterColumn(
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
     val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
+      if (newDefaultExpression.nonEmpty) {
+        // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
+        // value parses successfully, and return an error otherwise
+        val newDataType = dataType.getOrElse(column.asInstanceOf[ResolvedFieldName].field.dataType)
+        ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
+          "ALTER TABLE ALTER COLUMN")
+      }
       TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
     }
     typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
@@ -235,4 +244,20 @@ case class AlterColumn(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
+}
+
+/**
+ * The logical plan of the following commands:
+ *  - ALTER TABLE ... CLUSTER BY (col1, col2, ...)
+ *  - ALTER TABLE ... CLUSTER BY NONE
+ */
+case class AlterTableClusterBy(
+    table: LogicalPlan, clusterBySpec: Option[ClusterBySpec]) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = {
+    Seq(TableChange.clusterBy(clusterBySpec
+      .map(_.columnNames.toArray) // CLUSTER BY (col1, col2, ...)
+      .getOrElse(Array.empty)))
+  }
+
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

@@ -21,12 +21,12 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.regex.Pattern;
 
-import scala.collection.JavaConverters;
+import scala.jdk.javaapi.CollectionConverters;
 
 import org.apache.kafka.common.TopicPartition;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaConsumerStrategySuite implements Serializable {
 
@@ -35,23 +35,21 @@ public class JavaConsumerStrategySuite implements Serializable {
     final String topic1 = "topic1";
     final Pattern pat = Pattern.compile("top.*");
     final Collection<String> topics = Arrays.asList(topic1);
-    final scala.collection.Iterable<String> sTopics =
-      JavaConverters.collectionAsScalaIterableConverter(topics).asScala();
+    final scala.collection.Iterable<String> sTopics = CollectionConverters.asScala(topics);
     final TopicPartition tp1 = new TopicPartition(topic1, 0);
     final TopicPartition tp2 = new TopicPartition(topic1, 1);
     final Collection<TopicPartition> parts = Arrays.asList(tp1, tp2);
-    final scala.collection.Iterable<TopicPartition> sParts =
-      JavaConverters.collectionAsScalaIterableConverter(parts).asScala();
+    final scala.collection.Iterable<TopicPartition> sParts = CollectionConverters.asScala(parts);
     final Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("bootstrap.servers", "not used");
     final scala.collection.Map<String, Object> sKafkaParams =
-      JavaConverters.mapAsScalaMapConverter(kafkaParams).asScala();
+      CollectionConverters.asScala(kafkaParams);
     final Map<TopicPartition, Long> offsets = new HashMap<>();
     offsets.put(tp1, 23L);
     final Map<TopicPartition, Object> dummyOffsets = new HashMap<>();
     dummyOffsets.putAll(offsets);
     final scala.collection.Map<TopicPartition, Object> sOffsets =
-      JavaConverters.mapAsScalaMap(dummyOffsets);
+      CollectionConverters.asScala(dummyOffsets);
 
     final ConsumerStrategy<String, String> sub1 =
       ConsumerStrategies.Subscribe(sTopics, sKafkaParams, sOffsets);
@@ -62,7 +60,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> sub4 =
       ConsumerStrategies.Subscribe(topics, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
@@ -75,7 +73,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> psub4 =
       ConsumerStrategies.SubscribePattern(pat, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       psub1.executorKafkaParams().get("bootstrap.servers"),
       psub3.executorKafkaParams().get("bootstrap.servers"));
 
@@ -88,7 +86,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> asn4 =
       ConsumerStrategies.Assign(parts, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       asn1.executorKafkaParams().get("bootstrap.servers"),
       asn3.executorKafkaParams().get("bootstrap.servers"));
   }

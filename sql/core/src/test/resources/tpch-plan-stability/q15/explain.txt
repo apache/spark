@@ -109,57 +109,57 @@ Subquery:1 Hosting operator id = 11 Hosting Expression = Subquery scalar-subquer
 
 
 (17) Scan parquet spark_catalog.default.lineitem
-Output [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
+Output [4]: [l_suppkey#18, l_extendedprice#19, l_discount#20, l_shipdate#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
 PushedFilters: [IsNotNull(l_shipdate), GreaterThanOrEqual(l_shipdate,1996-01-01), LessThan(l_shipdate,1996-04-01)]
 ReadSchema: struct<l_suppkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_shipdate:date>
 
 (18) ColumnarToRow [codegen id : 1]
-Input [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
+Input [4]: [l_suppkey#18, l_extendedprice#19, l_discount#20, l_shipdate#21]
 
 (19) Filter [codegen id : 1]
-Input [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
-Condition : ((isnotnull(l_shipdate#8) AND (l_shipdate#8 >= 1996-01-01)) AND (l_shipdate#8 < 1996-04-01))
+Input [4]: [l_suppkey#18, l_extendedprice#19, l_discount#20, l_shipdate#21]
+Condition : ((isnotnull(l_shipdate#21) AND (l_shipdate#21 >= 1996-01-01)) AND (l_shipdate#21 < 1996-04-01))
 
 (20) Project [codegen id : 1]
-Output [3]: [l_suppkey#5, l_extendedprice#6, l_discount#7]
-Input [4]: [l_suppkey#5, l_extendedprice#6, l_discount#7, l_shipdate#8]
+Output [3]: [l_suppkey#18, l_extendedprice#19, l_discount#20]
+Input [4]: [l_suppkey#18, l_extendedprice#19, l_discount#20, l_shipdate#21]
 
 (21) HashAggregate [codegen id : 1]
-Input [3]: [l_suppkey#5, l_extendedprice#6, l_discount#7]
-Keys [1]: [l_suppkey#5]
-Functions [1]: [partial_sum((l_extendedprice#6 * (1 - l_discount#7)))]
-Aggregate Attributes [2]: [sum#18, isEmpty#19]
-Results [3]: [l_suppkey#5, sum#20, isEmpty#21]
+Input [3]: [l_suppkey#18, l_extendedprice#19, l_discount#20]
+Keys [1]: [l_suppkey#18]
+Functions [1]: [partial_sum((l_extendedprice#19 * (1 - l_discount#20)))]
+Aggregate Attributes [2]: [sum#22, isEmpty#23]
+Results [3]: [l_suppkey#18, sum#24, isEmpty#25]
 
 (22) Exchange
-Input [3]: [l_suppkey#5, sum#20, isEmpty#21]
-Arguments: hashpartitioning(l_suppkey#5, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+Input [3]: [l_suppkey#18, sum#24, isEmpty#25]
+Arguments: hashpartitioning(l_suppkey#18, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (23) HashAggregate [codegen id : 2]
-Input [3]: [l_suppkey#5, sum#20, isEmpty#21]
-Keys [1]: [l_suppkey#5]
-Functions [1]: [sum((l_extendedprice#6 * (1 - l_discount#7)))]
-Aggregate Attributes [1]: [sum((l_extendedprice#6 * (1 - l_discount#7)))#13]
-Results [1]: [sum((l_extendedprice#6 * (1 - l_discount#7)))#13 AS total_revenue#15]
+Input [3]: [l_suppkey#18, sum#24, isEmpty#25]
+Keys [1]: [l_suppkey#18]
+Functions [1]: [sum((l_extendedprice#19 * (1 - l_discount#20)))]
+Aggregate Attributes [1]: [sum((l_extendedprice#19 * (1 - l_discount#20)))#13]
+Results [1]: [sum((l_extendedprice#19 * (1 - l_discount#20)))#13 AS total_revenue#26]
 
 (24) HashAggregate [codegen id : 2]
-Input [1]: [total_revenue#15]
+Input [1]: [total_revenue#26]
 Keys: []
-Functions [1]: [partial_max(total_revenue#15)]
-Aggregate Attributes [1]: [max#22]
-Results [1]: [max#23]
+Functions [1]: [partial_max(total_revenue#26)]
+Aggregate Attributes [1]: [max#27]
+Results [1]: [max#28]
 
 (25) Exchange
-Input [1]: [max#23]
+Input [1]: [max#28]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 
 (26) HashAggregate [codegen id : 3]
-Input [1]: [max#23]
+Input [1]: [max#28]
 Keys: []
-Functions [1]: [max(total_revenue#15)]
-Aggregate Attributes [1]: [max(total_revenue#15)#24]
-Results [1]: [max(total_revenue#15)#24 AS max(total_revenue)#25]
+Functions [1]: [max(total_revenue#26)]
+Aggregate Attributes [1]: [max(total_revenue#26)#29]
+Results [1]: [max(total_revenue#26)#29 AS max(total_revenue)#30]
 
 

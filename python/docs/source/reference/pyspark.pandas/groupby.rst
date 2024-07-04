@@ -68,7 +68,6 @@ Computations / Descriptive Stats
    GroupBy.filter
    GroupBy.first
    GroupBy.last
-   GroupBy.mad
    GroupBy.max
    GroupBy.mean
    GroupBy.median
@@ -90,7 +89,6 @@ Computations / Descriptive Stats
    GroupBy.bfill
    GroupBy.ffill
    GroupBy.head
-   GroupBy.backfill
    GroupBy.shift
    GroupBy.tail
 

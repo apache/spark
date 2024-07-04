@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.{Locale, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -41,6 +41,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws
@@ -161,7 +162,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     val defaultTopic = caseInsensitiveParameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(caseInsensitiveParameters)
-    new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
+    new KafkaSink(specifiedKafkaParams, defaultTopic)
   }
 
   override def createRelation(
@@ -171,16 +172,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       data: DataFrame): BaseRelation = {
     mode match {
       case SaveMode.Overwrite | SaveMode.Ignore =>
-        throw new AnalysisException(s"Save mode $mode not allowed for Kafka. " +
-          s"Allowed save modes are ${SaveMode.Append} and " +
-          s"${SaveMode.ErrorIfExists} (default).")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3081",
+          messageParameters = Map(
+            "mode" -> mode.toString,
+            "append" -> SaveMode.Append.toString,
+            "errorIfExists" -> SaveMode.ErrorIfExists.toString))
       case _ => // good
     }
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     val topic = caseInsensitiveParameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(caseInsensitiveParameters)
-    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
-      topic)
+    KafkaWriter.write(data.queryExecution, specifiedKafkaParams, topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
@@ -205,7 +208,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case (ASSIGN, value) =>
         AssignStrategy(JsonUtils.partitions(value))
       case (SUBSCRIBE, value) =>
-        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty))
+        SubscribeStrategy(value.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq)
       case (SUBSCRIBE_PATTERN, value) =>
         SubscribePatternStrategy(value.trim())
       case _ =>
@@ -525,6 +528,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def supportedCustomMetrics(): Array[CustomMetric] = {
       Array(new OffsetOutOfRangeMetric, new DataLossMetric)
     }
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
   }
 }
 
@@ -577,14 +583,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | data was aged out by Kafka or the topic may have been deleted before all the data in the
       | topic was processed. If you want your streaming query to fail on such cases, set the source
       | option "failOnDataLoss" to "true".
-    """.stripMargin
-
-  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
-    """
-      |Some data may have been lost because they are not available in Kafka any more; either the
-      | data was aged out by Kafka or the topic may have been deleted before all the data in the
-      | topic was processed. If you don't want your streaming query to fail on such cases, set the
-      | source option "failOnDataLoss" to "false".
     """.stripMargin
 
   val CUSTOM_GROUP_ID_ERROR_MESSAGE =

@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.SpeculationStageSummaryWrapper
 import org.apache.spark.status.api.v1.SpeculationStageSummary
 
-class SpeculationStageSummaryWrapperSerializer
+private[protobuf] class SpeculationStageSummaryWrapperSerializer
   extends ProtobufSerDe[SpeculationStageSummaryWrapper] {
 
   override def serialize(s: SpeculationStageSummaryWrapper): Array[Byte] = {

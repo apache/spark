@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, KEY, VALUE}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-
 
 /**
  * Command that runs
@@ -41,7 +44,7 @@ case class SetCommand(kv: Option[(String, Option[String])])
     val schema = StructType(Array(
       StructField("key", StringType, nullable = false),
         StructField("value", StringType, nullable = false)))
-    schema.toAttributes
+    toAttributes(schema)
   }
 
   private val (_output, runFunc): (Seq[Attribute], SparkSession => Seq[Row]) = kv match {
@@ -49,8 +52,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
+            log"automatically converted to ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} " +
+            log"instead.")
         if (value.toInt < 1) {
           val msg =
             s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
@@ -66,8 +70,9 @@ case class SetCommand(kv: Option[(String, Option[String])])
     case Some((SQLConf.Replaced.MAPREDUCE_JOB_REDUCES, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} is Hadoop's property, " +
-            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Replaced.MAPREDUCE_JOB_REDUCES)} is Hadoop's " +
+            log"property, automatically converted to " +
+            log"${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
         if (value.toInt < 1) {
           val msg =
             s"Setting negative ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} for automatically " +
@@ -90,13 +95,31 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+        /**
+         * Be nice and detect if the key matches a SQL variable.
+         * If it does give a meaningful error pointing the user to SET VARIABLE
+         */
+        val varName = try {
+          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+        } catch {
+          case _: ParseException =>
+          Seq()
+        }
+        if (varName.nonEmpty && varName.length <= 3) {
+          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+              messageParameters = Map("variableName" -> toSQLId(varName)))
+          }
+        }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
-          logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
-            "the Hive config dynamically. Please pass the Hive-specific config by adding the " +
-            s"prefix spark.hadoop (e.g. spark.hadoop.$key) when starting a Spark application. " +
-            "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
-            "dynamically-loading-spark-properties.")
+          logWarning(log"'SET ${MDC(KEY, key)}=${MDC(VALUE, value)}' might not work, since Spark " +
+            log"doesn't support changing the Hive config dynamically. Please pass the " +
+            log"Hive-specific config by adding the prefix spark.hadoop " +
+            log"(e.g. spark.hadoop.${MDC(KEY, key)}) when starting a Spark application. For " +
+            log"details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+            log"dynamically-loading-spark-properties.")
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
@@ -130,14 +153,14 @@ case class SetCommand(kv: Option[(String, Option[String])])
           StructField("value", StringType, nullable = false),
           StructField("meaning", StringType, nullable = false),
           StructField("Since version", StringType, nullable = false)))
-      (schema.toAttributes, runFunc)
+      (toAttributes(schema), runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
         logWarning(
-          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-            s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+          log"Property ${MDC(CONFIG, SQLConf.Deprecated.MAPRED_REDUCE_TASKS)} is deprecated, " +
+            log"showing ${MDC(CONFIG2, SQLConf.SHUFFLE_PARTITIONS.key)} instead.")
         Seq(Row(
           SQLConf.SHUFFLE_PARTITIONS.key,
           sparkSession.sessionState.conf.defaultNumShufflePartitions.toString))

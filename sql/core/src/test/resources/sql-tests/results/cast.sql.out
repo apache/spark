@@ -873,7 +873,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE",
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -914,3 +914,248 @@ select cast(10.654321BD as interval month)
 struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
 -- !query output
 0-11
+
+
+-- !query
+SELECT '1.23' :: int
+-- !query schema
+struct<CAST(1.23 AS INT):int>
+-- !query output
+1
+
+
+-- !query
+SELECT 'abc' :: int
+-- !query schema
+struct<CAST(abc AS INT):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT '12345678901234567890123' :: long
+-- !query schema
+struct<CAST(12345678901234567890123 AS BIGINT):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT '' :: int
+-- !query schema
+struct<CAST( AS INT):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULL :: int
+-- !query schema
+struct<CAST(NULL AS INT):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT '123.a' :: int
+-- !query schema
+struct<CAST(123.a AS INT):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT '-2147483648' :: int
+-- !query schema
+struct<CAST(-2147483648 AS INT):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT HEX('abc' :: binary)
+-- !query schema
+struct<hex(CAST(abc AS BINARY)):string>
+-- !query output
+616263
+
+
+-- !query
+SELECT HEX((123 :: byte) :: binary)
+-- !query schema
+struct<hex(CAST(CAST(123 AS TINYINT) AS BINARY)):string>
+-- !query output
+7B
+
+
+-- !query
+SELECT 'interval 3 month 1 hour' :: interval
+-- !query schema
+struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+-- !query output
+3 months 1 hours
+
+
+-- !query
+SELECT interval 3 day 1 second :: string
+-- !query schema
+struct<CAST(INTERVAL '3 00:00:01' DAY TO SECOND AS STRING):string>
+-- !query output
+INTERVAL '3 00:00:01' DAY TO SECOND
+
+
+-- !query
+select ' 1 ' :: DOUBLE
+-- !query schema
+struct<CAST( 1  AS DOUBLE):double>
+-- !query output
+1.0
+
+
+-- !query
+select '1.0 ' :: DEC
+-- !query schema
+struct<CAST(1.0  AS DECIMAL(10,0)):decimal(10,0)>
+-- !query output
+1
+
+
+-- !query
+select '\t\t true \n\r ' :: boolean
+-- !query schema
+struct<CAST(		 true 
+  AS BOOLEAN):boolean>
+-- !query output
+true
+
+
+-- !query
+select '2022-01-01 00:00:00' :: timestamp
+-- !query schema
+struct<CAST(2022-01-01 00:00:00 AS TIMESTAMP):timestamp>
+-- !query output
+2022-01-01 00:00:00
+
+
+-- !query
+select interval '-10-2' year to month :: smallint
+-- !query schema
+struct<CAST(INTERVAL '-10-2' YEAR TO MONTH AS SMALLINT):smallint>
+-- !query output
+-122
+
+
+-- !query
+select -10L :: interval second
+-- !query schema
+struct<CAST(-10 AS INTERVAL SECOND):interval second>
+-- !query output
+-0 00:00:10.000000000
+
+
+-- !query
+select interval '08:11:10.001' hour to second :: decimal(10, 4)
+-- !query schema
+struct<CAST(INTERVAL '08:11:10.001' HOUR TO SECOND AS DECIMAL(10,4)):decimal(10,4)>
+-- !query output
+29470.0010
+
+
+-- !query
+select 10.123456BD :: interval day to second
+-- !query schema
+struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
+-- !query output
+0 00:00:10.123456000
+
+
+-- !query
+SELECT '1.23' :: int :: long
+-- !query schema
+struct<CAST(CAST(1.23 AS INT) AS BIGINT):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT '2147483648' :: long :: int
+-- !query schema
+struct<CAST(CAST(2147483648 AS BIGINT) AS INT):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT CAST('2147483648' :: long AS int)
+-- !query schema
+struct<CAST(CAST(2147483648 AS BIGINT) AS INT):int>
+-- !query output
+-2147483648
+
+
+-- !query
+SELECT map(1, '123', 2, '456')[1] :: int
+-- !query schema
+struct<CAST(map(1, 123, 2, 456)[1] AS INT):int>
+-- !query output
+123
+
+
+-- !query
+SELECT '2147483648' :: BINT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "typeName" : "\"BINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 27,
+    "fragment" : "BINT"
+  } ]
+}
+
+
+-- !query
+SELECT '2147483648' :: SELECT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "typeName" : "\"SELECT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 29,
+    "fragment" : "SELECT"
+  } ]
+}
+
+
+-- !query
+SELECT FALSE IS NOT NULL :: string
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'::'",
+    "hint" : ""
+  }
+}

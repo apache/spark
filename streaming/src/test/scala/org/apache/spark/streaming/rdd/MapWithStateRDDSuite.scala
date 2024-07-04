@@ -60,7 +60,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
     val rdd = MapWithStateRDD.createFromPairRDD[Int, Int, String, Int](
       sc.parallelize(data), partitioner, Time(123))
     assertRDD[Int, Int, String, Int](rdd, data.map { x => (x._1, x._2, 123)}.toSet, Set.empty)
-    assert(rdd.partitions.size === partitioner.numPartitions)
+    assert(rdd.partitions.length === partitioner.numPartitions)
 
     assert(rdd.partitioner === Some(partitioner))
   }
@@ -108,7 +108,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
           case Some("get-state") =>
             Some(state.getOption().getOrElse(-1))
           case Some("update-state") =>
-            if (state.exists) state.update(state.get + 1) else state.update(0)
+            if (state.exists()) state.update(state.get() + 1) else state.update(0)
             None
           case Some("remove-state") =>
             removedStates += state.get()
@@ -232,7 +232,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
         // else if the data is 2, remove the state if it exists
         data match {
           case Some(1) =>
-            if (state.exists()) { state.update(state.get + 1) }
+            if (state.exists()) { state.update(state.get() + 1) }
             else state.update(0)
           case Some(2) =>
             state.remove()
@@ -303,7 +303,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
     def rddCollectFunc(rdd: RDD[MapWithStateRDDRecord[Int, Int, Int]])
       : Set[(List[(Int, Int, Long)], List[Int])] = {
       rdd.map { record => (record.stateMap.getAll().toList, record.mappedData.toList) }
-         .collect.toSet
+        .collect().toSet
     }
 
     /** Generate MapWithStateRDD with data RDD having a long lineage */

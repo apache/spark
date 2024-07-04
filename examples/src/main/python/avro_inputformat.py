@@ -47,7 +47,7 @@ import sys
 from typing import Any, Tuple
 
 from functools import reduce
-from pyspark.rdd import RDD
+from pyspark import RDD
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":

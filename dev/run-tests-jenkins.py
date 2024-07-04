@@ -178,9 +178,6 @@ def main():
     # Switch to a Maven-based build if the PR title contains "test-maven":
     if "test-maven" in ghprb_pull_title:
         os.environ["SPARK_JENKINS_BUILD_TOOL"] = "maven"
-    # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop2" in ghprb_pull_title:
-        os.environ["SPARK_JENKINS_BUILD_PROFILE"] = "hadoop2"
     if "test-hadoop3" in ghprb_pull_title:
         os.environ["SPARK_JENKINS_BUILD_PROFILE"] = "hadoop3"
     # Switch the Scala profile based on the PR title:

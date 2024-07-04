@@ -22,11 +22,12 @@ import java.util.Collections
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.CalendarIntervalType
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataSourceV2DataFrameSuite
@@ -177,16 +178,25 @@ class DataSourceV2DataFrameSuite
         val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
         testCatalog.createTable(
           Identifier.of(Array(), "table_name"),
-          new StructType().add("i", "interval"),
-          Array.empty, Collections.emptyMap[String, String])
+          Array(Column.create("i", CalendarIntervalType)),
+          Array.empty[Transform], Collections.emptyMap[String, String])
         val df = sql(s"select interval 1 millisecond as i")
         val v2Writer = df.writeTo("testcat.table_name")
-        val e1 = intercept[AnalysisException](v2Writer.append())
-        assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-        val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-        assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
-        val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-        assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.append()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwrite(df("i"))),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException](v2Writer.overwritePartitions()),
+          errorClass = "_LEGACY_ERROR_TEMP_1183",
+          parameters = Map.empty
+        )
       }
     }
   }

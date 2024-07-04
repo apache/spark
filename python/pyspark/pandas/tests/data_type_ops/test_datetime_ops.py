@@ -21,10 +21,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class DatetimeOpsTest(OpsTestBase):
+class DatetimeOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(pd.date_range("1994-1-31 10:30:15", periods=3, freq="D"))
@@ -236,10 +237,18 @@ class DatetimeOpsTest(OpsTestBase):
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
-class DatetimeNTZOpsTest(DatetimeOpsTest):
+class DatetimeOpsTests(
+    DatetimeOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
+class DatetimeNTZOpsTest(DatetimeOpsTests):
     @classmethod
     def setUpClass(cls):
-        super(DatetimeOpsTest, cls).setUpClass()
+        super(DatetimeOpsTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
 
 

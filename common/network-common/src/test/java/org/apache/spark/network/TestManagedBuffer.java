@@ -81,15 +81,20 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public Object convertToNettyForSsl() throws IOException {
+    return underlying.convertToNettyForSsl();
+  }
+
+  @Override
   public int hashCode() {
     return underlying.hashCode();
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ManagedBuffer) {
+    if (other instanceof ManagedBuffer managedBuffer) {
       try {
-        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer();
+        ByteBuffer nioBuf = managedBuffer.nioByteBuffer();
         if (nioBuf.remaining() != len) {
           return false;
         } else {

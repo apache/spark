@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.HiveSerDe
  */
 class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[ShowCreateTableSuiteBase].commandVersion
+  def nsTable: String = s"$ns.$table"
 
   override def getShowCreateDDL(table: String, serde: Boolean = false): Array[String] = {
     super.getShowCreateDDL(table, serde).filter(!_.startsWith("'transient_lastDdlTime'"))
@@ -42,13 +43,14 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
+           |USING HIVE
            |TBLPROPERTIES (
            |  'prop1' = 'value1',
            |  'prop2' = 'value2'
            |)
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
@@ -66,6 +68,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |  c1 INT COMMENT 'bla',
              |  c2 STRING
              |)
+             |USING HIVE
              |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
              |  'prop1' = 'value1',
@@ -73,7 +76,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |)
            """.stripMargin
         )
-        val expected = s"CREATE EXTERNAL TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+        val expected = s"CREATE EXTERNAL TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
           s" ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
           s" WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
           s" STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
@@ -93,6 +96,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
+           |USING HIVE
            |COMMENT 'bla'
            |PARTITIONED BY (
            |  p1 BIGINT COMMENT 'bla',
@@ -100,7 +104,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |)
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " COMMENT 'bla' PARTITIONED BY (p1 BIGINT COMMENT 'bla', p2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
@@ -124,7 +128,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |NULL DEFINED AS 'NaN'
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'colelction.delim' = '@'," +
@@ -148,7 +152,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |STORED AS PARQUET
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
@@ -175,7 +179,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'field.delim' = ','," +
@@ -192,12 +196,13 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
     withNamespaceAndTable(ns, table) { t =>
       sql(
         s"""CREATE TABLE $t (a INT, b STRING)
+           |STORED AS TEXTFILE
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS
          """.stripMargin
       )
-      val expected = s"CREATE TABLE $fullName ( a INT, b STRING)" +
+      val expected = s"CREATE TABLE $nsTable ( a INT, b STRING)" +
         " CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
         " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
@@ -245,7 +250,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
+        properties = table.properties.filter { case (k, _) => !nondeterministicProps.contains(k) },
         stats = None,
         ignoredProperties = Map.empty,
         storage = table.storage.copy(properties = Map.empty),
@@ -356,11 +361,17 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
          """.stripMargin
       )
 
-      val cause = intercept[AnalysisException] {
-        checkCreateSparkTableAsHive("t1")
-      }
-
-      assert(cause.getMessage.contains("unsupported serde configuration"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          checkCreateSparkTableAsHive("t1")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1273",
+        parameters = Map(
+          "table" -> "t1",
+          "configs" -> (" SERDE: org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe " +
+            "INPUTFORMAT: org.apache.hadoop.hive.ql.io.RCFileInputFormat " +
+            "OUTPUTFORMAT: org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+      )
     }
   }
 
@@ -422,13 +433,13 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
          """.stripMargin
       )
 
-
-      val cause = intercept[AnalysisException] {
-        sql("SHOW CREATE TABLE t1")
-      }
-
-      assert(cause.getMessage.contains(
-        "SHOW CREATE TABLE doesn't support transactional Hive table"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE t1")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1272",
+        parameters = Map("table" -> "`spark_catalog`.`default`.`t1`")
+      )
     }
   }
 }

@@ -92,7 +92,7 @@ install_app() {
       if [ -f "${local_checksum}" ]; then
         echo "  ${local_tarball}" >> ${local_checksum} # two spaces + file are important!
         # Assuming SHA512 here for now
-        echo "Veryfing checksum from ${local_checksum}" 1>&2
+        echo "Verifying checksum from ${local_checksum}" 1>&2
         if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
           echo "Bad checksum from ${remote_checksum}"
           exit 2
@@ -119,7 +119,7 @@ install_mvn() {
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
-  if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
+  if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
     local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
     local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
     local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
@@ -146,30 +146,6 @@ install_mvn() {
   fi
 }
 
-# Determine the Scala version from the root pom.xml file, set the Scala URL,
-# and, with that, download the specific version of Scala necessary under
-# the build/ folder
-install_scala() {
-  # determine the Scala version used in Spark
-  local scala_binary_version=`grep "scala.binary.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
-  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | grep ${scala_binary_version} | head -n1 | awk -F '[<>]' '{print $3}'`
-  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
-  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
-  local SCALA_TARBALL="scala-${scala_version}.tgz"
-
-  install_app \
-    "${TYPESAFE_MIRROR}" \
-    "scala/${scala_version}/${SCALA_TARBALL}" \
-    "" \
-    "" \
-    ${SCALA_TARBALL} \
-    "scala-${scala_version}/bin/scala"
-
-  SCALA_COMPILER="$(cd "$(dirname "${scala_bin}")/../lib" && pwd)/scala-compiler.jar"
-  SCALA_LIBRARY="$(cd "$(dirname "${scala_bin}")/../lib" && pwd)/scala-library.jar"
-}
-
-install_scala
 install_mvn
 
 # Reset the current working directory

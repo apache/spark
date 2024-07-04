@@ -20,12 +20,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-streaming-kafka-0-10_2.12</artifactId>
+  <artifactId>spark-streaming-kafka-0-10_2.13</artifactId>
   <properties>
     <sbt.project.name>streaming-kafka-0-10</sbt.project.name>
   </properties>
@@ -59,12 +59,10 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-    <!-- #if scala-2.13 --><!--
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
-    --><!-- #endif scala-2.13 -->
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
@@ -94,13 +92,15 @@
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-annotations</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
-    <!-- Kafka embedded server uses Zookeeper 3.5.7 API -->
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
-      <version>3.5.7</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -125,7 +125,7 @@
     </dependency>
     <dependency>
       <groupId>org.jmock</groupId>
-      <artifactId>jmock-junit4</artifactId>
+      <artifactId>jmock-junit5</artifactId>
       <scope>test</scope>
     </dependency>
 

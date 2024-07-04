@@ -24,4 +24,7 @@ Spark SQL
    :maxdepth: 2
 
    arrow_pandas
+   python_udtf
+   python_data_source
+   type_conversions
 

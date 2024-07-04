@@ -22,17 +22,16 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 
-import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -50,12 +49,12 @@ public class Java8RDDAPISuite implements Serializable {
   private static int foreachCalls = 0;
   private transient JavaSparkContext sc;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     sc = new JavaSparkContext("local", "JavaAPISuite");
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     sc.stop();
     sc = null;
@@ -66,7 +65,7 @@ public class Java8RDDAPISuite implements Serializable {
     foreachCalls = 0;
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(s -> foreachCalls++);
-    Assert.assertEquals(2, foreachCalls);
+    Assertions.assertEquals(2, foreachCalls);
   }
 
   @Test
@@ -74,7 +73,7 @@ public class Java8RDDAPISuite implements Serializable {
     foreachCalls = 0;
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(x -> foreachCalls++);
-    Assert.assertEquals(2, foreachCalls);
+    Assertions.assertEquals(2, foreachCalls);
   }
 
   @Test
@@ -82,14 +81,14 @@ public class Java8RDDAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function<Integer, Boolean> isOdd = x -> x % 2 == 0;
     JavaPairRDD<Boolean, Iterable<Integer>> oddsAndEvens = rdd.groupBy(isOdd);
-    Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assertions.assertEquals(2, oddsAndEvens.count());
+    Assertions.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assertions.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
 
     oddsAndEvens = rdd.groupBy(isOdd, 1);
-    Assert.assertEquals(2, oddsAndEvens.count());
-    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
-    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+    Assertions.assertEquals(2, oddsAndEvens.count());
+    Assertions.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assertions.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
   @Test
@@ -108,10 +107,10 @@ public class Java8RDDAPISuite implements Serializable {
     ));
     List<Tuple2<Integer, Tuple2<Integer, Optional<Character>>>> joined =
       rdd1.leftOuterJoin(rdd2).collect();
-    Assert.assertEquals(5, joined.size());
+    Assertions.assertEquals(5, joined.size());
     Tuple2<Integer, Tuple2<Integer, Optional<Character>>> firstUnmatched =
       rdd1.leftOuterJoin(rdd2).filter(tup -> !tup._2()._2().isPresent()).first();
-    Assert.assertEquals(3, firstUnmatched._1().intValue());
+    Assertions.assertEquals(3, firstUnmatched._1().intValue());
   }
 
   @Test
@@ -120,10 +119,10 @@ public class Java8RDDAPISuite implements Serializable {
     Function2<Integer, Integer, Integer> add = (a, b) -> a + b;
 
     int sum = rdd.fold(0, add);
-    Assert.assertEquals(33, sum);
+    Assertions.assertEquals(33, sum);
 
     sum = rdd.reduce(add);
-    Assert.assertEquals(33, sum);
+    Assertions.assertEquals(33, sum);
   }
 
   @Test
@@ -137,9 +136,9 @@ public class Java8RDDAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
     JavaPairRDD<Integer, Integer> sums = rdd.foldByKey(0, (a, b) -> a + b);
-    Assert.assertEquals(1, sums.lookup(1).get(0).intValue());
-    Assert.assertEquals(2, sums.lookup(2).get(0).intValue());
-    Assert.assertEquals(3, sums.lookup(3).get(0).intValue());
+    Assertions.assertEquals(1, sums.lookup(1).get(0).intValue());
+    Assertions.assertEquals(2, sums.lookup(2).get(0).intValue());
+    Assertions.assertEquals(3, sums.lookup(3).get(0).intValue());
   }
 
   @Test
@@ -153,19 +152,19 @@ public class Java8RDDAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs);
     JavaPairRDD<Integer, Integer> counts = rdd.reduceByKey((a, b) -> a + b);
-    Assert.assertEquals(1, counts.lookup(1).get(0).intValue());
-    Assert.assertEquals(2, counts.lookup(2).get(0).intValue());
-    Assert.assertEquals(3, counts.lookup(3).get(0).intValue());
+    Assertions.assertEquals(1, counts.lookup(1).get(0).intValue());
+    Assertions.assertEquals(2, counts.lookup(2).get(0).intValue());
+    Assertions.assertEquals(3, counts.lookup(3).get(0).intValue());
 
     Map<Integer, Integer> localCounts = counts.collectAsMap();
-    Assert.assertEquals(1, localCounts.get(1).intValue());
-    Assert.assertEquals(2, localCounts.get(2).intValue());
-    Assert.assertEquals(3, localCounts.get(3).intValue());
+    Assertions.assertEquals(1, localCounts.get(1).intValue());
+    Assertions.assertEquals(2, localCounts.get(2).intValue());
+    Assertions.assertEquals(3, localCounts.get(3).intValue());
 
     localCounts = rdd.reduceByKeyLocally((a, b) -> a + b);
-    Assert.assertEquals(1, localCounts.get(1).intValue());
-    Assert.assertEquals(2, localCounts.get(2).intValue());
-    Assert.assertEquals(3, localCounts.get(3).intValue());
+    Assertions.assertEquals(1, localCounts.get(1).intValue());
+    Assertions.assertEquals(2, localCounts.get(2).intValue());
+    Assertions.assertEquals(3, localCounts.get(3).intValue());
   }
 
   @Test
@@ -186,8 +185,8 @@ public class Java8RDDAPISuite implements Serializable {
       "The quick brown fox jumps over the lazy dog."));
     JavaRDD<String> words = rdd.flatMap(x -> Arrays.asList(x.split(" ")).iterator());
 
-    Assert.assertEquals("Hello", words.first());
-    Assert.assertEquals(11, words.count());
+    Assertions.assertEquals("Hello", words.first());
+    Assertions.assertEquals(11, words.count());
 
     JavaPairRDD<String, String> pairs = rdd.flatMapToPair(s -> {
       List<Tuple2<String, String>> pairs2 = new LinkedList<>();
@@ -197,8 +196,8 @@ public class Java8RDDAPISuite implements Serializable {
       return pairs2.iterator();
     });
 
-    Assert.assertEquals(new Tuple2<>("Hello", "Hello"), pairs.first());
-    Assert.assertEquals(11, pairs.count());
+    Assertions.assertEquals(new Tuple2<>("Hello", "Hello"), pairs.first());
+    Assertions.assertEquals(11, pairs.count());
 
     JavaDoubleRDD doubles = rdd.flatMapToDouble(s -> {
       List<Double> lengths = new LinkedList<>();
@@ -208,8 +207,8 @@ public class Java8RDDAPISuite implements Serializable {
       return lengths.iterator();
     });
 
-    Assert.assertEquals(5.0, doubles.first(), 0.01);
-    Assert.assertEquals(11, pairs.count());
+    Assertions.assertEquals(5.0, doubles.first(), 0.01);
+    Assertions.assertEquals(11, pairs.count());
   }
 
   @Test
@@ -241,12 +240,12 @@ public class Java8RDDAPISuite implements Serializable {
       return Collections.singletonList(sum).iterator();
     });
 
-    Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
+    Assertions.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
 
   @Test
   public void sequenceFile() throws IOException {
-    File tempDir = JavaUtils.createTempDir();
+    File tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
@@ -262,7 +261,7 @@ public class Java8RDDAPISuite implements Serializable {
     // Try reading the output back as an object file
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class, Text.class)
       .mapToPair(pair -> new Tuple2<>(pair._1().get(), pair._2().toString()));
-    Assert.assertEquals(pairs, readRDD.collect());
+    Assertions.assertEquals(pairs, readRDD.collect());
     Utils.deleteRecursively(tempDir);
   }
 
@@ -293,15 +292,15 @@ public class Java8RDDAPISuite implements Serializable {
         return Arrays.asList(sizeI, sizeS).iterator();
       };
     JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
-    Assert.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
+    Assertions.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
   }
 
   @Test
   public void keyBy() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2));
     List<Tuple2<String, Integer>> s = rdd.keyBy(Object::toString).collect();
-    Assert.assertEquals(new Tuple2<>("1", 1), s.get(0));
-    Assert.assertEquals(new Tuple2<>("2", 2), s.get(1));
+    Assertions.assertEquals(new Tuple2<>("1", 1), s.get(0));
+    Assertions.assertEquals(new Tuple2<>("2", 2), s.get(1));
   }
 
   @Test
@@ -311,7 +310,7 @@ public class Java8RDDAPISuite implements Serializable {
       rdd1.mapToPair(i -> new Tuple2<>(i, i % 2));
     JavaPairRDD<Integer, Integer> rdd3 =
       rdd2.mapToPair(in -> new Tuple2<>(in._2(), in._1()));
-    Assert.assertEquals(Arrays.asList(
+    Assertions.assertEquals(Arrays.asList(
       new Tuple2<>(1, 1),
       new Tuple2<>(0, 2),
       new Tuple2<>(1, 3),
@@ -325,19 +324,19 @@ public class Java8RDDAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> rdd2 =
       rdd1.mapToPair(i -> new Tuple2<>(i, i % 2));
     List<Integer>[] parts = rdd1.collectPartitions(new int[]{0});
-    Assert.assertEquals(Arrays.asList(1, 2), parts[0]);
+    Assertions.assertEquals(Arrays.asList(1, 2), parts[0]);
 
     parts = rdd1.collectPartitions(new int[]{1, 2});
-    Assert.assertEquals(Arrays.asList(3, 4), parts[0]);
-    Assert.assertEquals(Arrays.asList(5, 6, 7), parts[1]);
+    Assertions.assertEquals(Arrays.asList(3, 4), parts[0]);
+    Assertions.assertEquals(Arrays.asList(5, 6, 7), parts[1]);
 
-    Assert.assertEquals(Arrays.asList(new Tuple2<>(1, 1), new Tuple2<>(2, 0)),
+    Assertions.assertEquals(Arrays.asList(new Tuple2<>(1, 1), new Tuple2<>(2, 0)),
       rdd2.collectPartitions(new int[]{0})[0]);
 
     List<Tuple2<Integer, Integer>>[] parts2 = rdd2.collectPartitions(new int[]{1, 2});
-    Assert.assertEquals(Arrays.asList(new Tuple2<>(3, 1), new Tuple2<>(4, 0)), parts2[0]);
-    Assert.assertEquals(Arrays.asList(new Tuple2<>(5, 1), new Tuple2<>(6, 0), new Tuple2<>(7, 1)),
-      parts2[1]);
+    Assertions.assertEquals(Arrays.asList(new Tuple2<>(3, 1), new Tuple2<>(4, 0)), parts2[0]);
+    Assertions.assertEquals(
+      Arrays.asList(new Tuple2<>(5, 1), new Tuple2<>(6, 0), new Tuple2<>(7, 1)), parts2[1]);
   }
 
   @Test

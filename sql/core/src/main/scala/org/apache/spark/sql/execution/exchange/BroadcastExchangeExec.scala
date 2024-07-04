@@ -25,6 +25,8 @@ import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -45,9 +47,14 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 trait BroadcastExchangeLike extends Exchange {
 
   /**
-   * The broadcast job group ID
+   * The broadcast run ID in job tag
    */
-  def runId: UUID = UUID.randomUUID
+  val runId: UUID = UUID.randomUUID
+
+  /**
+   * The broadcast job tag
+   */
+  def jobTag: String = s"broadcast exchange (runId ${runId.toString})"
 
   /**
    * The asynchronous job that prepares the broadcast relation.
@@ -60,10 +67,21 @@ trait BroadcastExchangeLike extends Exchange {
    * It also does the preparations work, such as waiting for the subqueries.
    */
   final def submitBroadcastJob: scala.concurrent.Future[broadcast.Broadcast[Any]] = executeQuery {
+    materializationStarted.set(true)
     completionFuture
   }
 
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
+
+  /**
+   * Cancels broadcast job.
+   */
+  final def cancelBroadcastJob(): Unit = {
+    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+      sparkContext.cancelJobsWithTag(this.jobTag)
+      this.relationFuture.cancel(true)
+    }
+  }
 
   /**
    * Returns the runtime statistics after broadcast materialization.
@@ -79,8 +97,6 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
-
-  override val runId: UUID = UUID.randomUUID
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -129,9 +145,9 @@ case class BroadcastExchangeExec(
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
       session, BroadcastExchangeExec.executionContext) {
           try {
-            // Setup a job group here so later it may get cancelled by groupId if necessary.
-            sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
-              interruptOnCancel = true)
+            // Setup a job tag here so later it may get cancelled by tag if necessary.
+            sparkContext.addJobTag(jobTag)
+            sparkContext.setInterruptOnCancel(true)
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
@@ -209,9 +225,9 @@ case class BroadcastExchangeExec(
       relationFuture.get(timeout, TimeUnit.SECONDS).asInstanceOf[broadcast.Broadcast[T]]
     } catch {
       case ex: TimeoutException =>
-        logError(s"Could not execute broadcast in $timeout secs.", ex)
+        logError(log"Could not execute broadcast in ${MDC(TIMEOUT, timeout)} secs.", ex)
         if (!relationFuture.isDone) {
-          sparkContext.cancelJobGroup(runId.toString)
+          sparkContext.cancelJobsWithTag(jobTag)
           relationFuture.cancel(true)
         }
         throw QueryExecutionErrors.executeBroadcastTimeoutError(timeout, Some(ex))

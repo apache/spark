@@ -16,8 +16,9 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
 import scala.collection.mutable
+
+import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.util.ManualClock

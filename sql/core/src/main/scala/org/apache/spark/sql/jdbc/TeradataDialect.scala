@@ -20,10 +20,11 @@ package org.apache.spark.sql.jdbc
 import java.sql.Types
 import java.util.Locale
 
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types._
 
 
-private case object TeradataDialect extends JdbcDialect {
+private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:teradata")
@@ -41,6 +42,7 @@ private case object TeradataDialect extends JdbcDialect {
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
     case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case ByteType => Option(JdbcType("BYTEINT", java.sql.Types.TINYINT))
     case _ => None
   }
 
@@ -58,13 +60,14 @@ private case object TeradataDialect extends JdbcDialect {
    */
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     s"DELETE FROM $table ALL"
   }
 
   // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/wysTNUMsP~0aGzksLCl1kg
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"RENAME TABLE $oldTable TO $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   override def getLimitClause(limit: Integer): String = {

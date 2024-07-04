@@ -60,14 +60,15 @@ private[spark] class ResultTask[T, U](
     numPartitions: Int,
     locs: Seq[TaskLocation],
     val outputId: Int,
+    artifacts: JobArtifactSet,
     localProperties: Properties,
     serializedTaskMetrics: Array[Byte],
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
     isBarrier: Boolean = false)
-  extends Task[U](stageId, stageAttemptId, partition.index, numPartitions, localProperties,
-    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
+  extends Task[U](stageId, stageAttemptId, partition.index, numPartitions, artifacts,
+    localProperties, serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {

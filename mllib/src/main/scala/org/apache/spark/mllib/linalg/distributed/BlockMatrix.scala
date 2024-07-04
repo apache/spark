@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import scala.collection.mutable.ArrayBuffer
+
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 
 import org.apache.spark.{Partitioner, PartitionIdPassthrough, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -322,7 +322,10 @@ class BlockMatrix @Since("1.3.0") (
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
-    if (mem > 500) logWarning(s"Storing this matrix will require $mem MiB of memory!")
+    if (mem > 500) {
+      logWarning(log"Storing this matrix will require ${MDC(LogKeys.MEMORY_SIZE, mem)} " +
+        log"MiB of memory!")
+    }
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>
@@ -443,7 +446,7 @@ class BlockMatrix @Since("1.3.0") (
     val leftMatrix = blockInfo.keys.collect()
     val rightMatrix = other.blockInfo.keys.collect()
 
-    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).transform((_, v) => v.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
       val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.emptyIntArray)
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
@@ -452,7 +455,7 @@ class BlockMatrix @Since("1.3.0") (
         partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
-    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).transform((_, v) => v.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
       val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.emptyIntArray)
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))

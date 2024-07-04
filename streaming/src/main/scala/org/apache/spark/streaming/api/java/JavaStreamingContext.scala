@@ -22,7 +22,7 @@ import java.lang.{Boolean => JBoolean}
 import java.util.{List => JList, Map => JMap}
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration

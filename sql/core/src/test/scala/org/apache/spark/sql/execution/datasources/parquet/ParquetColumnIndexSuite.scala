@@ -59,7 +59,7 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
   }
 
   test("reading from unaligned pages - test filters") {
-    val df = spark.range(0, 2000).map(i => (i, i + ":" + "o" * (i / 100).toInt)).toDF()
+    val df = spark.range(0, 2000).map(i => (i, s"$i:${"o" * (i / 100).toInt}")).toDF()
     checkUnalignedPages(df)(actions: _*)
   }
 
@@ -97,14 +97,14 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
     // insert 50 null values in [400, 450) to verify that they are skipped during processing row
     // range [500, 1000) against the second page of col_2 [400, 800)
     val df = spark.range(0, 2000).map { i =>
-      val strVal = if (i >= 400 && i < 450) null else i + ":" + "o" * (i / 100).toInt
+      val strVal = if (i >= 400 && i < 450) null else s"$i:${"o" * (i / 100).toInt}"
       (i, strVal)
     }.toDF()
     checkUnalignedPages(df)(actions: _*)
   }
 
   test("reading unaligned pages - struct type") {
-    val df = (0 until 2000).map(i => Tuple1((i.toLong, i + ":" + "o" * (i / 100)))).toDF("s")
+    val df = (0 until 2000).map(i => Tuple1((i.toLong, s"$i:${"o" * (i / 100)}"))).toDF("s")
     checkUnalignedPages(df)(
       df => df.filter("s._1 = 500"),
       df => df.filter("s._1 = 500 or s._1 = 1500"),

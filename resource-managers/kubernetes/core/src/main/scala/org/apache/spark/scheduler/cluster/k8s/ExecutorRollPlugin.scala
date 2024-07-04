@@ -20,15 +20,17 @@ import java.lang.Math.sqrt
 import java.util.{Map => JMap}
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.deploy.k8s.Config.{EXECUTOR_ROLL_INTERVAL, EXECUTOR_ROLL_POLICY, ExecutorRollPolicy, MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING}
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, EXECUTOR_ID, INTERVAL}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.status.api.v1
 import org.apache.spark.util.ThreadUtils
 
@@ -60,9 +62,10 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
     val interval = sc.conf.get(EXECUTOR_ROLL_INTERVAL)
     if (interval <= 0) {
-      logWarning(s"Disabled due to invalid interval value, '$interval'")
+      logWarning(log"Disabled due to invalid interval value, " +
+        log"'${MDC(INTERVAL, interval * MILLIS_PER_SECOND)}'")
     } else if (!sc.conf.get(DECOMMISSION_ENABLED)) {
-      logWarning(s"Disabled because ${DECOMMISSION_ENABLED.key} is false.")
+      logWarning(log"Disabled because ${MDC(CONFIG, DECOMMISSION_ENABLED.key)} is false.")
     } else {
       minTasks = sc.conf.get(MINIMUM_TASKS_PER_EXECUTOR_BEFORE_ROLLING)
       // Scheduler is not created yet
@@ -79,7 +82,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
               choose(executorSummaryList, policy) match {
                 case Some(id) =>
                   // Use decommission to be safe.
-                  logInfo(s"Ask to decommission executor $id")
+                  logInfo(log"Ask to decommission executor ${MDC(EXECUTOR_ID, id)}")
                   val now = System.currentTimeMillis()
                   scheduler.decommissionExecutor(
                     id,
@@ -90,7 +93,7 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
               }
             case _ =>
               logWarning("This plugin expects " +
-                s"${classOf[KubernetesClusterSchedulerBackend].getSimpleName}.")
+                log"${MDC(CLASS_NAME, classOf[KubernetesClusterSchedulerBackend].getSimpleName)}.")
           }
         } catch {
           case e: Throwable => logError("Error in rolling thread", e)
@@ -150,14 +153,15 @@ class ExecutorRollDriverPlugin extends DriverPlugin with Logging {
    * Since we will choose only first item, the duplication is okay.
    */
   private def outliersFromMultipleDimensions(listWithoutDriver: Seq[v1.ExecutorSummary]) =
-    outliers(listWithoutDriver.filter(_.totalTasks > 0), e => e.totalDuration / e.totalTasks) ++
-      outliers(listWithoutDriver, e => e.totalDuration) ++
-      outliers(listWithoutDriver, e => e.totalGCTime) ++
-      outliers(listWithoutDriver, e => e.failedTasks) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory")) ++
-      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory")) ++
-      outliers(listWithoutDriver, e => e.totalShuffleWrite) ++
-      outliers(listWithoutDriver, e => e.diskUsed)
+    outliers(listWithoutDriver.filter(_.totalTasks > 0),
+      e => (e.totalDuration / e.totalTasks).toFloat) ++
+      outliers(listWithoutDriver, e => e.totalDuration.toFloat) ++
+      outliers(listWithoutDriver, e => e.totalGCTime.toFloat) ++
+      outliers(listWithoutDriver, e => e.failedTasks.toFloat) ++
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMHeapMemory").toFloat) ++
+      outliers(listWithoutDriver, e => getPeakMetrics(e, "JVMOffHeapMemory").toFloat) ++
+      outliers(listWithoutDriver, e => e.totalShuffleWrite.toFloat) ++
+      outliers(listWithoutDriver, e => e.diskUsed.toFloat)
 
   /**
    * Return executors whose metrics is outstanding, '(value - mean) > 2-sigma'. This is

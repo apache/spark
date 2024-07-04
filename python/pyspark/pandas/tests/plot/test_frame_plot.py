@@ -25,7 +25,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class DataFramePlotTest(PandasOnSparkTestCase):
+class DataFramePlotTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -50,7 +50,6 @@ class DataFramePlotTest(PandasOnSparkTestCase):
                 getattr(psdf.plot, name)()
 
     def test_topn_max_rows(self):
-
         pdf = pd.DataFrame(np.random.rand(2500, 4), columns=["a", "b", "c", "d"])
         psdf = ps.from_pandas(pdf)
 
@@ -151,6 +150,10 @@ class DataFramePlotTest(PandasOnSparkTestCase):
 
         check_box_multi_columns(psdf)
         check_box_multi_columns(-psdf)
+
+
+class DataFramePlotTests(DataFramePlotTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

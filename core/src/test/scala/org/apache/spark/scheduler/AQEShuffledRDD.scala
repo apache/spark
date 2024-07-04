@@ -48,7 +48,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
     result
   }
 
-  override def numPartitions: Int = partitionStartIndices.size
+  override def numPartitions: Int = partitionStartIndices.length
 
   override def getPartition(key: Any): Int = {
     parentPartitionMapping(parent.getPartition(key))

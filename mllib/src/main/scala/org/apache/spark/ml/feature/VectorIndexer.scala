@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap, NoSuchElementException}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -300,7 +300,8 @@ class VectorIndexerModel private[ml] (
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
-    categoryMaps.mapValues(_.asJava).toMap.asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
+    categoryMaps.map { case (k, v) => (k, v.asJava) }
+      .asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
   }
 
   /**

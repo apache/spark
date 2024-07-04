@@ -41,7 +41,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
 import org.apache.spark.storage._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SslTestUtils, ThreadUtils}
 
 class ShuffleBlockPusherSuite extends SparkFunSuite {
 
@@ -51,11 +51,15 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   @Mock(answer = RETURNS_SMART_NULLS) private var executorBackend: CoarseGrainedExecutorBackend = _
 
   private var conf: SparkConf = _
-  private var pushedBlocks = new ArrayBuffer[String]
+  private val pushedBlocks = new ArrayBuffer[String]
+
+  def createSparkConf(): SparkConf = {
+    new SparkConf(loadDefaults = false)
+  }
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    conf = new SparkConf(loadDefaults = false)
+    conf = createSparkConf()
     MockitoAnnotations.openMocks(this).close()
     when(dependency.shuffleId).thenReturn(0)
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
@@ -82,7 +86,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
         pushedBlocks ++= blocks
         val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
         val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
-        (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+        blocks.lazyZip(managedBuffers).foreach((blockId, buffer) => {
           blockPushListener.onBlockPushSuccess(blockId, buffer)
         })
       })
@@ -91,7 +95,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   private def verifyPushRequests(
       pushRequests: Seq[PushRequest],
       expectedSizes: Seq[Int]): Unit = {
-    (pushRequests, expectedSizes).zipped.foreach((req, size) => {
+    pushRequests.lazyZip(expectedSizes).foreach((req, size) => {
       assert(req.size == size)
     })
   }
@@ -256,7 +260,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
           // blocks to be deferred
           blockPushListener.onBlockPushSuccess(blocks(0), managedBuffers(0))
         } else {
-          (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+          blocks.lazyZip(managedBuffers).foreach((blockId, buffer) => {
             blockPushListener.onBlockPushSuccess(blockId, buffer)
           })
         }
@@ -478,5 +482,11 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
       super.notifyDriverAboutPushCompletion()
       semaphore.release()
     }
+  }
+}
+
+class SslShuffleBlockPusherSuite extends ShuffleBlockPusherSuite {
+  override def createSparkConf(): SparkConf = {
+    SslTestUtils.updateWithSSLConfig(super.createSparkConf())
   }
 }

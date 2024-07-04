@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils.{castPartitionSpec, normalizePartitionSpec, requireExactMatchedPartitionSpec}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
@@ -63,7 +64,8 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       tableName,
       conf.resolver)
     if (!allowPartitionSpec) {
-      requireExactMatchedPartitionSpec(tableName, normalizedSpec, partSchema.fieldNames)
+      requireExactMatchedPartitionSpec(tableName, normalizedSpec,
+        partSchema.fieldNames.toImmutableArraySeq)
     }
     val partitionNames = normalizedSpec.keySet
     val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))

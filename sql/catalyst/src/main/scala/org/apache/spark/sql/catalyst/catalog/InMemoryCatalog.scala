@@ -126,7 +126,7 @@ class InMemoryCatalog(
             dbDefinition, e)
       }
       val newDb = dbDefinition.copy(
-        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName))
+        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
       catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
   }

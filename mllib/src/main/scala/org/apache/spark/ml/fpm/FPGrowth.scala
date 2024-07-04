@@ -164,7 +164,8 @@ class FPGrowth @Since("2.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
     val data = dataset.select($(itemsCol))
     val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))

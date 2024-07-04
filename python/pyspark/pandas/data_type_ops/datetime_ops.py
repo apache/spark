@@ -23,7 +23,6 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
@@ -33,7 +32,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     NumericType,
 )
-
+from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
@@ -109,28 +108,20 @@ class DatetimeOps(DataTypeOps):
             raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        return pyspark_column_op("__lt__", left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        return pyspark_column_op("__le__", left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        return pyspark_column_op("__ge__", left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        return pyspark_column_op("__gt__", left, right)
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
@@ -159,6 +150,8 @@ class DatetimeNTZOps(DatetimeOps):
     """
 
     def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
+        from pyspark import SparkContext
+
         jvm = SparkContext._active_spark_context._jvm
         return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
 

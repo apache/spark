@@ -20,13 +20,13 @@ import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
@@ -49,9 +49,10 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
-import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, WebBrowserTest}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -389,6 +390,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // a new conf is used with the background thread set and running at its fastest
     // allowed refresh rate (1Hz)
     stop()
+    // Like 'init()', we need to clear the store directory of previously stopped server.
+    Utils.deleteRecursively(storeDir)
+    assert(storeDir.mkdir())
     val myConf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
       .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
@@ -408,7 +412,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     def listDir(dir: Path): Seq[FileStatus] = {
       val statuses = fs.listStatus(dir)
       statuses.flatMap(
-        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
+        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat)).toImmutableArraySeq
     }
 
     def dumpLogDir(msg: String = ""): Unit = {
@@ -540,8 +544,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     eventually(stdTimeout, stdInterval) {
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
-    val jobcount = getNumJobs("/jobs")
-    assert(!isApplicationCompleted(provider.getListing().next))
+    assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
 
@@ -549,7 +552,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(isApplicationCompleted(provider.getListing().next),
+      assert(isApplicationCompleted(provider.getListing().next()),
         s"application never completed, server=$server\n")
     }
 
@@ -560,7 +563,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // app is no longer incomplete
     listApplications(false) should not contain(appId)
 
-    assert(jobcount === getNumJobs("/jobs"))
+    eventually(stdTimeout, stdInterval) {
+      assert(4 === getNumJobsRestful())
+    }
 
     // no need to retain the test dir now the tests complete
     ShutdownHookManager.registerShutdownDeleteDir(logDir)
@@ -621,28 +626,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   }
 
   test("access history application defaults to the last attempt id") {
-
-    def getRedirectUrl(url: URL): (Int, String) = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod("GET")
-      connection.setUseCaches(false)
-      connection.setDefaultUseCaches(false)
-      connection.setInstanceFollowRedirects(false)
-      connection.connect()
-      val code = connection.getResponseCode()
-      val location = connection.getHeaderField("Location")
-      (code, location)
-    }
-
-    def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
-      attemptId match {
-        case Some(id) =>
-          new URL(s"http://$localhost:$port/history/$appId/$id")
-        case None =>
-          new URL(s"http://$localhost:$port/history/$appId")
-      }
-    }
-
     val oneAttemptAppId = "local-1430917381534"
     HistoryServerSuite.getUrl(buildPageAttemptUrl(oneAttemptAppId, None))
 
@@ -660,6 +643,42 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
           assert(location.stripSuffix("/") === url.toString)
       }
       HistoryServerSuite.getUrl(new URL(location))
+    }
+  }
+
+  test("Redirect URLs should end with a slash") {
+    val oneAttemptAppId = "local-1430917381534"
+    val multiAttemptAppid = "local-1430917381535"
+
+    val url = buildPageAttemptUrl(oneAttemptAppId, None)
+    val (code, location) = getRedirectUrl(url)
+    assert(code === 302, s"Unexpected status code $code for $url")
+    assert(location === url.toString + "/")
+
+    val url2 = buildPageAttemptUrl(multiAttemptAppid, None)
+    val (code2, location2) = getRedirectUrl(url2)
+    assert(code2 === 302, s"Unexpected status code $code2 for $url2")
+    assert(location2 === url2.toString + "/2/")
+  }
+
+  def getRedirectUrl(url: URL): (Int, String) = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod("GET")
+    connection.setUseCaches(false)
+    connection.setDefaultUseCaches(false)
+    connection.setInstanceFollowRedirects(false)
+    connection.connect()
+    val code = connection.getResponseCode()
+    val location = connection.getHeaderField("Location")
+    (code, location)
+  }
+
+  def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
+    attemptId match {
+      case Some(id) =>
+        new URL(s"http://$localhost:$port/history/$appId/$id")
+      case None =>
+        new URL(s"http://$localhost:$port/history/$appId")
     }
   }
 
@@ -715,8 +734,8 @@ object HistoryServerSuite {
     // generate the "expected" results for the characterization tests.  Just blindly assume the
     // current behavior is correct, and write out the returned json to the test/resource files
 
-    // SPARK-38851: Use LevelDB backend because it is the default.
-    val suite = new LevelDBBackendHistoryServerSuite
+    // Use RocksDB backend because it is the default.
+    val suite = new RocksDBBackendHistoryServerSuite
     FileUtils.deleteDirectory(suite.getExpRoot)
     suite.getExpRoot.mkdirs()
     try {
@@ -794,12 +813,14 @@ object FakeAuthFilter {
   val FAKE_HTTP_USER = "HTTP_USER"
 }
 
+@WebBrowserTest
 @ExtendedLevelDBTest
 class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
   override protected def diskBackend: History.HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.LEVELDB
 }
 
+@WebBrowserTest
 class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
   override protected def diskBackend: History.HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.ROCKSDB

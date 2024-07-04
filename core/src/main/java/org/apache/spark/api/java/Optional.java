@@ -168,10 +168,9 @@ public final class Optional<T> implements Serializable {
 
   @Override
   public boolean equals(Object obj) {
-    if (!(obj instanceof Optional)) {
+    if (!(obj instanceof Optional<?> other)) {
       return false;
     }
-    Optional<?> other = (Optional<?>) obj;
     return Objects.equals(value, other.value);
   }
 

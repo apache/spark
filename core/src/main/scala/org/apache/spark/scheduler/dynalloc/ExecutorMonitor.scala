@@ -20,12 +20,12 @@ package org.apache.spark.scheduler.dynalloc
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
@@ -342,7 +342,8 @@ private[spark] class ExecutorMonitor(
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     val exec = ensureExecutorIsTracked(event.executorId, event.executorInfo.resourceProfileId)
     exec.updateRunningTasks(0)
-    logInfo(s"New executor ${event.executorId} has registered (new total is ${executors.size()})")
+    logInfo(log"New executor ${MDC(LogKeys.EXECUTOR_ID, event.executorId)} has registered " +
+      log"(new total is ${MDC(LogKeys.COUNT, executors.size())})")
   }
 
   private def decrementExecResourceProfileCount(rpId: Int): Unit = {
@@ -365,11 +366,14 @@ private[spark] class ExecutorMonitor(
       } else {
         metrics.exitedUnexpectedly.inc()
       }
-      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
-        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
-        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
-        s"driver killed: ${metrics.driverKilled.getCount()}, " +
-        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
+      // scalastyle:off line.size.limit
+      logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, event.executorId)} is removed. " +
+        log"Remove reason statistics: (gracefully decommissioned: " +
+        log"${MDC(LogKeys.NUM_DECOMMISSIONED, metrics.gracefullyDecommissioned.getCount())}, " +
+        log"decommission unfinished: ${MDC(LogKeys.NUM_UNFINISHED_DECOMMISSIONED, metrics.decommissionUnfinished.getCount())}, " +
+        log"driver killed: ${MDC(LogKeys.NUM_EXECUTORS_KILLED, metrics.driverKilled.getCount())}, " +
+        log"unexpectedly exited: ${MDC(LogKeys.NUM_EXECUTORS_EXITED, metrics.exitedUnexpectedly.getCount())}).")
+      // scalastyle:on line.size.limit
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }
@@ -563,17 +567,14 @@ private[spark] class ExecutorMonitor(
     def updateTimeout(): Unit = {
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
-        val timeout = if (cachedBlocks.nonEmpty || (shuffleIds != null && shuffleIds.nonEmpty)) {
-          val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else Long.MaxValue
-          val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
-            shuffleTimeoutNs
-          } else {
-            Long.MaxValue
-          }
-          math.min(_cacheTimeout, _shuffleTimeout)
+        val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else 0
+        val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
+          shuffleTimeoutNs
         } else {
-          idleTimeoutNs
+          0
         }
+        // timeout should be max of idleTimeout, storageTimeout and shuffleTimeout
+        val timeout = Seq(_cacheTimeout, _shuffleTimeout, idleTimeoutNs).max
         val deadline = idleStart + timeout
         if (deadline >= 0) deadline else Long.MaxValue
       } else {

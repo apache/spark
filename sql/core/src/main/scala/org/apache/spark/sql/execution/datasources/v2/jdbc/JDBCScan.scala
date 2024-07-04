@@ -16,14 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 case class JDBCScan(
     relation: JDBCRelation,
@@ -39,32 +39,29 @@ case class JDBCScan(
   override def readSchema(): StructType = prunedSchema
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
-    new BaseRelation with TableScan {
-      override def sqlContext: SQLContext = context
-      override def schema: StructType = prunedSchema
-      override def needConversion: Boolean = relation.needConversion
-      override def buildScan(): RDD[Row] = {
-        val columnList = if (groupByColumns.isEmpty) {
-          prunedSchema.map(_.name).toArray
-        } else {
-          pushedAggregateColumn
-        }
-        relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
-          pushedLimit, sortOrders, pushedOffset)
-      }
-    }.asInstanceOf[T]
+    JDBCV1RelationFromV2Scan(
+      context,
+      prunedSchema,
+      relation,
+      pushedPredicates,
+      pushedAggregateColumn,
+      groupByColumns,
+      tableSample,
+      pushedLimit,
+      sortOrders,
+      pushedOffset).asInstanceOf[T]
   }
 
   override def description(): String = {
     val (aggString, groupByString) = if (groupByColumns.nonEmpty) {
       val groupByColumnsLength = groupByColumns.get.length
-      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength)),
-        seqToString(pushedAggregateColumn.take(groupByColumnsLength)))
+      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength).toImmutableArraySeq),
+        seqToString(pushedAggregateColumn.take(groupByColumnsLength).toImmutableArraySeq))
     } else {
       ("[]", "[]")
     }
     super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
-      ", PushedPredicates: " + seqToString(pushedPredicates) +
+      ", PushedPredicates: " + seqToString(pushedPredicates.toImmutableArraySeq) +
       ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
   }
 

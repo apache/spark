@@ -79,8 +79,7 @@ public class UploadBlock extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UploadBlock) {
-      UploadBlock o = (UploadBlock) other;
+    if (other instanceof UploadBlock o) {
       return Objects.equals(appId, o.appId)
         && Objects.equals(execId, o.execId)
         && Objects.equals(blockId, o.blockId)

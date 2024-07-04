@@ -18,7 +18,8 @@
 package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, LABEL_COLUMN, NUM_CLASSES}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ClassifierParams
 import org.apache.spark.ml.feature.Instance
@@ -83,7 +84,8 @@ private[spark] object DatasetUtils extends Logging {
 
   private[ml] def checkNonNanVectors(vectorCol: Column): Column = {
     when(vectorCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
-      .when(!validateVector(vectorCol),
+      .when(exists(unwrap_udt(vectorCol).getField("values"),
+        v => v.isNaN || v === Double.NegativeInfinity || v === Double.PositiveInfinity),
         raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
           vectorCol.cast(StringType))))
       .otherwise(vectorCol)
@@ -91,15 +93,6 @@ private[spark] object DatasetUtils extends Logging {
 
   private[ml] def checkNonNanVectors(vectorCol: String): Column = {
     checkNonNanVectors(col(vectorCol))
-  }
-
-  private lazy val validateVector = udf { vector: Vector =>
-    vector match {
-      case dv: DenseVector =>
-        dv.values.forall(v => !v.isNaN && !v.isInfinity)
-      case sv: SparseVector =>
-        sv.values.forall(v => !v.isNaN && !v.isInfinity)
-    }
   }
 
   private[ml] def extractInstances(
@@ -203,8 +196,9 @@ private[spark] object DatasetUtils extends Logging {
           s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
           s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
           s" StringIndexer to the label column.")
-        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
-          s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
+        logInfo(log"${MDC(CLASS_NAME, this.getClass.getCanonicalName)} inferred ${MDC(
+          NUM_CLASSES, numClasses)} classes for labelCol=${MDC(LABEL_COLUMN, labelCol)}" +
+          log" since numClasses was not specified in the column metadata.")
         numClasses
     }
   }
@@ -215,7 +209,7 @@ private[spark] object DatasetUtils extends Logging {
    */
   private[ml] def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
     MetadataUtils.getNumFeatures(dataset.schema(vectorCol)).getOrElse {
-      dataset.select(columnToVector(dataset, vectorCol)).head.getAs[Vector](0).size
+      dataset.select(columnToVector(dataset, vectorCol)).head().getAs[Vector](0).size
     }
   }
 }

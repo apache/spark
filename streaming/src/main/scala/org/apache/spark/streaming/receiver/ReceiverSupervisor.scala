@@ -25,7 +25,8 @@ import scala.concurrent._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{DELAY, ERROR, MESSAGE, STREAM_ID}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -144,10 +145,10 @@ private[streaming] abstract class ReceiverSupervisor(
   def startReceiver(): Unit = synchronized {
     try {
       if (onReceiverStart()) {
-        logInfo(s"Starting receiver $streamId")
+        logInfo(log"Starting receiver ${MDC(LogKeys.STREAM_ID, streamId)}")
         receiverState = Started
         receiver.onStart()
-        logInfo(s"Called receiver $streamId onStart")
+        logInfo(log"Called receiver ${MDC(LogKeys.STREAM_ID, streamId)} onStart")
       } else {
         // The driver refused us
         stop("Registered unsuccessfully because Driver refused to start receiver " + streamId, None)
@@ -161,7 +162,8 @@ private[streaming] abstract class ReceiverSupervisor(
   /** Stop receiver */
   def stopReceiver(message: String, error: Option[Throwable]): Unit = synchronized {
     try {
-      logInfo("Stopping receiver with message: " + message + ": " + error.getOrElse(""))
+      logInfo(log"Stopping receiver with message: ${MDC(LogKeys.MESSAGE, message)}: " +
+        log"${MDC(LogKeys.ERROR, error.getOrElse(""))}")
       receiverState match {
         case Initialized =>
           logWarning("Skip stopping receiver because it has not yet stared")
@@ -175,7 +177,8 @@ private[streaming] abstract class ReceiverSupervisor(
       }
     } catch {
       case NonFatal(t) =>
-        logError(s"Error stopping receiver $streamId ${Utils.exceptionString(t)}")
+        logError(log"Error stopping receiver ${MDC(STREAM_ID, streamId)} " +
+          log"${MDC(ERROR, Utils.exceptionString(t))}")
     }
   }
 
@@ -189,8 +192,8 @@ private[streaming] abstract class ReceiverSupervisor(
     Future {
       // This is a blocking action so we should use "futureExecutionContext" which is a cached
       // thread pool.
-      logWarning("Restarting receiver with delay " + delay + " ms: " + message,
-        error.orNull)
+      logWarning(log"Restarting receiver with delay ${MDC(DELAY, delay)} ms: " +
+        log"${MDC(MESSAGE, message)}", error.orNull)
       stopReceiver("Restarting receiver with delay " + delay + "ms: " + message, error)
       logDebug("Sleeping for " + delay)
       Thread.sleep(delay)
@@ -218,7 +221,7 @@ private[streaming] abstract class ReceiverSupervisor(
     logInfo("Waiting for receiver to be stopped")
     stopLatch.await()
     if (stoppingError != null) {
-      logError("Stopped receiver with error: " + stoppingError)
+      logError(log"Stopped receiver with error: ${MDC(ERROR, stoppingError)}")
       throw stoppingError
     } else {
       logInfo("Stopped receiver without error")

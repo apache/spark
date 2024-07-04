@@ -93,12 +93,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
+    "aggExpr" : "udaf(b#x) AS `udaf(b)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 41,
+    "stopIndex" : 41,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -109,12 +116,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"a\"",
-    "expressionAnyValue" : "\"any_value(a)\""
-  }
+    "aggExpr" : "(udaf(b#x) + 2) AS `(udaf(b) + 2)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 45,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -351,12 +365,19 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
   "messageParameters" : {
-    "expression" : "\"b\"",
-    "expressionAnyValue" : "\"any_value(b)\""
-  }
+    "aggExpr" : "udaf(1) AS `udaf(1)`",
+    "index" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 44,
+    "fragment" : "3"
+  } ]
 }
 
 
@@ -390,14 +411,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "GROUP_BY_POS_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "aggExpr" : "udaf(1) AS `udaf(1)`",
+    "index" : "3"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 50,
-    "fragment" : "group by cube(1, 3)"
+    "startIndex" : 49,
+    "stopIndex" : 49,
+    "fragment" : "3"
   } ]
 }
 

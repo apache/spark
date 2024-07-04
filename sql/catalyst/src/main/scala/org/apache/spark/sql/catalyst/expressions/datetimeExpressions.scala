@@ -24,7 +24,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.SparkDateTimeException
+import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeAnyCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -49,7 +50,7 @@ trait TimeZoneAwareExpression extends Expression {
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
   final override val nodePatterns: Seq[TreePattern] =
-    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
+    Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal()
 
   // Subclasses can override this function to provide more TreePatterns.
   def nodePatternsInternal(): Seq[TreePattern] = Seq()
@@ -104,7 +105,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   since = "3.1.0")
 case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "current_timezone"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
@@ -134,21 +135,13 @@ case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
-  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
-
+  extends LeafExpression with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = DateType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
 }
@@ -171,17 +164,15 @@ object CurDateExpressionBuilder extends ExpressionBuilder {
     if (expressions.isEmpty) {
       CurrentDate()
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentsError(
-        funcName, "0", expressions.length)
+      throw QueryCompilationErrors.wrongNumArgsError(
+        funcName, Seq(0), expressions.length)
     }
   }
 }
 
-abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallback {
-  override def foldable: Boolean = true
+abstract class CurrentTimestampLike() extends LeafExpression with FoldableUnevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = TimestampType
-  override def eval(input: InternalRow): Any = currentTimestamp()
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -245,22 +236,13 @@ case class Now() extends CurrentTimestampLike {
   group = "datetime_funcs",
   since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
-  with TimeZoneAwareExpression with CodegenFallback {
-
+  with TimeZoneAwareExpression with FoldableUnevaluable {
   def this() = this(None)
-
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
-
   override def dataType: DataType = TimestampNTZType
-
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
-
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
-
   override def prettyName: String = "localtimestamp"
 }
 
@@ -911,6 +893,42 @@ case class WeekOfYear(child: Expression) extends GetDateField {
     copy(child = newChild)
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the three-letter abbreviated month name from the given date.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2008-02-20');
+       Feb
+  """,
+  group = "datetime_funcs",
+  since = "4.0.0")
+case class MonthName(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getMonthName
+  override val funcName = "getMonthName"
+  override def dataType: DataType = StringType
+  override protected def withNewChildInternal(newChild: Expression): MonthName =
+    copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the three-letter abbreviated day name from the given date.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(DATE('2008-02-20'));
+       Wed
+  """,
+  group = "datetime_funcs",
+  since = "4.0.0")
+case class DayName(child: Expression) extends GetDateField {
+  override val func = DateTimeUtils.getDayName
+  override val funcName = "getDayName"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+  override def dataType: DataType = SQLConf.get.defaultStringType
+  override protected def withNewChildInternal(newChild: Expression): DayName =
+    copy(child = newChild)
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
@@ -934,9 +952,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringTypeAnyCollation)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1017,7 +1035,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -1073,7 +1091,7 @@ case class UnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal(TimestampFormatter.defaultPattern))
+    this(time, Literal(TimestampFormatter.defaultPattern()))
   }
 
   def this() = {
@@ -1143,7 +1161,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1180,7 +1198,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1 || numArgs == 2) {
       ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1224,7 +1242,7 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
         SQLConf.get.timestampType,
         failOnError = false)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }
@@ -1244,7 +1262,8 @@ abstract class ToTimestamp
   override def forTimestampNTZ: Boolean = left.dataType == TimestampNTZType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType, TimestampType, TimestampNTZType), StringType)
+    Seq(TypeCollection(StringTypeAnyCollation, DateType, TimestampType, TimestampNTZType),
+      StringTypeAnyCollation)
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -1266,7 +1285,7 @@ abstract class ToTimestamp
           daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType | TimestampNTZType =>
           t.asInstanceOf[Long] / downScaleFactor
-        case StringType =>
+        case _: StringType =>
           val fmt = right.eval(input)
           if (fmt == null) {
             null
@@ -1309,7 +1328,7 @@ abstract class ToTimestamp
     }
 
     left.dataType match {
-      case StringType => formatterOption.map { fmt =>
+      case _: StringType => formatterOption.map { fmt =>
         val df = classOf[TimestampFormatter].getName
         val formatterName = ctx.addReferenceObj("formatter", fmt, df)
         nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
@@ -1409,13 +1428,13 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal(TimestampFormatter.defaultPattern))
+    this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringTypeAnyCollation)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1502,7 +1521,7 @@ case class LastDay(startDate: Expression)
     """_FUNC_(start_date, day_of_week) - Returns the first date which is later than `start_date` and named as indicated.
       The function returns NULL if at least one of the input parameters is NULL.
       When both of the input parameters are not NULL and day_of_week is an invalid input,
-      the function throws IllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
+      the function throws SparkIllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
       """,
   examples = """
     Examples:
@@ -1523,7 +1542,7 @@ case class NextDay(
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringTypeAnyCollation)
 
   override def dataType: DataType = DateType
   override def nullable: Boolean = true
@@ -1534,9 +1553,9 @@ case class NextDay(
       val sd = start.asInstanceOf[Int]
       DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
     } catch {
-      case e: IllegalArgumentException =>
+      case e: SparkIllegalArgumentException =>
         if (failOnError) {
-          throw QueryExecutionErrors.ansiIllegalArgumentError(e)
+          throw e
         } else {
           null
         }
@@ -1551,7 +1570,7 @@ case class NextDay(
       sd: String,
       dowS: String): String = {
     val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiIllegalArgumentError(e);"
+      "throw e;"
     } else {
       s"${ev.isNull} = true;"
     }
@@ -1559,7 +1578,7 @@ case class NextDay(
      |try {
      |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
      |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-     |} catch (IllegalArgumentException e) {
+     |} catch (org.apache.spark.SparkIllegalArgumentException e) {
      |  $failOnErrorBranch
      |}
      |""".stripMargin
@@ -1577,7 +1596,7 @@ case class NextDay(
             val dayOfWeekValue = DateTimeUtils.getDayOfWeekFromString(input)
             s"${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekValue);"
           } catch {
-            case _: IllegalArgumentException => nextDayGenCode(ev, dayOfWeekTerm, sd, dowS)
+            case _: SparkIllegalArgumentException => nextDayGenCode(ev, dayOfWeekTerm, sd, dowS)
           }
         }
       } else {
@@ -1734,7 +1753,7 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes w
   val func: (Long, String) => Long
   val funcName: String
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringTypeAnyCollation)
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(time: Any, timezone: Any): Any = {
@@ -2044,12 +2063,15 @@ case class MonthsBetween(
 case class ParseToDate(
     left: Expression,
     format: Option[Expression],
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = format.map { f =>
-    Cast(GetTimestamp(left, f, TimestampType, timeZoneId), DateType, timeZoneId)
-  }.getOrElse(Cast(left, DateType, timeZoneId)) // backwards compatibility
+    Cast(GetTimestamp(left, f, TimestampType, timeZoneId, ansiEnabled), DateType, timeZoneId,
+      EvalMode.fromBoolean(ansiEnabled))
+  }.getOrElse(Cast(left, DateType, timeZoneId,
+    EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format))
@@ -2071,8 +2093,8 @@ case class ParseToDate(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    TypeCollection(StringType, DateType, TimestampType, TimestampNTZType) +:
-      format.map(_ => StringType).toSeq
+    TypeCollection(StringTypeAnyCollation, DateType, TimestampType, TimestampNTZType) +:
+      format.map(_ => StringTypeAnyCollation).toSeq
   }
 
   override protected def withNewChildrenInternal(
@@ -2143,10 +2165,10 @@ case class ParseToTimestamp(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    val types = Seq(StringType, DateType, TimestampType, TimestampNTZType)
+    val types = Seq(StringTypeAnyCollation, DateType, TimestampType, TimestampNTZType)
     TypeCollection(
       (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
-    ) +: format.map(_ => StringType).toSeq
+    ) +: format.map(_ => StringTypeAnyCollation).toSeq
   }
 
   override protected def withNewChildrenInternal(
@@ -2276,7 +2298,7 @@ case class TruncDate(date: Expression, format: Expression)
   override def left: Expression = date
   override def right: Expression = format
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringTypeAnyCollation)
   override def dataType: DataType = DateType
   override def prettyName: String = "trunc"
   override val instant = date
@@ -2345,7 +2367,7 @@ case class TruncTimestamp(
   override def left: Expression = format
   override def right: Expression = timestamp
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation, TimestampType)
   override def dataType: TimestampType = TimestampType
   override def prettyName: String = "date_trunc"
   override val instant = timestamp
@@ -2518,7 +2540,7 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
         expressions(5),
         dataType = TimestampNTZType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
     }
   }
 }
@@ -2566,7 +2588,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         expressions.drop(6).lastOption,
         dataType = TimestampType)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(6), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
     }
   }
 }
@@ -2646,7 +2668,7 @@ case class MakeTimestamp(
   // casted into decimal safely, we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(16, 6)) ++
-      timezone.map(_ => StringType)
+      timezone.map(_ => StringTypeAnyCollation)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2837,7 +2859,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
       val source = expressions(1)
       Extract(field, source, Extract.createExpr(funcName, field, source))
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 }
@@ -2918,7 +2940,7 @@ case class Extract(field: Expression, source: Expression, replacement: Expressio
 object Extract {
   def createExpr(funcName: String, field: Expression, source: Expression): Expression = {
     // both string and null literals are allowed.
-    if ((field.dataType == StringType || field.dataType == NullType) && field.foldable) {
+    if ((field.dataType.isInstanceOf[StringType] || field.dataType == NullType) && field.foldable) {
       val fieldStr = field.eval().asInstanceOf[UTF8String]
       if (fieldStr == null) {
         Literal(null, DoubleType)
@@ -2931,7 +2953,7 @@ object Extract {
         }
       }
     } else {
-      throw QueryCompilationErrors.requireLiteralParameter(funcName, "field", "string")
+      throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "field", StringType)
     }
   }
 }
@@ -3093,7 +3115,8 @@ case class ConvertTimezone(
   override def second: Expression = targetTz
   override def third: Expression = sourceTs
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation,
+    StringTypeAnyCollation, TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
 
   override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {

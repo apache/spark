@@ -41,6 +41,7 @@ user=$($Env:USERNAME)
 revision=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 date=$([DateTime]::UtcNow | Get-Date -UFormat +%Y-%m-%dT%H:%M:%SZ)
-url=$(git config --get remote.origin.url)"
+url=$(git config --get remote.origin.url),
+docroot=https://spark.apache.org/docs/latest"
 
 Set-Content -Path $SparkBuildInfoPath -Value $SparkBuildInfoContent

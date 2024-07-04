@@ -17,10 +17,9 @@
 
 package org.apache.spark.streaming.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml._
 
+import jakarta.servlet.http.HttpServletRequest
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.api.v1.{JobData, StageData}
@@ -405,7 +404,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def metadataDescriptionToHTML(metadataDescription: String): Seq[Node] = {
     // tab to 4 spaces and "\n" to "<br/>"
     Unparsed(StringEscapeUtils.escapeHtml4(metadataDescription).
-      replaceAllLiterally("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replaceAllLiterally("\n", "<br/>"))
+      replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("\n", "<br/>"))
   }
 
   private def outputOpStatusCell(outputOp: OutputOperationUIData, rowspan: Int): Seq[Node] = {

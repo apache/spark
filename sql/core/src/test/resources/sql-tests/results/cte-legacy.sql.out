@@ -34,6 +34,28 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT (
+  WITH unreferenced AS (SELECT id)
+  SELECT 1
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery():int>
+-- !query output
+1
+
+
+-- !query
+SELECT (
+  WITH unreferenced AS (SELECT 1)
+  SELECT id
+) FROM range(1)
+-- !query schema
+struct<scalarsubquery(id):bigint>
+-- !query output
+0
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))
@@ -44,7 +66,7 @@ SELECT * FROM cte
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -259,7 +281,7 @@ SELECT * FROM t2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -310,7 +332,7 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -343,7 +365,7 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -378,7 +400,7 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",

@@ -34,7 +34,7 @@ class ModelCache:
     memory configurations, e.g. `spark.executor.memoryOverhead`.
     """
 
-    _models: OrderedDict[UUID, Callable] = OrderedDict()
+    _models: OrderedDict = OrderedDict()
     _capacity: int = 3  # "reasonable" default size for now, make configurable later, if needed
     _lock: Lock = Lock()
 

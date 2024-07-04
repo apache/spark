@@ -16,14 +16,42 @@
 #
 
 import re
-from typing import Dict
-
+import functools
+import inspect
+import os
+import threading
+from typing import Any, Callable, Dict, Match, TypeVar, Type, Optional, TYPE_CHECKING
+import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+
+if TYPE_CHECKING:
+    from pyspark.sql import SparkSession
+
+T = TypeVar("T")
+
+_current_origin = threading.local()
+
+
+def current_origin() -> threading.local:
+    global _current_origin
+
+    if not hasattr(_current_origin, "fragment"):
+        _current_origin.fragment = None
+    if not hasattr(_current_origin, "call_site"):
+        _current_origin.call_site = None
+    return _current_origin
+
+
+def set_current_origin(fragment: Optional[str], call_site: Optional[str]) -> None:
+    global _current_origin
+
+    _current_origin.fragment = fragment
+    _current_origin.call_site = call_site
 
 
 class ErrorClassesReader:
     """
-    A reader to load error information from error_classes.py.
+    A reader to load error information from error-conditions.json.
     """
 
     def __init__(self) -> None:
@@ -37,20 +65,25 @@ class ErrorClassesReader:
         # Verify message parameters.
         message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
         assert set(message_parameters_from_template) == set(message_parameters), (
-            f"Undifined error message parameter for error class: {error_class}. "
+            f"Undefined error message parameter for error class: {error_class}. "
             f"Parameters: {message_parameters}"
         )
-        table = str.maketrans("<>", "{}")
 
-        return message_template.translate(table).format(**message_parameters)
+        def replace_match(match: Match[str]) -> str:
+            return match.group().translate(str.maketrans("<>", "{}"))
+
+        # Convert <> to {} only when paired.
+        message_template = re.sub(r"<([^<>]*)>", replace_match, message_template)
+
+        return message_template.format(**message_parameters)
 
     def get_message_template(self, error_class: str) -> str:
         """
-        Returns the message template for corresponding error class from error_classes.py.
+        Returns the message template for corresponding error class from error-conditions.json.
 
         For example,
         when given `error_class` is "EXAMPLE_ERROR_CLASS",
-        and corresponding error class in error_classes.py looks like the below:
+        and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
 
@@ -64,7 +97,7 @@ class ErrorClassesReader:
         "Problem <A> because of <B>."
 
         For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
-        and corresponding error class in error_classes.py looks like the below:
+        and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
 
@@ -72,7 +105,7 @@ class ErrorClassesReader:
               "message" : [
                 "Problem <A> because of <B>."
               ],
-              "subClass" : {
+              "sub_class" : {
                 "SUB_ERROR_CLASS" : {
                   "message" : [
                     "Do <C> to fix the problem."
@@ -104,7 +137,7 @@ class ErrorClassesReader:
         else:
             # Generate message template for sub error class if exists.
             sub_error_class = error_classes[1]
-            main_error_class_subclass_info_map = main_error_class_info_map["subClass"]
+            main_error_class_subclass_info_map = main_error_class_info_map["sub_class"]
             if sub_error_class in main_error_class_subclass_info_map:
                 sub_error_class_info_map = main_error_class_subclass_info_map[sub_error_class]
             else:
@@ -114,3 +147,124 @@ class ErrorClassesReader:
             message_template = main_message_template + " " + sub_message_template
 
         return message_template
+
+
+def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
+    """
+    Capture the call site information including file name, line number, and function name.
+    This function updates the thread-local storage from JVM side (PySparkCurrentOrigin)
+    with the current call site information when a PySpark API function is called.
+
+    Parameters
+    ----------
+    spark_session : SparkSession
+        Current active Spark session.
+
+    Notes
+    -----
+    The call site information is used to enhance error messages with the exact location
+    in the user code that led to the error.
+    """
+    # Filtering out PySpark code and keeping user code only
+    pyspark_root = os.path.dirname(pyspark.__file__)
+    stack = [
+        frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
+    ]
+
+    selected_frames = stack[:depth]
+
+    # We try import here since IPython is not a required dependency
+    try:
+        import IPython
+
+        # ipykernel is required for IPython
+        import ipykernel  # type: ignore[import-not-found]
+
+        ipython = IPython.get_ipython()
+        # Filtering out IPython related frames
+        ipy_root = os.path.dirname(IPython.__file__)
+        ipykernel_root = os.path.dirname(ipykernel.__file__)
+        selected_frames = [
+            frame
+            for frame in selected_frames
+            if (ipy_root not in frame.filename) and (ipykernel_root not in frame.filename)
+        ]
+    except ImportError:
+        ipython = None
+
+    # Identifying the cell is useful when the error is generated from IPython Notebook
+    if ipython:
+        call_sites = [
+            f"line {frame.lineno} in cell [{ipython.execution_count}]" for frame in selected_frames
+        ]
+    else:
+        call_sites = [f"{frame.filename}:{frame.lineno}" for frame in selected_frames]
+    call_sites_str = "\n".join(call_sites)
+
+    return call_sites_str
+
+
+def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    A decorator to capture and provide the call site information to the server side
+    when PySpark API functions are invoked.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        from pyspark.sql import SparkSession
+        from pyspark.sql.utils import is_remote
+
+        spark = SparkSession.getActiveSession()
+        if spark is not None and hasattr(func, "__name__"):
+            if is_remote():
+                global current_origin
+
+                # Getting the configuration requires RPC call. Uses the default value for now.
+                depth = 1
+                set_current_origin(func.__name__, _capture_call_site(spark, depth))
+
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    set_current_origin(None, None)
+            else:
+                assert spark._jvm is not None
+                jvm_pyspark_origin = (
+                    spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+                )
+                depth = int(
+                    spark.conf.get(  # type: ignore[arg-type]
+                        "spark.sql.stackTracesInDataFrameContext"
+                    )
+                )
+                # Update call site when the function is called
+                jvm_pyspark_origin.set(func.__name__, _capture_call_site(spark, depth))
+
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    jvm_pyspark_origin.clear()
+        else:
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
+def with_origin_to_class(cls: Type[T]) -> Type[T]:
+    """
+    Decorate all methods of a class with `_with_origin` to capture call site information.
+    """
+    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+        for name, method in cls.__dict__.items():
+            # Excluding Python magic methods that do not utilize JVM functions.
+            if callable(method) and name not in (
+                "__init__",
+                "__new__",
+                "__iter__",
+                "__nonzero__",
+                "__repr__",
+                "__bool__",
+            ):
+                setattr(cls, name, _with_origin(method))
+    return cls

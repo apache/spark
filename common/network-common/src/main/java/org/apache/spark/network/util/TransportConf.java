@@ -17,10 +17,11 @@
 
 package org.apache.spark.network.util;
 
+import java.io.File;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
 
@@ -103,15 +104,15 @@ public class TransportConf {
       conf.get("spark.network.timeout", "120s"));
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, defaultNetworkTimeoutS + "s")) * 1000;
-    return (int) defaultTimeoutMs;
+    return defaultTimeoutMs < 0 ? 0 : (int) defaultTimeoutMs;
   }
 
-  /** Connect creation timeout in milliseconds. Default 30 secs. */
+  /** Connect creation timeout in milliseconds. Default 120 secs. */
   public int connectionCreationTimeoutMs() {
     long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  connectionTimeoutS + "s")) * 1000;
-    return (int) defaultTimeoutMs;
+    return defaultTimeoutMs < 0 ? 0 : (int) defaultTimeoutMs;
   }
 
   /** Number of concurrent connections between two nodes for fetching data. */
@@ -213,6 +214,15 @@ public class TransportConf {
   }
 
   /**
+   * Version number to be used by the AuthEngine key agreement protocol. Valid values are 1 or 2.
+   * The default version is 1 for backward compatibility. Version 2 is recommended for stronger
+   * security properties.
+   */
+  public int authEngineVersion() {
+    return conf.getInt("spark.network.crypto.authEngineVersion", 1);
+  }
+
+  /**
    * The cipher transformation to use for encrypting session data.
    */
   public String cipherTransformation() {
@@ -247,6 +257,164 @@ public class TransportConf {
    */
   public boolean saslServerAlwaysEncrypt() {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
+  }
+
+  /**
+   * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
+   */
+  public int sslShuffleChunkSize() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.network.ssl.maxEncryptedBlockSize", "64k")));
+  }
+
+  /**
+   * Whether Secure (SSL/TLS) RPC (including Block Transfer Service) is enabled
+   */
+  public boolean sslRpcEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.enabled", false);
+  }
+
+  /**
+   * SSL protocol (remember that SSLv3 was compromised) supported by Java
+   */
+  public String sslRpcProtocol() {
+    return conf.get("spark.ssl.rpc.protocol", null);
+  }
+
+  /**
+   * A comma separated list of ciphers
+   */
+  public String[] sslRpcRequestedCiphers() {
+    String ciphers = conf.get("spark.ssl.rpc.enabledAlgorithms", null);
+    return (ciphers != null ? ciphers.split(",") : null);
+  }
+
+  /**
+   * The key-store file; can be relative to the current directory
+   */
+  public File sslRpcKeyStore() {
+    String keyStore = conf.get("spark.ssl.rpc.keyStore", null);
+    if (keyStore != null) {
+      return new File(keyStore);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the key-store file
+   */
+  public String sslRpcKeyStorePassword() {
+    return conf.get("spark.ssl.rpc.keyStorePassword", null);
+  }
+
+  /**
+   * The password to the private key in the key store
+   */
+  public String sslRpcKeyPassword() {
+    return conf.get("spark.ssl.rpc.keyPassword", null);
+  }
+
+  /**
+   * A PKCS#8 private key file in PEM format; can be relative to the current directory
+   */
+  public File sslRpcPrivateKey() {
+    String privateKey = conf.get("spark.ssl.rpc.privateKey", null);
+    if (privateKey != null) {
+      return new File(privateKey);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the private key
+   */
+  public String sslRpcPrivateKeyPassword() {
+    return conf.get("spark.ssl.rpc.privateKeyPassword", null);
+  }
+
+  /**
+   * A X.509 certificate chain file in PEM format; can be relative to the current directory
+   */
+  public File sslRpcCertChain() {
+    String certChain = conf.get("spark.ssl.rpc.certChain", null);
+    if (certChain != null) {
+      return new File(certChain);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The trust-store file; can be relative to the current directory
+   */
+  public File sslRpcTrustStore() {
+    String trustStore = conf.get("spark.ssl.rpc.trustStore", null);
+    if (trustStore != null) {
+      return new File(trustStore);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The password to the trust-store file
+   */
+  public String sslRpcTrustStorePassword() {
+    return conf.get("spark.ssl.rpc.trustStorePassword", null);
+  }
+
+  /**
+   * If using a trust-store that that reloads its configuration is enabled.
+   * If true, when the trust-store file on disk changes, it will be reloaded
+   */
+  public boolean sslRpcTrustStoreReloadingEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.trustStoreReloadingEnabled", false);
+  }
+
+  /**
+   * The interval, in milliseconds, the trust-store will reload its configuration
+   */
+  public int sslRpctrustStoreReloadIntervalMs() {
+    return conf.getInt("spark.ssl.rpc.trustStoreReloadIntervalMs", 10000);
+  }
+
+  /**
+   * If the OpenSSL implementation is enabled,
+   * (if available on host system), requires certChain and keyFile arguments
+   */
+  public boolean sslRpcOpenSslEnabled() {
+    return conf.getBoolean("spark.ssl.rpc.openSslEnabled", false);
+  }
+
+  /**
+   *
+   * @return true if and only if RPC encryption is enabled and the relevant keys exist
+   */
+  public boolean sslRpcEnabledAndKeysAreValid() {
+    if (!sslRpcEnabled()) {
+      return false;
+    }
+    if (sslRpcOpenSslEnabled()) {
+      // OpenSSL requires both the privateKey and certChain
+      File privateKey = sslRpcPrivateKey();
+      if (privateKey == null || !privateKey.exists()) {
+        return false;
+      }
+      File certChain = sslRpcCertChain();
+      if (certChain == null || !certChain.exists()) {
+        return false;
+      }
+      return true;
+    } else {
+      File keyStore = sslRpcKeyStore();
+      if (keyStore == null || !keyStore.exists()) {
+        return false;
+      }
+      // It's fine for the trust store to be missing, we would default to trusting all.
+      return true;
+    }
   }
 
   /**
@@ -322,6 +490,35 @@ public class TransportConf {
    */
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
+  }
+
+  /**
+   * Percentage of io.serverThreads used by netty to process FinalizeShuffleMerge. When the config
+   * `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set, shuffle server will use a
+   * separate EventLoopGroup to process FinalizeShuffleMerge messages, which are I/O intensive and
+   * could take long time to process due to disk contentions. The number of threads used for
+   * handling finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it
+   * is a percentage of 2 * #cores.
+   */
+  public int finalizeShuffleMergeHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+        "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
+    int finalizeShuffleMergeThreadsPercent =
+        Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));
+    int threads =
+        this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (finalizeShuffleMergeThreadsPercent / 100.0));
+  }
+
+  /**
+   * Whether to use a separate EventLoopGroup to process FinalizeShuffleMerge messages, it is
+   * decided by the config `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set or not.
+   */
+  public boolean separateFinalizeShuffleMerge() {
+    return conf.getInt("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", 0) > 0;
   }
 
   /**

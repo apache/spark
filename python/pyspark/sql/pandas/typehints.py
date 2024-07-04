@@ -18,6 +18,7 @@ from inspect import Signature
 from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
 
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
@@ -31,7 +32,7 @@ def infer_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
 ) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
     """
-    Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
     """
     from pyspark.sql.pandas.functions import PandasUDFType
@@ -50,12 +51,18 @@ def infer_eval_type(
         annotations[parameter] for parameter in sig.parameters if parameter in annotations
     ]
     if len(parameters_sig) != len(sig.parameters):
-        raise ValueError("Type hints for all parameters should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            message_parameters={"target": "all parameters", "sig": str(sig)},
+        )
 
     # Check if the return has a type hint
     return_annotation = type_hints.get("return", sig.return_annotation)
     if sig.empty is return_annotation:
-        raise ValueError("Type hint for the return type should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            error_class="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            message_parameters={"target": "the return type", "sig": str(sig)},
+        )
 
     # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
     is_series_or_frame = all(
@@ -132,7 +139,10 @@ def infer_eval_type(
     elif is_series_or_frame_agg:
         return PandasUDFType.GROUPED_AGG
     else:
-        raise NotImplementedError("Unsupported signature: %s." % sig)
+        raise PySparkNotImplementedError(
+            error_class="UNSUPPORTED_SIGNATURE",
+            message_parameters={"signature": str(sig)},
+        )
 
 
 def check_tuple_annotation(
@@ -141,7 +151,7 @@ def check_tuple_annotation(
     # Tuple has _name but other types have __name__
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
-    return name == "Tuple" and (
+    return name in ("Tuple", "tuple") and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))
     )
 
@@ -161,7 +171,7 @@ def check_union_annotation(
     import typing
 
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
-    # to version. For example, it's abc.Iterator in Python 3.7 but typing.Iterator in Python 3.6.
+    # to version.
     origin = getattr(annotation, "__origin__", None)
     return origin == typing.Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))

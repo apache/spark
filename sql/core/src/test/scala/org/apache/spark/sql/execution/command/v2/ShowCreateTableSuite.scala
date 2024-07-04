@@ -144,4 +144,41 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       ))
     }
   }
+
+  test("should quote identifiers with special characters") {
+    withNamespaceAndTable("`a_schema-with+special^chars`", "`a_table-with+special^chars`") { t =>
+      sql(s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |) $defaultUsing
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`." +
+        s"`a_table-with+special^chars` ("
+      )
+    }
+  }
+
+  test("SPARK-46629: show struct fields with NOT NULL and comment") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(s"""
+             |CREATE TABLE $t (
+             |  a struct<b: bigint COMMENT 'comment', c: struct<d: string NOT NULL, e: string>>
+             |)
+             |USING parquet
+             |COMMENT 'This is a comment'
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL === Array(
+          s"CREATE TABLE $fullName (",
+          "a STRUCT<b: BIGINT COMMENT 'comment', c: STRUCT<d: STRING NOT NULL, e: STRING>>)",
+          "USING parquet",
+          "COMMENT 'This is a comment'"
+        )
+      )
+    }
+  }
 }

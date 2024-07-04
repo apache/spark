@@ -151,11 +151,11 @@ object SizeEstimator extends Logging {
       // TODO: We could use reflection on the VMOption returned ?
       getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
-        val guessInWords = if (guess) "yes" else "not"
-        logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
+        logWarning(log"Failed to check whether UseCompressedOops is set; " +
+          log"assuming " + (if (guess) log"yes" else log"not"))
         guess
     }
   }
@@ -180,7 +180,7 @@ object SizeEstimator extends Logging {
 
     def dequeue(): AnyRef = {
       val elem = stack.last
-      stack.trimEnd(1)
+      stack.dropRightInPlace(1)
       elem
     }
   }
@@ -197,7 +197,7 @@ object SizeEstimator extends Logging {
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
     state.enqueue(obj)
-    while (!state.isFinished) {
+    while (!state.isFinished()) {
       visitSingleObject(state.dequeue(), state)
     }
     state.size
@@ -333,18 +333,14 @@ object SizeEstimator extends Logging {
         if (fieldClass.isPrimitive) {
           sizeCount(primitiveSize(fieldClass)) += 1
         } else {
-          // Note: in Java 9+ this would be better with trySetAccessible and canAccess
           try {
-            field.setAccessible(true) // Enable future get()'s on this field
-            pointerFields = field :: pointerFields
+            if (field.trySetAccessible()) { // Enable future get()'s on this field
+              pointerFields = field :: pointerFields
+            }
           } catch {
             // If the field isn't accessible, we can still record the pointer size
             // but can't know more about the field, so ignore it
             case _: SecurityException =>
-              // do nothing
-            // Java 9+ can throw InaccessibleObjectException but the class is Java 9+-only
-            case re: RuntimeException
-                if re.getClass.getSimpleName == "InaccessibleObjectException" =>
               // do nothing
           }
           sizeCount(pointerSize) += 1

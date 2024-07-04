@@ -19,15 +19,15 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
@@ -43,7 +43,7 @@ class RateStreamProviderSuite extends StreamTest {
     override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
-        case r: StreamingDataSourceV2Relation
+        case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[RateStreamMicroBatchStream] =>
           r.stream.asInstanceOf[RateStreamMicroBatchStream]
       }.head
@@ -56,14 +56,15 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("RateStreamProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance()
+    val ds = DataSource.lookupDataSource("rate", spark.sessionState.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
   test("compatible with old path in registry") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.RateSourceProvider",
-      spark.sqlContext.conf).newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
@@ -164,7 +165,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 1)
+      assert(partitions.length == 1)
       val dataReader = readerFactory.createReader(partitions(0))
       val data = ArrayBuffer[InternalRow]()
       while (dataReader.next()) {
@@ -183,7 +184,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 11)
+      assert(partitions.length == 11)
 
       val readData = partitions
         .map(readerFactory.createReader)
@@ -344,21 +345,22 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream
-        .format("rate")
-        .schema(spark.range(1).schema)
-        .load()
-    }
-    assert(exception.getMessage.contains(
-      "RateStreamProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream
+          .format("rate")
+          .schema(spark.range(1).schema)
+          .load()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "RateStreamProvider"))
   }
 
   test("continuous data") {
     val stream = new RateStreamContinuousStream(rowsPerSecond = 20, numPartitions = 2)
     val partitions = stream.planInputPartitions(stream.initialOffset)
     val readerFactory = stream.createContinuousReaderFactory()
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val data = scala.collection.mutable.ListBuffer[InternalRow]()
     partitions.foreach {

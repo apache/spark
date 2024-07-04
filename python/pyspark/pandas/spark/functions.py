@@ -17,79 +17,157 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from typing import Union, no_type_check
-
-from pyspark import SparkContext
-from pyspark.sql.column import (
-    Column,
-    _to_java_column,
-    _create_column_from_literal,
-)
+from pyspark.sql.column import Column
+from pyspark.sql.utils import is_remote
 
 
 def product(col: Column, dropna: bool) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_product",
+            col,
+            lit(dropna),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasProduct(col._jc, dropna))
 
 
 def stddev(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_stddev",
+            col,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasStddev(col._jc, ddof))
 
 
 def var(col: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_var",
+            col,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasVariance(col._jc, ddof))
 
 
 def skew(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(
+            "pandas_skew",
+            col,
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasSkewness(col._jc))
 
 
 def kurt(col: Column) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
+
+        return _invoke_function_over_columns(
+            "pandas_kurt",
+            col,
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasKurtosis(col._jc))
 
 
 def mode(col: Column, dropna: bool) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_mode",
+            col,
+            lit(dropna),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasMode(col._jc, dropna))
 
 
 def covar(col1: Column, col2: Column, ddof: int) -> Column:
-    sc = SparkContext._active_spark_context
-    return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "pandas_covar",
+            col1,
+            col2,
+            lit(ddof),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.pandasCovar(col1._jc, col2._jc, ddof))
 
 
-def repeat(col: Column, n: Union[int, Column]) -> Column:
-    """
-    Repeats a string column n times, and returns it as a new string column.
-    """
-    sc = SparkContext._active_spark_context
-    n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
-    return _call_udf(sc, "repeat", _to_java_column(col), n)
+def ewm(col: Column, alpha: float, ignore_na: bool) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns, lit
+
+        return _invoke_function_over_columns(
+            "ewm",
+            col,
+            lit(alpha),
+            lit(ignore_na),
+        )
+
+    else:
+        from pyspark import SparkContext
+
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.ewm(col._jc, alpha, ignore_na))
 
 
-def date_part(field: Union[str, Column], source: Column) -> Column:
-    """
-    Extracts a part of the date/timestamp or interval source.
-    """
-    sc = SparkContext._active_spark_context
-    field = (
-        _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
-    )
-    return _call_udf(sc, "date_part", field, _to_java_column(source))
+def null_index(col: Column) -> Column:
+    if is_remote():
+        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
 
+        return _invoke_function_over_columns(
+            "null_index",
+            col,
+        )
 
-@no_type_check
-def _call_udf(sc, name, *cols):
-    return Column(sc._jvm.functions.callUDF(name, _make_arguments(sc, *cols)))
+    else:
+        from pyspark import SparkContext
 
-
-@no_type_check
-def _make_arguments(sc, *cols):
-    java_arr = sc._gateway.new_array(sc._jvm.Column, len(cols))
-    for i, col in enumerate(cols):
-        java_arr[i] = col
-    return java_arr
+        sc = SparkContext._active_spark_context
+        return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))

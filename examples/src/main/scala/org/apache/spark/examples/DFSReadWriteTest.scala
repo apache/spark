@@ -89,7 +89,7 @@ object DFSReadWriteTest {
       .flatMap(_.split("\t"))
       .filter(_.nonEmpty)
       .groupBy(w => w)
-      .mapValues(_.size)
+      .transform((_, v) => v.size)
       .values
       .sum
   }
@@ -103,7 +103,7 @@ object DFSReadWriteTest {
 
     println("Creating SparkSession")
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("DFS Read Write Test")
       .getOrCreate()
 

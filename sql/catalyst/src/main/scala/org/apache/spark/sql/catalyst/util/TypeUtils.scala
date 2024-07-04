@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 
@@ -57,7 +58,7 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
       DataTypeMismatch(
         errorSubClass = "INVALID_MAP_KEY_TYPE",
         messageParameters = Map(
@@ -77,7 +78,7 @@ object TypeUtils extends QueryErrorsBase {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
           "inputSql" -> toSQLExpr(input),
           "inputType" -> toSQLType(other)))
@@ -85,19 +86,17 @@ object TypeUtils extends QueryErrorsBase {
 
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
-      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.exactNumeric(t.asInstanceOf[NumericType])
     } else {
-      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.numeric(t.asInstanceOf[NumericType])
     }
   }
 
   @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
+      case other => PhysicalDataType.ordering(other)
     }
   }
 
@@ -108,6 +107,7 @@ object TypeUtils extends QueryErrorsBase {
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
+    case s: StringType => s.supportsBinaryEquality
     case _: AtomicType => true
     case _ => false
   }

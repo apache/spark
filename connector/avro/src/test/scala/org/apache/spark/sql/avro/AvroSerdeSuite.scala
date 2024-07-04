@@ -22,7 +22,7 @@ import org.apache.avro.generic.GenericRecordBuilder
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.CORRECTED
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.CORRECTED
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
@@ -177,7 +177,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       case Serializer =>
         s"Cannot convert SQL type ${catalystSchema.sql} to Avro type $avroSchema."
     }
-    assert(e.getMessage === expectMsg)
+    assert(e.getMessage.contains(expectMsg))
     assert(e.getCause.getMessage === expectedCauseMessage)
   }
 
@@ -226,7 +226,9 @@ object AvroSerdeSuite {
         sql,
         isPositional(matchType),
         RebaseSpec(CORRECTED),
-        new NoopFilters)
+        new NoopFilters,
+        false,
+        "")
   }
 
   /**

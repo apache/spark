@@ -36,8 +36,9 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * A SASL Server for Spark which simply keeps track of the state of a single SASL session, from the
@@ -45,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * connections on some socket.)
  */
 public class SparkSaslServer implements SaslEncryptionBackend {
-  private static final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SparkSaslServer.class);
 
   /**
    * This is passed as the server name when creating the sasl client/server.
@@ -156,20 +157,16 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     @Override
     public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
       for (Callback callback : callbacks) {
-        if (callback instanceof NameCallback) {
+        if (callback instanceof NameCallback nc) {
           logger.trace("SASL server callback: setting username");
-          NameCallback nc = (NameCallback) callback;
           nc.setName(encodeIdentifier(secretKeyHolder.getSaslUser(secretKeyId)));
-        } else if (callback instanceof PasswordCallback) {
+        } else if (callback instanceof PasswordCallback pc) {
           logger.trace("SASL server callback: setting password");
-          PasswordCallback pc = (PasswordCallback) callback;
           pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
-        } else if (callback instanceof RealmCallback) {
+        } else if (callback instanceof RealmCallback rc) {
           logger.trace("SASL server callback: setting realm");
-          RealmCallback rc = (RealmCallback) callback;
           rc.setText(rc.getDefaultText());
-        } else if (callback instanceof AuthorizeCallback) {
-          AuthorizeCallback ac = (AuthorizeCallback) callback;
+        } else if (callback instanceof AuthorizeCallback ac) {
           String authId = ac.getAuthenticationID();
           String authzId = ac.getAuthorizationID();
           ac.setAuthorized(authId.equals(authzId));

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryCatalog, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The trait contains settings and utility functions. It can be mixed to the test suites for
@@ -56,7 +57,8 @@ trait CommandSuiteBase extends SharedSparkSession {
     val partTable = catalogPlugin.asTableCatalog
       .loadTable(Identifier.of(namespaces, tableName))
       .asInstanceOf[InMemoryPartitionTable]
-    val ident = ResolvePartitionSpec.convertToPartIdent(spec, partTable.partitionSchema.fields)
+    val ident = ResolvePartitionSpec.convertToPartIdent(spec,
+      partTable.partitionSchema.fields.toImmutableArraySeq)
     val partMetadata = partTable.loadPartitionMetadata(ident)
 
     assert(partMetadata.containsKey("location"))

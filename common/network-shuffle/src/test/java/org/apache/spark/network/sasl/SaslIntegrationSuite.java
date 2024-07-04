@@ -22,12 +22,12 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
@@ -57,7 +57,7 @@ public class SaslIntegrationSuite {
 
   TransportClientFactory clientFactory;
 
-  @BeforeClass
+  @BeforeAll
   public static void beforeAll() throws IOException {
     conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     context = new TransportContext(conf, new TestRpcHandler());
@@ -75,13 +75,13 @@ public class SaslIntegrationSuite {
   }
 
 
-  @AfterClass
+  @AfterAll
   public static void afterAll() {
     server.close();
     context.close();
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     if (clientFactory != null) {
       clientFactory.close();
@@ -111,7 +111,7 @@ public class SaslIntegrationSuite {
     // Bootstrap should fail on startup.
     Exception e = assertThrows(Exception.class,
       () -> clientFactory.createClient(TestUtils.getLocalHost(), server.getPort()));
-    assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
+    assertTrue(e.getMessage().contains("Mismatched response"), e.getMessage());
   }
 
   @Test
@@ -121,12 +121,12 @@ public class SaslIntegrationSuite {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     Exception e1 = assertThrows(Exception.class,
       () -> client.sendRpcSync(ByteBuffer.allocate(13), TIMEOUT_MS));
-    assertTrue(e1.getMessage(), e1.getMessage().contains("Expected SaslMessage"));
+    assertTrue(e1.getMessage().contains("Expected SaslMessage"), e1.getMessage());
 
     // Guessing the right tag byte doesn't magically get you in...
     Exception e2 = assertThrows(Exception.class,
       () -> client.sendRpcSync(ByteBuffer.wrap(new byte[] { (byte) 0xEA }), TIMEOUT_MS));
-    assertTrue(e2.getMessage(), e2.getMessage().contains("java.lang.IndexOutOfBoundsException"));
+    assertTrue(e2.getMessage().contains("java.lang.IndexOutOfBoundsException"), e2.getMessage());
   }
 
   @Test
@@ -138,7 +138,7 @@ public class SaslIntegrationSuite {
       try (TransportServer server = context.createServer()) {
         Exception e = assertThrows(Exception.class,
           () -> clientFactory.createClient(TestUtils.getLocalHost(), server.getPort()));
-        assertTrue(e.getMessage(), e.getMessage().contains("Digest-challenge format violation"));
+        assertTrue(e.getMessage().contains("Digest-challenge format violation"), e.getMessage());
       }
     }
   }

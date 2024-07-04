@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.SortedMap
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import com.codahale.metrics._
@@ -124,9 +124,9 @@ private[spark] class StatsdReporter(
 
   private def reportTimer(name: String, timer: Timer)(implicit socket: DatagramSocket): Unit = {
     val snapshot = timer.getSnapshot
-    send(fullName(name, "max"), format(convertDuration(snapshot.getMax)), TIMER)
+    send(fullName(name, "max"), format(convertDuration(snapshot.getMax.toDouble)), TIMER)
     send(fullName(name, "mean"), format(convertDuration(snapshot.getMean)), TIMER)
-    send(fullName(name, "min"), format(convertDuration(snapshot.getMin)), TIMER)
+    send(fullName(name, "min"), format(convertDuration(snapshot.getMin.toDouble)), TIMER)
     send(fullName(name, "stddev"), format(convertDuration(snapshot.getStdDev)), TIMER)
     send(fullName(name, "p50"), format(convertDuration(snapshot.getMedian)), TIMER)
     send(fullName(name, "p75"), format(convertDuration(snapshot.get75thPercentile)), TIMER)

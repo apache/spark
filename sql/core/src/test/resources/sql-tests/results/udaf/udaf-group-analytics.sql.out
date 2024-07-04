@@ -15,18 +15,18 @@ SELECT a + b, b, udaf(a - b) FROM testData GROUP BY a + b, b WITH CUBE
 struct<(a + b):int,b:int,udaf((a - b)):int>
 -- !query output
 2	1	1
-2	NULL	0
+2	NULL	1
 3	1	1
 3	2	1
-3	NULL	0
+3	NULL	2
 4	1	1
 4	2	1
-4	NULL	0
+4	NULL	2
 5	2	1
-5	NULL	0
+5	NULL	1
 NULL	1	3
 NULL	2	3
-NULL	NULL	0
+NULL	NULL	6
 
 
 -- !query
@@ -36,16 +36,16 @@ struct<a:int,b:int,udaf(b):int>
 -- !query output
 1	1	1
 1	2	1
-1	NULL	0
+1	NULL	2
 2	1	1
 2	2	1
-2	NULL	0
+2	NULL	2
 3	1	1
 3	2	1
-3	NULL	0
+3	NULL	2
 NULL	1	3
 NULL	2	3
-NULL	NULL	0
+NULL	NULL	6
 
 
 -- !query
@@ -54,16 +54,16 @@ SELECT a + b, b, udaf(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 struct<(a + b):int,b:int,udaf((a - b)):int>
 -- !query output
 2	1	1
-2	NULL	0
+2	NULL	1
 3	1	1
 3	2	1
-3	NULL	0
+3	NULL	2
 4	1	1
 4	2	1
-4	NULL	0
+4	NULL	2
 5	2	1
-5	NULL	0
-NULL	NULL	0
+5	NULL	1
+NULL	NULL	6
 
 
 -- !query
@@ -73,14 +73,14 @@ struct<a:int,b:int,udaf(b):int>
 -- !query output
 1	1	1
 1	2	1
-1	NULL	0
+1	NULL	2
 2	1	1
 2	2	1
-2	NULL	0
+2	NULL	2
 3	1	1
 3	2	1
-3	NULL	0
-NULL	NULL	0
+3	NULL	2
+NULL	NULL	6
 
 
 -- !query
@@ -416,14 +416,14 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 -- !query schema
 struct<course:string,sum:int>
 -- !query output
-NULL	0
-Java	0
+NULL	5
 Java	1
 Java	1
-dotNET	0
+Java	2
 dotNET	1
 dotNET	1
 dotNET	1
+dotNET	3
 
 
 -- !query
@@ -432,14 +432,14 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 -- !query schema
 struct<course:string,sum:int,grouping_id(course, earnings):bigint>
 -- !query output
-NULL	0	3
-Java	0	1
+NULL	5	3
 Java	1	0
 Java	1	0
-dotNET	0	1
+Java	2	1
 dotNET	1	0
 dotNET	1	0
 dotNET	1	0
+dotNET	3	1
 
 
 -- !query
@@ -468,16 +468,16 @@ SELECT a + b AS k, b, udaf(a - b) FROM testData GROUP BY ROLLUP(k, b)
 struct<k:int,b:int,udaf((a - b)):int>
 -- !query output
 2	1	1
-2	NULL	0
+2	NULL	1
 3	1	1
 3	2	1
-3	NULL	0
+3	NULL	2
 4	1	1
 4	2	1
-4	NULL	0
+4	NULL	2
 5	2	1
-5	NULL	0
-NULL	NULL	0
+5	NULL	1
+NULL	NULL	6
 
 
 -- !query

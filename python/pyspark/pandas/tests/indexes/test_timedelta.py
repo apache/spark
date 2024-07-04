@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 from datetime import timedelta
 
 import pandas as pd
@@ -23,7 +24,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
+class TimedeltaIndexTestsMixin:
     @property
     def pidx(self):
         return pd.TimedeltaIndex(
@@ -89,9 +90,9 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
         )
 
         # ps.TimedeltaIndex(ps.Index([1, 2, 3]))
-        with self.assertRaisesRegexp(TypeError, "Index.name must be a hashable type"):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
             ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)], name=[(1, 2)])
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             TypeError, "Cannot perform 'all' with this index type: TimedeltaIndex"
         ):
             psidx.all()
@@ -103,6 +104,14 @@ class TimedeltaIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(self.neg_psidx.days, self.neg_pidx.days)
         self.assert_eq(self.neg_psidx.seconds, self.neg_pidx.seconds)
         self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
+
+
+class TimedeltaIndexTests(
+    TimedeltaIndexTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
+    pass
 
 
 if __name__ == "__main__":

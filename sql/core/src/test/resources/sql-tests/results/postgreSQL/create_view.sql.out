@@ -52,7 +52,7 @@ CREATE VIEW key_dependent_view AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
@@ -69,7 +69,7 @@ CREATE VIEW key_dependent_view_no_cols AS
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
@@ -267,6 +267,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -278,10 +279,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -329,6 +333,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table	                    
 View Original Text  	SELECT * FROM base_table	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -340,10 +345,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -381,6 +389,7 @@ View Text           	SELECT t1.a AS t1_a, t2.a AS t2_a
 View Original Text  	SELECT t1.a AS t1_a, t2.a AS t2_a
     FROM base_table t1, base_table2 t2
     WHERE t1.id = t2.id	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[t1_a, t2_a]
 
@@ -395,10 +404,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -413,10 +425,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -447,6 +462,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -477,6 +493,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
 View Original Text  	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[id, a]
 
@@ -507,6 +524,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -537,6 +555,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
 View Original Text  	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -567,6 +586,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
 View Query Output Columns	[a, id]
 
@@ -578,10 +598,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -593,10 +616,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -608,10 +634,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -623,10 +652,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
-    "nameParts" : "temp_table"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`temp_table`"
   }
 }
 
@@ -636,7 +668,7 @@ CREATE VIEW v10_temp AS SELECT * FROM v7_temp
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -658,7 +690,7 @@ CREATE VIEW v11_temp AS SELECT t1.id, t2.a FROM base_table t1, v10_temp t2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -669,8 +701,8 @@ org.apache.spark.sql.AnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 64,
-    "stopIndex" : 74,
-    "fragment" : "v10_temp t2"
+    "stopIndex" : 71,
+    "fragment" : "v10_temp"
   } ]
 }
 
@@ -680,7 +712,7 @@ CREATE VIEW v12_temp AS SELECT true FROM v11_temp
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
@@ -766,6 +798,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 CROSS JOIN t2	                    
 View Original Text  	SELECT * FROM t1 CROSS JOIN t2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]
 
@@ -777,10 +810,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal1`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -813,6 +849,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]
 
@@ -824,10 +861,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal2`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -860,6 +900,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]
 
@@ -871,10 +912,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal3`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -907,6 +951,7 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[num, name, num2, value]
 
@@ -918,10 +963,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal4`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -933,10 +981,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1283",
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`testviewschm2`.`temporal5`",
-    "nameParts" : "tt"
+    "obj" : "VIEW",
+    "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`tt`"
   }
 }
 
@@ -1021,6 +1072,7 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]
 
@@ -1060,6 +1112,7 @@ View Original Text  	SELECT * FROM tbl1 WHERE tbl1.a
 BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
 View Query Output Columns	[a, b]
 

@@ -63,7 +63,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
        > sum(arsDF$confidence == 1)
        [1] 23
      */
-    assert(results1.size === 23)
+    assert(results1.length === 23)
     assert(results1.count(rule => rule.confidence ~= 1.0D absTol 1e-6) == 23)
 
     val results2 = ar
@@ -84,7 +84,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
        > sum(arsDF$confidence == 1)
        [1] 23
      */
-    assert(results2.size === 30)
+    assert(results2.length === 30)
     assert(results2.count(rule => rule.confidence ~= 1.0D absTol 1e-6) == 23)
   }
 }

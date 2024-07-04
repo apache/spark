@@ -23,17 +23,13 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.annotations.VisibleForTesting;
-import org.apache.parquet.VersionParser;
-import org.apache.parquet.VersionParser.ParsedVersion;
-import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
@@ -42,15 +38,20 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
+import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.internal.SQLConf;
@@ -88,16 +89,27 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
+    initialize(inputSplit, taskAttemptContext, Option.empty());
+  }
+
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      Option<ParquetMetadata> fileFooter) throws IOException, InterruptedException {
     Configuration configuration = taskAttemptContext.getConfiguration();
     FileSplit split = (FileSplit) inputSplit;
     this.file = split.getPath();
-
-    ParquetReadOptions options = HadoopReadOptions
-      .builder(configuration, file)
-      .withRange(split.getStart(), split.getStart() + split.getLength())
-      .build();
-    ParquetFileReader fileReader = new ParquetFileReader(
-        HadoopInputFile.fromPath(file, configuration), options);
+    ParquetFileReader fileReader;
+    if (fileFooter.isDefined()) {
+      fileReader = new ParquetFileReader(configuration, file, fileFooter.get());
+    } else {
+      ParquetReadOptions options = HadoopReadOptions
+          .builder(configuration, file)
+          .withRange(split.getStart(), split.getStart() + split.getLength())
+          .build();
+      fileReader = new ParquetFileReader(
+          HadoopInputFile.fromPath(file, configuration), options);
+    }
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
     try {
@@ -149,7 +161,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    config.setBoolean(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED().key(), false);
+    config.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    config.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
@@ -200,7 +213,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    config.setBoolean(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED().key(), false);
+    config.setBoolean(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED().key(), false);
+    config.setBoolean(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG().key(), false);
     this.parquetColumn = new ParquetToSparkSchemaConverter(config)
       .convertParquetColumn(requestedSchema, Option.empty());
     this.sparkSchema = (StructType) parquetColumn.sparkType();
@@ -223,9 +237,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   private static <K, V> Map<K, Set<V>> toSetMultiMap(Map<K, V> map) {
     Map<K, Set<V>> setMultiMap = new HashMap<>();
     for (Map.Entry<K, V> entry : map.entrySet()) {
-      Set<V> set = new HashSet<>();
-      set.add(entry.getValue());
-      setMultiMap.put(entry.getKey(), Collections.unmodifiableSet(set));
+      setMultiMap.put(entry.getKey(), Set.of(entry.getValue()));
     }
     return Collections.unmodifiableMap(setMultiMap);
   }

@@ -20,8 +20,8 @@ import java.io.Serializable
 import java.lang.{Double => JDouble}
 import java.util.Arrays.binarySearch
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Regression model for isotonic regression.
@@ -190,7 +191,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       spark.createDataFrame(
-        boundaries.toSeq.zip(predictions).map { case (b, p) => Data(b, p) }
+        boundaries.toImmutableArraySeq.zip(predictions).map { case (b, p) => Data(b, p) }
       ).write.parquet(dataPath(path))
     }
 
@@ -209,7 +210,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
 
   @Since("1.4.0")
   override def load(sc: SparkContext, path: String): IsotonicRegressionModel = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val (loadedClassName, version, metadata) = loadMetadata(sc, path)
     val isotonic = (metadata \ "isotonic").extract[Boolean]
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -331,7 +332,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     if (cleanInput.length <= 1) {
       cleanInput
     } else {
-      val pointsAccumulator = new IsotonicRegression.PointsAccumulator
+      val pointsAccumulator = new PointsAccumulator
 
       // Go through input points, merging all points with equal feature values into a single point.
       // Equality of features is defined by shouldAccumulate method. The label of the accumulated
@@ -490,15 +491,13 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
       .sortBy(_._2)
     poolAdjacentViolators(parallelStepResult)
   }
-}
 
-object IsotonicRegression {
   /**
    * Utility class, holds a buffer of all points with unique features so far, and performs
    * weighted sum accumulation of points. Hides these details for better readability of the
    * main algorithm.
    */
-  class PointsAccumulator {
+  private class PointsAccumulator {
     private val output = ArrayBuffer[(Double, Double, Double)]()
     private var (currentLabel: Double, currentFeature: Double, currentWeight: Double) =
       (0d, 0d, 0d)

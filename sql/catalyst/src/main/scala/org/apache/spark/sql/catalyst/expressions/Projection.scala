@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -41,7 +42,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    initializeExprs(exprArray, partitionIndex)
+    initializeExprs(exprArray.toImmutableArraySeq, partitionIndex)
   }
 
   def apply(input: InternalRow): InternalRow = {
@@ -141,7 +142,7 @@ object UnsafeProjection
    * CAUTION: the returned projection object is *not* thread-safe.
    */
   def create(fields: Array[DataType]): UnsafeProjection = {
-    create(fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)))
+    create(fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)).toImmutableArraySeq)
   }
 
   /**
@@ -184,7 +185,7 @@ object SafeProjection extends CodeGeneratorWithInterpretedFallback[Seq[Expressio
    * Returns a SafeProjection for given Array of DataTypes.
    */
   def create(fields: Array[DataType]): Projection = {
-    createObject(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
+    createObject(fields.zipWithIndex.map(x => BoundReference(x._2, x._1, true)).toImmutableArraySeq)
   }
 
   /**

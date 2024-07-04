@@ -15,24 +15,12 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.sql.tests.test_catalog import CatalogTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class CatalogParityTests(CatalogTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41612): Support Catalog.isCached
-    # TODO(SPARK-41600): Support Catalog.cacheTable
-    # TODO(SPARK-41623): Support Catalog.uncacheTable
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_table_cache(self):
-        super().test_table_cache()
-
-    # TODO(SPARK-41600): Support Catalog.cacheTable
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_refresh_table(self):
-        super().test_refresh_table()
+    pass
 
 
 if __name__ == "__main__":

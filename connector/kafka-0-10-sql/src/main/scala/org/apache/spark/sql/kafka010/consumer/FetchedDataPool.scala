@@ -26,7 +26,8 @@ import scala.collection.mutable
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{DATA, KEY}
 import org.apache.spark.sql.kafka010.{FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL, FETCHED_DATA_CACHE_TIMEOUT}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, CacheKey, UNKNOWN_OFFSET}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -110,8 +111,8 @@ private[consumer] class FetchedDataPool(
 
   def release(key: CacheKey, fetchedData: FetchedData): Unit = synchronized {
     def warnReleasedDataNotInPool(key: CacheKey, fetchedData: FetchedData): Unit = {
-      logWarning(s"No matching data in pool for $fetchedData in key $key. " +
-        "It might be released before, or it was not a part of pool.")
+      logWarning(log"No matching data in pool for ${MDC(DATA, fetchedData)} in key " +
+        log"${MDC(KEY, key)}. It might be released before, or it was not a part of pool.")
     }
 
     cache.get(key) match {

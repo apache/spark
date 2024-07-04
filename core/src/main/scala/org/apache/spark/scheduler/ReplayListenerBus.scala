@@ -24,7 +24,8 @@ import scala.io.{Codec, Source}
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.util.JsonProtocol
 
@@ -91,7 +92,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             // Ignore unknown events, parse through the event log file.
             // To avoid spamming, warnings are only displayed once for each unknown event.
             if (!unrecognizedEvents.contains(e.getMessage)) {
-              logWarning(s"Drop unrecognized event: ${e.getMessage}")
+              logWarning(log"Drop unrecognized event: ${MDC(ERROR, e.getMessage)}")
               unrecognizedEvents.add(e.getMessage)
             }
             logDebug(s"Drop incompatible event log: $currentLine")
@@ -99,7 +100,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             // Ignore unrecognized properties, parse through the event log file.
             // To avoid spamming, warnings are only displayed once for each unrecognized property.
             if (!unrecognizedProperties.contains(e.getMessage)) {
-              logWarning(s"Drop unrecognized property: ${e.getMessage}")
+              logWarning(log"Drop unrecognized property: ${MDC(ERROR, e.getMessage)}")
               unrecognizedProperties.add(e.getMessage)
             }
             logDebug(s"Drop incompatible event log: $currentLine")
@@ -110,8 +111,9 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             if (!maybeTruncated || lineEntries.hasNext) {
               throw jpe
             } else {
-              logWarning(s"Got JsonParseException from log file $sourceName" +
-                s" at line $lineNumber, the file might not have finished writing cleanly.")
+              logWarning(log"Got JsonParseException from log file ${MDC(FILE_NAME, sourceName)}" +
+                log" at line ${MDC(LINE_NUM, lineNumber)}, " +
+                log"the file might not have finished writing cleanly.")
             }
         }
       }
@@ -124,8 +126,8 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
-        logError(s"Exception parsing Spark event log: $sourceName", e)
-        logError(s"Malformed line #$lineNumber: $currentLine\n")
+        logError(log"Exception parsing Spark event log: ${MDC(PATH, sourceName)}", e)
+        logError(log"Malformed line #${MDC(LINE_NUM, lineNumber)}: ${MDC(LINE, currentLine)}\n")
         false
     }
   }

@@ -36,6 +36,11 @@ import org.apache.spark.sql.types.StructType
 
 class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
+  }
+
   override def format: String = "parquet"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -164,8 +169,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
-      case p: FileSourceScanExec => p.selectedPartitions.length
-      case BatchScanExec(_, scan: FileScan, _, _, _, _, _) =>
+      case p: FileSourceScanExec => p.selectedPartitions.partitionCount
+      case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
         scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get
   }

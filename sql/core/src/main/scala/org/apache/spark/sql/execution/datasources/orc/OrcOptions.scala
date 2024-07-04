@@ -23,6 +23,7 @@ import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,8 +54,7 @@ class OrcOptions(
       .toLowerCase(Locale.ROOT)
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
-      throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      throw QueryExecutionErrors.codecNotAvailableError(codecName, availableCodecs.mkString(", "))
     }
     shortOrcCompressionCodecNames(codecName)
   }
@@ -75,14 +75,9 @@ object OrcOptions extends DataSourceOptions {
   val COMPRESSION = newOption("compression")
 
   // The ORC compression short names
-  private val shortOrcCompressionCodecNames = Map(
-    "none" -> "NONE",
-    "uncompressed" -> "NONE",
-    "snappy" -> "SNAPPY",
-    "zlib" -> "ZLIB",
-    "lzo" -> "LZO",
-    "lz4" -> "LZ4",
-    "zstd" -> "ZSTD")
+  private val shortOrcCompressionCodecNames = OrcCompressionCodec.values().map {
+    mapper => mapper.lowerCaseName() -> mapper.getCompressionKind.name()
+  }.toMap
 
   def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }

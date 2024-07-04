@@ -48,32 +48,29 @@ import org.apache.spark.sql.types._
  *        [[TimestampType]] fields.
  * @param caseSensitive Whether use case sensitive analysis when comparing Spark catalyst read
  *                      schema with Parquet schema.
- * @param timestampNTZEnabled Whether TimestampNTZType type is enabled.
+ * @param inferTimestampNTZ Whether TimestampNTZType type is enabled.
+ * @param nanosAsLong Whether timestamps with nanos are converted to long.
  */
 class ParquetToSparkSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
-    timestampNTZEnabled: Boolean = SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.defaultValue.get) {
+    inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
+    nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
     caseSensitive = conf.caseSensitiveAnalysis,
-    timestampNTZEnabled = conf.parquetTimestampNTZEnabled)
+    inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
+    nanosAsLong = conf.legacyParquetNanosAsLong)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
-    timestampNTZEnabled = conf.get(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key).toBoolean)
-
-  /**
-   * Returns true if TIMESTAMP_NTZ type is enabled in this ParquetToSparkSchemaConverter.
-   */
-  def isTimestampNTZEnabled(): Boolean = {
-    timestampNTZEnabled
-  }
+    inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
+    nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -181,6 +178,8 @@ class ParquetToSparkSchemaConverter(
     }
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
+      case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
+        convertVariantField(groupColumn)
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -266,11 +265,16 @@ class ParquetToSparkSchemaConverter(
             }
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
-            if (timestamp.isAdjustedToUTC || !timestampNTZEnabled) {
+            if (timestamp.isAdjustedToUTC || !inferTimestampNTZ) {
               TimestampType
             } else {
               TimestampNTZType
             }
+          // SPARK-40819: NANOS are not supported as a Timestamp, convert to LongType without
+          // timezone awareness to address behaviour regression introduced by SPARK-34661
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
+            LongType
           case _ => illegalType()
         }
 
@@ -397,6 +401,35 @@ class ParquetToSparkSchemaConverter(
     }
   }
 
+  private def convertVariantField(groupColumn: GroupColumnIO): ParquetColumn = {
+    if (groupColumn.getChildrenCount != 2) {
+      // We may allow more than two children in the future, so consider this unsupported.
+      throw QueryCompilationErrors.
+        parquetTypeUnsupportedYetError("variant with more than two fields")
+    }
+    // Find the binary columns, and validate that they have the correct type.
+    val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val idx = (0 until groupColumn.getChildrenCount)
+          .find(groupColumn.getChild(_).getName == colName)
+      if (idx.isEmpty) {
+        throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+      }
+      val child = groupColumn.getChild(idx.get)
+      // The value and metadata cannot be individually null, only the full struct can.
+      if (child.getType.getRepetition != REQUIRED ||
+          !child.isInstanceOf[PrimitiveColumnIO] ||
+          child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
+        throw QueryCompilationErrors.illegalParquetTypeError(
+          s"variant $colName must be a non-nullable binary")
+      }
+      child
+    }
+    ParquetColumn(VariantType, groupColumn, Seq(
+      convertField(valueAndMetadata(0), Some(BinaryType)),
+      convertField(valueAndMetadata(1), Some(BinaryType))
+    ))
+  }
+
   // scalastyle:off
   // Here we implement Parquet LIST backwards-compatibility rules.
   // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
@@ -460,27 +493,23 @@ class ParquetToSparkSchemaConverter(
  * @param outputTimestampType which parquet timestamp type to use when writing.
  * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
  *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
- * @param timestampNTZEnabled whether TIMESTAMP_NTZ type support is enabled.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
     outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
       SQLConf.ParquetOutputTimestampType.INT96,
-    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get,
-    timestampNTZEnabled: Boolean = SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.defaultValue.get) {
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
     outputTimestampType = conf.parquetOutputTimestampType,
-    useFieldId = conf.parquetFieldIdWriteEnabled,
-    timestampNTZEnabled = conf.parquetTimestampNTZEnabled)
+    useFieldId = conf.parquetFieldIdWriteEnabled)
 
   def this(conf: Configuration) = this(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.withName(
       conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)),
-    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean,
-    timestampNTZEnabled = conf.get(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key).toBoolean)
+    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean)
 
   /**
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
@@ -534,7 +563,7 @@ class SparkToParquetSchemaConverter(
       case DoubleType =>
         Types.primitive(DOUBLE, repetition).named(field.name)
 
-      case StringType =>
+      case _: StringType =>
         Types.primitive(BINARY, repetition)
           .as(LogicalTypeAnnotation.stringType()).named(field.name)
 
@@ -568,7 +597,7 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
-      case TimestampNTZType if timestampNTZEnabled =>
+      case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>
@@ -641,7 +670,6 @@ class SparkToParquetSchemaConverter(
           .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           .addField(Types
             .buildGroup(REPEATED)
-            // "array" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
           .named(field.name)
@@ -715,6 +743,12 @@ class SparkToParquetSchemaConverter(
       // Other types
       // ===========
 
+      case VariantType =>
+        Types.buildGroup(repetition)
+          .addField(convertField(StructField("value", BinaryType, nullable = false)))
+          .addField(convertField(StructField("metadata", BinaryType, nullable = false)))
+          .named(field.name)
+
       case StructType(fields) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
           builder.addField(convertField(field))
@@ -737,7 +771,9 @@ private[sql] object ParquetSchemaConverter {
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {
-      throw new AnalysisException(message)
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3071",
+        messageParameters = Map("msg" -> message))
     }
   }
 }

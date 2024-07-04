@@ -19,7 +19,6 @@ import os
 import sys
 import itertools
 from multiprocessing.pool import ThreadPool
-
 from typing import (
     Any,
     Callable,
@@ -38,7 +37,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
+from pyspark import keyword_only, since, inheritable_thread_target
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.common import inherit_doc, _py2java, _java2py
 from pyspark.ml.evaluation import Evaluator, JavaEvaluator
@@ -58,13 +57,13 @@ from pyspark.ml.util import (
 from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
-
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
     from py4j.java_gateway import JavaObject
     from py4j.java_collections import JavaArray
+    from pyspark.core.context import SparkContext
 
 __all__ = [
     "ParamGridBuilder",
@@ -184,7 +183,7 @@ class ParamGridBuilder:
         if isinstance(args[0], dict):
             self.baseOn(*args[0].items())
         else:
-            for (param, value) in args:
+            for param, value in args:
                 self.addGrid(param, [value])
 
         return self
@@ -274,6 +273,7 @@ class _ValidatorParams(HasSeed):
         """
         Return Java estimator, estimatorParamMaps, and evaluator from this Python instance.
         """
+        from pyspark.core.context import SparkContext
 
         gateway = SparkContext._gateway
         assert gateway is not None and SparkContext._jvm is not None
@@ -303,6 +303,8 @@ class _ValidatorSharedReadWrite:
     def meta_estimator_transfer_param_maps_to_java(
         pyEstimator: Estimator, pyParamMaps: Sequence["ParamMap"]
     ) -> "JavaArray":
+        from pyspark.core.context import SparkContext
+
         pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
         stagePairs = list(map(lambda stage: (stage, cast(JavaParams, stage)._to_java()), pyStages))
         sc = SparkContext._active_spark_context
@@ -337,6 +339,8 @@ class _ValidatorSharedReadWrite:
     def meta_estimator_transfer_param_maps_from_java(
         pyEstimator: Estimator, javaParamMaps: "JavaArray"
     ) -> List["ParamMap"]:
+        from pyspark.core.context import SparkContext
+
         pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
         stagePairs = list(map(lambda stage: (stage, cast(JavaParams, stage)._to_java()), pyStages))
         sc = SparkContext._active_spark_context
@@ -382,7 +386,7 @@ class _ValidatorSharedReadWrite:
     def saveImpl(
         path: str,
         instance: _ValidatorParams,
-        sc: SparkContext,
+        sc: "SparkContext",
         extraMetadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         numParamsNotJson = 0
@@ -426,7 +430,7 @@ class _ValidatorSharedReadWrite:
 
     @staticmethod
     def load(
-        path: str, sc: SparkContext, metadata: Dict[str, Any]
+        path: str, sc: "SparkContext", metadata: Dict[str, Any]
     ) -> Tuple[Dict[str, Any], Estimator, Evaluator, List["ParamMap"]]:
         evaluatorPath = os.path.join(path, "evaluator")
         evaluator: Evaluator = DefaultParamsReader.loadParamsInstance(evaluatorPath, sc)
@@ -461,7 +465,7 @@ class _ValidatorSharedReadWrite:
         evaluator = instance.getEvaluator()
         uidMap = MetaAlgorithmReadWrite.getUidMap(estiamtor)
 
-        for elem in [evaluator] + list(uidMap.values()):  # type: ignore[arg-type]
+        for elem in [evaluator] + list(uidMap.values()):
             if not isinstance(elem, MLWritable):
                 raise ValueError(
                     f"Validator write will fail because it contains {elem.uid} "
@@ -1091,6 +1095,8 @@ class CrossValidatorModel(
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None
 
@@ -1128,6 +1134,7 @@ class CrossValidatorModel(
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None
@@ -1650,6 +1657,7 @@ class TrainValidationSplitModel(
         Given a Java TrainValidationSplitModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
+        from pyspark.core.context import SparkContext
 
         # Load information from java_stage to the instance.
         sc = SparkContext._active_spark_context
@@ -1689,6 +1697,7 @@ class TrainValidationSplitModel(
         py4j.java_gateway.JavaObject
             Java object equivalent to this instance.
         """
+        from pyspark.core.context import SparkContext
 
         sc = SparkContext._active_spark_context
         assert sc is not None

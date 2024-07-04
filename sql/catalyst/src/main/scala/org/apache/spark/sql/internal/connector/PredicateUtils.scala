@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.expressions.{LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.sources.{AlwaysFalse, AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not, Or, StringContains, StringEndsWith, StringStartsWith}
@@ -44,7 +45,8 @@ private[sql] object PredicateUtils {
         if (values.length > 0) {
           if (!values.forall(_.isInstanceOf[LiteralValue[_]])) return None
           val dataType = values(0).asInstanceOf[LiteralValue[_]].dataType
-          if (!values.forall(_.asInstanceOf[LiteralValue[_]].dataType.sameType(dataType))) {
+          if (!values.forall(e =>
+            DataTypeUtils.sameType(e.asInstanceOf[LiteralValue[_]].dataType, dataType))) {
             return None
           }
           val inValues = values.map(v =>
@@ -80,7 +82,7 @@ private[sql] object PredicateUtils {
       case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" if isValidBinaryPredicate() =>
         val attribute = predicate.children()(0).toString
         val value = predicate.children()(1).asInstanceOf[LiteralValue[_]]
-        if (!value.dataType.sameType(StringType)) return None
+        if (!DataTypeUtils.sameType(value.dataType, StringType)) return None
         val v1Value = value.value.toString
         val v1Filter = predicate.name() match {
           case "STARTS_WITH" =>

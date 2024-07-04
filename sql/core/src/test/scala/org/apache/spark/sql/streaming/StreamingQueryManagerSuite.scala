@@ -30,12 +30,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, Encoders}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamingQueryManagerSuite extends StreamTest {
 
   import AwaitTerminationTester._
@@ -113,11 +115,11 @@ class StreamingQueryManagerSuite extends StreamTest {
       // Terminate a query asynchronously with exception and see awaitAnyTermination throws
       // the exception
       val q2 = stopRandomQueryAsync(100.milliseconds, withError = true)
-      testAwaitAnyTermination(ExpectException[SparkException])
+      testAwaitAnyTermination(ExpectException[SparkException]())
       require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception
-      testAwaitAnyTermination(ExpectException[SparkException])
+      testAwaitAnyTermination(ExpectException[SparkException]())
 
       // Resetting termination should make awaitAnyTermination() blocking again
       spark.streams.resetTerminated()
@@ -131,7 +133,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       val q4 = stopRandomQueryAsync(10.milliseconds, withError = true)
       eventually(Timeout(streamingTimeout)) { require(!q4.isActive) }
       // After q4 terminates with exception, awaitAnyTerm should start throwing exception
-      testAwaitAnyTermination(ExpectException[SparkException])
+      testAwaitAnyTermination(ExpectException[SparkException]())
     }
   }
 
@@ -179,14 +181,14 @@ class StreamingQueryManagerSuite extends StreamTest {
       // throws the exception
       val q2 = stopRandomQueryAsync(100.milliseconds, withError = true)
       testAwaitAnyTermination(
-        ExpectException[SparkException],
+        ExpectException[SparkException](),
         awaitTimeout = 4.seconds,
         testBehaviorFor = 6.seconds)
       require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception
       testAwaitAnyTermination(
-        ExpectException[SparkException],
+        ExpectException[SparkException](),
         awaitTimeout = 2.seconds,
         testBehaviorFor = 4.seconds)
 
@@ -206,7 +208,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       // `StreamingQueryManager` has already received the error.
       q3.stop()
       testAwaitAnyTermination(
-        ExpectException[SparkException],
+        ExpectException[SparkException](),
         awaitTimeout = 100.milliseconds,
         testBehaviorFor = 4.seconds)
 
@@ -226,7 +228,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       // `StreamingQueryManager` has already received the error.
       q5.stop()
       // After q5 terminates with exception, awaitAnyTerm should start throwing exception
-      testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 2.seconds)
+      testAwaitAnyTermination(ExpectException[SparkException](), awaitTimeout = 2.seconds)
     }
   }
 
@@ -407,7 +409,7 @@ class StreamingQueryManagerSuite extends StreamTest {
         datasets.zipWithIndex.map { case (ds, i) =>
           var query: StreamingQuery = null
           try {
-            val df = ds.toDF
+            val df = ds.toDF()
             val metadataRoot =
               Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
             query =
@@ -465,7 +467,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
-          case r: StreamingDataSourceV2Relation =>
+          case r: StreamingDataSourceV2ScanRelation =>
             r.stream.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
@@ -478,7 +480,7 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   private def makeDataset: (MemoryStream[Int], Dataset[Int]) = {
     val inputData = MemoryStream[Int]
-    val mapped = inputData.toDS.map(6 / _)
+    val mapped = inputData.toDS().map(6 / _)
     (inputData, mapped)
   }
 }

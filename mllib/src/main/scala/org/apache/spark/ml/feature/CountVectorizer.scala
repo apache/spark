@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
 /**
@@ -194,7 +195,7 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       if (dataset.storageLevel == StorageLevel.NONE) {
         input.persist(StorageLevel.MEMORY_AND_DISK)
       }
-      Some(input.count)
+      Some(input.count())
     } else {
       None
     }
@@ -369,7 +370,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.vocabulary)
+      val data = Data(instance.vocabulary.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }

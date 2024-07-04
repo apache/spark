@@ -20,14 +20,14 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 
 import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
+import org.junit.jupiter.api.AfterAll;
 
 public class RocksDBIteratorSuite extends DBIteratorSuite {
 
   private static File dbpath;
   private static RocksDB db;
 
-  @AfterClass
+  @AfterAll
   public static void cleanup() throws Exception {
     if (db != null) {
       db.close();

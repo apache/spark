@@ -39,7 +39,8 @@ class EliminateSortsSuite extends AnalysisTest {
         FoldablePropagation,
         LimitPushDown) ::
       Batch("Eliminate Sorts", Once,
-        EliminateSorts) ::
+        EliminateSorts,
+        RemoveRedundantSorts) ::
       Batch("Collapse Project", Once,
         CollapseProject) :: Nil
   }
@@ -97,11 +98,11 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+    val query = x.select($"a".as("x"), Literal(1).as("y"), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
-      x.select($"a".as("x"), Year(CurrentDate()).as("y"), $"b")
+      x.select($"a".as("x"), Literal(1).as("y"), $"b")
         .orderBy($"x".asc, $"b".desc))
 
     comparePlans(optimized, correctAnswer)
@@ -475,6 +476,18 @@ class EliminateSortsSuite extends AnalysisTest {
   test("SPARK-40050: Remove Sort if there is a LocalLimit between Sort and Sort") {
     val originalPlan = LocalLimit(Literal(2), testRelation.orderBy($"a".asc)).orderBy($"b".asc)
     val correctAnswer = LocalLimit(Literal(2), testRelation).orderBy($"b".asc)
+
+    comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-46378: Still remove Sort after converting Aggregate to Project") {
+    val originalPlan = testRelation.orderBy($"a".asc)
+      .groupBy($"a")($"a")
+      .limit(1)
+
+    val correctAnswer = testRelation.localLimit(1)
+      .select($"a")
+      .limit(1)
 
     comparePlans(Optimize.execute(originalPlan.analyze), correctAnswer.analyze)
   }

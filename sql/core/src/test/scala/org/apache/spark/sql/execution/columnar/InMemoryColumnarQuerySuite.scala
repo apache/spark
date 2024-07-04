@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,7 +49,8 @@ class TestCachedBatchSerializer(
   }
 }
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
+class InMemoryColumnarQuerySuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -165,9 +167,9 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
 
   test("access only some column of the all of columns") {
     val df = spark.range(1, 100).map(i => (i, (i + 1).toFloat)).toDF("i", "f")
-    df.cache
-    df.count  // forced to build cache
-    assert(df.filter("f <= 10.0").count == 9)
+    df.cache()
+    df.count()  // forced to build cache
+    assert(df.filter("f <= 10.0").count() == 9)
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
@@ -359,11 +361,11 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.length * INT.defaultSize)
   }
 
    test("cached row count should be calculated") {
-    val data = spark.range(6).toDF
+    val data = spark.range(6).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val cached = InMemoryRelation(new TestCachedBatchSerializer(true, 5),
       MEMORY_ONLY, plan, None, data.logicalPlan)
@@ -388,7 +390,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       }
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
@@ -408,7 +410,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       )
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
@@ -430,16 +432,16 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       )
       val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(data)))
       val df = spark.createDataFrame(rdd, StructType(schemas))
-      val row = df.persist.take(1).apply(0)
+      val row = df.persist().take(1).apply(0)
       checkAnswer(df, row)
     }
   }
 
   test("InMemoryTableScanExec should return correct output ordering and partitioning") {
-    val df1 = Seq((0, 0), (1, 1)).toDF
-      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
-    val df2 = Seq((0, 0), (1, 1)).toDF
-      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+    val df1 = Seq((0, 0), (1, 1)).toDF()
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist()
+    val df2 = Seq((0, 0), (1, 1)).toDF()
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist()
 
     // Because two cached dataframes have the same logical plan, this is a self-join actually.
     // So we force one of in-memory relation to alias its output. Then we can test if original and
@@ -504,7 +506,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     // Push predicate to the cached table.
     val df2 = df1.where("y = 3")
 
-    val planBeforeFilter = df2.queryExecution.executedPlan.collect {
+    val planBeforeFilter = collect(df2.queryExecution.executedPlan) {
       case f: FilterExec => f.child
       case WholeStageCodegenExec(FilterExec(_, i: InputAdapter)) => i.child
     }

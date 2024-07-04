@@ -25,7 +25,7 @@ import numpy as np
 from numpy import array, random, tile
 
 from pyspark import SparkContext, since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector  # noqa: F401
 from pyspark.mllib.stat.distribution import MultivariateGaussian
@@ -79,14 +79,14 @@ class BisectingKMeansModel(JavaModelWrapper):
         super(BisectingKMeansModel, self).__init__(java_model)
         self.centers = [c.toArray() for c in self.call("clusterCenters")]
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy
         arrays."""
         return self.centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def k(self) -> int:
         """Get the number of clusters"""
@@ -281,13 +281,13 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
     def __init__(self, centers: List["VectorLike"]):
         self.centers = centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.0.0")
     def clusterCenters(self) -> List["VectorLike"]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return self.centers
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def k(self) -> int:
         """Total number of clusters."""
@@ -532,7 +532,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
     True
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def weights(self) -> np.ndarray:
         """
@@ -541,7 +541,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
         """
         return array(self.call("weights"))
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def gaussians(self) -> List[MultivariateGaussian]:
         """
@@ -552,7 +552,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
             MultivariateGaussian(gaussian[0], gaussian[1]) for gaussian in self.call("gaussians")
         ]
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def k(self) -> int:
         """Number of gaussians in mixture."""
@@ -739,9 +739,11 @@ class PowerIterationClusteringModel(
     ...         theta = 2.0 * math.pi * i / n
     ...         points.append((r * math.cos(theta), r * math.sin(theta)))
     ...     return points
+    ...
     >>> def sim(x, y):
     ...     dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
     ...     return math.exp(-dist2 / 2.0)
+    ...
     >>> r1 = 1.0
     >>> n1 = 10
     >>> r2 = 4.0
@@ -776,7 +778,7 @@ class PowerIterationClusteringModel(
     ...     pass
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def k(self) -> int:
         """
@@ -944,7 +946,7 @@ class StreamingKMeansModel(KMeansModel):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)  # type: ignore[arg-type]
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def clusterWeights(self) -> List[np.float64]:
         """Return the cluster weights."""
@@ -1128,7 +1130,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader["LDAModel"]):
 
     .. [1] Blei, D. et al. "Latent Dirichlet Allocation."
         J. Mach. Learn. Res. 3 (2003): 993-1022.
-        https://www.jmlr.org/papers/v3/blei03a
+        https://web.archive.org/web/20220128160306/https://www.jmlr.org/papers/v3/blei03a
 
     Examples
     --------

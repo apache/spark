@@ -20,7 +20,7 @@ from py4j.java_gateway import java_import, is_instance_of, JavaObject
 
 from pyspark import RDD, SparkConf
 from pyspark.serializers import NoOpSerializer, UTF8Deserializer, CloudPickleSerializer
-from pyspark.context import SparkContext
+from pyspark.core.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.listener import StreamingListener
@@ -381,13 +381,13 @@ class StreamingContext:
         Changes to the queue after the stream is created will not be recognized.
         """
         if default and not isinstance(default, RDD):
-            default = self._sc.parallelize(default)  # type: ignore[arg-type]
+            default = self._sc.parallelize(default)
 
         if not rdds and default:
             rdds = [rdds]  # type: ignore[list-item]
 
         if rdds and not isinstance(rdds[0], RDD):
-            rdds = [self._sc.parallelize(input) for input in rdds]  # type: ignore[arg-type]
+            rdds = [self._sc.parallelize(input) for input in rdds]
         self._check_serializers(rdds)
 
         assert self._jvm is not None

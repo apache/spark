@@ -81,14 +81,14 @@ private[sql] class AvroOptions(
 
   /**
    * Top level record name in write result, which is required in Avro spec.
-   * See https://avro.apache.org/docs/1.11.1/specification/#schema-record .
+   * See https://avro.apache.org/docs/1.11.3/specification/#schema-record .
    * Default value is "topLevelRecord"
    */
   val recordName: String = parameters.getOrElse(RECORD_NAME, "topLevelRecord")
 
   /**
    * Record namespace in write result. Default value is "".
-   * See Avro spec for details: https://avro.apache.org/docs/1.11.1/specification/#schema-record .
+   * See Avro spec for details: https://avro.apache.org/docs/1.11.3/specification/#schema-record .
    */
   val recordNamespace: String = parameters.getOrElse(RECORD_NAMESPACE, "")
 
@@ -130,6 +130,12 @@ private[sql] class AvroOptions(
   val datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+
+  val useStableIdForUnionType: Boolean =
+    parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+
+  val stableIdPrefixForUnionType: String = parameters
+    .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -154,4 +160,14 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // datasource similarly to the SQL config `spark.sql.avro.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
   val DATETIME_REBASE_MODE = newOption("datetimeRebaseMode")
+  // If it is set to true, Avro schema is deserialized into Spark SQL schema, and the Avro Union
+  // type is transformed into a structure where the field names remain consistent with their
+  // respective types. The resulting field names are converted to lowercase, e.g. member_int or
+  // member_string. If two user-defined type names or a user-defined type name and a built-in
+  // type name are identical regardless of case, an exception will be raised. However, in other
+  // cases, the field names can be uniquely identified.
+  val STABLE_ID_FOR_UNION_TYPE = newOption("enableStableIdentifiersForUnionType")
+  // When STABLE_ID_FOR_UNION_TYPE is enabled, the option allows to configure the prefix for fields
+  // of Avro Union type.
+  val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
 }

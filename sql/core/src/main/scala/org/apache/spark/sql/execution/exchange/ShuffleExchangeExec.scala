@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.function.Supplier
 
+import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark._
@@ -29,13 +30,14 @@ import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProces
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 import org.apache.spark.util.random.XORShiftRandom
@@ -44,6 +46,15 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
  */
 trait ShuffleExchangeLike extends Exchange {
+
+  /**
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
+   */
+  @transient private lazy val shuffleFuture: Future[MapOutputStatistics] = executeQuery {
+    materializationStarted.set(true)
+    mapOutputStatisticsFuture
+  }
 
   /**
    * Returns the number of mappers of this shuffle.
@@ -56,19 +67,34 @@ trait ShuffleExchangeLike extends Exchange {
   def numPartitions: Int
 
   /**
+   * Returns the advisory partition size.
+   */
+  def advisoryPartitionSize: Option[Long]
+
+  /**
    * The origin of this shuffle operator.
    */
   def shuffleOrigin: ShuffleOrigin
 
   /**
-   * The asynchronous job that materializes the shuffle. It also does the preparations work,
-   * such as waiting for the subqueries.
+   * Submits the shuffle job.
    */
-  final def submitShuffleJob: Future[MapOutputStatistics] = executeQuery {
-    mapOutputStatisticsFuture
-  }
+  final def submitShuffleJob: Future[MapOutputStatistics] = shuffleFuture
 
   protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+
+  /**
+   * Cancels the shuffle job.
+   */
+  final def cancelShuffleJob: Unit = {
+    if (isMaterializationStarted()) {
+      shuffleFuture match {
+        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
+          action.cancel()
+        case _ =>
+      }
+    }
+  }
 
   /**
    * Returns the shuffle RDD with specified partition specs.
@@ -79,6 +105,11 @@ trait ShuffleExchangeLike extends Exchange {
    * Returns the runtime statistics after shuffle materialization.
    */
   def runtimeStatistics: Statistics
+
+  /**
+   * The shuffle ID.
+   */
+  def shuffleId: Int
 }
 
 // Describes where the shuffle operator comes from.
@@ -115,7 +146,8 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
+    advisoryPartitionSize: Option[Long] = None)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
@@ -157,6 +189,8 @@ case class ShuffleExchangeExec(
     val rowCount = metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value
     Statistics(dataSize, Some(rowCount))
   }
+
+  override def shuffleId: Int = shuffleDependency.shuffleId
 
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on
@@ -293,7 +327,12 @@ object ShuffleExchangeExec {
           ascending = true,
           samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition => new ConstantPartitioner
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case k @ KeyGroupedPartitioning(expressions, n, _, _) =>
+        val valueMap = k.uniquePartitionValues.zipWithIndex.map {
+          case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
+        }.toMap
+        new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
     def getPartitionKeyExtractor(): InternalRow => Any = newPartitioning match {
@@ -319,7 +358,9 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case _ => throw new IllegalStateException(s"Exchange not implemented for $newPartitioning")
+      case KeyGroupedPartitioning(expressions, _, _, _) =>
+        row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
@@ -358,7 +399,7 @@ object ShuffleExchangeExec {
           val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
 
           val sorter = UnsafeExternalRowSorter.createWithRecordComparator(
-            StructType.fromAttributes(outputAttributes),
+            DataTypeUtils.fromAttributes(outputAttributes),
             recordComparatorSupplier,
             prefixComparator,
             prefixComputer,

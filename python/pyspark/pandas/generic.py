@@ -19,13 +19,11 @@
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
 from abc import ABCMeta, abstractmethod
-from collections import Counter
 from functools import reduce
 from typing import (
     Any,
     Callable,
     Dict,
-    Iterable,
     IO,
     List,
     Optional,
@@ -48,7 +46,6 @@ from pyspark.sql.types import (
     LongType,
     NumericType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import (
     Axis,
@@ -334,8 +331,6 @@ class Frame(object, metaclass=ABCMeta):
         return self._apply_series_op(lambda psser: psser._cumsum(skipna), should_resolve=True)
 
     # TODO: add 'axis' parameter
-    # TODO: use pandas_udf to support negative values and other options later
-    #  other window except unbounded ones is supported as of Spark 3.0.
     def cumprod(self: FrameLike, skipna: bool = True) -> FrameLike:
         """
         Return cumulative product over a DataFrame or Series axis.
@@ -400,55 +395,6 @@ class Frame(object, metaclass=ABCMeta):
         Name: A, dtype: float64
         """
         return self._apply_series_op(lambda psser: psser._cumprod(skipna), should_resolve=True)
-
-    # TODO: Although this has removed pandas >= 1.0.0, but we're keeping this as deprecated
-    # since we're using this for `DataFrame.info` internally.
-    # We can drop it once our minimal pandas version becomes 1.0.0.
-    def get_dtype_counts(self) -> pd.Series:
-        """
-        Return counts of unique dtypes in this object.
-
-        .. deprecated:: 0.14.0
-
-        Returns
-        -------
-        dtype: pd.Series
-            Series with the count of columns with each dtype.
-
-        See Also
-        --------
-        dtypes: Return the dtypes in this object.
-
-        Examples
-        --------
-        >>> a = [['a', 1, 1], ['b', 2, 2], ['c', 3, 3]]
-        >>> df = ps.DataFrame(a, columns=['str', 'int1', 'int2'])
-        >>> df
-          str  int1  int2
-        0   a     1     1
-        1   b     2     2
-        2   c     3     3
-
-        >>> df.get_dtype_counts().sort_values()
-        object    1
-        int64     2
-        dtype: int64
-
-        >>> df.str.get_dtype_counts().sort_values()
-        object    1
-        dtype: int64
-        """
-        warnings.warn(
-            "`get_dtype_counts` has been deprecated and will be "
-            "removed in a future version. For DataFrames use "
-            "`.dtypes.value_counts()",
-            FutureWarning,
-        )
-        if not isinstance(self.dtypes, Iterable):
-            dtypes = [self.dtypes]
-        else:
-            dtypes = list(self.dtypes)
-        return pd.Series(dict(Counter([d.name for d in dtypes])))
 
     def pipe(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         r"""
@@ -729,7 +675,6 @@ class Frame(object, metaclass=ABCMeta):
         DataFrame.to_delta
         DataFrame.to_table
         DataFrame.to_parquet
-        DataFrame.to_spark_io
 
         Examples
         --------
@@ -1043,9 +988,7 @@ class Frame(object, metaclass=ABCMeta):
         startcol: int = 0,
         engine: Optional[str] = None,
         merge_cells: bool = True,
-        encoding: Optional[str] = None,
         inf_rep: str = "inf",
-        verbose: bool = True,
         freeze_panes: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
@@ -1096,14 +1039,9 @@ class Frame(object, metaclass=ABCMeta):
             ``io.excel.xlsm.writer``.
         merge_cells: bool, default True
             Write MultiIndex and Hierarchical Rows as merged cells.
-        encoding: str, optional
-            Encoding of the resulting excel file. Only necessary for xlwt,
-            other writers support unicode natively.
         inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
-        verbose: bool, default True
-            Display more information in the error logs.
         freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.
@@ -1163,6 +1101,126 @@ class Frame(object, metaclass=ABCMeta):
             )
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_excel, f, args
+        )
+
+    def to_hdf(
+        self,
+        path_or_buf: Union[str, pd.HDFStore],
+        key: str,
+        mode: str = "a",
+        complevel: Optional[int] = None,
+        complib: Optional[str] = None,
+        append: bool = False,
+        format: Optional[str] = None,
+        index: bool = True,
+        min_itemsize: Optional[Union[int, Dict[str, int]]] = None,
+        nan_rep: Optional[Any] = None,
+        dropna: Optional[bool] = None,
+        data_columns: Optional[Union[bool, List[str]]] = None,
+        errors: str = "strict",
+        encoding: str = "UTF-8",
+    ) -> None:
+        """
+        Write the contained data to an HDF5 file using HDFStore.
+
+        .. note:: This method should only be used if the resulting DataFrame is expected
+                  to be small, as all the data is loaded into the driver's memory.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path_or_buf : str or pandas.HDFStore
+            File path or HDFStore object.
+        key : str
+            Identifier for the group in the store.
+        mode : {'a', 'w', 'r+'}, default 'a'
+            Mode to open file:
+
+            - 'w': write, a new file is created (an existing file with
+              the same name would be deleted).
+            - 'a': append, an existing file is opened for reading and
+              writing, and if the file does not exist it is created.
+            - 'r+': similar to 'a', but the file must already exist.
+
+        complevel : {0-9}, default None
+            Specifies a compression level for data.
+            A value of 0 or None disables compression.
+        complib : {'zlib', 'lzo', 'bzip2', 'blosc'}, default 'zlib'
+            Specifies the compression library to be used.
+            These additional compressors for Blosc are supported
+            (default if no compressor specified: 'blosc:blosclz'):
+            {'blosc:blosclz', 'blosc:lz4', 'blosc:lz4hc', 'blosc:snappy',
+            'blosc:zlib', 'blosc:zstd'}.
+            Specifying a compression library which is not available issues
+            a ValueError.
+        append : bool, default False
+            For Table formats, append the input data to the existing.
+        format : {'fixed', 'table', None}, default 'fixed'
+            Possible values:
+
+            - 'fixed': Fixed format. Fast writing/reading. Not-appendable,
+              nor searchable.
+            - 'table': Table format. Write as a PyTables Table structure
+              which may perform worse but allow more flexible operations
+              like searching / selecting subsets of the data.
+            - If None, pd.get_option('io.hdf.default_format') is checked,
+              followed by fallback to "fixed".
+
+        index : bool, default True
+            Write DataFrame index as a column.
+        min_itemsize : dict or int, optional
+            Map column names to minimum string sizes for columns.
+        nan_rep : Any, optional
+            How to represent null values as str.
+            Not allowed with append=True.
+        dropna : bool, default False, optional
+            Remove missing values.
+        data_columns : list of columns or True, optional
+            List of columns to create as indexed data columns for on-disk
+            queries, or True to use all columns. By default only the axes
+            of the object are indexed. Applicable only to format='table'.
+        errors : str, default 'strict'
+            Specifies how encoding and decoding errors are to be handled.
+            See the errors argument for :func:`open` for a full list
+            of options.
+        encoding : str, default "UTF-8"
+
+        See Also
+        --------
+        DataFrame.to_orc : Write a DataFrame to the binary orc format.
+        DataFrame.to_parquet : Write a DataFrame to the binary parquet format.
+        DataFrame.to_csv : Write out to a csv file.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]},
+        ...                   index=['a', 'b', 'c'])  # doctest: +SKIP
+        >>> df.to_hdf('data.h5', key='df', mode='w')  # doctest: +SKIP
+
+        We can add another object to the same file:
+
+        >>> s = ps.Series([1, 2, 3, 4])  # doctest: +SKIP
+        >>> s.to_hdf('data.h5', key='s')  # doctest: +SKIP
+        """
+        log_advice(
+            "`to_hdf` loads all data into the driver's memory. "
+            "It should only be used if the resulting DataFrame is expected to be small."
+        )
+        # Make sure locals() call is at the top of the function so we don't capture local variables.
+        args = locals()
+        psdf = self
+
+        if isinstance(self, ps.DataFrame):
+            f = pd.DataFrame.to_hdf
+        elif isinstance(self, ps.Series):
+            f = pd.Series.to_hdf
+        else:
+            raise TypeError(
+                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
+            )
+        return validate_arguments_and_invoke_function(
+            psdf._to_internal_pandas(), self.to_hdf, f, args
         )
 
     def mean(
@@ -1311,6 +1369,13 @@ class Frame(object, metaclass=ABCMeta):
         >>> df['b'].sum(min_count=3)
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sum with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1394,7 +1459,7 @@ class Frame(object, metaclass=ABCMeta):
 
         If there is no numeric type columns, returns empty Series.
 
-        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()
+        >>> ps.DataFrame({"key": ['a', 'b', 'c'], "val": ['x', 'y', 'z']}).prod()  # doctest: +SKIP
         Series([], dtype: float64)
 
         On a Series:
@@ -1404,14 +1469,21 @@ class Frame(object, metaclass=ABCMeta):
 
         By default, the product of an empty or all-NA Series is ``1``
 
-        >>> ps.Series([]).prod()
+        >>> ps.Series([]).prod()  # doctest: +SKIP
         1.0
 
         This can be controlled with the ``min_count`` parameter
 
-        >>> ps.Series([]).prod(min_count=1)
+        >>> ps.Series([]).prod(min_count=1)  # doctest: +SKIP
         nan
         """
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.product with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1864,6 +1936,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.std with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1956,6 +2035,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.var with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2185,6 +2271,13 @@ class Frame(object, metaclass=ABCMeta):
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
+        if axis is None and isinstance(self, ps.DataFrame):
+            warnings.warn(
+                "The behavior of DataFrame.sem with axis=None is deprecated, "
+                "in a future version this will reduce over both axes and return a scalar. "
+                "To retain the old behavior, pass axis=0 (or do not pass axis)",
+                FutureWarning,
+            )
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -2307,7 +2400,7 @@ class Frame(object, metaclass=ABCMeta):
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
         """
-        Group DataFrame or Series using a Series of columns.
+        Group DataFrame or Series using one or more columns.
 
         A groupby operation involves some combination of splitting the
         object, applying a function, and combining the results. This can be
@@ -2442,6 +2535,8 @@ class Frame(object, metaclass=ABCMeta):
         This must be a boolean scalar value, either True or False. Raise a ValueError if
         the object does not have exactly 1 element, or that element is not boolean
 
+        .. deprecated:: 4.0.0
+
         Returns
         -------
         bool
@@ -2473,6 +2568,11 @@ class Frame(object, metaclass=ABCMeta):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
         """
+        warnings.warn(
+            f"{self.__class__.__name__}.bool is now deprecated "
+            "and will be removed in future version.",
+            FutureWarning,
+        )
         if isinstance(self, ps.DataFrame):
             df = self
         elif isinstance(self, ps.Series):
@@ -2720,7 +2820,7 @@ class Frame(object, metaclass=ABCMeta):
         return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
-    #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
+    #   'axis' implementation, refer https://github.com/databricks/koalas/pull/607
     def expanding(self: FrameLike, min_periods: int = 1) -> "Expanding[FrameLike]":
         """
         Provide expanding transformations.

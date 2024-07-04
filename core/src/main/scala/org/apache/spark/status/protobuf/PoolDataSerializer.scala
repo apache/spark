@@ -17,12 +17,12 @@
 
 package org.apache.spark.status.protobuf
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.status.PoolData
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-class PoolDataSerializer extends ProtobufSerDe[PoolData] {
+private[protobuf] class PoolDataSerializer extends ProtobufSerDe[PoolData] {
 
   override def serialize(input: PoolData): Array[Byte] = {
     val builder = StoreTypes.PoolData.newBuilder()

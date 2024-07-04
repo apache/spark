@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming.sources
 
 import java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -35,8 +36,10 @@ import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class FakeDataStream extends MicroBatchStream with ContinuousStream {
   override def deserializeOffset(json: String): Offset = RateStreamOffset(Map())
   override def commit(end: Offset): Unit = {}
@@ -269,6 +272,7 @@ object LastWriteOptions {
   }
 }
 
+@SlowSQLTest
 class StreamingDataSourceV2Suite extends StreamTest {
 
   override def beforeAll(): Unit = {
@@ -297,7 +301,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     Trigger.ProcessingTime(1000),
     Trigger.Continuous(1000))
 
-  private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
+  private def testCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
     testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(_ => ())
   }
 
@@ -316,22 +320,12 @@ class StreamingDataSourceV2Suite extends StreamTest {
     query.stop()
   }
 
-  private def testNegativeCase(
-      readFormat: String,
-      writeFormat: String,
-      trigger: Trigger,
-      errorMsg: String) = {
-    val ex = intercept[UnsupportedOperationException] {
-      testPositiveCase(readFormat, writeFormat, trigger)
-    }
-    assert(ex.getMessage.contains(errorMsg))
-  }
-
   private def testPostCreationNegativeCase(
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
-      errorMsg: String) = {
+      errorClass: String,
+      parameters: Map[String, String]) = {
     val query = spark.readStream
       .format(readFormat)
       .load()
@@ -343,7 +337,11 @@ class StreamingDataSourceV2Suite extends StreamTest {
     eventually(timeout(streamingTimeout)) {
       assert(query.exception.isDefined)
       assert(query.exception.get.cause != null)
-      assert(query.exception.get.cause.getMessage.contains(errorMsg))
+      checkErrorMatchPVals(
+        exception = query.exception.get.cause.asInstanceOf[SparkUnsupportedOperationException],
+        errorClass = errorClass,
+        parameters = parameters
+      )
     }
   }
 
@@ -424,42 +422,69 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
+      val sourceTable = DataSource.lookupDataSource(read, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
-      val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
+      val sinkTable = DataSource.lookupDataSource(write, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       trigger match {
         // Invalid - can't read at all
         case _ if !sourceTable.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-          testNegativeCase(read, write, trigger,
-            s"Data source $read does not support streamed reading")
+          checkError(
+            exception = intercept[SparkUnsupportedOperationException] {
+              testCase(read, write, trigger)
+            },
+            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            parameters = Map(
+              "className" -> "fake-read-neither-mode",
+              "operator" -> "reading"
+            )
+          )
 
         // Invalid - can't write
         case _ if !sinkTable.supports(STREAMING_WRITE) =>
-          testNegativeCase(read, write, trigger,
-            s"Data source $write does not support streamed writing")
+          checkError(
+            exception = intercept[SparkUnsupportedOperationException] {
+              testCase(read, write, trigger)
+            },
+            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            parameters = Map(
+              "className" -> "fake-write-neither-mode",
+              "operator" -> "writing"
+            )
+          )
 
         case _: ContinuousTrigger =>
           if (sourceTable.supports(CONTINUOUS_READ)) {
             // Valid microbatch queries.
-            testPositiveCase(read, write, trigger)
+            testCase(read, write, trigger)
           } else {
             // Invalid - trigger is continuous but reader is not
-            testNegativeCase(
-              read, write, trigger, s"Data source $read does not support continuous processing")
+            checkError(
+              exception = intercept[SparkUnsupportedOperationException] {
+                testCase(read, write, trigger)
+              },
+              errorClass = "_LEGACY_ERROR_TEMP_2253",
+              parameters = Map("sourceName" -> "fake-read-microbatch-only")
+            )
           }
 
         case microBatchTrigger =>
           if (sourceTable.supports(MICRO_BATCH_READ)) {
             // Valid continuous queries.
-            testPositiveCase(read, write, trigger)
+            testCase(read, write, trigger)
           } else {
             // Invalid - trigger is microbatch but reader is not
             testPostCreationNegativeCase(read, write, trigger,
-              s"Data source $read does not support microbatch processing")
+              errorClass = "_LEGACY_ERROR_TEMP_2209",
+              parameters = Map(
+                "srcName" -> read,
+                "disabledSources" -> "",
+                "table" -> ".*"
+              )
+            )
           }
       }
     }

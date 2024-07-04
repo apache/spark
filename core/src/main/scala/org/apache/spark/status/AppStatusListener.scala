@@ -20,13 +20,13 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile.CPUS
@@ -250,7 +250,7 @@ private[spark] class AppStatusListener(
       }
       // Remove all RDD partitions that reference the removed executor
       liveRDDs.values.foreach { rdd =>
-        rdd.getPartitions.values
+        rdd.getPartitions().values
           .filter(_.executors.contains(event.executorId))
           .foreach { partition =>
             if (partition.executors.length == 1) {
@@ -319,16 +319,6 @@ private[spark] class AppStatusListener(
   private def addExcludedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
     exec.excludedInStages += stageId
     liveUpdate(exec, now)
-  }
-
-  private def setStageBlackListStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
-    executorIds.foreach { executorId =>
-      val executorStageSummary = stage.executorSummary(executorId)
-      executorStageSummary.isExcluded = true
-      maybeUpdate(executorStageSummary, now)
-    }
-    stage.excludedExecutors ++= executorIds
-    maybeUpdate(stage, now)
   }
 
   private def setStageExcludedStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
@@ -448,6 +438,13 @@ private[spark] class AppStatusListener(
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION)) }
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
+    val jobTags = Option(event.properties)
+      .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_TAGS)) }
+      .map(_.split(SparkContext.SPARK_JOB_TAGS_SEP).toSet)
+      .getOrElse(Set())
+      .toSeq
+      .filter(!_.isEmpty)
+      .sorted
     val sqlExecutionId = Option(event.properties)
       .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))
 
@@ -458,6 +455,7 @@ private[spark] class AppStatusListener(
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
+      jobTags,
       numTasks,
       sqlExecutionId)
     liveJobs.put(event.jobId, job)
@@ -664,7 +662,7 @@ private[spark] class AppStatusListener(
         case e: TaskFailedReason => // All other failure cases
           Some(e.toErrorString)
         case other =>
-          logInfo(s"Unhandled task end reason: $other")
+          logInfo(log"Unhandled task end reason: ${MDC(LogKeys.REASON, other)}")
           None
       }
       task.errorMessage = errorMessage
@@ -814,7 +812,7 @@ private[spark] class AppStatusListener(
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     val maybeStage =
-      Option(liveStages.get((event.stageInfo.stageId, event.stageInfo.attemptNumber)))
+      Option(liveStages.get((event.stageInfo.stageId, event.stageInfo.attemptNumber())))
     maybeStage.foreach { stage =>
       val now = System.nanoTime()
       stage.info = event.stageInfo
@@ -862,7 +860,7 @@ private[spark] class AppStatusListener(
       val removeStage = stage.activeTasks == 0
       update(stage, now, last = removeStage)
       if (removeStage) {
-        liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber))
+        liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber()))
       }
       if (stage.status == v1.StageStatus.COMPLETE) {
         appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
@@ -871,7 +869,7 @@ private[spark] class AppStatusListener(
     }
 
     // remove any dead executors that were not running for any currently active stages
-    deadExecutors.retain((execId, exec) => isExecutorActiveForLiveStages(exec))
+    deadExecutors.filterInPlace((execId, exec) => isExecutorActiveForLiveStages(exec))
   }
 
   private def removeExcludedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
@@ -1211,7 +1209,7 @@ private[spark] class AppStatusListener(
   }
 
   private def getOrCreateStage(info: StageInfo): LiveStage = {
-    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber),
+    val stage = liveStages.computeIfAbsent((info.stageId, info.attemptNumber()),
       (_: (Int, Int)) => new LiveStage(info))
     stage.info = info
     stage
@@ -1379,7 +1377,7 @@ private[spark] class AppStatusListener(
   private def cleanupTasks(stage: LiveStage): Unit = {
     val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
     if (countToDelete > 0) {
-      val stageKey = Array(stage.info.stageId, stage.info.attemptNumber)
+      val stageKey = Array(stage.info.stageId, stage.info.attemptNumber())
       val view = kvstore.view(classOf[TaskDataWrapper])
         .index(TaskIndexNames.COMPLETION_TIME)
         .parent(stageKey)

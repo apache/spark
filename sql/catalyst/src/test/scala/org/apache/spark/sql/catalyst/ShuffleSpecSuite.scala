@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -62,211 +62,254 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("compatibility: HashShuffleSpec on both sides") {
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = true
-    )
+  private def testHashShuffleSpecLike(
+      shuffleSpecName: String,
+      create: (HashPartitioning, ClusteredDistribution) => ShuffleSpec): Unit = {
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
-      expected = true
-    )
+    test(s"compatibility: $shuffleSpecName on both sides") {
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"b"), 10), ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"d"), 10), ClusteredDistribution(Seq($"c", $"d"))),
-      expected = true
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"a"), 10), ClusteredDistribution(Seq($"a", $"b"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"c", $"c", $"d"), 10),
-        ClusteredDistribution(Seq($"c", $"d"))),
-      expected = true
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"b"), 10), ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"d"), 10), ClusteredDistribution(Seq($"c", $"d"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"d"), 10),
-        ClusteredDistribution(Seq($"a", $"c", $"d"))),
-      expected = true
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"c", $"c", $"d"), 10),
+          ClusteredDistribution(Seq($"c", $"d"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"c", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"c", $"c"))),
-      expected = true
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b", $"b"))),
+        create(HashPartitioning(Seq($"a", $"d"), 10),
+          ClusteredDistribution(Seq($"a", $"c", $"d"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"c", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"c", $"d"))),
-      expected = true
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b", $"b"))),
+        create(HashPartitioning(Seq($"a", $"c", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"c", $"c"))),
+        expected = true
+      )
 
-    // negative cases
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"c"), 5),
-        ClusteredDistribution(Seq($"c", $"d"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b", $"b"))),
+        create(HashPartitioning(Seq($"a", $"c", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"c", $"d"))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = false
-    )
+      // negative cases
+      checkCompatible(
+        create(HashPartitioning(Seq($"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"c"), 5),
+          ClusteredDistribution(Seq($"c", $"d"))),
+        expected = false
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = false
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"d"), 10),
-        ClusteredDistribution(Seq($"c", $"d"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = false
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"d"), 10),
-        ClusteredDistribution(Seq($"c", $"d"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"d"), 10),
+          ClusteredDistribution(Seq($"c", $"d"))),
+        expected = false
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"d"), 10),
+          ClusteredDistribution(Seq($"c", $"d"))),
+        expected = false
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"a"), 10),
-        ClusteredDistribution(Seq($"a", $"b", $"b"))),
-      expected = false
-    )
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"a", $"b", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = false
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b", $"b"))),
+        create(HashPartitioning(Seq($"a", $"b", $"a"), 10),
+          ClusteredDistribution(Seq($"a", $"b", $"b"))),
+        expected = false
+      )
+    }
+
+    test(s"compatibility: Only one side is $shuffleSpecName") {
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        SinglePartitionShuffleSpec,
+        expected = false
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 1),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        SinglePartitionShuffleSpec,
+        expected = true
+      )
+
+      checkCompatible(
+        SinglePartitionShuffleSpec,
+        create(HashPartitioning(Seq($"a", $"b"), 1),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = true
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))),
+        expected = false
+      )
+
+      checkCompatible(
+        RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))),
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        expected = false
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"a", $"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))))),
+        expected = true
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"a"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))),
+          create(HashPartitioning(Seq($"a", $"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))))),
+        expected = true
+      )
+
+      checkCompatible(
+        create(HashPartitioning(Seq($"a", $"b"), 10),
+          ClusteredDistribution(Seq($"a", $"b"))),
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"a"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))),
+          create(HashPartitioning(Seq($"a", $"b", $"c"), 10),
+            ClusteredDistribution(Seq($"a", $"b", $"c"))))),
+        expected = false
+      )
+
+      checkCompatible(
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))),
+          create(HashPartitioning(Seq($"a", $"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))))),
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"a", $"b", $"c"), 10),
+            ClusteredDistribution(Seq($"a", $"b", $"c"))),
+          create(HashPartitioning(Seq($"d"), 10),
+            ClusteredDistribution(Seq($"c", $"d"))))),
+        expected = true
+      )
+
+      checkCompatible(
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))),
+          create(HashPartitioning(Seq($"a", $"b"), 10),
+            ClusteredDistribution(Seq($"a", $"b"))))),
+        ShuffleSpecCollection(Seq(
+          create(HashPartitioning(Seq($"a", $"b", $"c"), 10),
+            ClusteredDistribution(Seq($"a", $"b", $"c"))),
+          create(HashPartitioning(Seq($"c"), 10),
+            ClusteredDistribution(Seq($"c", $"d"))))),
+        expected = false
+      )
+    }
   }
 
-  test("compatibility: Only one side is HashShuffleSpec") {
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      SinglePartitionShuffleSpec,
-      expected = false
-    )
+  testHashShuffleSpecLike("HashShuffleSpec",
+    (partitioning, distribution) => HashShuffleSpec(partitioning, distribution))
+   testHashShuffleSpecLike("CoalescedHashShuffleSpec",
+    (partitioning, distribution) => {
+      val partitions = if (partitioning.numPartitions == 1) {
+        Seq(CoalescedBoundary(0, 1))
+      } else {
+        Seq(CoalescedBoundary(0, 1), CoalescedBoundary(0, partitioning.numPartitions))
+      }
+      CoalescedHashShuffleSpec(HashShuffleSpec(partitioning, distribution), partitions)
+  })
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 1),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      SinglePartitionShuffleSpec,
-      expected = true
-    )
+  test("compatibility: CoalescedHashShuffleSpec other specs") {
+      val hashShuffleSpec = HashShuffleSpec(
+        HashPartitioning(Seq($"a", $"b"), 10), ClusteredDistribution(Seq($"a", $"b")))
+      checkCompatible(
+        hashShuffleSpec,
+        CoalescedHashShuffleSpec(hashShuffleSpec, Seq(CoalescedBoundary(0, 10))),
+        expected = false
+      )
 
-    checkCompatible(
-      SinglePartitionShuffleSpec,
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 1),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = true
-    )
+      checkCompatible(
+        CoalescedHashShuffleSpec(hashShuffleSpec,
+          Seq(CoalescedBoundary(0, 5), CoalescedBoundary(5, 10))),
+        CoalescedHashShuffleSpec(hashShuffleSpec,
+          Seq(CoalescedBoundary(0, 5), CoalescedBoundary(5, 10))),
+        expected = true
+      )
 
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))),
-      expected = false
-    )
-
-    checkCompatible(
-      RangeShuffleSpec(10, ClusteredDistribution(Seq($"a", $"b"))),
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      expected = false
-    )
-
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))))),
-      expected = true
-    )
-
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))),
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))))),
-      expected = true
-    )
-
-    checkCompatible(
-      HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-        ClusteredDistribution(Seq($"a", $"b"))),
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"a"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))),
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"c"), 10),
-          ClusteredDistribution(Seq($"a", $"b", $"c"))))),
-      expected = false
-    )
-
-    checkCompatible(
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))),
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))))),
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"c"), 10),
-          ClusteredDistribution(Seq($"a", $"b", $"c"))),
-        HashShuffleSpec(HashPartitioning(Seq($"d"), 10),
-          ClusteredDistribution(Seq($"c", $"d"))))),
-      expected = true
-    )
-
-    checkCompatible(
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))),
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b"), 10),
-          ClusteredDistribution(Seq($"a", $"b"))))),
-      ShuffleSpecCollection(Seq(
-        HashShuffleSpec(HashPartitioning(Seq($"a", $"b", $"c"), 10),
-          ClusteredDistribution(Seq($"a", $"b", $"c"))),
-        HashShuffleSpec(HashPartitioning(Seq($"c"), 10),
-          ClusteredDistribution(Seq($"c", $"d"))))),
-      expected = false
-    )
+      checkCompatible(
+        CoalescedHashShuffleSpec(hashShuffleSpec,
+          Seq(CoalescedBoundary(0, 4), CoalescedBoundary(4, 10))),
+        CoalescedHashShuffleSpec(hashShuffleSpec,
+          Seq(CoalescedBoundary(0, 5), CoalescedBoundary(5, 10))),
+        expected = false
+      )
   }
 
   test("compatibility: other specs") {
@@ -427,8 +470,13 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
     // unsupported cases
 
-    val msg = intercept[Exception](RangeShuffleSpec(10, distribution)
-      .createPartitioning(distribution.clustering))
-    assert(msg.getMessage.contains("Operation unsupported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        RangeShuffleSpec(10, distribution).createPartitioning(distribution.clustering)
+      },
+      errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "methodName" -> "createPartitioning$",
+        "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))
   }
 }

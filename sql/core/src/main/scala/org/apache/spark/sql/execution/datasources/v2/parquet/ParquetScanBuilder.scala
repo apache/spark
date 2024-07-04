@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2.parquet
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -26,10 +26,11 @@ import org.apache.spark.sql.connector.read.SupportsPushDownAggregates
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 case class ParquetScanBuilder(
     sparkSession: SparkSession,
@@ -73,7 +74,7 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
-      parquetFilters.convertibleFilters(dataFilters).toArray
+      parquetFilters.convertibleFilters(dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
     }

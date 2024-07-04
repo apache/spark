@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -134,7 +135,7 @@ case class Average(
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
 
-  override def initQueryContext(): Option[SQLQueryContext] = if (evalMode == EvalMode.ANSI) {
+  override def initQueryContext(): Option[QueryContext] = if (evalMode == EvalMode.ANSI) {
     Some(origin.context)
   } else {
     None
@@ -162,7 +163,7 @@ object TryAverageExpressionBuilder extends ExpressionBuilder {
     if (numArgs == 1) {
       Average(expressions.head, EvalMode.TRY)
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(1, 2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }

@@ -36,7 +36,7 @@ class AutoCleanupLiveUIDirSuite extends SparkFunSuite {
           _ + _
         }
         .collect()
-      // `baseUIDir` should exists and not emtpy before SparkContext stop.
+      // `baseUIDir` should exists and not empty before SparkContext stop.
       assert(baseUIDir.exists())
       val subDirs = baseUIDir.listFiles()
       assert(subDirs.nonEmpty)

@@ -248,13 +248,13 @@ SELECT nt2.k FROM (SELECT * FROM nt1 natural join nt2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`nt2`.`k`",
-    "proposal" : "`__auto_generated_subquery_name`.`k`, `__auto_generated_subquery_name`.`v1`, `__auto_generated_subquery_name`.`v2`"
+    "proposal" : "`k`, `v1`, `v2`"
   },
   "queryContext" : [ {
     "objectType" : "",

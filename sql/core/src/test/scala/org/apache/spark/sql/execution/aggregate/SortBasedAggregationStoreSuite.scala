@@ -78,7 +78,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       groupingSchema,
       updateInputRow,
       mergeAggBuffer,
-      createNewAggregationBuffer)
+      createNewAggregationBuffer())
 
     (5000 to 100000).foreach { _ =>
       randomKV(inputRow, group)

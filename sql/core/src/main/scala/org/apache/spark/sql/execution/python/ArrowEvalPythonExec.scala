@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
 
 /**
  * Grouped a iterator into batches.
@@ -63,30 +64,64 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     evalType: Int)
   extends EvalPythonExec with PythonSQLMetrics {
 
-  private val batchSize = conf.arrowMaxRecordsPerBatch
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  protected override def evaluate(
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
+  override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
+    new ArrowEvalPythonEvaluatorFactory(
+      child.output,
+      udfs,
+      output,
+      conf.arrowMaxRecordsPerBatch,
+      evalType,
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      ArrowPythonRunner.getPythonRunnerConfMap(conf),
+      pythonMetrics,
+      jobArtifactUUID,
+      conf.pythonUDFProfiler)
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
+class ArrowEvalPythonEvaluatorFactory(
+    childOutput: Seq[Attribute],
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    batchSize: Int,
+    evalType: Int,
+    sessionLocalTimeZone: String,
+    largeVarTypes: Boolean,
+    pythonRunnerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+
+  override def evaluate(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val outputTypes = output.drop(child.output.length).map(_.dataType)
+    val outputTypes = output.drop(childOutput.length).map(_.dataType)
 
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
-    val columnarBatchIter = new ArrowPythonRunner(
+    val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
       funcs,
       evalType,
-      argOffsets,
+      argMetas,
       schema,
       sessionLocalTimeZone,
+      largeVarTypes,
       pythonRunnerConf,
-      pythonMetrics).compute(batchIter, context.partitionId(), context)
+      pythonMetrics,
+      jobArtifactUUID,
+      profiler).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
@@ -95,7 +130,4 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       batch.rowIterator.asScala
     }
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
-    copy(child = newChild)
 }

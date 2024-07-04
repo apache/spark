@@ -12,7 +12,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -41,7 +41,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -73,7 +73,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -103,7 +103,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -133,7 +133,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   b STRING,
   c INT,
   a INT)
@@ -163,7 +163,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -195,7 +195,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT DEFAULT 42,
   b STRING DEFAULT 'abc, def',
   c INT DEFAULT 42)
@@ -225,7 +225,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -255,7 +255,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a INT,
   b STRING,
   c INT)
@@ -286,7 +286,7 @@ SHOW CREATE TABLE tbl
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE default.tbl (
+CREATE TABLE spark_catalog.default.tbl (
   a FLOAT,
   b DECIMAL(10,0),
   c DECIMAL(10,0),
@@ -327,6 +327,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -338,6 +339,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -368,6 +370,7 @@ CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -380,6 +383,7 @@ CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -412,6 +416,7 @@ CREATE VIEW default.view_spark_30302 (
 TBLPROPERTIES (
   'a' = '1',
   'b' = '2')
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -426,6 +431,7 @@ CREATE VIEW default.view_spark_30302 (
 TBLPROPERTIES (
   'a' = '1',
   'b' = '2')
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 

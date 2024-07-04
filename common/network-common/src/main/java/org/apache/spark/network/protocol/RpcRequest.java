@@ -72,8 +72,7 @@ public final class RpcRequest extends AbstractMessage implements RequestMessage 
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RpcRequest) {
-      RpcRequest o = (RpcRequest) other;
+    if (other instanceof RpcRequest o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;

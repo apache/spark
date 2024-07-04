@@ -28,6 +28,7 @@ import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class NaiveBayesWrapper private (
     val pipeline: PipelineModel,
@@ -98,8 +99,8 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> instance.labels.toSeq) ~
-        ("features" -> instance.features.toSeq)
+        ("labels" -> instance.labels.toImmutableArraySeq) ~
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 

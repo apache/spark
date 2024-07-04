@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
@@ -197,9 +199,9 @@ class StringIndexer @Since("1.4.0") (
     val aggregator = new StringIndexerAggregator(inputCols.length)
     implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
-    val selectedCols = getSelectedCols(dataset, inputCols)
+    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq)
     dataset.select(selectedCols: _*)
-      .toDF
+      .toDF()
       .agg(aggregator.toColumn)
       .as[Array[OpenHashMap[String, Long]]]
       .collect()(0)
@@ -209,7 +211,7 @@ class StringIndexer @Since("1.4.0") (
     val (inputCols, _) = getInOutCols()
 
     val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
-    val orgStrings = countByValue(dataset, inputCols).toSeq
+    val orgStrings = countByValue(dataset, inputCols).toImmutableArraySeq
     ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
       counts.toSeq.sortWith(sortFunc).map(_._1).toArray
     }.toArray
@@ -218,9 +220,9 @@ class StringIndexer @Since("1.4.0") (
   private def sortByAlphabet(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
 
-    val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
+    val selectedCols = getSelectedCols(dataset, inputCols.toImmutableArraySeq).map(collect_set)
     val allLabels = dataset.select(selectedCols: _*)
-      .collect().toSeq.flatMap(_.toSeq)
+      .collect().toImmutableArraySeq.flatMap(_.toSeq)
       .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
     ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted
@@ -418,7 +420,7 @@ class StringIndexerModel (
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
     val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filterInvalidData(dataset, inputColNames)
+      filterInvalidData(dataset, inputColNames.toImmutableArraySeq)
     } else {
       dataset
     }
@@ -430,8 +432,8 @@ class StringIndexerModel (
       val labels = labelsArray(i)
 
       if (!dataset.schema.fieldNames.contains(inputColName)) {
-        logWarning(s"Input column ${inputColName} does not exist during transformation. " +
-          "Skip StringIndexerModel for this column.")
+        logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
+          log"during transformation. Skip StringIndexerModel for this column.")
         outputColNames(i) = null
       } else {
         val filteredLabels = getHandleInvalid match {
@@ -443,7 +445,7 @@ class StringIndexerModel (
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer = getIndexer(labels, labelToIndex)
+        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex)
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
@@ -455,7 +457,8 @@ class StringIndexerModel (
 
     require(filteredOutputColNames.length == filteredOutputColumns.length)
     if (filteredOutputColNames.length > 0) {
-      filteredDataset.withColumns(filteredOutputColNames, filteredOutputColumns)
+      filteredDataset.withColumns(
+        filteredOutputColNames.toImmutableArraySeq, filteredOutputColumns.toImmutableArraySeq)
     } else {
       filteredDataset.toDF()
     }

@@ -20,9 +20,13 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfter
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark._
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 
 class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -42,6 +46,9 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
     MockitoAnnotations.openMocks(this).close()
     when(sc.conf).thenReturn(sparkConf)
     when(sc.conf.get(KUBERNETES_DRIVER_POD_NAME)).thenReturn(None)
+    when(sc.conf.get(EXECUTOR_INSTANCES)).thenReturn(None)
+    when(sc.conf.get(MAX_EXECUTOR_FAILURES)).thenReturn(None)
+    when(sc.conf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS)).thenReturn(None)
     when(sc.env).thenReturn(env)
   }
 
@@ -51,8 +58,26 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
       classOf[ExecutorPodsAllocator].getName)
     validConfigs.foreach { c =>
       val manager = new KubernetesClusterManager()
-        when(sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)).thenReturn(c)
+      when(sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)).thenReturn(c)
       manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
     }
+  }
+
+  test("SPARK-45948: Single-pod Spark jobs respect spark.app.id") {
+    val conf = new SparkConf()
+    conf.set(KUBERNETES_DRIVER_MASTER_URL, "local[2]")
+    when(sc.conf).thenReturn(conf)
+    val scheduler = mock[TaskSchedulerImpl]
+    when(scheduler.sc).thenReturn(sc)
+    val manager = new KubernetesClusterManager()
+
+    val backend1 = manager.createSchedulerBackend(sc, "", scheduler)
+    assert(backend1.isInstanceOf[LocalSchedulerBackend])
+    assert(backend1.applicationId().startsWith("local-"))
+
+    conf.set("spark.app.id", "user-app-id")
+    val backend2 = manager.createSchedulerBackend(sc, "", scheduler)
+    assert(backend2.isInstanceOf[LocalSchedulerBackend])
+    assert(backend2.applicationId() === "user-app-id")
   }
 }

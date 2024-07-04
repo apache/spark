@@ -28,7 +28,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -1202,6 +1202,8 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String
@@ -1219,7 +1221,7 @@ class CountVectorizerModel(
         model._set(vocabSize=len(vocabulary))
         return model
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.6.0")
     def vocabulary(self) -> List[str]:
         """
@@ -1889,7 +1891,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def idf(self) -> Vector:
         """
@@ -1897,7 +1899,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._call_java("idf")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def docFreq(self) -> List[int]:
         """
@@ -1905,7 +1907,7 @@ class IDFModel(JavaModel, _IDFParams, JavaMLReadable["IDFModel"], JavaMLWritable
         """
         return self._call_java("docFreq")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def numDocs(self) -> int:
         """
@@ -2255,7 +2257,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def surrogateDF(self) -> DataFrame:
         """
@@ -2470,7 +2472,7 @@ class MaxAbsScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def maxAbs(self) -> Vector:
         """
@@ -2820,7 +2822,7 @@ class MinMaxScalerModel(
         """
         return self._set(max=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def originalMin(self) -> Vector:
         """
@@ -2828,7 +2830,7 @@ class MinMaxScalerModel(
         """
         return self._call_java("originalMin")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def originalMax(self) -> Vector:
         """
@@ -3329,7 +3331,7 @@ class OneHotEncoderModel(
         """
         return self._set(handleInvalid=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.3.0")
     def categorySizes(self) -> List[int]:
         """
@@ -3476,7 +3478,7 @@ class QuantileDiscretizer(
     non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 
     Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
-    :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
+    :py:meth:`pyspark.sql.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the
     :py:attr:`relativeError` parameter.
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
@@ -4007,7 +4009,7 @@ class RobustScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def median(self) -> Vector:
         """
@@ -4015,7 +4017,7 @@ class RobustScalerModel(
         """
         return self._call_java("median")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def range(self) -> Vector:
         """
@@ -4459,7 +4461,7 @@ class StandardScalerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def std(self) -> Vector:
         """
@@ -4467,7 +4469,7 @@ class StandardScalerModel(
         """
         return self._call_java("std")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def mean(self) -> Vector:
         """
@@ -4791,6 +4793,8 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String
@@ -4818,6 +4822,8 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
+        from pyspark.core.context import SparkContext
+
         sc = SparkContext._active_spark_context
         assert sc is not None and sc._gateway is not None
         java_class = sc._gateway.jvm.java.lang.String
@@ -4832,7 +4838,7 @@ class StringIndexerModel(
             model.setHandleInvalid(handleInvalid)
         return model
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.5.0")
     def labels(self) -> List[str]:
         """
@@ -4843,7 +4849,7 @@ class StringIndexerModel(
         """
         return self._call_java("labels")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.2")
     def labelsArray(self) -> List[str]:
         """
@@ -5313,7 +5319,7 @@ class VectorAssembler(
     +---+---+----+-------------+
     |  a|  b|   c|     features|
     +---+---+----+-------------+
-    |1.0|2.0|null|[1.0,2.0,NaN]|
+    |1.0|2.0|NULL|[1.0,2.0,NaN]|
     |3.0|NaN| 4.0|[3.0,NaN,4.0]|
     |5.0|6.0| 7.0|[5.0,6.0,7.0]|
     +---+---+----+-------------+
@@ -5627,7 +5633,7 @@ class VectorIndexerModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def numFeatures(self) -> int:
         """
@@ -5635,7 +5641,7 @@ class VectorIndexerModel(
         """
         return self._call_java("numFeatures")
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
         """
@@ -6263,7 +6269,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable["PCAModel"], JavaMLWritable
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def pc(self) -> DenseMatrix:
         """
@@ -6272,7 +6278,7 @@ class PCAModel(JavaModel, _PCAParams, JavaMLReadable["PCAModel"], JavaMLWritable
         """
         return self._call_java("pc")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def explainedVariance(self) -> DenseVector:
         """
@@ -6729,7 +6735,7 @@ class _SelectorModel(JavaModel, _SelectorParams):
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def selectedFeatures(self) -> List[int]:
         """
@@ -7144,7 +7150,7 @@ class VarianceThresholdSelectorModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.0")
     def selectedFeatures(self) -> List[int]:
         """
@@ -7419,7 +7425,7 @@ class UnivariateFeatureSelectorModel(
         """
         return self._set(outputCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.1.1")
     def selectedFeatures(self) -> List[int]:
         """

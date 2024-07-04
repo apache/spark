@@ -59,9 +59,9 @@ private[receiver] abstract class RateLimiter(conf: SparkConf) extends Logging {
   private[receiver] def updateRate(newRate: Long): Unit =
     if (newRate > 0) {
       if (maxRateLimit > 0) {
-        rateLimiter.setRate(newRate.min(maxRateLimit))
+        rateLimiter.setRate(newRate.min(maxRateLimit).toDouble)
       } else {
-        rateLimiter.setRate(newRate)
+        rateLimiter.setRate(newRate.toDouble)
       }
     }
 

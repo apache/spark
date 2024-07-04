@@ -21,10 +21,12 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -163,6 +165,7 @@ class StreamingQueryProgress private[spark](
     ("name" -> JString(name)) ~
     ("timestamp" -> JString(timestamp)) ~
     ("batchId" -> JInt(batchId)) ~
+    ("batchDuration" -> JInt(batchDuration)) ~
     ("numInputRows" -> JInt(numInputRows)) ~
     ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
     ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond)) ~
@@ -173,6 +176,21 @@ class StreamingQueryProgress private[spark](
     ("sink" -> sink.jsonValue) ~
     ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
+}
+
+private[spark] object StreamingQueryProgress {
+  private[this] val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret
+  }
+
+  private[spark] def jsonString(progress: StreamingQueryProgress): String =
+    mapper.writeValueAsString(progress)
+
+  private[spark] def fromJson(json: String): StreamingQueryProgress =
+    mapper.readValue[StreamingQueryProgress](json)
 }
 
 /**
@@ -276,7 +294,7 @@ private object SafeJsonSerializer {
 
   /** Convert map to JValue while handling empty maps. Also, this sorts the keys. */
   def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
-    if (map.isEmpty) return JNothing
+    if (map == null || map.isEmpty) return JNothing
     val keys = map.asScala.keySet.toSeq.sorted
     keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
   }

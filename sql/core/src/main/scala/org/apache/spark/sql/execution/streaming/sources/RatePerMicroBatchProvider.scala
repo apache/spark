@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
@@ -34,11 +35,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *  with 0L.
  *
  *  This source supports the following options:
- *  - `rowsPerMicroBatch` (e.g. 100): How many rows should be generated per micro-batch.
+ *  - `rowsPerBatch` (e.g. 100): How many rows should be generated per micro-batch.
  *  - `numPartitions` (e.g. 10, default: Spark's default parallelism): The partition number for the
  *    generated rows.
  *  - `startTimestamp` (e.g. 1000, default: 0): starting value of generated time
- *  - `advanceMillisPerMicroBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
+ *  - `advanceMillisPerBatch` (e.g. 1000, default: 1000): the amount of time being advanced in
  *    generated time on each micro-batch.
  *
  *  Unlike `rate` data source, this data source provides a consistent set of input rows per
@@ -109,8 +110,11 @@ class RatePerMicroBatchTable(
         advanceMillisPerBatch, options)
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      throw new UnsupportedOperationException("continuous mode is not supported!")
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3167")
     }
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
   }
 }
 

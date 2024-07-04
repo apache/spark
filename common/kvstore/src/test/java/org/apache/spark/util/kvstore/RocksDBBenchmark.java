@@ -29,13 +29,15 @@ import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import org.apache.commons.io.FileUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.LoggerFactory;
-import static org.junit.Assert.*;
+// checkstyle.on: RegexpSinglelineJava
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * A set of small benchmarks for the RocksDB implementation.
@@ -48,7 +50,7 @@ import static org.junit.Assert.*;
  * - iterate over natural index, ascending and descending
  * - iterate over ref index, ascending and descending
  */
-@Ignore
+@Disabled
 public class RocksDBBenchmark {
 
   private static final int COUNT = 1024;
@@ -60,7 +62,7 @@ public class RocksDBBenchmark {
   private RocksDB db;
   private File dbpath;
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     dbpath = File.createTempFile("test.", ".rdb");
     dbpath.delete();
@@ -69,7 +71,7 @@ public class RocksDBBenchmark {
     }
   }
 
-  @After
+  @AfterEach
   public void cleanup() throws Exception {
     if (db != null) {
       try(Timer.Context ctx = dbClose.time()) {
@@ -81,7 +83,7 @@ public class RocksDBBenchmark {
     }
   }
 
-  @AfterClass
+  @AfterAll
   public static void report() {
     if (metrics.getTimers().isEmpty()) {
       return;
@@ -259,7 +261,7 @@ public class RocksDBBenchmark {
   }
 
   private Timer newTimer(String name) {
-    assertNull("Timer already exists: " + name, metrics.getTimers().get(name));
+    assertNull(metrics.getTimers().get(name), "Timer already exists: " + name);
     return metrics.timer(name);
   }
 

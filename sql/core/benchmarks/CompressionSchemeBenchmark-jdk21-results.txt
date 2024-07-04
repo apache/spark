@@ -1,0 +1,137 @@
+================================================================================================
+Compression Scheme Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+BOOLEAN Encode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    1              1           0      49573.5           0.0       1.0X
+RunLengthEncoding(2.501)                            931            957          41         72.1          13.9       0.0X
+BooleanBitSet(0.125)                                295            296           1        227.6           4.4       0.0X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+BOOLEAN Decode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         210            212           2        319.6           3.1       1.0X
+RunLengthEncoding                                   593            594           0        113.1           8.8       0.4X
+BooleanBitSet                                       681            684           3         98.5          10.1       0.3X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+SHORT Encode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    3              3           0      24654.7           0.0       1.0X
+RunLengthEncoding(1.502)                           1208           1209           1         55.6          18.0       0.0X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+SHORT Decode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         894            895           2         75.1          13.3       1.0X
+RunLengthEncoding                                  1053           1055           2         63.7          15.7       0.8X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+SHORT Encode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    3              3           0      23243.9           0.0       1.0X
+RunLengthEncoding(1.994)                           1224           1226           2         54.8          18.2       0.0X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+SHORT Decode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         894            896           4         75.1          13.3       1.0X
+RunLengthEncoding                                  1000           1001           1         67.1          14.9       0.9X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+INT Encode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    6              6           0      11188.7           0.1       1.0X
+RunLengthEncoding(1.003)                           1245           1246           2         53.9          18.6       0.0X
+DictionaryEncoding(0.500)                          1376           1379           4         48.8          20.5       0.0X
+IntDelta(0.250)                                     110            113           9        612.8           1.6       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+INT Decode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         644            645           2        104.2           9.6       1.0X
+RunLengthEncoding                                  1155           1156           0         58.1          17.2       0.6X
+DictionaryEncoding                                  523            525           3        128.4           7.8       1.2X
+IntDelta                                            499            501           3        134.5           7.4       1.3X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+INT Encode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    6              6           0      11231.0           0.1       1.0X
+RunLengthEncoding(1.337)                           1087           1104          24         61.7          16.2       0.0X
+DictionaryEncoding(0.501)                           565            567           3        118.9           8.4       0.0X
+IntDelta(0.250)                                     109            110           1        613.0           1.6       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+INT Decode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         706            709           4         95.0          10.5       1.0X
+RunLengthEncoding                                  1132           1136           5         59.3          16.9       0.6X
+DictionaryEncoding                                  659            663           4        101.8           9.8       1.1X
+IntDelta                                            624            626           4        107.5           9.3       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+LONG Encode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   13             13           0       5066.3           0.2       1.0X
+RunLengthEncoding(0.744)                           1050           1056           8         63.9          15.6       0.0X
+DictionaryEncoding(0.250)                           593            595           2        113.1           8.8       0.0X
+LongDelta(0.125)                                    110            111           1        608.6           1.6       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+LONG Decode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         646            647           2        103.9           9.6       1.0X
+RunLengthEncoding                                  1203           1205           3         55.8          17.9       0.5X
+DictionaryEncoding                                  724            725           2         92.7          10.8       0.9X
+LongDelta                                           524            525           1        128.1           7.8       1.2X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+LONG Encode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   13             13           0       5065.9           0.2       1.0X
+RunLengthEncoding(1.002)                           1099           1107          10         61.0          16.4       0.0X
+DictionaryEncoding(0.251)                           603            605           2        111.2           9.0       0.0X
+LongDelta(0.125)                                    110            111           1        608.5           1.6       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+LONG Decode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         750            754           4         89.5          11.2       1.0X
+RunLengthEncoding                                  1213           1216           3         55.3          18.1       0.6X
+DictionaryEncoding                                  722            725           3         92.9          10.8       1.0X
+LongDelta                                           653            653           0        102.8           9.7       1.1X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+STRING Encode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   29             29           0       2332.2           0.4       1.0X
+RunLengthEncoding(0.889)                           1744           1745           1         38.5          26.0       0.0X
+DictionaryEncoding(0.167)                          1441           1443           2         46.6          21.5       0.0X
+
+OpenJDK 64-Bit Server VM 21.0.3+9-LTS on Linux 6.5.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+STRING Decode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                        1613           1614           1         41.6          24.0       1.0X
+RunLengthEncoding                                  2107           2108           1         31.8          31.4       0.8X
+DictionaryEncoding                                 1830           1832           3         36.7          27.3       0.9X
+
+

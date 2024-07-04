@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.{ByteBuffer, ByteOrder}
 import java.util
 
-import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.column.ParquetProperties
@@ -29,15 +29,14 @@ import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
-import org.apache.spark.SPARK_VERSION_SHORT
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -133,7 +132,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       }
     }
 
-    logInfo(
+    logDebug(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
          |${schema.prettyJson}
          |and corresponding Parquet message type:
@@ -200,7 +199,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addDouble(row.getDouble(ordinal))
 
-      case StringType =>
+      case _: StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(
             Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
@@ -239,6 +238,18 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
 
+      case VariantType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          val v = row.getVariant(ordinal)
+          consumeGroup {
+            consumeField("value", 0) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getValue))
+            }
+            consumeField("metadata", 1) {
+              recordConsumer.addBinary(Binary.fromReusedByteArray(v.getMetadata))
+            }
+          }
+
       case t: StructType =>
         val fieldWriters = t.map(_.dataType).map(makeWriter).toArray[ValueWriter]
         (row: SpecializedGetters, ordinal: Int) =>
@@ -252,7 +263,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case t: UserDefinedType[_] => makeWriter(t.sqlType)
 
-      case _ => throw new IllegalStateException(s"Unsupported data type $dataType.")
+      case _ => throw SparkException.internalError(s"Unsupported data type $dataType.")
     }
   }
 

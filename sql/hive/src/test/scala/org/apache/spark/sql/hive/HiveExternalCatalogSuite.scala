@@ -22,9 +22,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -201,18 +202,43 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     })
   }
 
-  test("SPARK-39203: Rewrite table location to absolute location based on database location") {
-    val tableLocation1 = CatalogUtils.stringToURI("/user/hive/warehouse/t1")
-    val tableLocation2 = CatalogUtils.stringToURI("viewfs://clusterB/user/hive/warehouse/t2")
-    val dbLocation = CatalogUtils.stringToURI("viewfs://clusterA/user/hive/warehouse/")
+  test("write collated strings as regular strings in hive - but read them back as collated") {
+    val catalog = newBasicCatalog()
+    val tableName = "collation_tbl"
+    val columnName = "col1"
 
-    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation1, Some(dbLocation))
-      .equals(CatalogUtils.stringToURI("viewfs://clusterA/user/hive/warehouse/t1")))
+    val collationsSchema = StructType(Seq(
+      StructField(columnName, StringType("UNICODE"))
+    ))
+    val noCollationsSchema = StructType(Seq(
+      StructField(columnName, StringType)
+    ))
 
-    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation1, None)
-      .equals(tableLocation1))
+    val tableDDL = CatalogTable(
+      identifier = TableIdentifier(tableName, Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = collationsSchema,
+      provider = Some("hive"))
 
-    assert(HiveExternalCatalog.toAbsoluteURI(tableLocation2, Some(dbLocation))
-      .equals(tableLocation2))
+    catalog.createTable(tableDDL, ignoreIfExists = false)
+
+    val rawTable = externalCatalog.getRawTable("db1", tableName)
+    assert(DataTypeUtils.sameType(rawTable.schema, noCollationsSchema))
+
+    val readBackTable = externalCatalog.getTable("db1", tableName)
+    assert(DataTypeUtils.sameType(readBackTable.schema, collationsSchema))
+
+    // perform alter table
+    val newSchema = StructType(Seq(
+      StructField("col1", StringType("UTF8_LCASE"))
+    ))
+    catalog.alterTableDataSchema("db1", tableName, newSchema)
+
+    val alteredRawTable = externalCatalog.getRawTable("db1", tableName)
+    assert(DataTypeUtils.sameType(alteredRawTable.schema, noCollationsSchema))
+
+    val alteredTable = externalCatalog.getTable("db1", tableName)
+    assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
   }
 }

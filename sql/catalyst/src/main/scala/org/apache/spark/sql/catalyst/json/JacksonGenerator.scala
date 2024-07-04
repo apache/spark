@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * `JackGenerator` can only be initialized with a `StructType`, a `MapType` or an `ArrayType`.
@@ -36,7 +38,7 @@ import org.apache.spark.sql.types._
  * of map. An exception will be thrown if trying to write out a struct if it is initialized with
  * a `MapType`, and vice verse.
  */
-private[sql] class JacksonGenerator(
+class JacksonGenerator(
     dataType: DataType,
     writer: Writer,
     options: JSONOptions) {
@@ -45,11 +47,13 @@ private[sql] class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
-  // `JackGenerator` can only be initialized with a `StructType`, a `MapType` or a `ArrayType`.
+  // `JackGenerator` can only be initialized with a `StructType`, a `MapType`, a `ArrayType` or a
+  // `VariantType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
-    || dataType.isInstanceOf[ArrayType],
+    || dataType.isInstanceOf[ArrayType] || dataType.isInstanceOf[VariantType],
     s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString}, " +
-      s"${MapType.simpleString} or ${ArrayType.simpleString} but got ${dataType.catalogString}")
+      s"${MapType.simpleString}, ${ArrayType.simpleString} or ${VariantType.simpleString} but " +
+      s"got ${dataType.catalogString}")
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
@@ -74,7 +78,8 @@ private[sql] class JacksonGenerator(
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
     if (options.pretty) {
-      generator.setPrettyPrinter(new DefaultPrettyPrinter(""))
+      generator.setPrettyPrinter(
+        new DefaultPrettyPrinter(PrettyPrinter.DEFAULT_SEPARATORS.withRootSeparator("")))
     }
     if (options.writeNonAsciiCharacterAsCodePoint) {
       generator.setHighestNonEscapedChar(0x7F)
@@ -135,7 +140,7 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeNumber(row.getDouble(ordinal))
 
-    case StringType =>
+    case _: StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
 
@@ -199,6 +204,9 @@ private[sql] class JacksonGenerator(
       val valueWriter = makeWriter(mt.valueType)
       (row: SpecializedGetters, ordinal: Int) =>
         writeObject(writeMapData(row.getMap(ordinal), mt, valueWriter))
+
+    case VariantType =>
+      (row: SpecializedGetters, ordinal: Int) => write(row.getVariant(ordinal))
 
     // For UDT values, they should be in the SQL type's corresponding value type.
     // We should not see values in the user-defined class at here.
@@ -283,7 +291,7 @@ private[sql] class JacksonGenerator(
    */
   def write(row: InternalRow): Unit = {
     writeObject(writeFields(
-      fieldWriters = rootFieldWriters,
+      fieldWriters = rootFieldWriters.toImmutableArraySeq,
       row = row,
       schema = dataType.asInstanceOf[StructType]))
   }
@@ -306,6 +314,10 @@ private[sql] class JacksonGenerator(
       fieldWriter = mapElementWriter,
       map = map,
       mapType = dataType.asInstanceOf[MapType]))
+  }
+
+  def write(v: VariantVal): Unit = {
+    gen.writeRawValue(v.toJson(options.zoneId))
   }
 
   def writeLineEnding(): Unit = {

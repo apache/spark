@@ -17,72 +17,30 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteNameParts }
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types.StructType
 
-/**
- * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
- * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
- */
-class DatabaseAlreadyExistsException(db: String)
-  extends NamespaceAlreadyExistsException(Array(db))
+// any changes to this class should be backward compatible as it may be used by external connectors
+class PartitionAlreadyExistsException private(
+    message: String,
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
 
-
-class NamespaceAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
-  def this(namespace: Array[String]) = {
-    this(errorClass = "SCHEMA_ALREADY_EXISTS",
-      Map("schemaName" -> quoteNameParts(namespace)))
-  }
-}
-
-
-class TableAlreadyExistsException(errorClass: String, messageParameters: Map[String, String],
-  cause: Option[Throwable] = None)
-  extends AnalysisException(errorClass, messageParameters, cause = cause) {
-  def this(db: String, table: String) = {
-    this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" ->
-        (quoteIdentifier(db) + "." + quoteIdentifier(table))))
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
   }
 
-  def this(table: String) = {
-    this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" ->
-        quoteNameParts(UnresolvedAttribute.parseAttributeName(table))))
-  }
-
-  def this(table: Seq[String]) = {
-    this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> quoteNameParts(table)))
-  }
-}
-
-class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map[String, String],
-                                      cause: Option[Throwable] = None)
-  extends AnalysisException(errorClass, messageParameters, cause = cause) {
-  def this(table: String) = {
-    this(errorClass = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName"
-        -> quoteNameParts(UnresolvedAttribute.parseAttributeName(table))))
-  }
-}
-
-class ViewAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
-
-  def this(ident: Identifier) =
-    this(errorClass = "VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> ident.quoted))
-}
-
-class PartitionAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
   def this(db: String, table: String, spec: TablePartitionSpec) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
       Map("partitionList" -> ("PARTITION (" +
@@ -99,8 +57,23 @@ class PartitionAlreadyExistsException(errorClass: String, messageParameters: Map
   }
 }
 
-class PartitionsAlreadyExistException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class PartitionsAlreadyExistException private(
+    message: String,
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
+  }
+
   def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
     this(errorClass = "PARTITIONS_ALREADY_EXIST",
       Map("partitionList" ->
@@ -126,22 +99,3 @@ class PartitionsAlreadyExistException(errorClass: String, messageParameters: Map
   def this(tableName: String, partitionIdent: InternalRow, partitionSchema: StructType) =
     this(tableName, Seq(partitionIdent), partitionSchema)
 }
-
-class FunctionAlreadyExistsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
-
-  def this(function: Seq[String]) = {
-    this (errorClass = "ROUTINE_ALREADY_EXISTS",
-      Map("routineName" -> quoteNameParts(function)))
-  }
-}
-
-class IndexAlreadyExistsException(
-    indexName: String,
-    tableName: String,
-    cause: Option[Throwable] = None)
-  extends AnalysisException(
-    errorClass = "INDEX_ALREADY_EXISTS",
-    Map("indexName" -> indexName, "tableName" -> tableName),
-    cause
-  )

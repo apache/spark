@@ -86,7 +86,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    ReplaceData(writeRelation, cond, remainingRowsPlan, relation)
+    ReplaceData(writeRelation, cond, remainingRowsPlan, relation, Some(cond))
   }
 
   // build a rewrite plan for sources that support row deltas

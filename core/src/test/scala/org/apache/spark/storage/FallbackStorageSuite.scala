@@ -31,6 +31,7 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.config._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.launcher.SparkLauncher.{EXECUTOR_MEMORY, SPARK_MASTER}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -292,7 +293,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  Seq("lz4", "lzf", "snappy", "zstd").foreach { codec =>
+  CompressionCodec.shortCompressionCodecNames.keys.foreach { codec =>
     test(s"$codec - Newly added executors should access old data from remote storage") {
       sc = new SparkContext(getSparkConf(2, 0).set(IO_COMPRESSION_CODEC, codec))
       withSpark(sc) { sc =>

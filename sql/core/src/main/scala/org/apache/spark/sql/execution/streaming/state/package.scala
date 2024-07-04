@@ -35,28 +35,32 @@ package object state {
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
-        numColsPrefixKey: Int)(
+        keyStateEncoderSpec: KeyStateEncoderSpec)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       mapPartitionsWithStateStore(
         stateInfo,
         keySchema,
         valueSchema,
-        numColsPrefixKey,
+        keyStateEncoderSpec,
         sqlContext.sessionState,
         Some(sqlContext.streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }
 
+    // Disable scala style because num parameters exceeds the max limit used to enforce scala style
+    // scalastyle:off
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
-        numColsPrefixKey: Int,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
-        extraOptions: Map[String, String] = Map.empty)(
+        useColumnFamilies: Boolean = false,
+        extraOptions: Map[String, String] = Map.empty,
+        useMultipleValuesPerKey: Boolean = false)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -77,20 +81,24 @@ package object state {
         stateInfo.storeVersion,
         keySchema,
         valueSchema,
-        numColsPrefixKey,
+        keyStateEncoderSpec,
         sessionState,
         storeCoordinator,
-        extraOptions)
+        useColumnFamilies,
+        extraOptions,
+        useMultipleValuesPerKey)
     }
+    // scalastyle:on
 
     /** Map each partition of an RDD along with data in a [[ReadStateStore]]. */
     private[streaming] def mapPartitionsWithReadStateStore[U: ClassTag](
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
-        numColsPrefixKey: Int,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
+        useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty)(
         storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
       : ReadStateStoreRDD[T, U] = {
@@ -112,9 +120,10 @@ package object state {
         stateInfo.storeVersion,
         keySchema,
         valueSchema,
-        numColsPrefixKey,
+        keyStateEncoderSpec,
         sessionState,
         storeCoordinator,
+        useColumnFamilies,
         extraOptions)
     }
   }

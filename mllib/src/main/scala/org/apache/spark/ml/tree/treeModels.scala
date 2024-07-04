@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.VersionUtils
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -477,14 +478,15 @@ private[ml] object EnsembleModelReadWrite {
         instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sparkSession.createDataFrame(treesMetadataWeights)
+    sparkSession.createDataFrame(treesMetadataWeights.toImmutableArraySeq)
       .toDF("treeID", "metadata", "weights")
       .repartition(1)
       .write.parquet(treesMetadataPath)
 
     val dataPath = new Path(path, "data").toString
     val numDataParts = NodeData.inferNumPartitions(instance.trees.map(_.numNodes.toLong).sum)
-    val nodeDataRDD = sparkSession.sparkContext.parallelize(instance.trees.zipWithIndex)
+    val nodeDataRDD = sparkSession.sparkContext
+      .parallelize(instance.trees.zipWithIndex.toImmutableArraySeq)
       .flatMap { case (tree, treeID) => EnsembleNodeData.build(tree, treeID) }
     sparkSession.createDataFrame(nodeDataRDD)
       .repartition(numDataParts)
@@ -535,7 +537,8 @@ private[ml] object EnsembleModelReadWrite {
       val newNodeDataCol = df.schema("nodeData").dataType match {
         case StructType(fields) =>
           val cols = fields.map(f => col(s"nodeData.${f.name}")) :+ lit(-1L).as("rawCount")
-          struct(cols: _*)
+          import org.apache.spark.util.ArrayImplicits._
+          struct(cols.toImmutableArraySeq: _*)
       }
       df = df.withColumn("nodeData", newNodeDataCol)
     }

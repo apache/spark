@@ -34,7 +34,7 @@ import org.apache.spark.tags.SlowHiveTest
 @SlowHiveTest
 class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiveSingleton {
 
-  override def format(): String = "hive"
+  override def format: String = "hive"
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =

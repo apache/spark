@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.{JobArtifactSet, Partition, SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.resource.ResourceProfile
 
@@ -27,10 +27,18 @@ class FakeTask(
     stageId: Int,
     partitionId: Int,
     prefLocs: Seq[TaskLocation] = Nil,
-    serializedTaskMetrics: Array[Byte] =
-      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
-    isBarrier: Boolean = false)
-  extends Task[Int](stageId, 0, partitionId, 1, new Properties, serializedTaskMetrics,
+    isBarrier: Boolean = false,
+    // This has to be a `val`, so that the accumulators of `TaskMetrics` will be referenced and not
+    // GCed before the stage is completed.
+    private val fakeTaskMetrics: TaskMetrics = TaskMetrics.registered)
+  extends Task[Int](
+    stageId,
+    0,
+    partitionId,
+    1,
+    JobArtifactSet.defaultJobArtifactSet,
+    new Properties,
+    SparkEnv.get.closureSerializer.newInstance().serialize(fakeTaskMetrics).array(),
     isBarrier = isBarrier) {
 
   override def runTask(context: TaskContext): Int = 0
@@ -96,7 +104,7 @@ object FakeTask {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new ShuffleMapTask(stageId, stageAttemptId, null, new Partition {
         override def index: Int = i
-      }, 1, prefLocs(i), new Properties,
+      }, 1, prefLocs(i), JobArtifactSet.defaultJobArtifactSet, new Properties,
         SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array())
     }
     new TaskSet(tasks, stageId, stageAttemptId, priority = priority, null,

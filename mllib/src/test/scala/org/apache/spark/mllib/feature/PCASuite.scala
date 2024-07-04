@@ -22,6 +22,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -31,7 +32,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
   )
 
-  private lazy val dataRDD = sc.parallelize(data, 2)
+  private lazy val dataRDD = sc.parallelize(data.toImmutableArraySeq, 2)
 
   test("Correct computing use a PCA wrapper") {
     val k = dataRDD.count().toInt
