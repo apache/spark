@@ -86,6 +86,7 @@ class IncrementalExecution(
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
+
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
