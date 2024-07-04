@@ -115,7 +115,7 @@ object UrlCodec {
       UTF8String.fromString(URLDecoder.decode(src.toString, enc.toString))
     } catch {
       case e: IllegalArgumentException =>
-        throw QueryExecutionErrors.illegalUrlError(src)
+        throw QueryExecutionErrors.illegalUrlError(src, e)
     }
   }
 }
