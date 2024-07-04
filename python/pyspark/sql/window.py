@@ -28,7 +28,7 @@ from pyspark.util import (
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import ColumnOrName, ColumnOrName_
+    from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -68,7 +68,7 @@ class Window:
 
     @staticmethod
     @dispatch_window_method
-    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
 
@@ -121,7 +121,7 @@ class Window:
 
     @staticmethod
     @dispatch_window_method
-    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
 
@@ -348,7 +348,7 @@ class WindowSpec:
 
         return WindowSpec.__new__(WindowSpec, jspec)
 
-    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
@@ -361,7 +361,7 @@ class WindowSpec:
         """
         ...
 
-    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
