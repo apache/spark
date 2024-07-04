@@ -3174,16 +3174,18 @@ abstract class CSVSuite
 
   test("SPARK-48807: Binary support for csv") {
     BinaryOutputStyle.values.foreach { style =>
-      withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> style.toString) {
-        withTable("t") {
-          sql("CREATE TABLE t (id INT, value BINARY) USING csv")
-          Seq((1, "Spark SQL".getBytes())).toDF("id", "value")
-            .write
-            .format("csv")
-            .insertInto("t")
+      withTempPath { path =>
+        withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> style.toString) {
+          val df = Seq((1, "Spark SQL".getBytes())).toDF("id", "value")
+          df.write
+            .option("ds_option", "value")
+            .format(dataSourceFormat)
+            .save(path.getCanonicalPath)
+          val expectedStr = ToStringBase.getBinaryFormatter("Spark SQL".getBytes())
+          checkAnswer(spark.read.csv(path.getCanonicalPath), Row(1, expectedStr))
           checkAnswer(
-            spark.table("t"),
-            Row(1, ToStringBase.getBinaryFormatter("Spark SQL".getBytes()).getBytes))
+            spark.read.schema(df.schema).csv(path.getCanonicalPath),
+            Row(1, expectedStr.getBytes))
         }
       }
     }
