@@ -91,16 +91,3 @@ u.bd-sidebar .nav>li>ul>.active:hover>a,.bd-sidebar .nav>li>ul>.active>a {
 .spec_table tr, td, th {
     border-top: none!important;
 }
-
-/* Styling to the version dropdown */
-#version-button {
-  padding-left: 0.2rem;
-  padding-right: 3.2rem;
-}
-
-#version_switcher {
-  height: auto;
-  max-height: 300px;
-  width: 165px;
-  overflow-y: auto;
-}
