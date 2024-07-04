@@ -1922,17 +1922,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def invalidVariantMissingFieldError(field: String): Throwable = {
-    new AnalysisException(errorClass = "INVALID_VARIANT.MISSING_FIELD",
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD",
       messageParameters = Map("field" -> field))
   }
 
   def invalidVariantNullableOrNotBinaryFieldError(field: String): Throwable = {
-    new AnalysisException(errorClass = "INVALID_VARIANT.NULLABLE_OR_NOT_BINARY_FIELD",
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
       messageParameters = Map("field" -> field))
   }
 
   def invalidVariantWrongNumFieldsError(): Throwable = {
-    new AnalysisException(errorClass = "INVALID_VARIANT.WRONG_NUM_FIELDS",
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS",
       messageParameters = Map.empty)
   }
 

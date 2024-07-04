@@ -276,19 +276,19 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     val v = "X'8'"
     val cases = Seq(
       (s"named_struct('value', $v)",
-        "INVALID_VARIANT.WRONG_NUM_FIELDS", Map.empty[String, String]),
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
       (s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
-        "INVALID_VARIANT.WRONG_NUM_FIELDS", Map.empty[String, String]),
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
       (s"named_struct('value', $v, 'dictionary', $m)",
-        "INVALID_VARIANT.MISSING_FIELD", Map("field" -> "metadata")),
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "metadata")),
       (s"named_struct('val', $v, 'metadata', $m)",
-        "INVALID_VARIANT.MISSING_FIELD", Map("field" -> "value")),
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "value")),
       (s"named_struct('value', 8, 'metadata', $m)",
-        "INVALID_VARIANT.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
       (s"named_struct('value', cast(null as binary), 'metadata', $m)",
-        "INVALID_VARIANT.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
       (s"named_struct('value', $v, 'metadata', cast(null as binary))",
-        "INVALID_VARIANT.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "metadata"))
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "metadata"))
     )
     cases.foreach { case (structDef, errorClass, parameters) =>
       Seq(false, true).foreach { vectorizedReader =>
