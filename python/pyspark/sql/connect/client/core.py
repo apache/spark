@@ -20,6 +20,8 @@ __all__ = [
     "SparkConnectClient",
 ]
 
+import atexit
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -668,6 +670,9 @@ class SparkConnectClient(object):
 
         self._progress_handlers: List[ProgressHandler] = []
 
+        # cleanup ml cache if possible
+        atexit.register(self._cleanup_ml)
+
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Register a progress handler to be called when a progress message is received.
@@ -1142,6 +1147,26 @@ class SparkConnectClient(object):
                         "response": str(response),
                     },
                 )
+
+    def execute_ml(self, req: pb2.ExecutePlanRequest) -> Optional[pb2.MlCommandResponse]:
+        """
+        Execute the ML command request and return ML response result
+        Parameters
+        ----------
+        req : pb2.ExecutePlanRequest
+            Proto representation of the plan.
+        """
+        logger.info("Execute ML")
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.HasField("ml_command_result"):
+                            return b.ml_command_result
+
+            raise PySparkValueError(errorClass="UNKNOWN_RESPONSE")
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
 
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
@@ -1918,3 +1943,32 @@ class SparkConnectClient(object):
         (_, properties, _) = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
+
+    def add_ml_model(self, model_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_models"):
+            self.thread_local.ml_models = set()
+        self.thread_local.ml_models.add(model_id)
+
+    def remove_ml_model(self, model_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_models"):
+            self.thread_local.ml_models = set()
+
+        if model_id in self.thread_local.ml_models:
+            self._delete_ml_model(model_id)
+
+    def _delete_ml_model(self, model_id: str) -> None:
+        # try best to delete the model
+        try:
+            req = self._execute_plan_request_with_metadata()
+            req.plan.ml_command.delete_model.model_ref.CopyFrom(pb2.ModelRef(id=model_id))
+            self.execute_ml(req)
+        except Exception:
+            pass
+
+    def _cleanup_ml(self) -> None:
+        if not hasattr(self.thread_local, "ml_models"):
+            self.thread_local.ml_models = set()
+
+        # Todo add a pattern to delete all model in one command
+        for model_id in self.thread_local.ml_models:
+            self._delete_ml_model(model_id)

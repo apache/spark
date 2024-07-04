@@ -24,6 +24,7 @@ import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
 import "spark/connect/common.proto";
+import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -97,10 +98,56 @@ message Relation {
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
+    // ML relation
+    MlRelation ml_relation = 300;
+
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 998;
     Unknown unknown = 999;
+  }
+}
+
+// Relation to represent ML world
+message MlRelation {
+  oneof ml_type {
+    Transform ml_transform = 1;
+    FetchModelAttr model_attr = 2;
+  }
+  // Relation to represent transform(input) of the operator
+  // which could be a cached model or a new transformer
+  message Transform {
+    oneof operator {
+      // Could be a model reference
+      ModelRef model_ref = 1;
+      // Could be an ML transformer like VectorAssembler
+      MlOperator transformer = 2;
+    }
+    // the input dataframe
+    Relation input = 3;
+    // the operator specific parameters
+    MlParams params = 4;
+  }
+}
+
+// Message for fetching model attribute. It can be representing to a Relation or a ML command
+// Eg, model.coefficients, model.summary.weightedPrecision
+// or model.summary.roc which returns a DataFrame
+message FetchModelAttr {
+  // (Required) reference to the server model object or
+  // the intermediate attribute of the model eg, "model.summary"
+  ModelRef model_ref = 1;
+  // (Required) the method name. Eg, "coefficients" of the model
+  // and "weightedPrecision" of "model.summary"
+  string method = 2;
+  // (Optional) the parameters of the method
+  repeated Args args = 3;
+
+  message Args {
+    oneof args_type {
+      Param param = 1;
+      Relation input = 2;
+    }
   }
 }
 

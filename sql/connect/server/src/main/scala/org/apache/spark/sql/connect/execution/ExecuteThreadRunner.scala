@@ -29,6 +29,7 @@ import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.connect.common.ProtoUtils
+import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -213,6 +214,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       executeHolder.request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)
         case proto.Plan.OpTypeCase.ROOT => handlePlan(executeHolder.request)
+        case proto.Plan.OpTypeCase.ML_COMMAND => handleMLCommand(executeHolder.request)
         case _ =>
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
@@ -309,6 +311,17 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(executeHolder)
     planner.process(command = command, responseObserver = responseObserver)
+  }
+
+  private def handleMLCommand(request: proto.ExecutePlanRequest): Unit = {
+    val mlResultProto =
+      MLHandler.handleMlCommand(executeHolder.sessionHolder, request.getPlan.getMlCommand)
+    executeHolder.responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(executeHolder.sessionHolder.sessionId)
+        .setMlCommandResult(mlResultProto)
+        .build())
   }
 
   private def requestString(request: Message) = {

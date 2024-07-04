@@ -1,0 +1,104 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = 'proto3';
+
+package spark.connect;
+
+import "spark/connect/expressions.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+
+// MlParams stores param settings for
+// ML Estimator / Transformer / Evaluator
+message MlParams {
+  // user-supplied params
+  map<string, Param> params = 1;
+}
+
+message Param {
+  oneof param_type {
+    Expression.Literal literal = 1;
+    Vector vector = 2;
+    Matrix matrix = 3;
+  }
+}
+
+// MLOperator represents the ML operators like (Estimator, Transformer or Evaluator)
+message MlOperator {
+  // The name of the ML operator.
+  string name = 1;
+  // unique id of the operator
+  string uid = 2;
+  // represent what the ml operator is
+  OperatorType type = 3;
+  enum OperatorType {
+    UNSPECIFIED = 0;
+    ESTIMATOR = 1;
+    TRANSFORMER = 2;
+    EVALUATOR = 3;
+  }
+}
+
+// represents a reference to the `Model` instance on the server side.
+message ModelRef {
+  // The ID is used to lookup the model instance on the server side.
+  string id = 1;
+}
+
+// See pyspark.ml.linalg.Vector
+message Vector {
+  oneof vector_type {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  // See pyspark.ml.linalg.DenseVector
+  message Dense {
+    repeated double value = 1;
+  }
+  // See pyspark.ml.linalg.SparseVector
+  message Sparse {
+    int32 size = 1;
+    repeated int32 index = 2;
+    repeated double value = 3;
+  }
+}
+
+// See pyspark.ml.linalg.Matrix
+message Matrix {
+  oneof matrix_type {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  // See pyspark.ml.linalg.DenseMatrix
+  message Dense {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    repeated double value = 3;
+    bool is_transposed = 4;
+  }
+  // See pyspark.ml.linalg.SparseMatrix
+  message Sparse {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    repeated int32 colptr = 3;
+    repeated int32 row_index = 4;
+    repeated double value = 5;
+    bool is_transposed = 6;
+  }
+}

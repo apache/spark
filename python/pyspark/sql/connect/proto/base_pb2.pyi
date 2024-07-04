@@ -43,6 +43,7 @@ import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
 import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
+import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -66,31 +67,49 @@ class Plan(google.protobuf.message.Message):
 
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    ML_COMMAND_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
+    @property
+    def ml_command(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommand: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
+        ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "ml_command",
+            b"ml_command",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "ml_command",
+            b"ml_command",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "ml_command"] | None: ...
 
 global___Plan = Plan
 
@@ -1534,6 +1553,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    ML_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1598,6 +1618,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def checkpoint_command_result(self) -> global___CheckpointCommandResult:
         """Response for command that checkpoints a DataFrame."""
     @property
+    def ml_command_result(self) -> pyspark.sql.connect.proto.ml_pb2.MlCommandResponse:
+        """ML command response"""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1639,6 +1662,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         checkpoint_command_result: global___CheckpointCommandResult | None = ...,
+        ml_command_result: pyspark.sql.connect.proto.ml_pb2.MlCommandResponse | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1662,6 +1686,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1697,6 +1723,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"get_resources_command_result",
             "metrics",
             b"metrics",
+            "ml_command_result",
+            b"ml_command_result",
             "observed_metrics",
             b"observed_metrics",
             "operation_id",
@@ -1740,6 +1768,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "create_resource_profile_command_result",
             "execution_progress",
             "checkpoint_command_result",
+            "ml_command_result",
             "extension",
         ]
         | None

@@ -115,6 +115,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
       request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => request.getPlan.getCommand
         case proto.Plan.OpTypeCase.ROOT => request.getPlan.getRoot
+        case proto.Plan.OpTypeCase.ML_COMMAND => request.getPlan.getMlCommand
         case _ =>
           throw new UnsupportedOperationException(
             s"${request.getPlan.getOpTypeCase} not supported.")

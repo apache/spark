@@ -686,6 +686,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.connect.test_legacy_mode_classification",
         "pyspark.ml.tests.connect.test_legacy_mode_pipeline",
         "pyspark.ml.tests.connect.test_legacy_mode_tuning",
+        "pyspark.ml.tests.test_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -1106,6 +1107,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
+        "pyspark.ml.tests.connect.test_connect_spark_ml_classification",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
