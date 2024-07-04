@@ -935,11 +935,11 @@ private[spark] object NoopDialect extends JdbcDialect {
   /**
    * Noop dialect always uses latest version
    */
-  override def jdbcVersion(): Int = Int.MaxValue
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.NOOP_JDBC_VERSION)
 
   /**
    * Noop dialect always uses latest version
    */
-  override def dialectVersion(): Int = Int.MaxValue
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.NOOP_DIALECT_VERSION)
 
 }

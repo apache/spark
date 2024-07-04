@@ -4431,6 +4431,20 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val NOOP_JDBC_VERSION = buildConf("spark.sql.connector.noop.jdbcVersion")
+    .internal()
+    .doc("JDBC version used for noop jdbc connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
+  val NOOP_DIALECT_VERSION = buildConf("spark.sql.connector.noop dialectVersion")
+    .internal()
+    .doc("JDBC version used for noop jdbc connector.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(0)
+
   val SNOWFLAKE_JDBC_VERSION = buildConf("spark.sql.connector.snowflake.jdbcVersion")
     .internal()
     .doc("JDBC version used for snowflake connector.")
