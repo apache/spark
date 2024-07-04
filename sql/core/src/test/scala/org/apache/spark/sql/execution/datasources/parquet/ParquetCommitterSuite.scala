@@ -113,7 +113,7 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
     result
   }
 
-  test("Fail fast on unloadable or invalid committers") {
+  test("SPARK-48804: Fail fast on unloadable or invalid committers") {
     Seq("invalid", getClass.getName).foreach { committer =>
       val e = intercept[IllegalArgumentException] {
         withSQLConf(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> committer)()
