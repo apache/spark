@@ -302,6 +302,8 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
 
   private[sql] val columnFamilySchemaUtils = ColumnFamilySchemaUtilsV1
 
+  // Because this is only happening on the driver side, there is only
+  // one task modifying and accessing this map at a time
   private[sql] val columnFamilySchemas: mutable.Map[String, ColumnFamilySchema] =
     new mutable.HashMap[String, ColumnFamilySchema]()
 

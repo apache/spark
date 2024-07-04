@@ -92,11 +92,6 @@ class StateSchemaV3File(
       fn(output)
       output.close()
     } catch {
-      case e: FileAlreadyExistsException =>
-        output.cancel()
-        // If next batch file already exists, then another concurrently running query has
-        // written it.
-        throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(path, e)
       case e: Throwable =>
         output.cancel()
         throw e

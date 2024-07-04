@@ -85,6 +85,7 @@ class IncrementalExecution(
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
+  private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
@@ -197,7 +198,7 @@ class IncrementalExecution(
         val stateSchemaVersion = statefulOp match {
           case _: TransformWithStateExec => sparkSession.sessionState.conf.
             getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
-          case _ => 2
+          case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
         val stateSchemaPaths = statefulOp.
           validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)

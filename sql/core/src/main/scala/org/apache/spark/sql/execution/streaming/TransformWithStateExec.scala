@@ -402,8 +402,7 @@ case class TransformWithStateExec(
     }
   }
 
-  private def stateSchemaFilePath(
-      storeName: String): Path = {
+  private def stateSchemaFilePath(storeName: String): Path = {
     assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
     def stateInfo = getStateInfo
     val stateCheckpointPath =

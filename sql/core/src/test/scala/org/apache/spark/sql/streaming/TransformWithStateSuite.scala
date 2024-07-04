@@ -818,7 +818,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
 
-
         val schema0 = List(ColumnFamilySchemaV1(
           "countState",
           KEY_ROW_SCHEMA,
