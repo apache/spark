@@ -2448,7 +2448,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("Ensure maxCachedFiles set to 0 forces each batch to list files") {
+  test("SPARK-48802: Ensure maxCachedFiles set to 0 forces each batch to list files") {
     withCountListingLocalFileSystemAsLocalFileSystem {
       withThreeTempDirs { case (src, meta, tmp) =>
         val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10",
