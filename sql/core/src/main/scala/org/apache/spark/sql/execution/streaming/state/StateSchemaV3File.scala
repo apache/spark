@@ -24,9 +24,8 @@ import java.util.UUID
 import scala.io.{Source => IOSource}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
 
