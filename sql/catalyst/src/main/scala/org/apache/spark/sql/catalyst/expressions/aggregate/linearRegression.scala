@@ -258,8 +258,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   private val covarPop = new CovPopulation(right, left)
 
-  private val varPop = new VariancePop(If(And(IsNotNull(left), IsNotNull(right)),
-    right, Literal.create(null, DoubleType)))
+  private val varPop = new VariancePop(right)
 
   override def nullable: Boolean = true
 
@@ -272,8 +271,13 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] =
-    covarPop.updateExpressions ++ varPop.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] = {
+    val isNull = left.isNull || right.isNull
+    val updateResult = covarPop.updateExpressions ++ varPop.updateExpressions
+    aggBufferAttributes.zip(updateResult).map { case (oldValue, newValue) =>
+      If(isNull, oldValue, newValue)
+    }
+  }
 
   override lazy val mergeExpressions: Seq[Expression] =
     covarPop.mergeExpressions ++ varPop.mergeExpressions
@@ -312,8 +316,7 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   private val covarPop = new CovPopulation(right, left)
 
-  private val varPop = new VariancePop(If(And(IsNotNull(left), IsNotNull(right)),
-    right, Literal.create(null, DoubleType)))
+  private val varPop = new VariancePop(right)
 
   override def nullable: Boolean = true
 
@@ -326,8 +329,13 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   override lazy val initialValues: Seq[Expression] = covarPop.initialValues ++ varPop.initialValues
 
-  override lazy val updateExpressions: Seq[Expression] =
-    covarPop.updateExpressions ++ varPop.updateExpressions
+  override lazy val updateExpressions: Seq[Expression] = {
+    val isNull = left.isNull || right.isNull
+    val updateResult = covarPop.updateExpressions ++ varPop.updateExpressions
+    aggBufferAttributes.zip(updateResult).map { case (oldValue, newValue) =>
+      If(isNull, oldValue, newValue)
+    }
+  }
 
   override lazy val mergeExpressions: Seq[Expression] =
     covarPop.mergeExpressions ++ varPop.mergeExpressions
