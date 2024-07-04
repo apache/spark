@@ -258,16 +258,16 @@ class CollationStringExpressionsSuite
     case class TranslateTestCase[R](input: String, matchExpression: String,
         replaceExpression: String, collation: String, result: R)
     val testCases = Seq(
-      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_BINARY_LCASE", "41a2s3a4e"),
-      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_BINARY_LCASE", "41a2s3a4e"),
-      TranslateTestCase("TRanslate", "rnlt", "XxXx", "UTF8_BINARY_LCASE", "xXaxsXaxe"),
-      TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UTF8_BINARY_LCASE", "xxaxsXaxex"),
-      TranslateTestCase("TRanslater", "Rrnlt", "XxxXx", "UTF8_BINARY_LCASE", "xXaxsXaxeX"),
-      TranslateTestCase("test大千世界X大千世界", "界x", "AB", "UTF8_BINARY_LCASE", "test大千世AB大千世A"),
-      TranslateTestCase("大千世界test大千世界", "TEST", "abcd", "UTF8_BINARY_LCASE", "大千世界abca大千世界"),
-      TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UTF8_BINARY_LCASE", "oeso大千世界大千世界"),
-      TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UTF8_BINARY_LCASE", "大千世界大千世界OesO"),
-      TranslateTestCase("大千世界大千世界tesT", "大千", "世世", "UTF8_BINARY_LCASE", "世世世界世世世界tesT"),
+      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e"),
+      TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e"),
+      TranslateTestCase("TRanslate", "rnlt", "XxXx", "UTF8_LCASE", "xXaxsXaxe"),
+      TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UTF8_LCASE", "xxaxsXaxex"),
+      TranslateTestCase("TRanslater", "Rrnlt", "XxxXx", "UTF8_LCASE", "xXaxsXaxeX"),
+      TranslateTestCase("test大千世界X大千世界", "界x", "AB", "UTF8_LCASE", "test大千世AB大千世A"),
+      TranslateTestCase("大千世界test大千世界", "TEST", "abcd", "UTF8_LCASE", "大千世界abca大千世界"),
+      TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UTF8_LCASE", "oeso大千世界大千世界"),
+      TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UTF8_LCASE", "大千世界大千世界OesO"),
+      TranslateTestCase("大千世界大千世界tesT", "大千", "世世", "UTF8_LCASE", "世世世界世世世界tesT"),
       TranslateTestCase("Translate", "Rnlt", "1234", "UNICODE", "Tra2s3a4e"),
       TranslateTestCase("TRanslate", "rnlt", "XxXx", "UNICODE", "TRaxsXaxe"),
       TranslateTestCase("TRanslater", "Rrnlt", "xXxXx", "UNICODE", "TxaxsXaxeX"),
@@ -284,16 +284,16 @@ class CollationStringExpressionsSuite
       TranslateTestCase("Test大千世界大千世界", "tT", "oO", "UNICODE_CI", "oeso大千世界大千世界"),
       TranslateTestCase("大千世界大千世界tesT", "Tt", "Oo", "UNICODE_CI", "大千世界大千世界OesO"),
       TranslateTestCase("大千世界大千世界tesT", "大千", "世世", "UNICODE_CI", "世世世界世世世界tesT"),
-      TranslateTestCase("Translate", "Rnlasdfjhgadt", "1234", "UTF8_BINARY_LCASE", "14234e"),
+      TranslateTestCase("Translate", "Rnlasdfjhgadt", "1234", "UTF8_LCASE", "14234e"),
       TranslateTestCase("Translate", "Rnlasdfjhgadt", "1234", "UNICODE_CI", "14234e"),
       TranslateTestCase("Translate", "Rnlasdfjhgadt", "1234", "UNICODE", "Tr4234e"),
       TranslateTestCase("Translate", "Rnlasdfjhgadt", "1234", "UTF8_BINARY", "Tr4234e"),
-      TranslateTestCase("Translate", "Rnlt", "123495834634", "UTF8_BINARY_LCASE", "41a2s3a4e"),
+      TranslateTestCase("Translate", "Rnlt", "123495834634", "UTF8_LCASE", "41a2s3a4e"),
       TranslateTestCase("Translate", "Rnlt", "123495834634", "UNICODE", "Tra2s3a4e"),
       TranslateTestCase("Translate", "Rnlt", "123495834634", "UNICODE_CI", "41a2s3a4e"),
       TranslateTestCase("Translate", "Rnlt", "123495834634", "UTF8_BINARY", "Tra2s3a4e"),
       TranslateTestCase("abcdef", "abcde", "123", "UTF8_BINARY", "123f"),
-      TranslateTestCase("abcdef", "abcde", "123", "UTF8_BINARY_LCASE", "123f"),
+      TranslateTestCase("abcdef", "abcde", "123", "UTF8_LCASE", "123f"),
       TranslateTestCase("abcdef", "abcde", "123", "UNICODE", "123f"),
       TranslateTestCase("abcdef", "abcde", "123", "UNICODE_CI", "123f"),
       // Case mapping edge cases
@@ -301,10 +301,10 @@ class CollationStringExpressionsSuite
       TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_BINARY", "123"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_BINARY", "1i\u0307"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_BINARY", "İ23"),
-      TranslateTestCase("İ", "i\u0307", "xy", "UTF8_BINARY_LCASE", "İ"),
-      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_BINARY_LCASE", "123"),
-      TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_BINARY_LCASE", "1i\u0307"),
-      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_BINARY_LCASE", "İ23"),
+      TranslateTestCase("İ", "i\u0307", "xy", "UTF8_LCASE", "İ"),
+      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_LCASE", "123"),
+      TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_LCASE", "1i\u0307"),
+      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_LCASE", "İ23"),
       TranslateTestCase("İi\u0307", "İi\u0307", "123", "UNICODE", "123"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UNICODE", "1i\u0307"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UNICODE", "İ23"),
@@ -331,7 +331,7 @@ class CollationStringExpressionsSuite
     })
     // Collation mismatch
     val collationMismatch = intercept[AnalysisException] {
-      sql(s"SELECT translate(collate('Translate', 'UTF8_BINARY_LCASE')," +
+      sql(s"SELECT translate(collate('Translate', 'UTF8_LCASE')," +
         s"collate('Rnlt', 'UNICODE'), '1234')")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
