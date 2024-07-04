@@ -50,6 +50,25 @@ private[spark] trait SparkClassUtils {
   def classIsLoadable(clazz: String): Boolean = {
     Try { classForName(clazz, initialize = false) }.isSuccess
   }
+
+  /**
+   * Determines whether the provided class is loadable in the current thread and a subclass
+   * of the given parent class.
+   *
+   * @param clazz the fully qualified class name of the class to check
+   *              for loadability and inheritance from `parent`
+   * @param parent the parent class which the class represented. If parent
+   *               is null, only checks if the class is loadable
+   * @return true if `clazz` is loadable and a subclass of `parent`, otherwise false
+   */
+  def classIsLoadableAndSubOf(
+      clazz: String,
+      parent: Class[_]): Boolean = {
+    Try {
+      val cls = classForName(clazz, initialize = false)
+      parent == null || parent.isAssignableFrom(cls)
+    }.getOrElse(false)
+  }
 }
 
 private[spark] object SparkClassUtils extends SparkClassUtils

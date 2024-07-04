@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{Locale, Properties, TimeZone}
 import java.util
+import java.util.{Locale, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.OutputCommitter
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -1162,6 +1163,8 @@ object SQLConf {
     .version("1.5.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndSubOf(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
 
   val PARQUET_VECTORIZED_READER_ENABLED =
@@ -1729,12 +1732,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  // The output committer class used by data sources. The specified class needs to be a
-  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndSubOf(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
@@ -5190,7 +5193,7 @@ object SQLConf {
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
 class SQLConf extends Serializable with Logging with SqlApiConf {
-  import SQLConf._
+  import org.apache.spark.sql.internal.SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
