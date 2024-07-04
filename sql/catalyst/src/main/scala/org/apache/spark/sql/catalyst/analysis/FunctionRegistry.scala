@@ -298,13 +298,7 @@ class SimpleFunctionRegistry
 
   override def clone(): SimpleFunctionRegistry = {
     val registry = new SimpleFunctionRegistry
-    val iterator = functionBuilders.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      val name = entry.getKey
-      val (info, builder) = entry.getValue
-      registry.internalRegisterFunction(name, info, builder)
-    }
+    functionBuilders.forEach((name, v) => registry.internalRegisterFunction(name, v._1, v._2))
     registry
   }
 }
@@ -1103,13 +1097,7 @@ class SimpleTableFunctionRegistry extends SimpleFunctionRegistryBase[LogicalPlan
 
   override def clone(): SimpleTableFunctionRegistry = {
     val registry = new SimpleTableFunctionRegistry
-    val iterator = functionBuilders.entrySet().iterator()
-    while (iterator.hasNext) {
-      val entry = iterator.next()
-      val name = entry.getKey
-      val (info, builder) = entry.getValue
-      registry.internalRegisterFunction(name, info, builder)
-    }
+    functionBuilders.forEach((name, v) => registry.internalRegisterFunction(name, v._1, v._2))
     registry
   }
 }
