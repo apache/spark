@@ -22,7 +22,6 @@ check_dependencies(__name__)
 import threading
 import os
 import warnings
-import grpc
 from collections.abc import Sized
 import functools
 from threading import RLock
