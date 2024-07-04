@@ -389,7 +389,7 @@ case class WhenNotMatchedBySource[T] private[sql] (
 }
 
 private object MergeIntoWriter {
-  def buildMergeAction(
+  private[sql] def buildMergeAction(
       actionType: MergeAction.ActionType,
       conditionOpt: Option[Expression],
       assignmentsOpt: Option[Map[String, Column]] = None): MergeAction = {
