@@ -21,7 +21,6 @@ from typing import Dict, Optional, TYPE_CHECKING, List, Callable
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import expr
-
 from pyspark.sql.merge import MergeIntoWriter as PySparkMergeIntoWriter
 
 if TYPE_CHECKING:
@@ -35,7 +34,7 @@ __all__ = ["MergeIntoWriter"]
 
 def _build_merge_action(
     client: "SparkConnectClient",
-    action_type: proto.MergeAction.ActionType,
+    action_type: proto.MergeAction.ActionType.ValueType,
     condition: Optional[Column] = None,
     assignments: Optional[Dict[str, Column]] = None,
 ) -> proto.MergeAction:
@@ -99,7 +98,7 @@ class MergeIntoWriter:
     withSchemaEvolution.__doc__ = PySparkMergeIntoWriter.withSchemaEvolution.__doc__
 
     def merge(self) -> None:
-        def a2e(a):
+        def a2e(a: proto.MergeAction) -> proto.Expression:
             return proto.Expression(merge_action=a)
 
         merge = proto.MergeIntoTableCommand(
@@ -229,25 +228,23 @@ def _test() -> None:
     import os
     import py4j
     from pyspark.core.context import SparkContext
-    from pyspark.sql import SparkSession
+    from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.merge
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.connect.merge.__dict__.copy()
-    sc = SparkContext("local[4]", "PythonTest")
-    try:
-        spark = SparkSession._getActiveSessionOrCreate()
-    except py4j.protocol.Py4JError:
-        spark = SparkSession(sc)
-
-    globs["spark"] = spark
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.dataframe tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
+    )
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.merge,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
     )
-    spark.stop()
+    globs["spark"].stop()
     if failure_count:
         sys.exit(-1)
 

@@ -5994,10 +5994,6 @@ class DataFrame:
 
         .. versionadded:: 4.0.0
 
-        Notes
-        -----
-        This method does not support streaming dataframes.
-
         Parameters
         ----------
         table : str
@@ -6022,6 +6018,10 @@ class DataFrame:
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
         ...     .merge())
+
+        Notes
+        -----
+        This method does not support streaming queries.
         """
         ...
 
