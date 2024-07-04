@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName"]], ...]) -> List[Column]:
+def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) -> List[Column]:
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
@@ -84,14 +84,16 @@ class WindowSpec(ParentWindowSpec):
         self._orderSpec = orderSpec
         self._frame = frame
 
-    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> ParentWindowSpec:
+    def partitionBy(
+        self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]
+    ) -> ParentWindowSpec:
         return WindowSpec(
             partitionSpec=[c._expr for c in _to_cols(cols)],  # type: ignore[misc]
             orderSpec=self._orderSpec,
             frame=self._frame,
         )
 
-    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName"]]) -> ParentWindowSpec:
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         return WindowSpec(
             partitionSpec=self._partitionSpec,
             orderSpec=[cast(SortOrder, F._sort_col(c)._expr) for c in _to_cols(cols)],
@@ -139,11 +141,11 @@ class Window(ParentWindow):
     _spec = WindowSpec(partitionSpec=[], orderSpec=[], frame=None)
 
     @staticmethod
-    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> ParentWindowSpec:
+    def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         return Window._spec.partitionBy(*cols)
 
     @staticmethod
-    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName"]]) -> ParentWindowSpec:
+    def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         return Window._spec.orderBy(*cols)
 
     @staticmethod
