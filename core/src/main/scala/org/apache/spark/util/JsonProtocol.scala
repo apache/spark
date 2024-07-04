@@ -66,12 +66,14 @@ private[spark] class JsonProtocolOptions(conf: SparkConf) {
 private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
+  private[util]
   val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
+  // Only for use in tests. Production code should use the two-argument overload defined below.
   def sparkEventToJsonString(event: SparkListenerEvent): String = {
     sparkEventToJsonString(event, defaultOptions)
   }
