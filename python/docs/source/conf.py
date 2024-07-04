@@ -192,6 +192,7 @@ html_theme = 'pydata_sphinx_theme'
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "check_switcher": False,
     "switcher": {
         # When releasing a new Spark version, please update the file
         # "site/static/versions.json" under the code repository "spark-website"
