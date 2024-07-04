@@ -155,7 +155,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
 
-      // As Virtual Column Family attach a column family prefix to the key row,
+      // As Virtual Column Family attaches a column family prefix to the key row,
       // we'll need to do prefixScan on the default column family with the same column
       // family id prefix to get all rows stored in a given virtual column family
       if (useColumnFamilies) {
@@ -585,7 +585,7 @@ private[sql] class RocksDBStateStoreProvider
      * @return - true if the column family exists, false otherwise
      */
     def checkColFamilyExists(colFamilyName: String): Boolean = {
-      colFamilyNameToIdMap.keys.asScala.toSeq.contains(colFamilyName)
+      colFamilyNameToIdMap.containsKey(colFamilyName)
     }
   }
 }
