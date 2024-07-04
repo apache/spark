@@ -111,6 +111,22 @@ object RocksDBStateEncoder {
       null
     }
   }
+
+  /**
+   * Put column family Id as a prefix to a pre-allocated byte array.
+   *
+   * @param encodedBytes - byte array where col family prefix size is pre-allocated
+   * @param vcfId - virtual column family Id
+   * @param useColumnFamilies - if column family is enabled
+   */
+  def putColFamilyPrefix(
+      encodedBytes: Array[Byte],
+      vcfId: Option[Short],
+      useColumnFamilies: Boolean): Unit = {
+    if (useColumnFamilies) {
+      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
+    }
+  }
 }
 
 /**
@@ -118,6 +134,7 @@ object RocksDBStateEncoder {
  *
  * @param keySchema - schema of the key to be encoded
  * @param numColsPrefixKey - number of columns to be used for prefix key
+ * @param useColumnFamilies - if column family is enabled for this encoder
  */
 class PrefixKeyScanStateEncoder(
     keySchema: StructType,
@@ -160,9 +177,7 @@ class PrefixKeyScanStateEncoder(
 
     val encodedBytes = new Array[Byte](prefixKeyEncoded.length +
       remainingEncoded.length + 4 + offSetForColFamilyPrefix)
-    if (useColumnFamilies) {
-      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
-    }
+    putColFamilyPrefix(encodedBytes, vcfId, useColumnFamilies)
 
     Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
       prefixKeyEncoded.length)
@@ -213,9 +228,8 @@ class PrefixKeyScanStateEncoder(
     val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
     val prefix = new Array[Byte](
       prefixKeyEncoded.length + 4 + offSetForColFamilyPrefix)
-    if (useColumnFamilies) {
-      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
-    }
+    putColFamilyPrefix(prefix, vcfId, useColumnFamilies)
+
     Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
       prefixKeyEncoded.length)
     Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
@@ -256,6 +270,7 @@ class PrefixKeyScanStateEncoder(
  *
  * @param keySchema - schema of the key to be encoded
  * @param orderingOrdinals - the ordinals for which the range scan is constructed
+ * @param useColumnFamilies - if column family is enabled for this encoder
  */
 class RangeKeyScanStateEncoder(
     keySchema: StructType,
@@ -531,10 +546,7 @@ class RangeKeyScanStateEncoder(
       val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length +
         remainingEncoded.length + 4 + offSetForColFamilyPrefix)
 
-      if (useColumnFamilies) {
-        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
-      }
-
+      putColFamilyPrefix(encodedBytes, vcfId, useColumnFamilies)
       Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
         rangeScanKeyEncoded.length)
       Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
@@ -552,10 +564,8 @@ class RangeKeyScanStateEncoder(
       // encode the remaining key as it's empty.
       val encodedBytes = new Array[Byte](
         rangeScanKeyEncoded.length + 4 + offSetForColFamilyPrefix)
-      if (useColumnFamilies) {
-        Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
-      }
 
+      putColFamilyPrefix(encodedBytes, vcfId, useColumnFamilies)
       Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
         rangeScanKeyEncoded.length)
       Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
@@ -605,9 +615,7 @@ class RangeKeyScanStateEncoder(
     val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
     val prefix = new Array[Byte](rangeScanKeyEncoded.length + 4 + offSetForColFamilyPrefix)
 
-    if (useColumnFamilies) {
-      Platform.putShort(prefix, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
-    }
+    putColFamilyPrefix(prefix, vcfId, useColumnFamilies)
     Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET + offSetForColFamilyPrefix,
       rangeScanKeyEncoded.length)
     Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
@@ -649,7 +657,7 @@ class NoPrefixKeyStateEncoder(keySchema: StructType, useColumnFamilies: Boolean 
       val encodedBytes = new Array[Byte](bytesToEncode.length +
         STATE_ENCODING_NUM_VERSION_BYTES + VIRTUAL_COL_FAMILY_PREFIX_BYTES)
 
-      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, vcfId.get)
+      putColFamilyPrefix(encodedBytes, vcfId, useColumnFamilies)
       Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET + VIRTUAL_COL_FAMILY_PREFIX_BYTES,
         STATE_ENCODING_VERSION)
       // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
