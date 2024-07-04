@@ -1684,7 +1684,7 @@ class MergeAction(google.protobuf.message.Message):
             MergeAction._ActionType.ValueType
         ],
         builtins.type,
-    ):
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         ACTION_TYPE_INVALID: MergeAction._ActionType.ValueType  # 0
         ACTION_TYPE_DELETE: MergeAction._ActionType.ValueType  # 1
