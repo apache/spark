@@ -39,7 +39,7 @@ import org.apache.thrift.transport.TSaslClientTransport;
 import org.apache.thrift.transport.TSaslServerTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportFactory;
-
+import org.apache.thrift.transport.TTransportException;
 public final class PlainSaslHelper {
 
   public static TProcessorFactory getPlainProcessorFactory(ThriftCLIService service) {
@@ -64,7 +64,7 @@ public final class PlainSaslHelper {
   }
 
   public static TTransport getPlainTransport(String username, String password,
-    TTransport underlyingTransport) throws SaslException {
+    TTransport underlyingTransport) throws SaslException, TTransportException {
     return new TSaslClientTransport("PLAIN", null, null, null, new HashMap<String, String>(),
       new PlainCallbackHandler(username, password), underlyingTransport);
   }
