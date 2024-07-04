@@ -890,7 +890,6 @@ case class CTERelationRef(
 
 case class UnresolvedWithCTERelations(
     child: LogicalPlan,
-    alwaysInline: Boolean,
     cteRelations: Seq[(String, CTERelationDef)])
   extends UnresolvedUnaryNode {
 

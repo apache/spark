@@ -20,22 +20,19 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTERelationRef, LogicalPlan,
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /*
- Resolve CTE RELATIONS
+ Resolves all unresolved CTE relations in the plan based on visible
+ CTE definitions collected as part of CollectCTEDefinitions rule.
  */
 object ResolveCTERelations extends Rule[LogicalPlan]{
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperatorsDown {
-      case u @ UnresolvedWithCTERelations(child, alwaysInline, cteRelations) =>
+      case u @ UnresolvedWithCTERelations(child, cteRelations) =>
         child resolveOperatorsDown {
           case u @ UnresolvedRelation(Seq(table), _, _) =>
             cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
-              if (alwaysInline) {
-                d.child
-              } else {
-                // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-                SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-              }
+              // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
+              SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
             }.getOrElse(child)
         }
     }

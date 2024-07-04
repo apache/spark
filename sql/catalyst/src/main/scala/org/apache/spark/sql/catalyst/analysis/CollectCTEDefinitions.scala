@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, UnresolvedWithCTERelations, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -50,8 +50,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
  * If the query is a SQL command or DML statement (extends `CTEInChildren`),
  * place `WithCTE` into their children.
  */
-class CTESubstitution(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with ColumnResolutionHelper {
+object CollectCTEDefinitions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
@@ -280,10 +279,18 @@ class CTESubstitution(val catalogManager: CatalogManager)
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(table))
 
       case u @ UnresolvedRelation(Seq(table), _, _) =>
-        UnresolvedWithCTERelations(u, alwaysInline, cteRelations)
+        cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
+          if (alwaysInline) {
+            d.child
+          } else {
+            // Add unresolved with CTE relations to the plan and we
+            // will do CTE resolution later in analyzer based on this node.
+            UnresolvedWithCTERelations(u, cteRelations)
+          }
+        }.getOrElse(u)
 
       case p: PlanWithUnresolvedIdentifier =>
-        UnresolvedWithCTERelations(p, alwaysInline, cteRelations)
+        UnresolvedWithCTERelations(p, cteRelations)
 
       case other =>
         // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.

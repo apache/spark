@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.ResolveIdentifierClause.evalIdentifierExpr
-import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -46,10 +44,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           e.exprBuilder.apply(evalIdentifierExpr(e.identifierExpr), e.otherExprs)
       }
   }
-}
 
-object ResolveIdentifierClause extends AliasHelper {
-  def evalIdentifierExpr(expr: Expression): Seq[String] = {
+  private def evalIdentifierExpr(expr: Expression): Seq[String] = {
     trimAliases(prepareForEval(expr)) match {
       case e if !e.foldable => expr.failAnalysis(
         errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",

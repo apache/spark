@@ -262,7 +262,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
       // at the beginning of analysis.
       OptimizeUpdateFields,
-      new CTESubstitution(catalogManager),
+      CollectCTEDefinitions,
       WindowsSubstitution,
       EliminateUnions,
       SubstituteUnresolvedOrdinals),
