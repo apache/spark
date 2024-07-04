@@ -38,6 +38,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
         DataFrameLike as PandasDataFrameLike,
     )
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -5985,6 +5987,41 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        """
+        Merges a set of updates, insertions, and deletions based on a source table into
+        a target table.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        table : str
+            Target table name to merge into.
+        condition : :class:`Column`
+            The condition that determines whether a row in the target table matches one in the
+            source DataFrame.
+
+        Returns
+        -------
+        :class:`MergeIntoWriter`
+            MergeIntoWriter to use further to specify how to merge the source DataFrame
+            into the target table.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import expr
+        >>> source = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
+        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        ...     .whenMatched().update({ "name": source.name })
+        ...     .whenNotMatched().insertAll()
+        ...     .whenNotMatchedBySource().delete()
+        ...     .merge())
+        """
+        ...
+
+    @dispatch_df_method
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -6278,6 +6315,31 @@ class DataFrame:
            age   name
         0    2  Alice
         1    5    Bob
+        """
+        ...
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        """
+        Returns a QueryExecution object after the query was executed.
+
+        The queryExecution method allows to introspect information about the actual
+        query execution after the successful execution. Accessing this member before
+        the query execution will return None.
+
+        If the same DataFrame is executed multiple times, the execution info will be
+        overwritten by the latest operation.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        An instance of QueryExecution or None when the value is not set yet.
+
+        Notes
+        -----
+        This is an API dedicated to Spark Connect client only. With regular Spark Session, it throws
+        an exception.
         """
         ...
 

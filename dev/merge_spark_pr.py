@@ -118,9 +118,14 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
 
-def continue_maybe(prompt):
+def continue_maybe(prompt, cherry=False):
     result = bold_input("%s (y/N): " % prompt)
     if result.lower() != "y":
+        if cherry:
+            try:
+                run_cmd("git cherry-pick --abort")
+            except Exception:
+                print_error("Unable to abort and get back to the state before cherry-pick")
         fail("Okay, exiting")
 
 
@@ -234,9 +239,9 @@ def cherry_pick(pr_num, merge_hash, default_branch):
         run_cmd("git cherry-pick -sx %s" % merge_hash)
     except Exception as e:
         msg = "Error cherry-picking: %s\nWould you like to manually fix-up this merge?" % e
-        continue_maybe(msg)
+        continue_maybe(msg, True)
         msg = "Okay, please fix any conflicts and finish the cherry-pick. Finished?"
-        continue_maybe(msg)
+        continue_maybe(msg, True)
 
     continue_maybe(
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
@@ -257,16 +262,19 @@ def cherry_pick(pr_num, merge_hash, default_branch):
 
 
 def print_jira_issue_summary(issue):
-    summary = issue.fields.summary
+    summary = "Summary\t\t%s\n" % issue.fields.summary
     assignee = issue.fields.assignee
     if assignee is not None:
         assignee = assignee.displayName
-    status = issue.fields.status.name
+    assignee = "Assignee\t%s\n" % assignee
+    status = "Status\t\t%s\n" % issue.fields.status.name
+    url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
+    target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
+    fix_versions = ""
+    if len(issue.fields.fixVersions) > 0:
+        fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
-    print(
-        "summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n"
-        % (summary, assignee, status, JIRA_BASE, issue.key)
-    )
+    print("%s%s%s%s%s%s" % (summary, assignee, status, url, target_versions, fix_versions))
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -501,11 +509,18 @@ def standardize_jira_ref(text):
     >>> standardize_jira_ref(
     ...     "[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
     '[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.'
+    >>> standardize_jira_ref(
+    ...     'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"')
+    'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"'
     >>> standardize_jira_ref("Additional information for users building from source code")
     'Additional information for users building from source code'
     """
     jira_refs = []
     components = []
+
+    # If this is a Revert PR, no need to process any further
+    if text.startswith('Revert "') and text.endswith('"'):
+        return text
 
     # If the string is compliant, no need to process any further
     if re.search(r"^\[SPARK-[0-9]{3,6}\](\[[A-Z0-9_\s,]+\] )+\S+", text):
@@ -677,6 +692,14 @@ def main():
             + "Continue? (experts only!)"
         )
         continue_maybe(msg)
+
+    if asf_jira is not None:
+        jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+        for jira_id in jira_ids:
+            try:
+                print_jira_issue_summary(asf_jira.issue(jira_id))
+            except Exception:
+                print_error("Unable to fetch summary of %s" % jira_id)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))

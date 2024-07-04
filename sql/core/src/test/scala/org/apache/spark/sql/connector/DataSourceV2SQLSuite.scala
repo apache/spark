@@ -1739,6 +1739,16 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-48709: varchar resolution mismatch for DataSourceV2 CTAS") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
+      withTable("testcat.ns.t1", "testcat.ns.t2") {
+        sql("CREATE TABLE testcat.ns.t1 (d1 string, d2 varchar(200)) USING parquet")
+        sql("CREATE TABLE testcat.ns.t2 USING foo as select * from testcat.ns.t1")
+      }
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()

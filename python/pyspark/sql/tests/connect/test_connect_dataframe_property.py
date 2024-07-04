@@ -20,6 +20,9 @@ import unittest
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType
 from pyspark.sql.utils import is_remote
 
+from pyspark.sql import functions as SF
+from pyspark.sql.connect import functions as CF
+
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.sqlutils import (
     have_pandas,
@@ -392,6 +395,38 @@ class SparkConnectDataFramePropertyTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf1.intersectAll(cdf2)._cached_schema, cdf1._cached_schema)
         # cannot infer when schemas mismatch
         self.assertTrue(cdf1.intersectAll(cdf3)._cached_schema is None)
+
+    def test_cached_schema_in_chain_op(self):
+        data = [(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)]
+
+        cdf = self.connect.createDataFrame(data, ("id", "v1"))
+        sdf = self.spark.createDataFrame(data, ("id", "v1"))
+
+        cdf1 = cdf.withColumn("v2", CF.lit(1))
+        sdf1 = sdf.withColumn("v2", SF.lit(1))
+
+        self.assertTrue(cdf1._cached_schema is None)
+        # trigger analysis of cdf1.schema
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertTrue(cdf1._cached_schema is not None)
+
+        cdf2 = cdf1.where(cdf1.v2 > 0)
+        sdf2 = sdf1.where(sdf1.v2 > 0)
+        self.assertEqual(cdf1._cached_schema, cdf2._cached_schema)
+
+        cdf3 = cdf2.repartition(10)
+        sdf3 = sdf2.repartition(10)
+        self.assertEqual(cdf1._cached_schema, cdf3._cached_schema)
+
+        cdf4 = cdf3.distinct()
+        sdf4 = sdf3.distinct()
+        self.assertEqual(cdf1._cached_schema, cdf4._cached_schema)
+
+        cdf5 = cdf4.sample(fraction=0.5)
+        sdf5 = sdf4.sample(fraction=0.5)
+        self.assertEqual(cdf1._cached_schema, cdf5._cached_schema)
+
+        self.assertEqual(cdf5.schema, sdf5.schema)
 
 
 if __name__ == "__main__":
