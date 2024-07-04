@@ -27,17 +27,17 @@ object ResolveCTERelations extends Rule[LogicalPlan]{
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperatorsDown {
       case u @ UnresolvedWithCTERelations(child, alwaysInline, cteRelations) =>
-        val unresolvedRelation = child.asInstanceOf[UnresolvedRelation]
-          cteRelations.find(r => plan.conf.resolver(r._1,
-            unresolvedRelation.multipartIdentifier.head)).map { case (_, d) =>
-            if (alwaysInline) {
-              d.child
-            } else {
-              // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
-              SubqueryAlias(unresolvedRelation.multipartIdentifier.head,
-                CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
-            }
-          }.getOrElse(child)
+        child resolveOperatorsDown {
+          case u @ UnresolvedRelation(Seq(table), _, _) =>
+            cteRelations.find(r => plan.conf.resolver(r._1, table)).map { case (_, d) =>
+              if (alwaysInline) {
+                d.child
+              } else {
+                // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
+                SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
+              }
+            }.getOrElse(child)
+        }
     }
   }
 }
