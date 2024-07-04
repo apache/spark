@@ -63,7 +63,7 @@ private[sql] class RocksDBStateStoreProvider
       ColumnFamilyUtils.createColFamilyIfAbsent(colFamilyName, isInternal)
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
+        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
@@ -161,7 +161,7 @@ private[sql] class RocksDBStateStoreProvider
       if (useColumnFamilies) {
         val cfId: Short = colFamilyNameToIdMap.get(colFamilyName)
         rocksDB.prefixScan(ColumnFamilyUtils.getVcfIdBytes(cfId)).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key, true),
+          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
             StateStoreProvider.validateStateRowFormat(
@@ -196,7 +196,7 @@ private[sql] class RocksDBStateStoreProvider
       val prefix =
         kvEncoder._1.encodePrefixKey(prefixKey, Option(colFamilyNameToIdMap.get(colFamilyName)))
       rocksDB.prefixScan(prefix).map { kv =>
-        rowPair.withRows(kvEncoder._1.decodeKey(kv.key, useColumnFamilies),
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
@@ -355,7 +355,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
+      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies),
        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     if (useColumnFamilies) {
       // put default column family only if useColumnFamilies are enabled

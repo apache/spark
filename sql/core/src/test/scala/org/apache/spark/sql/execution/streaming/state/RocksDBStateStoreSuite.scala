@@ -937,7 +937,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
             parameters = Map(
               "operationType" -> "create_col_family",
-              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+              "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
             ),
             matchPVals = true
           )
@@ -974,7 +974,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
             errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
             parameters = Map(
               "operationType" -> "create_col_family",
-              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+              "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
             ),
             matchPVals = true
           )
@@ -1192,7 +1192,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
         parameters = Map(
           "operationType" -> operationName,
-          "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+          "entity" -> "multiple column families is disabled in RocksDBStateStoreProvider"
         ),
         matchPVals = true
       )
