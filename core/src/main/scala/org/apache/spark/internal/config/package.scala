@@ -267,7 +267,7 @@ package object config {
         "fields (so the accumulator updates are redundant). This flag exists only as a " +
         "backwards-compatibility escape hatch for applications that might rely on the old " +
         "behavior. See SPARK-42204 for details.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
