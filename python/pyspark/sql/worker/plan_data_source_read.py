@@ -19,7 +19,7 @@ import os
 import sys
 import functools
 import pyarrow as pa
-from itertools import islice, tee
+from itertools import islice, chain
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -80,41 +80,40 @@ def records_to_arrow_batches(
     col_mapping = {name: i for i, name in enumerate(column_names)}
     col_name_set = set(column_names)
 
-    # Create a copy of the iterator using itertools.tee
-    output_iter, output_iter_copy = tee(output_iter)
     try:
-        # Check if the first element is of type pa.RecordBatch
-        # In that case, yield all elements and return
-        first_element = next(output_iter_copy)
-        if isinstance(first_element, pa.RecordBatch):
-            print(pa_schema)
-            print(first_element.schema)
-            # Validate the schema, check the RecordBatch column count
-            num_columns = first_element.num_columns
-            if num_columns != num_cols:
+        first_element = next(output_iter)
+    except StopIteration:
+        return
+
+    # If the first element is of type pa.RecordBatch yield all elements and return
+    if isinstance(first_element, pa.RecordBatch):
+        # Validate the schema, check the RecordBatch column count
+        num_columns = first_element.num_columns
+        if num_columns != num_cols:
+            raise PySparkRuntimeError(
+                error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+                message_parameters={
+                    "expected": str(num_cols),
+                    "actual": str(num_columns),
+                },
+            )
+        for name in column_names:
+            if name not in first_element.schema.names:
                 raise PySparkRuntimeError(
                     error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
                     message_parameters={
-                        "expected": str(num_cols),
-                        "actual": str(num_columns),
+                        "expected": str(column_names),
+                        "actual": str(first_element.schema.names),
                     },
                 )
-            for name in column_names:
-                if name not in first_element.schema.names:
-                    raise PySparkRuntimeError(
-                        error_class="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
-                        message_parameters={
-                            "expected": str(column_names),
-                            "actual": str(first_element.schema.names),
-                        },
-                    )
 
-            yield first_element
-            for element in output_iter_copy:
-                yield element
-            return
-    except StopIteration:
-        pass
+        yield first_element
+        for element in output_iter:
+            yield element
+        return
+
+    # Put the first element back to the iterator
+    output_iter = chain([first_element], output_iter)
 
     def batched(iterator: Iterator, n: int) -> Iterator:
         return iter(functools.partial(lambda it: list(islice(it, n)), iterator), [])
