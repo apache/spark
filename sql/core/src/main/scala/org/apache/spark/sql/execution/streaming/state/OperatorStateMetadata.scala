@@ -33,12 +33,14 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, Metadata
  */
 trait StateStoreMetadata {
   def storeName: String
-  def numColsPrefixKey: Int
   def numPartitions: Int
 }
 
-case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
-  extends StateStoreMetadata
+case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int,
+  numPartitions: Int) extends StateStoreMetadata
+
+case class StateStoreMetadataV2(storeName: String,
+  numPartitions: Int, stateSchemaPath: String) extends StateStoreMetadata
 
 /**
  * Information about a stateful operator.
@@ -50,6 +52,9 @@ trait OperatorInfo {
 
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
+case class OperatorInfoV2(operatorId: Long, operatorName: String, operatorProperties: String)
+  extends OperatorInfo
+
 trait OperatorStateMetadata {
   def version: Int
 }
@@ -58,6 +63,12 @@ case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+}
+
+case class OperatorStateMetadataV2(
+    operatorInfo: OperatorInfoV2,
+    stateStoreInfo: Array[StateStoreMetadataV2]) extends OperatorStateMetadata {
+  override def version: Int = 2
 }
 
 object OperatorStateMetadataUtils {
@@ -74,6 +85,9 @@ object OperatorStateMetadataUtils {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
 
+      case 2 =>
+        Serialization.read[OperatorStateMetadataV2](in)
+
       case _ =>
         throw new IllegalArgumentException(s"Failed to deserialize operator metadata with " +
           s"version=$version")
@@ -86,6 +100,9 @@ object OperatorStateMetadataUtils {
     operatorStateMetadata.version match {
       case 1 =>
         Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1], out)
+
+      case 2 =>
+        Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
 
       case _ =>
         throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +

@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -40,6 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 case class StateMetadataTableEntry(
+    version: Int,
     operatorId: Long,
     operatorName: String,
     stateStoreName: String,
@@ -199,17 +200,40 @@ class StateMetadataPartitionReader(
 
   private[sql] lazy val stateMetadata: Iterator[StateMetadataTableEntry] = {
     allOperatorStateMetadata.flatMap { operatorStateMetadata =>
-      require(operatorStateMetadata.version == 1)
-      val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]
-      operatorStateMetadataV1.stateStoreInfo.map { stateStoreMetadata =>
-        StateMetadataTableEntry(operatorStateMetadataV1.operatorInfo.operatorId,
-          operatorStateMetadataV1.operatorInfo.operatorName,
-          stateStoreMetadata.storeName,
-          stateStoreMetadata.numPartitions,
-          if (batchIds.nonEmpty) batchIds.head else -1,
-          if (batchIds.nonEmpty) batchIds.last else -1,
-          stateStoreMetadata.numColsPrefixKey
-        )
+      operatorStateMetadata.version match {
+        case 1 =>
+          val operatorStateMetadataV1 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1]
+          operatorStateMetadataV1.stateStoreInfo.map { stateStoreMetadata =>
+            StateMetadataTableEntry(
+              operatorStateMetadata.version,
+              operatorStateMetadataV1.operatorInfo.operatorId,
+              operatorStateMetadataV1.operatorInfo.operatorName,
+              stateStoreMetadata.storeName,
+              stateStoreMetadata.numPartitions,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
+              stateStoreMetadata.numColsPrefixKey
+            )
+          }
+
+        case 2 =>
+          val operatorStateMetadataV2 = operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2]
+          operatorStateMetadataV2.stateStoreInfo.map { stateStoreMetadata =>
+            StateMetadataTableEntry(
+              operatorStateMetadata.version,
+              operatorStateMetadataV2.operatorInfo.operatorId,
+              operatorStateMetadataV2.operatorInfo.operatorName,
+              stateStoreMetadata.storeName,
+              stateStoreMetadata.numPartitions,
+              if (batchIds.nonEmpty) batchIds.head else -1,
+              if (batchIds.nonEmpty) batchIds.last else -1,
+              0
+            )
+          }
+
+        case _ =>
+          throw new IllegalStateException(s"Failed to process unknown operator metadata " +
+            s"version=${operatorStateMetadata.version}")
       }
     }
   }.iterator
