@@ -273,9 +273,8 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 
   override lazy val updateExpressions: Seq[Expression] = {
     val isNull = left.isNull || right.isNull
-    val updateResult = covarPop.updateExpressions ++ varPop.updateExpressions
-    aggBufferAttributes.zip(updateResult).map { case (oldValue, newValue) =>
-      If(isNull, oldValue, newValue)
+    covarPop.updateExpressions ++ varPop.updateExpressions.zip(varPop.aggBufferAttributes).map {
+      case (newValue, oldValue) => If(isNull, oldValue, newValue)
     }
   }
 
@@ -331,9 +330,8 @@ case class RegrIntercept(left: Expression, right: Expression) extends Declarativ
 
   override lazy val updateExpressions: Seq[Expression] = {
     val isNull = left.isNull || right.isNull
-    val updateResult = covarPop.updateExpressions ++ varPop.updateExpressions
-    aggBufferAttributes.zip(updateResult).map { case (oldValue, newValue) =>
-      If(isNull, oldValue, newValue)
+    covarPop.updateExpressions ++ varPop.updateExpressions.zip(varPop.aggBufferAttributes).map {
+      case (newValue, oldValue) => If(isNull, oldValue, newValue)
     }
   }
 
