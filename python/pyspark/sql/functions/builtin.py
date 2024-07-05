@@ -5385,6 +5385,24 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (3,)], ["value"])
+    >>> df.select(sf.count_distinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
+    
+    >>> df.select(sf.countDistinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
     """
     return count_distinct(col, *cols)
 
