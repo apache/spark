@@ -5948,6 +5948,29 @@ class DataFrame:
 
         .. versionchanged:: 4.0.0
             Supports variable-length argument
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([
+        ...     Row(name='Alice', age=5, height=80),
+        ...     Row(name='Alice', age=5, height=80),
+        ...     Row(name='Alice', age=10, height=80)
+        ... ])
+        >>> df.drop_duplicates().show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        |Alice| 10|    80|
+        +-----+---+------+
+        >>> df.dropDuplicates().show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        |Alice| 10|    80|
+        +-----+---+------+            
         """
         ...
 
