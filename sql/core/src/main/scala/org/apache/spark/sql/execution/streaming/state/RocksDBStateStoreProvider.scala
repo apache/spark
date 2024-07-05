@@ -114,6 +114,7 @@ private[sql] class RocksDBStateStoreProvider
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
       ColumnFamilyUtils.verifyColFamilyOperations("merge", colFamilyName)
+
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val keyEncoder = kvEncoder._1
       val valueEncoder = kvEncoder._2
@@ -187,12 +188,12 @@ private[sql] class RocksDBStateStoreProvider
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
       ColumnFamilyUtils.verifyColFamilyOperations("prefixScan", colFamilyName)
+
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       require(kvEncoder._1.supportPrefixKeyScan,
         "Prefix scan requires setting prefix key!")
 
       val rowPair = new UnsafeRowPair()
-
       val prefix =
         kvEncoder._1.encodePrefixKey(prefixKey, Option(colFamilyNameToIdMap.get(colFamilyName)))
       rocksDB.prefixScan(prefix).map { kv =>
@@ -313,21 +314,21 @@ private[sql] class RocksDBStateStoreProvider
     /** Remove column family if exists */
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
       verify(useColumnFamilies, "Column families are not supported in this store")
+
       val result = {
-        val colFamilyExists = ColumnFamilyUtils.checkColFamilyExists(colFamilyName)
+        val colFamilyId = colFamilyNameToIdMap.get(colFamilyName)
+        val colFamilyExists = ColumnFamilyUtils.removeColFamilyIfExists(colFamilyName)
+
         if (colFamilyExists) {
-          ColumnFamilyUtils.verifyColFamilyOperations("prefixScan", colFamilyName)
           val idPrefix = ColumnFamilyUtils.getVcfIdBytes(
-            colFamilyNameToIdMap.get(colFamilyName)
+            colFamilyNameToIdMap.get(colFamilyId)
           )
           rocksDB.prefixScan(idPrefix).foreach { kv =>
-            ColumnFamilyUtils.verifyColFamilyOperations("remove", colFamilyName)
             rocksDB.remove(kv.key)
           }
         }
         colFamilyExists
       }
-      ColumnFamilyUtils.removeColFamilyIfExists(colFamilyName)
       keyValueEncoderMap.remove(colFamilyName)
       result
     }

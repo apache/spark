@@ -2006,8 +2006,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
-  def iterator(db: RocksDB):
-    Iterator[(String, String)] = db.iterator().map(toStr)
+  def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty

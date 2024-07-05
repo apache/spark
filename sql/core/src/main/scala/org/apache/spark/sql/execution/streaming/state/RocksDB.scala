@@ -396,8 +396,7 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator():
-    Iterator[ByteArrayPair] = {
+  def iterator(): Iterator[ByteArrayPair] = {
 
     val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
@@ -446,8 +445,7 @@ class RocksDB(
     }
   }
 
-  def prefixScan(prefix: Array[Byte]):
-    Iterator[ByteArrayPair] = {
+  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
     val iter = db.newIterator()
     iter.seek(prefix)
 
@@ -802,10 +800,7 @@ class RocksDB(
     acquireLock.notifyAll()
   }
 
-  private def getDBProperty(property: String): Long = {
-    // get cumulative sum across all available column families
-    db.getProperty(property).toLong
-  }
+  private def getDBProperty(property: String): Long = db.getProperty(property).toLong
 
   private def openDB(): Unit = {
     assert(db == null)
