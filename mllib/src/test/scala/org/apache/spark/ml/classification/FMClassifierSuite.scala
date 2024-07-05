@@ -52,8 +52,8 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("FMClassifier: Predictor, Classifier methods") {
-    val sqlContext = smallBinaryDataset.sqlContext
-    import sqlContext.implicits._
+    val sparkSession = smallBinaryDataset.sparkSession
+    import sparkSession.implicits._
     val fm = new FMClassifier()
 
     val model = fm.fit(smallBinaryDataset)
