@@ -712,8 +712,8 @@ class SparkSession private[sql] (
   /**
    * Close the [[SparkSession]].
    *
-   * Release the current session and close the GRPC connection to the server. The API will
-   * not error if any of these operations fail. Closing a closed session is a no-op.
+   * Release the current session and close the GRPC connection to the server. The API will not
+   * error if any of these operations fail. Closing a closed session is a no-op.
    *
    * Close the allocator. Fail if there are still open [[SparkResult]]s.
    *
