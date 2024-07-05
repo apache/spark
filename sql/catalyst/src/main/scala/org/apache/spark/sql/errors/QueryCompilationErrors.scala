@@ -4097,4 +4097,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("functionName" -> functionName)
     )
   }
+
+  def mapKeyTypeNotSupported(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "MAP_KEY_BAD_DATATYPE",
+      messageParameters = Map("keyType" -> toSQLType(dataType))
+    )
+  }
 }

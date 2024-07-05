@@ -895,53 +895,75 @@ case class MapFromEntries(child: Expression)
 case class MapSort(base: Expression)
   extends UnaryExpression with NullIntolerant with QueryErrorsBase {
 
-  val keyType: DataType = base.dataType.asInstanceOf[MapType].keyType
-  val valueType: DataType = base.dataType.asInstanceOf[MapType].valueType
+  override lazy val canonicalized: Expression = base.canonicalized
+
+  override lazy val deterministic: Boolean = base.deterministic
 
   override def child: Expression = base
 
   override def dataType: DataType = base.dataType
 
-  override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case m: MapType if RowOrdering.isOrderable(m.keyType) =>
-        TypeCheckResult.TypeCheckSuccess
+  def recursiveCheckDataTypes(dataType: DataType): TypeCheckResult = dataType match {
+    case a: ArrayType => recursiveCheckDataTypes(a.elementType)
+    case StructType(fields) =>
+      fields.collect(sf => recursiveCheckDataTypes(sf.dataType)).filter(_.isFailure).headOption
+        .getOrElse(TypeCheckResult.TypeCheckSuccess)
+    case m: MapType if RowOrdering.isOrderable(m.keyType) => TypeCheckResult.TypeCheckSuccess
     case _: MapType =>
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> toSQLType(base.dataType)
+          "dataType" -> toSQLType(dataType)
         )
       )
-    case _ =>
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
-        messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> toSQLType(MapType),
-          "inputSql" -> toSQLExpr(base),
-          "inputType" -> toSQLType(base.dataType))
-      )
+    case _ => TypeCheckResult.TypeCheckSuccess
   }
 
-  override def nullSafeEval(array: Any): Any = {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    recursiveCheckDataTypes(dataType)
+  }
+
+  def nullSafeEvalRecursive(input: Any, dataType: DataType): Any = {
+
+    dataType match {
+      case ArrayType(elementType, _) =>
+          val arrayData = input.asInstanceOf[ArrayData]
+          new GenericArrayData(arrayData.toObjectArray(elementType).map(nullSafeEvalRecursive(_, elementType)))
+
+      case StructType(fields) =>
+        val structData = input.asInstanceOf[InternalRow]
+        val values = fields.zipWithIndex.map { case (field, i) =>
+          nullSafeEvalRecursive(structData.get(i, field.dataType), field.dataType)
+        }
+        InternalRow(values.toIndexedSeq: _*)
+
+      case _: MapType =>
+        val mapData = input.asInstanceOf[MapData]
+        val numElements = mapData.numElements()
+        val keys = mapData.keyArray()
+        val values = mapData.valueArray()
+
+        val ordering = PhysicalDataType.ordering(IntegerType)
+
+        val sortedMap = Array
+          .tabulate(numElements)(i => (keys.get(i, IntegerType).asInstanceOf[Any],
+            values.get(i, IntegerType).asInstanceOf[Any]))
+          .sortBy(_._1)(ordering)
+
+        new ArrayBasedMapData(new GenericArrayData(sortedMap.map(_._1)),
+          new GenericArrayData(sortedMap.map(_._2)))
+
+      case _ => input
+    }
+  }
+
+  override def nullSafeEval(input: Any): Any = {
     // put keys and their respective values inside a tuple and sort them
     // according to the key ordering. Extract the new sorted k/v pairs to form a sorted map
 
-    val mapData = array.asInstanceOf[MapData]
-    val numElements = mapData.numElements()
-    val keys = mapData.keyArray()
-    val values = mapData.valueArray()
+    nullSafeEvalRecursive(input, dataType)
 
-    val ordering = PhysicalDataType.ordering(keyType)
-
-    val sortedMap = Array
-      .tabulate(numElements)(i => (keys.get(i, keyType).asInstanceOf[Any],
-        values.get(i, valueType).asInstanceOf[Any]))
-      .sortBy(_._1)(ordering)
-
-    new ArrayBasedMapData(new GenericArrayData(sortedMap.map(_._1)),
-      new GenericArrayData(sortedMap.map(_._2)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -967,22 +989,22 @@ case class MapSort(base: Expression)
     val newKeys = ctx.freshName("newKeys")
     val newValues = ctx.freshName("newValues")
 
-    val boxedKeyType = CodeGenerator.boxedType(keyType)
-    val boxedValueType = CodeGenerator.boxedType(valueType)
-    val javaKeyType = CodeGenerator.javaType(keyType)
+    val boxedKeyType = CodeGenerator.boxedType(IntegerType)
+    val boxedValueType = CodeGenerator.boxedType(IntegerType)
+    val javaKeyType = CodeGenerator.javaType(IntegerType)
 
     val simpleEntryType = s"java.util.AbstractMap.SimpleEntry<$boxedKeyType, $boxedValueType>"
 
-    val comp = if (CodeGenerator.isPrimitiveType(keyType)) {
+    val comp = if (CodeGenerator.isPrimitiveType(IntegerType)) {
       val v1 = ctx.freshName("v1")
       val v2 = ctx.freshName("v2")
       s"""
          |$javaKeyType $v1 = (($boxedKeyType) $o1).${javaKeyType}Value();
          |$javaKeyType $v2 = (($boxedKeyType) $o2).${javaKeyType}Value();
-         |int $c = ${ctx.genComp(keyType, v1, v2)};
+         |int $c = ${ctx.genComp(IntegerType, v1, v2)};
        """.stripMargin
     } else {
-      s"int $c = ${ctx.genComp(keyType, s"(($javaKeyType) $o1)", s"(($javaKeyType) $o2)")};"
+      s"int $c = ${ctx.genComp(IntegerType, s"(($javaKeyType) $o1)", s"(($javaKeyType) $o2)")};"
     }
 
     s"""
@@ -994,8 +1016,8 @@ case class MapSort(base: Expression)
        |
        |for (int $i = 0; $i < $numElements; $i++) {
        |  $sortArray[$i] = new $simpleEntryType(
-       |    ${CodeGenerator.getValue(keys, keyType, i)},
-       |    ${CodeGenerator.getValue(values, valueType, i)});
+       |    ${CodeGenerator.getValue(keys, IntegerType, i)},
+       |    ${CodeGenerator.getValue(values, IntegerType, i)});
        |}
        |
        |java.util.Arrays.sort($sortArray, new java.util.Comparator<Object>() {

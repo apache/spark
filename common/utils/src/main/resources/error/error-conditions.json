@@ -8338,5 +8338,10 @@
       "<errorMessage>"
     ],
     "sqlState" : "P0001"
+  },
+  "MAP_KEY_BAD_DATATYPE" : {
+    "message" : [
+      "The key of map cannot be/contain <keyType>."
+    ]
   }
 }

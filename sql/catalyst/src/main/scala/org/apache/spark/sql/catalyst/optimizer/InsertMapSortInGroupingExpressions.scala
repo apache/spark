@@ -34,7 +34,8 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     _.containsPattern(AGGREGATE), ruleId) {
     case a @ Aggregate(groupingExpr, _, _) =>
       val newGrouping = groupingExpr.map { expr =>
-        if (!expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]) {
+        if (!expr.isInstanceOf[MapSort]
+          && expr.dataType.existsRecursively(_.isInstanceOf[MapType])) {
           MapSort(expr)
         } else {
           expr
