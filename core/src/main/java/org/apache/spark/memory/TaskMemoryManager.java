@@ -125,12 +125,12 @@ public class TaskMemoryManager {
   /**
    * Peak off heap memory usage by this task.
    */
-  private long peakOffHeapMemory = 0L;
+  private volatile long peakOffHeapMemory = 0L;
 
   /**
    * Peak on heap memory usage by this task.
    */
-  private long peakOnHeapMemory = 0L;
+  private volatile long peakOnHeapMemory = 0L;
 
   /**
    * Construct a new TaskMemoryManager.
