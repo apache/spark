@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
       > SET spark.sql.collation.enabled=true;
       spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL', 'UTF8_LCASE');
-      UTF8_LCASE
+      Spark SQL
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
   """,
