@@ -226,8 +226,6 @@ MergeIntoWriter.__doc__ = PySparkMergeIntoWriter.__doc__
 def _test() -> None:
     import doctest
     import os
-    import py4j
-    from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.merge
 
