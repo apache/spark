@@ -268,6 +268,25 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
           "message" -> s"value should be less than or equal to $endBatchId"))
     }
   }
+
+  test("ERROR: trying to specify state variable name with " +
+    s"non-transformWithState operator") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "test")
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", Some("42616"),
+        Map("optionName" -> StateSourceOptions.STATE_VAR_NAME,
+          "message" -> ".*"),
+        matchPVals = true)
+    }
+  }
 }
 
 /**
