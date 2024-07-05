@@ -406,12 +406,12 @@ object CSVBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark to measure CSV read/write performance") {
       val numIters = 3
-      // quotedValuesBenchmark(rowsNum = 50 * 1000, numIters)
-      // multiColumnsBenchmark(rowsNum = 1000 * 1000, numIters)
-      // countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
-      // datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
-      // filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
-      intervalBenchmark(rowsNum = 100_1000, numIters)
+      quotedValuesBenchmark(rowsNum = 50 * 1000, numIters)
+      multiColumnsBenchmark(rowsNum = 1000 * 1000, numIters)
+      countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
+      intervalBenchmark(rowsNum = 300_1000, numIters)
     }
   }
 }
