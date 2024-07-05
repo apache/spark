@@ -343,7 +343,7 @@ class UnivocityParser(
         if (skipRow) {
           row.setNullAt(i)
         } else {
-          row(i) = valueConverters(i).apply(getShorToken(tokens, i))
+          row(i) = valueConverters(i).apply(getToken(tokens, i))
           if (csvFilters.skipRow(row, i)) {
             skipRow = true
           }
