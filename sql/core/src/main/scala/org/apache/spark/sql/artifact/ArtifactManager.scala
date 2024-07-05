@@ -233,9 +233,15 @@ class ArtifactManager(session: SparkSession) extends Logging {
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
     val sparkContext = session.sparkContext
-    sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-    sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-    sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
+    val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
+      sparkContext.addedArchives.contains(state.uuid) ||
+      sparkContext.addedJars.contains(state.uuid)
+    if (shouldUpdateEnv) {
+      sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+      sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+      sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
+      sparkContext.postEnvironmentUpdate()
+    }
 
     // Clean up cached relations
     val blockManager = sparkContext.env.blockManager
