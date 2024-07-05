@@ -256,7 +256,7 @@ class CollationStringExpressionsSuite
   test("Support StringTranslate string expression with collation") {
     // Supported collations
     case class TranslateTestCase[R](input: String, matchExpression: String,
-        replaceExpression: String, collation: String, result: R)
+      replaceExpression: String, collation: String, result: R)
     val testCases = Seq(
       TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e"),
       TranslateTestCase("Translate", "Rnlt", "1234", "UTF8_LCASE", "41a2s3a4e"),
@@ -301,16 +301,28 @@ class CollationStringExpressionsSuite
       TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_BINARY", "123"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_BINARY", "1i\u0307"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_BINARY", "İ23"),
+      TranslateTestCase("a\u030Abcå", "a\u030Aå", "123", "UTF8_BINARY", "12bc3"),
+      TranslateTestCase("a\u030Abcå", "A\u030AÅ", "123", "UTF8_BINARY", "a2bcå"),
+      TranslateTestCase("a\u030AβφδI\u0307", "Iİaå", "1234", "UTF8_BINARY", "3\u030Aβφδ1\u0307"),
       TranslateTestCase("İ", "i\u0307", "xy", "UTF8_LCASE", "İ"),
-      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_LCASE", "123"),
-      TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_LCASE", "1i\u0307"),
+      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UTF8_LCASE", "11"),
+      TranslateTestCase("İi\u0307", "İyz", "123", "UTF8_LCASE", "11"),
       TranslateTestCase("İi\u0307", "xi\u0307", "123", "UTF8_LCASE", "İ23"),
-      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UNICODE", "123"),
+      TranslateTestCase("a\u030Abcå", "a\u030Aå", "123", "UTF8_LCASE", "12bc3"),
+      TranslateTestCase("a\u030Abcå", "A\u030AÅ", "123", "UTF8_LCASE", "12bc3"),
+      TranslateTestCase("A\u030Aβφδi\u0307", "Iİaå", "1234", "UTF8_LCASE", "3\u030Aβφδ2"),
+      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UNICODE", "1i\u0307"),
       TranslateTestCase("İi\u0307", "İyz", "123", "UNICODE", "1i\u0307"),
-      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UNICODE", "İ23"),
-      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UNICODE_CI", "123"),
-      TranslateTestCase("İi\u0307", "İyz", "123", "UNICODE_CI", "1i\u0307"),
-      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UNICODE_CI", "İ23")
+      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UNICODE", "İi\u0307"),
+      TranslateTestCase("a\u030Abcå", "a\u030Aå", "123", "UNICODE", "3bc3"),
+      TranslateTestCase("a\u030Abcå", "A\u030AÅ", "123", "UNICODE", "a\u030Abcå"),
+      TranslateTestCase("a\u030AβφδI\u0307", "Iİaå", "1234", "UNICODE", "4βφδ2"),
+      TranslateTestCase("İi\u0307", "İi\u0307", "123", "UNICODE_CI", "11"),
+      TranslateTestCase("İi\u0307", "İyz", "123", "UNICODE_CI", "11"),
+      TranslateTestCase("İi\u0307", "xi\u0307", "123", "UNICODE_CI", "İi\u0307"),
+      TranslateTestCase("a\u030Abcå", "a\u030Aå", "123", "UNICODE_CI", "3bc3"),
+      TranslateTestCase("a\u030Abcå", "A\u030AÅ", "123", "UNICODE_CI", "3bc3"),
+      TranslateTestCase("A\u030Aβφδi\u0307", "Iİaå", "1234", "UNICODE_CI", "4βφδ2")
     )
 
     testCases.foreach(t => {

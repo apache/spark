@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
@@ -1051,11 +1051,35 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String)
+  /**
+   * Build a translation dictionary from UTF8Strings. First, this method converts the input strings
+   * to valid Java Strings. However, we avoid any behavior changes for the UTF8_BINARY collation,
+   * but ensure that all other collations use `UTF8String.toValidString` to achieve this step.
+   */
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Integer)
     : JMap[String, String] = {
-    val matching = matchingString.toString()
+    val isCollationAware = collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+    val matching: String = if (isCollationAware) {
+      matchingString.toString
+    } else {
+      matchingString.toValidString
+    }
+    val replace: String = if (isCollationAware) {
+      replaceString.toString
+    } else {
+      replaceString.toValidString
+    }
+    buildDict(matching, replace)
+  }
 
-    val replace = replaceString.toString()
+  /**
+   * Build a translation dictionary from Strings. This method assumes that the input strings are
+   * already valid. The result dictionary maps each character in `matching` to the corresponding
+   * character in `replace`. If `replace` is shorter than `matching`, the extra characters in
+   * `matching` will be mapped to null terminator, which causes characters to get deleted during
+   * translation. If `replace` is longer than `matching`, the extra characters will be ignored.
+   */
+  private def buildDict(matching: String, replace: String): JMap[String, String] = {
     val dict = new HashMap[String, String]()
     var i = 0
     var j = 0
@@ -1079,6 +1103,7 @@ object StringTranslate {
     }
     dict
   }
+
 }
 
 /**
@@ -1111,7 +1136,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
       lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
-      dict = StringTranslate.buildDict(lastMatching, lastReplace)
+      dict = StringTranslate.buildDict(lastMatching, lastReplace, collationId)
     }
 
     CollationSupport.StringTranslate.exec(srcEval.asInstanceOf[UTF8String], dict, collationId)
@@ -1135,7 +1160,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termLastMatching = $matching.clone();
         $termLastReplace = $replace.clone();
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict($termLastMatching, $termLastReplace);
+          .buildDict($termLastMatching, $termLastReplace, $collationId);
       }
       ${ev.value} = CollationSupport.StringTranslate.
       exec($src, $termDict, $collationId);

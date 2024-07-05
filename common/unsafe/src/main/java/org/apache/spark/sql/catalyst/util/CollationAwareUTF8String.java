@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.BreakIterator;
+import com.ibm.icu.text.Collator;
+import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 
@@ -27,6 +29,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
 
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -424,28 +428,40 @@ public class CollationAwareUTF8String {
    * @param codePoint The code point to convert to lowercase.
    * @param sb The StringBuilder to append the lowercase character to.
    */
-  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
-    if (codePoint == 0x0130) {
+  private static void appendLowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
+    if (lowercaseCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
       sb.appendCodePoint(0x0069);
       sb.appendCodePoint(0x0307);
-    }
-    else if (codePoint == 0x03C2) {
-      // Greek final and non-final capital letter sigma should be mapped the same.
-      sb.appendCodePoint(0x03C3);
-    }
-    else {
+    } else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
-      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+      sb.appendCodePoint(lowercaseCodePoint);
     }
   }
 
-  private static final int COMBINED_LOWERCASE_I_DOT = 0x69 << 16 | 0x307;
+  /**
+   * `CODE_POINT_COMBINED_LOWERCASE_I_DOT` is an internal representation of the combined lowercase
+   * code point for ASCII lowercase letter i with an additional combining dot character (U+0307).
+   * This integer value is not a valid code point itself, but rather an artificial code point
+   * marker used to represent the two lowercase characters that are the result of converting the
+   * uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
+   */
+  private static final int CODE_POINT_LOWERCASE_I = 0x69;
+  private static final int CODE_POINT_COMBINING_DOT = 0x307;
+  private static final int CODE_POINT_COMBINED_LOWERCASE_I_DOT =
+    CODE_POINT_LOWERCASE_I << 16 | CODE_POINT_COMBINING_DOT;
 
+  /**
+   * Returns the lowercase version of the provided code point, with special handling for
+   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase) and
+   * context-insensitive case mappings (i.e. characters that map to different characters based on
+   * the position in the string relative to other characters in lowercase).
+   */
   private static int getLowercaseCodePoint(final int codePoint) {
     if (codePoint == 0x0130) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
-      return COMBINED_LOWERCASE_I_DOT;
+      return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
     else if (codePoint == 0x03C2) {
       // Greek final and non-final capital letter sigma should be mapped the same.
@@ -461,7 +477,7 @@ public class CollationAwareUTF8String {
    * Converts an entire string to lowercase using ICU rules, code point by code point, with
    * special handling for one-to-many case mappings (i.e. characters that map to multiple
    * characters in lowercase). Also, this method omits information about context-sensitive case
-   * mappings using special handling in the `lowercaseCodePoint` method.
+   * mappings using special handling in the `appendLowercaseCodePoint` method.
    *
    * @param target The target string to convert to lowercase.
    * @return The string converted to lowercase in a context-unaware manner.
@@ -475,7 +491,7 @@ public class CollationAwareUTF8String {
     String targetString = target.toValidString();
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < targetString.length(); ++i) {
-      lowercaseCodePoint(targetString.codePointAt(i), sb);
+      appendLowercaseCodePoint(targetString.codePointAt(i), sb);
     }
     return UTF8String.fromString(sb.toString());
   }
@@ -672,6 +688,17 @@ public class CollationAwareUTF8String {
     }
   }
 
+  /**
+   * Converts the original translation dictionary (`dict`) to a dictionary with lowercased keys.
+   * This method is used to create a dictionary that can be used for the UTF8_LCASE collation.
+   * Note that `StringTranslate.buildDict` will ensure that all strings are validated properly.
+   *
+   * The method returns a map with lowercased code points as keys, while the values remain
+   * unchanged. Note that `dict` is constructed on a character by character basis, and the
+   * original keys are stored as strings. Keys in the resulting lowercase dictionary are stored
+   * as integers, which correspond only to single characters from the original `dict`. Also,
+   * there is special handling for the Turkish dotted uppercase letter I (U+0130).
+   */
   private static Map<Integer, String> getLowercaseDict(final Map<String, String> dict) {
     // Replace all the keys in the dict with lowercased code points.
     Map<Integer, String> lowercaseDict = new HashMap<>();
@@ -680,63 +707,87 @@ public class CollationAwareUTF8String {
       lowercaseDict.putIfAbsent(getLowercaseCodePoint(codePoint), entry.getValue());
     }
     return lowercaseDict;
-    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
-  }
-  private static Map<String, String> getCollationAwareDict(final Map<String, String> dict,
-      int collationId) {
-    // Replace all the keys in the dict with collation keys.
-    Map<String, String> collationAwareDict = new HashMap<>();
-    for (Map.Entry<String, String> entry : dict.entrySet()) {
-      String collationKey = CollationFactory.getCollationKey(entry.getKey(), collationId);
-      collationAwareDict.putIfAbsent(collationKey, entry.getValue());
-    }
-    return collationAwareDict;
-    // TODO(SPARK-48715): All UTF8String -> String conversions should use `makeValid`
   }
 
-  private static String lowercaseTranslate(final String input, final Map<Integer, String> dict) {
+  /**
+   * Translates the `input` string using the translation map `dict`, for UTF8_LCASE collation.
+   * String translation is performed by iterating over the input string, from left to right, and
+   * repeatedly translating the longest possible substring that matches a key in the dictionary.
+   * For UTF8_LCASE, the method uses the lowercased substring to perform the lookup in the
+   * lowercase version of the translation map.
+   *
+   * @param input the string to be translated
+   * @param dict the lowercase translation dictionary
+   * @return the translated string
+   */
+  public static UTF8String lowercaseTranslate(final UTF8String input,
+      final Map<String, String> dict) {
+    Map<Integer, String> lowercaseDict = getLowercaseDict(dict);
     StringBuilder sb = new StringBuilder();
-    int charCount = 0;
-    for (int k = 0; k < input.length(); k += charCount) {
-      int codePoint = input.codePointAt(k);
-      charCount = Character.charCount(codePoint);
-      String translated = dict.get(getLowercaseCodePoint(codePoint));
-      if (null == translated) {
+    for (int charIndex = 0; charIndex < input.numChars(); ++charIndex) {
+      int codePoint = input.getChar(charIndex);
+      if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
+          codePoint == CODE_POINT_LOWERCASE_I && charIndex + 1 < input.numChars() &&
+          input.getChar(charIndex + 1) == CODE_POINT_COMBINING_DOT) {
+        // Special handling for letter i (U+0069) followed by a combining dot (U+0307)
+        codePoint = CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+        ++charIndex;
+      }
+      String translated = lowercaseDict.get(getLowercaseCodePoint(codePoint));
+      if (translated == null) {
         sb.appendCodePoint(codePoint);
       } else if (!"\0".equals(translated)) {
         sb.append(translated);
       }
     }
-    return sb.toString();
-  }
-  private static String translate(final String input, final Map<String, String> dict,
-      final int collationId) {
-    StringBuilder sb = new StringBuilder();
-    int charCount = 0;
-    for (int k = 0; k < input.length(); k += charCount) {
-      int codePoint = input.codePointAt(k);
-      charCount = Character.charCount(codePoint);
-      String subStr = input.substring(k, k + charCount);
-      String collationKey = CollationFactory.getCollationKey(subStr, collationId);
-      String translated = dict.get(collationKey);
-      if (null == translated) {
-        sb.append(subStr);
-      } else if (!"\0".equals(translated)) {
-        sb.append(translated);
-      }
-    }
-    return sb.toString();
+    return UTF8String.fromString(sb.toString());
   }
 
-  public static UTF8String lowercaseTranslate(final UTF8String input,
-      final Map<String, String> dict) {
-    Map<Integer, String> lowercaseDict = getLowercaseDict(dict);
-    return UTF8String.fromString(lowercaseTranslate(input.toString(), lowercaseDict));
-  }
-  public static UTF8String translate(final UTF8String input, final Map<String, String> dict,
-    final int collationId) {
-    Map<String, String> collationAwareDict = getCollationAwareDict(dict,collationId);
-    return UTF8String.fromString(translate(input.toString(), collationAwareDict, collationId));
+  /**
+   * Translates the `input` string using the translation map `dict`, for all ICU collations.
+   * String translation is performed by iterating over the input string, from left to right, and
+   * repeatedly translating the longest possible substring that matches a key in the dictionary.
+   * For ICU collations, the method uses the collation key of the substring to perform the lookup
+   * in the collation aware version of the translation map.
+   *
+   * @param input the string to be translated
+   * @param dict the collation aware translation dictionary
+   * @param collationId the collation ID to use for string translation
+   * @return the translated string
+   */
+  public static UTF8String translate(final UTF8String input,
+      final Map<String, String> dict, final int collationId) {
+    String inputString = input.toValidString();
+    CharacterIterator target = new StringCharacterIterator(inputString);
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    StringBuilder sb = new StringBuilder();
+    int charIndex = 0;
+    while (charIndex < inputString.length()) {
+      int longestMatchLen = 0;
+      String longestMatch = "";
+      for (String key : dict.keySet()) {
+        StringSearch stringSearch = new StringSearch(key, target, (RuleBasedCollator) collator);
+        stringSearch.setIndex(charIndex);
+        int matchIndex = stringSearch.next();
+        if (matchIndex == charIndex) {
+          int matchLen = stringSearch.getMatchLength();
+          if (matchLen > longestMatchLen) {
+            longestMatchLen = matchLen;
+            longestMatch = key;
+          }
+        }
+      }
+      if (longestMatchLen == 0) {
+        sb.append(inputString.charAt(charIndex));
+        charIndex++;
+      } else {
+        if (!"\0".equals(dict.get(longestMatch))) {
+          sb.append(dict.get(longestMatch));
+        }
+        charIndex += longestMatchLen;
+      }
+    }
+    return UTF8String.fromString(sb.toString());
   }
 
   public static UTF8String lowercaseTrim(
