@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
     Examples:
       > SET spark.sql.collation.enabled=true;
       spark.sql.collation.enabled	true
-      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
+      > SELECT _FUNC_('Spark SQL', 'UTF8_LCASE');
       UTF8_LCASE
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
@@ -107,6 +107,8 @@ case class Collate(child: Expression, collationName: String)
       spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
       UTF8_BINARY
+      > SELECT _FUNC_('Spark SQL' collate UTF8_LCASE);
+      UTF8_LCASE
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
   """,
