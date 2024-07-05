@@ -3182,7 +3182,9 @@ abstract class CSVSuite
             .format(dataSourceFormat)
             .save(path.getCanonicalPath)
           val expectedStr = ToStringBase.getBinaryFormatter("Spark SQL".getBytes())
-          checkAnswer(spark.read.csv(path.getCanonicalPath), Row(1, expectedStr))
+          checkAnswer(
+            spark.read.csv(path.getCanonicalPath),
+            Row("1", expectedStr.toString))
           checkAnswer(
             spark.read.schema(df.schema).csv(path.getCanonicalPath),
             Row(1, expectedStr.getBytes))
