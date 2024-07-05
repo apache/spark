@@ -63,7 +63,7 @@ case class StateMetadataTableEntry(
 }
 
 object StateMetadataTableEntry {
-  private[sql] val schema = {
+  private[sql] val schema: StructType = {
     new StructType()
       .add("operatorId", LongType)
       .add("operatorName", StringType)
@@ -76,35 +76,35 @@ object StateMetadataTableEntry {
 }
 
 class StateMetadataSource extends TableProvider with DataSourceRegister {
+
   override def shortName(): String = "state-metadata"
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    new StateMetadataTable
+    new StateMetadataTable(schema)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    // The schema of state metadata table is static.
-   StateMetadataTableEntry.schema
+    if (!options.containsKey("path")) {
+      throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
+    }
+
+    StateMetadataTableEntry.schema
   }
 }
 
 
-class StateMetadataTable extends Table with SupportsRead with SupportsMetadataColumns {
+class StateMetadataTable(override val schema: StructType) extends Table
+  with SupportsRead with SupportsMetadataColumns {
   override def name(): String = "state-metadata-table"
-
-  override def schema(): StructType = StateMetadataTableEntry.schema
 
   override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     () => {
-      if (!options.containsKey("path")) {
-        throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
-      }
-      new StateMetadataScan(options.get("path"))
+      new StateMetadataScan(options.get("path"), schema)
     }
   }
 
@@ -119,8 +119,10 @@ class StateMetadataTable extends Table with SupportsRead with SupportsMetadataCo
 
 case class StateMetadataInputPartition(checkpointLocation: String) extends InputPartition
 
-class StateMetadataScan(checkpointLocation: String) extends Scan {
-  override def readSchema: StructType = StateMetadataTableEntry.schema
+class StateMetadataScan(
+    checkpointLocation: String,
+    schema: StructType) extends Scan {
+  override def readSchema: StructType = schema
 
   override def toBatch: Batch = {
     new Batch {
@@ -238,7 +240,8 @@ class StateMetadataPartitionReader(
               stateStoreMetadata.numPartitions,
               if (batchIds.nonEmpty) batchIds.head else -1,
               if (batchIds.nonEmpty) batchIds.last else -1,
-              0
+              None,
+              Some(operatorStateMetadataV2.operatorInfo.operatorProperties)
             )
           }
 
