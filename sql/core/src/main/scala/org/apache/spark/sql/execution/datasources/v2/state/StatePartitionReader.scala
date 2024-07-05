@@ -77,7 +77,8 @@ abstract class StatePartitionReaderBase(
       0
     } else {
       require(stateStoreMetadata.length == 1)
-      stateStoreMetadata.head.numColsPrefixKey
+      require(stateStoreMetadata.head.version == 1)
+      stateStoreMetadata.head.numColsPrefixKey.get
     }
 
     // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
