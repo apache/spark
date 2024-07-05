@@ -40,6 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SerializableConfiguration
 
 case class StateMetadataTableEntry(
+    version: Int,
     operatorId: Long,
     operatorName: String,
     stateStoreName: String,
@@ -243,7 +244,7 @@ class StateMetadataPartitionReader(
               -1 // numColsPrefixKey is not available in OperatorStateMetadataV2
             )
           }
-        }
       }
-    }.iterator
+    }
+  }.iterator
 }

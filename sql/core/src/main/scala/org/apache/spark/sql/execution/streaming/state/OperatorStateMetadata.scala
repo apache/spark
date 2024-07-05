@@ -37,12 +37,11 @@ import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataUtils
  */
 trait StateStoreMetadata {
   def storeName: String
-  def numColsPrefixKey: Int
   def numPartitions: Int
 }
 
-case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
-  extends StateStoreMetadata
+case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int,
+  numPartitions: Int) extends StateStoreMetadata
 
 case class StateStoreMetadataV2(
     storeName: String,
@@ -139,6 +138,9 @@ object OperatorStateMetadataUtils extends Logging {
     version match {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
+      case 2 =>
+        Serialization.read[OperatorStateMetadataV2](in)
+
       case 2 =>
         Serialization.read[OperatorStateMetadataV2](in)
 
