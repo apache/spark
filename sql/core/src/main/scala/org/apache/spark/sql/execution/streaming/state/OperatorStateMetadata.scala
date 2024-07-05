@@ -35,12 +35,14 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, Metadata
  */
 trait StateStoreMetadata extends Serializable {
   def storeName: String
-  def numColsPrefixKey: Int
   def numPartitions: Int
 }
 
-case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int, numPartitions: Int)
-  extends StateStoreMetadata
+case class StateStoreMetadataV1(storeName: String, numColsPrefixKey: Int,
+  numPartitions: Int) extends StateStoreMetadata
+
+case class StateStoreMetadataV2(storeName: String,
+  numPartitions: Int, stateSchemaPath: String) extends StateStoreMetadata
 
 case class StateStoreMetadataV2(
     storeName: String,
@@ -67,7 +69,10 @@ trait OperatorInfo extends Serializable {
 
 case class OperatorInfoV1(operatorId: Long, operatorName: String) extends OperatorInfo
 
-trait OperatorStateMetadata extends Serializable {
+case class OperatorInfoV2(operatorId: Long, operatorName: String, operatorProperties: String)
+  extends OperatorInfo
+
+trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
@@ -99,6 +104,9 @@ object OperatorStateMetadataUtils {
     version match {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
+      case 2 =>
+        Serialization.read[OperatorStateMetadataV2](in)
+
       case 2 =>
         Serialization.read[OperatorStateMetadataV2](in)
 
