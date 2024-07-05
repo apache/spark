@@ -52,6 +52,8 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
   override def shortName(): String = "statestore"
 
+  private lazy val TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME = "transformWithStateExec"
+
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
@@ -66,6 +68,18 @@ class StateDataSource extends TableProvider with DataSourceRegister {
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == sourceOptions.operatorId &&
         entry.stateStoreName == sourceOptions.storeName
+    }
+
+    if (sourceOptions.stateVarName.isDefined) {
+      // Perform checks for transformWithState operator in case state variable name is provided
+      allStateStoreMetadata.foreach { entry =>
+        if (entry.operatorName != TRANSFORM_WITH_STATE_OPERATOR_SHORT_NAME) {
+          val errorMsg = "Providing state variable names is only supported with the " +
+            s"transformWithState operator. Found operator=${entry.operatorName}"
+          throw StateDataSourceErrors.invalidOptionValue(sourceOptions.stateVarName.get,
+            errorMsg)
+        }
+      }
     }
 
     new StateTable(session, schema, sourceOptions, stateConf, stateStoreMetadata)
@@ -153,12 +167,14 @@ case class StateSourceOptions(
     joinSide: JoinSideValues,
     readChangeFeed: Boolean,
     fromSnapshotOptions: Option[FromSnapshotOptions],
-    readChangeFeedOptions: Option[ReadChangeFeedOptions]) {
+    readChangeFeedOptions: Option[ReadChangeFeedOptions],
+    stateVarName: Option[String]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide"
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide" +
+      s"stateVarName=${stateVarName.getOrElse("None")})"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
@@ -182,6 +198,7 @@ object StateSourceOptions extends DataSourceOptions {
   val READ_CHANGE_FEED = newOption("readChangeFeed")
   val CHANGE_START_BATCH_ID = newOption("changeStartBatchId")
   val CHANGE_END_BATCH_ID = newOption("changeEndBatchId")
+  val STATE_VAR_NAME = newOption("stateVarName")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -217,6 +234,10 @@ object StateSourceOptions extends DataSourceOptions {
     if (storeName.isEmpty) {
       throw StateDataSourceErrors.invalidOptionValueIsEmpty(STORE_NAME)
     }
+
+    // Check if the state variable name is provided. Used with the transformWithState operator.
+    val stateVarName = Option(options.get(STATE_VAR_NAME))
+      .map(_.trim)
 
     val joinSide = try {
       Option(options.get(JOIN_SIDE))
@@ -321,7 +342,7 @@ object StateSourceOptions extends DataSourceOptions {
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
-      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions)
+      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions, stateVarName)
   }
 
   private def resolvedCheckpointLocation(
