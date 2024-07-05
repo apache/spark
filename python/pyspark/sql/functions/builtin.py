@@ -6187,7 +6187,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
         return _invoke_function_over_columns("round", col)
     else:
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, lit(scale))
+        return _invoke_function_over_columns("round", col, scale)
 
 
 @_try_remote_functions
