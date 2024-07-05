@@ -112,13 +112,20 @@ class TaskMetrics private[spark] () extends Serializable {
    * joins. The value of this accumulator should be approximately the sum of the peak sizes
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
+   * This is not equal to peakOnHeapExecutionMemory + peakOffHeapExecutionMemory
    */
   // TODO: SPARK-48789: the naming is confusing since this does not really reflect the whole
   //  execution memory. We'd better deprecate this once we have a replacement.
   def peakExecutionMemory: Long = _peakExecutionMemory.sum
 
+  /**
+   * Peak on heap execution memory as tracked by TaskMemoryManager.
+   */
   def peakOnHeapExecutionMemory: Long = _peakOnHeapExecutionMemory.sum
 
+  /**
+   * Peak off heap execution memory as tracked by TaskMemoryManager.
+   */
   def peakOffHeapExecutionMemory: Long = _peakOffHeapExecutionMemory.sum
 
   /**

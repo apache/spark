@@ -345,14 +345,10 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
     val onHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.ON_HEAP)
 
-    val result1 = Future {
-      tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
-    }
-    val result2 = Future {
-      tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
-    }
-    assert(ThreadUtils.awaitResult(result1, 200.millis) === 500L)
-    assert(ThreadUtils.awaitResult(result2, 200.millis) === 400L)
+    val result1 = tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
+    val result2 = tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
+    assert(result1 === 500L)
+    assert(result2 === 400L)
     assert(tMemManager.getMemoryConsumptionForThisTask === 900L)
     assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
     assert(tMemManager.getPeakOffHeapExecutionMemory === 500L)
