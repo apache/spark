@@ -550,8 +550,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression: Predictor, Classifier methods") {
-    val sparkSession = smallMultinomialDataset.sparkSession
-    import sparkSession.implicits._
+    val session = smallMultinomialDataset.sparkSession
+    import session.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial")
 
     val model = mlr.fit(smallMultinomialDataset)
@@ -590,8 +590,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
-    val sparkSession = smallBinaryDataset.sparkSession
-    import sparkSession.implicits._
+    val session = smallBinaryDataset.sparkSession
+    import session.implicits._
     val lr = new LogisticRegression().setFamily("binomial")
 
     val model = lr.fit(smallBinaryDataset)
@@ -1427,8 +1427,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(false)
 
-    val sparkSession = multinomialDataset.sparkSession
-    import sparkSession.implicits._
+    val session = multinomialDataset.sparkSession
+    import session.implicits._
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
