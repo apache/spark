@@ -26,10 +26,12 @@ from sparktestsupport import SPARK_HOME
 
 def main():
     nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|s".*(?:\$|\+\s*[^\s"]).*"\))'
+
+    # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
         '[Tt]est',
-        './sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala'
-        './sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala'
+        '/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala',
+        '/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala'
     ]
 
     nonmigrated_files = {}
@@ -41,29 +43,31 @@ def main():
         for exclude_pattern in excluded_file_patterns:
             if re.search(exclude_pattern, file):
                 excluded_files.add(file)
-                break
 
     for file in scala_files:
         if file not in excluded_files:
             with open(file, 'r') as f:
                 lines = f.readlines()
                 for line_number, line in enumerate(lines, start=1):
-                    if re.search(nonmigrated_pattern, line):
+                    matches = list(re.finditer(nonmigrated_pattern, line))
+                    if matches:
                         if file not in nonmigrated_files:
                             nonmigrated_files[file] = []
-                        nonmigrated_files[file].append((line_number, line))
+                        for match in matches:
+                            start_char = match.start()
+                            nonmigrated_files[file].append((line_number, start_char))
 
     if not nonmigrated_files:
         print("Structured logging style check passed.")
         sys.exit(0)
     else:
         for file_path, issues in nonmigrated_files.items():
-            print(f"[error] Structured logging style check failed for the file '{file}' at:")
-            for line_number, code in issues:
-                print(f"Line: {line_number} code: {code}")
+            for line_number, start_char in issues:
+                print(f"[error] {file_path}:{line_number}:{start_char}")
+                print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s. 
+                Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
 
         sys.exit(-1)
-
 
 if __name__ == "__main__":
     main()
