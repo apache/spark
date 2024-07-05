@@ -42,7 +42,9 @@ def _build_merge_action(
         proto_assignments = None
     else:
         proto_assignments = [
-            proto.MergeAction.Assignment(key=expr(k).to_plan(client), value=v.to_plan(client))
+            proto.MergeAction.Assignment(
+                key=expr(k).to_plan(client), value=v.to_plan(client)  # type: ignore[operator]
+            )
             for k, v in assignments.items()
         ]
     return proto.MergeAction(

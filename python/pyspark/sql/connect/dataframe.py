@@ -2191,7 +2191,9 @@ class DataFrame(ParentDataFrame):
         def cb(ei: "ExecutionInfo") -> None:
             self._execution_info = ei
 
-        return MergeIntoWriter(self._plan, self._session, table, condition, cb)
+        return MergeIntoWriter(
+            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
+        )
 
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
