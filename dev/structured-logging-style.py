@@ -25,7 +25,8 @@ import glob
 from sparktestsupport import SPARK_HOME
 
 def main():
-    nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|s".*(?:\$|\+\s*[^\s"]).*"\))'
+    nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|(?:s|\\)".*[\n\r].*(\$|\+).*\))'
+    pattern = re.compile(nonmigrated_pattern)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
@@ -35,27 +36,29 @@ def main():
     ]
 
     nonmigrated_files = {}
-    excluded_files = set()
 
     scala_files = glob.glob(os.path.join(SPARK_HOME, '**', '*.scala'), recursive=True)
 
     for file in scala_files:
+        skip_file = False
         for exclude_pattern in excluded_file_patterns:
             if re.search(exclude_pattern, file):
-                excluded_files.add(file)
+                skip_file = True
+                break
 
-    for file in scala_files:
-        if file not in excluded_files:
+        if not skip_file:
             with open(file, 'r') as f:
-                lines = f.readlines()
-                for line_number, line in enumerate(lines, start=1):
-                    matches = list(re.finditer(nonmigrated_pattern, line))
-                    if matches:
-                        if file not in nonmigrated_files:
-                            nonmigrated_files[file] = []
-                        for match in matches:
-                            start_char = match.start()
-                            nonmigrated_files[file].append((line_number, start_char))
+                content = f.read()
+                matches = list(pattern.finditer(content))
+
+                if matches:
+                    nonmigrated_files[file] = []
+                    for match in matches:
+                        start_pos = match.start()
+                        preceding_content = content[:start_pos]
+                        line_number = preceding_content.count('\n') + 1
+                        start_char = start_pos - preceding_content.rfind('\n') - 1
+                        nonmigrated_files[file].append((line_number, start_char))
 
     if not nonmigrated_files:
         print("Structured logging style check passed.")
