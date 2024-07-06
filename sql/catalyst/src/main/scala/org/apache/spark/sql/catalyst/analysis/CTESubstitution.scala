@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, UnresolvedWithCTERelations, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CTEInChildren, CTERelationDef, CTERelationRef, InsertIntoDir, LogicalPlan, ParsedStatement, SubqueryAlias, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -50,7 +50,7 @@ import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
  * If the query is a SQL command or DML statement (extends `CTEInChildren`),
  * place `WithCTE` into their children.
  */
-object ScopeCTERelations extends Rule[LogicalPlan] {
+object CTESubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
@@ -283,13 +283,16 @@ object ScopeCTERelations extends Rule[LogicalPlan] {
           if (alwaysInline) {
             d.child
           } else {
-            // Add unresolved with CTE relations to the plan and we
-            // will do CTE resolution later in analyzer based on this node.
-            UnresolvedWithCTERelations(u, cteRelations)
+            // Add a `SubqueryAlias` for hint-resolving rules to match relation names.
+            SubqueryAlias(table, CTERelationRef(d.id, d.resolved, d.output, d.isStreaming))
           }
         }.getOrElse(u)
 
       case p: PlanWithUnresolvedIdentifier =>
+        // We must look up CTE relations first when resolving `UnresolvedRelation`s, but we can't do it here
+        // as `PlanWithUnresolvedIdentifier` is a leaf node and may produce `UnresolvedRelation` later. Here
+        // we wrap it with `UnresolvedWithCTERelations` so that we can delay the CTE relations lookup after
+        // `PlanWithUnresolvedIdentifier` is resolved.
         UnresolvedWithCTERelations(p, cteRelations)
 
       case other =>

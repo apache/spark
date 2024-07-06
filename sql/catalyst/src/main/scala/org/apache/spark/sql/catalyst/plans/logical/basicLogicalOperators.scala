@@ -888,15 +888,6 @@ case class CTERelationRef(
   override def computeStats(): Statistics = statsOpt.getOrElse(Statistics(conf.defaultSizeInBytes))
 }
 
-case class UnresolvedWithCTERelations(
-    child: LogicalPlan,
-    cteRelations: Seq[(String, CTERelationDef)])
-  extends UnresolvedUnaryNode {
-
-    override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedWithCTERelations =
-        copy(child = newChild)
-}
-
 /**
  * The resolved version of [[UnresolvedWith]] with CTE referrences linked to CTE definitions
  * through unique IDs instead of relation aliases.
