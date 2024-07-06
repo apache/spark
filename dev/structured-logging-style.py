@@ -25,7 +25,7 @@ import glob
 from sparktestsupport import SPARK_HOME
 
 def main():
-    nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|(?:s|\\)".*[\n\r].*(\$|\+).*\))'
+    nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|(?:s|\\)".*[\n\r]*(\$|\+).*\))'
     pattern = re.compile(nonmigrated_pattern)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
