@@ -262,7 +262,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // very complex and make analysis impossible. Thus we need to optimize `UpdateFields` early
       // at the beginning of analysis.
       OptimizeUpdateFields,
-      CollectCTEDefinitions,
+      ScopeCTERelations,
       WindowsSubstitution,
       EliminateUnions,
       SubstituteUnresolvedOrdinals),
@@ -283,7 +283,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveInsertInto ::
       new ResolveReferences(catalogManager) ::
       new ResolveIdentifierClause(earlyBatches) ::
-      ResolveCTERelations ::
+      LookupCTERelations ::
       ResolveRelations ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::

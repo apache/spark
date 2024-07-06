@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  Resolves all unresolved CTE relations in the plan based on visible
  CTE definitions collected as part of CollectCTEDefinitions rule.
  */
-object ResolveCTERelations extends Rule[LogicalPlan]{
+object LookupCTERelations extends Rule[LogicalPlan]{
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperatorsDown {
