@@ -32,6 +32,7 @@ from typing import (
     overload,
     TYPE_CHECKING,
 )
+from typing_extensions import Concatenate, ParamSpec
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -73,6 +74,9 @@ if TYPE_CHECKING:
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
+
+
+P = ParamSpec("P")
 
 
 class DataFrame:
@@ -5837,7 +5841,12 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def transform(self, func: Callable[..., "DataFrame"], *args: Any, **kwargs: Any) -> "DataFrame":
+    def transform(
+        self,
+        func: Callable[Concatenate["DataFrame", P], "DataFrame"],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> "DataFrame":
         """Returns a new :class:`DataFrame`. Concise syntax for chaining custom transformations.
 
         .. versionadded:: 3.0.0
