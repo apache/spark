@@ -920,7 +920,7 @@ class CollationStringExpressionsSuite
 
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
     def evalStringTrim(src: Any, trim: Any, result: String): Unit = {
-      Seq("UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
         val dt: DataType = StringType(collation)
         checkEvaluation(StringTrim(Literal.create(src, dt), Literal.create(trim, dt)), result)
         checkEvaluation(StringTrimLeft(Literal.create(src, dt), Literal.create(trim, dt)), result)
