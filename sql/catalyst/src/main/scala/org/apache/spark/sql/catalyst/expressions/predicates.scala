@@ -998,8 +998,25 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
     }
   }
 
-  protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
+  protected lazy val ordering: Ordering[Any] = new Ordering[Any] {
+    override def compare(x: Any, y: Any): Int = {
+      (x, y) match {
+        // Handle comparison when the left side is a String and the right side is an Integer
+        case (xs: String, yi: Int) => xs.toIntOption match {
+          case Some(xi) => xi.compareTo(yi)
+          case None => xs.compareTo(yi.toString)
+        }
+        // Handle comparison when the left side is an Integer and the right side is a String
+        case (xi: Int, ys: String) => ys.toIntOption match {
+          case Some(yi) => xi.compareTo(yi)
+          case None => xi.toString.compareTo(ys)
+        }
+        case _ => TypeUtils.getInterpretedOrdering(left.dataType).compare(x, y)
+      }
+    }
+  }
 }
+
 
 
 object BinaryComparison {
@@ -1044,6 +1061,15 @@ case class EqualTo(left: Expression, right: Expression)
 
   override def symbol: String = "="
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (StringType, IntegerType) | (IntegerType, StringType) =>
+        TypeCheckResult.TypeCheckSuccess
+      case _ =>
+        super.checkInputDataTypes()
+    }
+  }
+
   // +---------+---------+---------+---------+
   // | =       | TRUE    | FALSE   | UNKNOWN |
   // +---------+---------+---------+---------+
@@ -1051,7 +1077,13 @@ case class EqualTo(left: Expression, right: Expression)
   // | FALSE   | FALSE   | TRUE    | UNKNOWN |
   // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
   // +---------+---------+---------+---------+
-  protected override def nullSafeEval(left: Any, right: Any): Any = ordering.equiv(left, right)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    (input1, input2) match {
+      case (l: String, r: Int) => l == r.toString
+      case (l: Int, r: String) => l.toString == r
+      case _ => ordering.equiv(input1, input2)
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
@@ -1108,7 +1140,21 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     } else if (input1 == null || input2 == null) {
       false
     } else {
-      ordering.equiv(input1, input2)
+       if (left.dataType == StringType && right.dataType == IntegerType) {
+        try {
+          ordering.equiv(input1.toString.toInt, input2)
+        } catch {
+          case _: NumberFormatException => false
+        }
+      } else if (left.dataType == IntegerType && right.dataType == StringType) {
+        try {
+          ordering.equiv(input1, input2.toString.toInt)
+        } catch {
+          case _: NumberFormatException => false
+        }
+      } else {
+        ordering.equiv(input1, input2)
+      }
     }
   }
 
@@ -1193,7 +1239,23 @@ case class LessThan(left: Expression, right: Expression)
 
   override def symbol: String = "<"
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (left.dataType == StringType && right.dataType == IntegerType) {
+      try {
+        ordering.lt(input1.toString.toInt, input2)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else if (left.dataType == IntegerType && right.dataType == StringType) {
+      try {
+        ordering.lt(input1, input2.toString.toInt)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else {
+      ordering.lt(input1, input2)
+    }
+  }
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
@@ -1228,11 +1290,28 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   override def symbol: String = "<="
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (left.dataType == StringType && right.dataType == IntegerType) {
+      try {
+        ordering.lteq(input1.toString.toInt, input2)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else if (left.dataType == IntegerType && right.dataType == StringType) {
+      try {
+        ordering.lteq(input1, input2.toString.toInt)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else {
+      ordering.lteq(input1, input2)
+    }
+  }
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 }
+
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
@@ -1263,7 +1342,23 @@ case class GreaterThan(left: Expression, right: Expression)
 
   override def symbol: String = ">"
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (left.dataType == StringType && right.dataType == IntegerType) {
+      try {
+        ordering.gt(input1.toString.toInt, input2)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else if (left.dataType == IntegerType && right.dataType == StringType) {
+      try {
+        ordering.gt(input1, input2.toString.toInt)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else {
+      ordering.gt(input1, input2)
+    }
+  }
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
@@ -1298,7 +1393,23 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 
   override def symbol: String = ">="
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
+    if (left.dataType == StringType && right.dataType == IntegerType) {
+      try {
+        ordering.gteq(input1.toString.toInt, input2)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else if (left.dataType == IntegerType && right.dataType == StringType) {
+      try {
+        ordering.gteq(input1, input2.toString.toInt)
+      } catch {
+        case _: NumberFormatException => false
+      }
+    } else {
+      ordering.gteq(input1, input2)
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
