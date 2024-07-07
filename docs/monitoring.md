@@ -1086,29 +1086,37 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servlet</code> and the REST API, but in a time-series format. The following are the equivalent Prometheus Servlet endpoints.   
 
 <table>
-  <thead><tr><th></th></th><th>JSON End Point</th><th>Prometheus End Point</th></tr></thead>
+  <thead><tr><th></th></th>
+<th>Port</th>
+<th>JSON End Point</th>
+<th>Prometheus End Point</th></tr></thead>
   <tr>
     <td>Master</td>
+    <td>8080</td>
     <td><code>/metrics/master/json/</code></td>
     <td><code>/metrics/master/prometheus/</code></td>
   </tr>
   <tr>
     <td>Master</td>
+    <td>8080</td>
     <td><code>/metrics/applications/json/</code></td>
     <td><code>/metrics/applications/prometheus/</code></td>
   </tr>
   <tr>
     <td>Worker</td>
+    <td>8081</td>
     <td><code>/metrics/json/</code></td>
     <td><code>/metrics/prometheus/</code></td>
   </tr>
   <tr>
     <td>Driver</td>
+    <td>4040</td>
     <td><code>/metrics/json/</code></td>
     <td><code>/metrics/prometheus/</code></td>
   </tr>
   <tr>
     <td>Driver</td>
+    <td>4040</td>
     <td><code>/api/v1/applications/{id}/executors/	</code></td>
     <td><code>/metrics/executors/prometheus/</code></td>
   </tr>
