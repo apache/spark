@@ -1904,6 +1904,23 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "σ", "Σx");
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "ς", "Σx");
     assertStringTrimRight("UNICODE_CI", "ΣxΣ", "Σ", "Σx");
+
+    // Unicode normalization - UTF8_BINARY.
+    assertStringTrim("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrimLeft("UTF8_BINARY", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrimRight("UTF8_BINARY", "åβγδa\u030A", "å", "åβγδa\u030A");
+    // Unicode normalization - UTF8_LCASE.
+    assertStringTrim("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
+    assertStringTrimLeft("UTF8_LCASE", "åβγδa\u030A", "Å", "βγδa\u030A");
+    assertStringTrimRight("UTF8_LCASE", "åβγδa\u030A", "Å", "åβγδa\u030A");
+    // Unicode normalization - UNICODE.
+    assertStringTrim("UNICODE", "åβγδa\u030A", "å", "βγδ");
+    assertStringTrimLeft("UNICODE", "åβγδa\u030A", "å", "βγδa\u030A");
+    assertStringTrimRight("UNICODE", "åβγδa\u030A", "å", "åβγδ");
+    // Unicode normalization - UNICODE_CI.
+    assertStringTrim("UNICODE_CI", "åβγδa\u030A", "Å", "βγδ");
+    assertStringTrimLeft("UNICODE_CI", "åβγδa\u030A", "Å", "βγδa\u030A");
+    assertStringTrimRight("UNICODE_CI", "åβγδa\u030A", "Å", "åβγδ");
   }
 
   // TODO: Test more collation-aware string expressions.
