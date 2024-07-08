@@ -87,12 +87,12 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Returns jdbc version that this dialect uses.
    */
-  def jdbcVersion(): Int
+  def jdbcVersion(): Int = Int.MaxValue
 
   /**
    * Returns dialect version that this dialect uses.
    */
-  def dialectVersion(): Int
+  def dialectVersion(): Int = Int.MaxValue
 
   /**
    * Check if this dialect instance can handle a certain jdbc url.
