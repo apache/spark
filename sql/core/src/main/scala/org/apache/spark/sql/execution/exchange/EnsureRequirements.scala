@@ -176,6 +176,11 @@ case class EnsureRequirements(
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             bestSpecOpt match {
+              // If keyGroupCompatible = false, we can still perform SPJ
+              // by shuffling the other side based on join keys (see the else case below).
+              // Hence we need to ensure that after this call, the outputPartitioning of the
+              // partitioned side's BatchScanExec is grouped by join keys to match,
+              // and we do that by pushing down the join keys
               case Some(KeyGroupedShuffleSpec(_, _, Some(joinKeyPositions))) =>
                 populateJoinKeyPositions(child, Some(joinKeyPositions))
               case _ => child
@@ -583,8 +588,9 @@ case class EnsureRequirements(
   }
 
 
-  private def populateJoinKeyPositions(plan: SparkPlan,
-                                       joinKeyPositions: Option[Seq[Int]]): SparkPlan = plan match {
+  private def populateJoinKeyPositions(
+      plan: SparkPlan,
+      joinKeyPositions: Option[Seq[Int]]): SparkPlan = plan match {
     case scan: BatchScanExec =>
       scan.copy(
         spjParams = scan.spjParams.copy(

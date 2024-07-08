@@ -118,25 +118,29 @@ case class BatchScanExec(
 
   override def outputPartitioning: Partitioning = {
     super.outputPartitioning match {
-      case k: KeyGroupedPartitioning if spjParams.commonPartitionValues.isDefined =>
-        // We allow duplicated partition values if
-        // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
-        val newPartValues = spjParams.commonPartitionValues.get.flatMap {
-          case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
-        }
+      case k: KeyGroupedPartitioning =>
         val expressions = spjParams.joinKeyPositions match {
           case Some(projectionPositions) => projectionPositions.map(i => k.expressions(i))
           case _ => k.expressions
         }
-        k.copy(expressions = expressions, numPartitions = newPartValues.length,
-          partitionValues = newPartValues)
-      case k: KeyGroupedPartitioning if spjParams.joinKeyPositions.isDefined =>
-        val expressions = spjParams.joinKeyPositions.get.map(i => k.expressions(i))
-        val newPartValues = k.partitionValues.map{r =>
-          val projectedRow = KeyGroupedPartitioning.project(expressions,
-            spjParams.joinKeyPositions.get, r)
-          InternalRowComparableWrapper(projectedRow, expressions)
-        }.distinct.map(_.row)
+
+        val newPartValues = spjParams.commonPartitionValues match {
+          case Some(commonPartValues) =>
+            // We allow duplicated partition values if
+            // `spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled` is true
+             commonPartValues.flatMap {
+               case (partValue, numSplits) => Seq.fill(numSplits)(partValue)
+             }
+          case None =>
+            spjParams.joinKeyPositions match {
+              case Some(projectionPositions) => k.partitionValues.map{r =>
+                val projectedRow = KeyGroupedPartitioning.project(expressions,
+                  projectionPositions, r)
+                InternalRowComparableWrapper(projectedRow, expressions)
+              }.distinct.map(_.row)
+              case _ => k.partitionValues
+            }
+        }
         k.copy(expressions = expressions, numPartitions = newPartValues.length,
           partitionValues = newPartValues)
       case p => p
