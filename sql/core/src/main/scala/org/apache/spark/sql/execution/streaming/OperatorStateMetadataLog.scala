@@ -54,8 +54,6 @@ class OperatorStateMetadataLog(
       case 1 =>
         OperatorStateMetadataV1.serialize(fsDataOutputStream, metadata)
       case 2 =>
-        logError(s"### stateSchemaPath: ${metadata.asInstanceOf[OperatorStateMetadataV2].
-          stateStoreInfo.head.stateSchemaFilePath}")
         OperatorStateMetadataV2.serialize(fsDataOutputStream, metadata)
     }
 >>>>>>> 0acb7055d11 (checking the OperatorStateMetadata log for the state schema file)
