@@ -80,10 +80,18 @@ trait AlterTableClusterBySuiteBase extends QueryTest with DDLCommandTestUtils {
   test("clustering columns not defined in schema") {
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing CLUSTER BY (id)")
-      val err = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tbl CLUSTER BY (unknown)")
-      }
-      assert(err.message.contains("Couldn't find column unknown in:"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tbl CLUSTER BY (unknown)")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3060",
+        parameters = Map("i" -> "unknown",
+          "schema" ->
+            """root
+              | |-- id: long (nullable = true)
+              | |-- data: string (nullable = true)
+              |""".stripMargin)
+      )
     }
   }
 
