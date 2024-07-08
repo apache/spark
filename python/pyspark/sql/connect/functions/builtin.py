@@ -1195,9 +1195,6 @@ def percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
     if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
             error_class="NOT_COLUMN_OR_INT",
@@ -1207,7 +1204,8 @@ def percentile(
             },
         )
 
-    return _invoke_function("percentile", _to_col(col), lit(percentage), lit(frequency))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -1218,10 +1216,8 @@ def percentile_approx(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = lit(list(percentage))
-
-    return _invoke_function("percentile_approx", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
@@ -1232,10 +1228,8 @@ def approx_percentile(
     percentage: Union[Column, float, List[float], Tuple[float]],
     accuracy: Union[Column, float] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
-    return _invoke_function("approx_percentile", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
 
 
 approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
