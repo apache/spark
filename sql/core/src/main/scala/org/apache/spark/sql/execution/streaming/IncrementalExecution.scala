@@ -211,6 +211,7 @@ class IncrementalExecution(
             val metadataWriter = new OperatorStateMetadataWriter(new Path(
               checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
             metadataWriter.write(metadata)
+          case _ =>
         }
         statefulOp
     }
