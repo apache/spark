@@ -165,7 +165,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     }
   }
 
-  test("read limit state change feed") {
+  test("read global streaming limit state change feed") {
     withTempDir { tempDir =>
       val inputData = MemoryStream[Int]
       val df = inputData.toDF().limit(10)
@@ -195,7 +195,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     }
   }
 
-  test("read aggregate state change feed") {
+  test("read streaming aggregate state change feed") {
     withTempDir { tempDir =>
       val inputData = MemoryStream[Int]
       val df = inputData.toDF().groupBy("value").count()
@@ -234,7 +234,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     }
   }
 
-  test("read deduplication state change feed") {
+  test("read streaming deduplication state change feed") {
     withTempDir { tempDir =>
       val inputData = MemoryStream[Int]
       val df = inputData.toDF().dropDuplicates("value")
