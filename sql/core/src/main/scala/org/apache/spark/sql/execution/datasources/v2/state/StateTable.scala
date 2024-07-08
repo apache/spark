@@ -82,16 +82,15 @@ class StateTable(
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
   private def isValidSchema(schema: StructType): Boolean = {
-    if (sourceOptions.readChangeFeed) {
-      return isValidChangeDataSchema(schema)
-    }
-    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
+    if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
+      false
+    } else if (sourceOptions.readChangeFeed) {
+      isValidChangeDataSchema(schema)
+    } else if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
       false
     } else {
       true
@@ -105,12 +104,6 @@ class StateTable(
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "batch_id").isInstanceOf[LongType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "change_type").isInstanceOf[StringType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
       false
     } else {
       true

@@ -42,10 +42,10 @@ class StatePartitionReaderFactory(
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
-        partition.asInstanceOf[StateStoreInputPartition], schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, stateStoreMetadata)
     } else {
       new StatePartitionReader(storeConf, hadoopConf,
-        partition.asInstanceOf[StateStoreInputPartition], schema, stateStoreMetadata)
+        stateStoreInputPartition, schema, stateStoreMetadata)
     }
   }
 }

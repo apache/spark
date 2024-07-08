@@ -471,9 +471,11 @@ trait SupportsFineGrainedReplay {
   }
 
   /**
+   * Return a [[StateStoreChangeDataReader]] that reads the changelogs entries from startVersion to
+   * endVersion.
    *
-   * @param startVersion
-   * @param endVersion
+   * @param startVersion starting changelog version
+   * @param endVersion ending changelog version
    * @return
    */
   def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):

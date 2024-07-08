@@ -413,11 +413,11 @@ class StateStoreChangelogReaderV2(
  * @param compressionCodec de-compression method using for reading changelog file
  */
 abstract class StateStoreChangeDataReader(
-  fm: CheckpointFileManager,
-  stateLocation: Path,
-  startVersion: Long,
-  endVersion: Long,
-  compressionCodec: CompressionCodec)
+    fm: CheckpointFileManager,
+    stateLocation: Path,
+    startVersion: Long,
+    endVersion: Long,
+    compressionCodec: CompressionCodec)
   extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)

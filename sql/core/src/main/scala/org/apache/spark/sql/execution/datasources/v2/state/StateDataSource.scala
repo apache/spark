@@ -108,7 +108,6 @@ class StateDataSource extends TableProvider with DataSourceRegister {
           .add("partition_id", IntegerType)
       }
 
-
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
