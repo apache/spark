@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.execution.command.v1
 
 /**
- * The class contains tests for the `ALTER TABLE ... DROP (COLUMN | COLUMNS)` command to check
+ * The class contains tests for the `ALTER TABLE ... RENAME COLUMN` command to check
  * V1 Hive external table catalog.
  */
-class AlterTableDropColumnSuite extends v1.AlterTableDropColumnSuiteBase with CommandSuiteBase
+class AlterTableRenameColumnSuite extends v1.AlterTableRenameColumnSuiteBase with CommandSuiteBase

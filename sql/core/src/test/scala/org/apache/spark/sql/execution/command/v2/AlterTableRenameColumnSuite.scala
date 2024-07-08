@@ -25,11 +25,11 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
 /**
- * The class contains tests for the `ALTER TABLE .. DROP (COLUMN | COLUMNS)` command to
- * check V2 table catalogs.
+ * The class contains tests for the `ALTER TABLE .. RENAME COLUMN` command
+ * to check V2 table catalogs.
  */
-class AlterTableDropColumnSuite
-  extends command.AlterTableDropColumnSuiteBase with CommandSuiteBase {
+class AlterTableRenameColumnSuite
+  extends command.AlterTableRenameColumnSuiteBase with CommandSuiteBase {
 
   private def getTableMetadata(tableIndent: TableIdentifier): Table = {
     val nameParts = tableIndent.nameParts
@@ -40,10 +40,10 @@ class AlterTableDropColumnSuite
 
   test("table does not exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
       checkError(
         exception = intercept[AnalysisException] {
-          sql("ALTER TABLE does_not_exist DROP COLUMN id")
+          sql("ALTER TABLE does_not_exist RENAME COLUMN col1 TO col3")
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`does_not_exist`"),
@@ -52,77 +52,103 @@ class AlterTableDropColumnSuite
     }
   }
 
-  test("drop column") {
+  test("rename column") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, data string) $defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN data")
+      sql(s"CREATE TABLE $t (col1 int, col2 string, a int, b int) $defaultUsing")
+      sql(s"ALTER TABLE $t RENAME COLUMN col1 to col3")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
-      assert(table.columns() === Array(Column.create("id", IntegerType)))
+      assert(table.columns() === Array(
+        Column.create("col3", IntegerType),
+        Column.create("col2", StringType),
+        Column.create("a", IntegerType),
+        Column.create("b", IntegerType)))
     }
   }
 
-  test("drop nested column") {
+  test("rename nested column") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double, z: double>) $defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN point.z")
+      // don't write as: s"ALTER TABLE $t RENAME COLUMN point.z to point.w",
+      // otherwise, it will throw an exception
+      sql(s"ALTER TABLE $t RENAME COLUMN point.z to w")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
       assert(table.columns() === Array(
         Column.create("id", IntegerType),
         Column.create("point",
-          StructType(Seq(StructField("x", DoubleType), StructField("y", DoubleType))))))
+          StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("w", DoubleType))
+          )
+        ))
+      )
     }
   }
 
-  test("drop nested column in map key") {
+  test("rename nested column in map key") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) " +
         s"$defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN point.key.y")
+      sql(s"ALTER TABLE $t RENAME COLUMN point.key.y to z")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
       assert(table.columns() === Array(
         Column.create("id", IntegerType),
-        Column.create("point", MapType(StructType(Seq(StructField("x", DoubleType))), LongType))))
+        Column.create("point",
+          MapType(
+            StructType(Seq(StructField("x", DoubleType), StructField("z", DoubleType))),
+            LongType
+          )
+        ))
+      )
     }
   }
 
-  test("drop nested column in map value") {
+  test("rename nested column in map value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, point map<string, struct<x: double, y: double>>) " +
         s"$defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN point.value.y")
+      sql(s"ALTER TABLE $t RENAME COLUMN point.value.y to z")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
       assert(table.columns() === Array(
         Column.create("id", IntegerType),
-        Column.create("point", MapType(StringType, StructType(Seq(StructField("x", DoubleType)))))))
+        Column.create("point",
+          MapType(
+            StringType,
+            StructType(Seq(StructField("x", DoubleType), StructField("z", DoubleType)))
+          )
+        ))
+      )
     }
   }
 
-  test("drop nested column in array element") {
+  test("rename nested column in array element") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) $defaultUsing")
-      sql(s"ALTER TABLE $t DROP COLUMN points.element.y")
+      sql(s"ALTER TABLE $t RENAME COLUMN points.element.y to z")
 
       val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
       assert(table.name === t)
       assert(table.columns() === Array(
         Column.create("id", IntegerType),
-        Column.create("points", ArrayType(StructType(Seq(StructField("x", DoubleType)))))))
+        Column.create("points",
+          ArrayType(StructType(Seq(StructField("x", DoubleType), StructField("z", DoubleType))))))
+      )
     }
   }
 
-  test("drop column must exist if required") {
+  test("rename column must exist if required") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
 
-      val sqlText = s"ALTER TABLE $t DROP COLUMN does_not_exist"
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN does_not_exist to x"
       checkError(
         exception = intercept[AnalysisException] {
           sql(sqlText)
@@ -135,16 +161,16 @@ class AlterTableDropColumnSuite
             """root
               | |-- id: integer (nullable = true)
               |""".stripMargin),
-        context = ExpectedContext(fragment = sqlText, start = 0, stop = 57)
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 64)
       )
     }
   }
 
-  test("nested drop column must exist if required") {
+  test("nested rename column must exist if required") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
 
-      val sqlText = s"ALTER TABLE $t DROP COLUMN point.does_not_exist"
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN point.does_not_exist TO x"
       checkError(
         exception = intercept[AnalysisException] {
           sql(sqlText)
@@ -157,28 +183,8 @@ class AlterTableDropColumnSuite
             """root
               | |-- id: integer (nullable = true)
               |""".stripMargin),
-        context = ExpectedContext(fragment = sqlText, start = 0, stop = 63)
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = 70)
       )
-
-      // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.does_not_exist")
-      val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
-      assert(table.name === t)
-      assert(table.columns() === Array(Column.create("id", IntegerType)))
-    }
-  }
-
-  test("drop mixed existing/non-existing columns using IF EXISTS") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
-        s"$defaultUsing")
-      // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
-        s"names, name, points.element.z, id, points.element.x")
-      val table = getTableMetadata(TableIdentifier("tbl", Some("ns"), Some(catalog)))
-      assert(table.name === t)
-      assert(table.columns() === Array(Column.create("points",
-        ArrayType(StructType(Seq(StructField("y", DoubleType)))))))
     }
   }
 }

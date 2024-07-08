@@ -1222,15 +1222,6 @@ class DDLParserSuite extends AnalysisTest {
       )))
   }
 
-  test("alter table: rename column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
-      RenameColumn(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        "d"))
-  }
-
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
