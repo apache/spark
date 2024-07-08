@@ -22,8 +22,8 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.STATUS
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
 import org.apache.spark.streaming.util.RecurringTimer
@@ -281,7 +281,7 @@ private[streaming] class BlockGenerator(
         val block = blocksForPushing.take()
         logDebug(s"Pushing block $block")
         pushBlock(block)
-        logInfo("Blocks left to push " + blocksForPushing.size())
+        logInfo(log"Blocks left to push ${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())}")
       }
       logInfo("Stopped block pushing thread")
     } catch {
@@ -299,6 +299,6 @@ private[streaming] class BlockGenerator(
 
   private def pushBlock(block: Block): Unit = {
     listener.onPushBlock(block.id, block.buffer)
-    logInfo("Pushed block " + block.id)
+    logInfo(log"Pushed block ${MDC(LogKeys.BLOCK_ID, block.id)}")
   }
 }
