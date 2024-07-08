@@ -280,7 +280,7 @@ private[streaming] class BlockGenerator(
         log"${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())} blocks")
       while (!blocksForPushing.isEmpty) {
         val block = blocksForPushing.take()
-        logDebug(log"Pushing block ${MDC(LogKeys.BLOCK, block)}")
+        logDebug(s"Pushing block $block")
         pushBlock(block)
         logInfo(log"Blocks left to push ${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())}")
       }
