@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.util;
 
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.text.BreakIterator;
+import com.ibm.icu.text.Collator;
+import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 
@@ -26,7 +28,10 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
+import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -426,19 +431,48 @@ public class CollationAwareUTF8String {
    * @param codePoint The code point to convert to lowercase.
    * @param sb The StringBuilder to append the lowercase character to.
    */
-  private static void lowercaseCodePoint(final int codePoint, final StringBuilder sb) {
-    if (codePoint == 0x0130) {
+  private static void appendLowercaseCodePoint(final int codePoint, final StringBuilder sb) {
+    int lowercaseCodePoint = getLowercaseCodePoint(codePoint);
+    if (lowercaseCodePoint == CODE_POINT_COMBINED_LOWERCASE_I_DOT) {
       // Latin capital letter I with dot above is mapped to 2 lowercase characters.
       sb.appendCodePoint(0x0069);
       sb.appendCodePoint(0x0307);
+    } else {
+      // All other characters should follow context-unaware ICU single-code point case mapping.
+      sb.appendCodePoint(lowercaseCodePoint);
+    }
+  }
+
+  /**
+   * `CODE_POINT_COMBINED_LOWERCASE_I_DOT` is an internal representation of the combined lowercase
+   * code point for ASCII lowercase letter i with an additional combining dot character (U+0307).
+   * This integer value is not a valid code point itself, but rather an artificial code point
+   * marker used to represent the two lowercase characters that are the result of converting the
+   * uppercase Turkish dotted letter I with a combining dot character (U+0130) to lowercase.
+   */
+  private static final int CODE_POINT_LOWERCASE_I = 0x69;
+  private static final int CODE_POINT_COMBINING_DOT = 0x307;
+  private static final int CODE_POINT_COMBINED_LOWERCASE_I_DOT =
+    CODE_POINT_LOWERCASE_I << 16 | CODE_POINT_COMBINING_DOT;
+
+  /**
+   * Returns the lowercase version of the provided code point, with special handling for
+   * one-to-many case mappings (i.e. characters that map to multiple characters in lowercase) and
+   * context-insensitive case mappings (i.e. characters that map to different characters based on
+   * the position in the string relative to other characters in lowercase).
+   */
+  private static int getLowercaseCodePoint(final int codePoint) {
+    if (codePoint == 0x0130) {
+      // Latin capital letter I with dot above is mapped to 2 lowercase characters.
+      return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
     else if (codePoint == 0x03C2) {
       // Greek final and non-final capital letter sigma should be mapped the same.
-      sb.appendCodePoint(0x03C3);
+      return 0x03C3;
     }
     else {
       // All other characters should follow context-unaware ICU single-code point case mapping.
-      sb.appendCodePoint(UCharacter.toLowerCase(codePoint));
+      return UCharacter.toLowerCase(codePoint);
     }
   }
 
@@ -446,7 +480,7 @@ public class CollationAwareUTF8String {
    * Converts an entire string to lowercase using ICU rules, code point by code point, with
    * special handling for one-to-many case mappings (i.e. characters that map to multiple
    * characters in lowercase). Also, this method omits information about context-sensitive case
-   * mappings using special handling in the `lowercaseCodePoint` method.
+   * mappings using special handling in the `appendLowercaseCodePoint` method.
    *
    * @param target The target string to convert to lowercase.
    * @return The string converted to lowercase in a context-unaware manner.
@@ -460,7 +494,7 @@ public class CollationAwareUTF8String {
     String targetString = target.toValidString();
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < targetString.length(); ++i) {
-      lowercaseCodePoint(targetString.codePointAt(i), sb);
+      appendLowercaseCodePoint(targetString.codePointAt(i), sb);
     }
     return UTF8String.fromString(sb.toString());
   }
@@ -691,12 +725,32 @@ public class CollationAwareUTF8String {
     return collationAwareDict;
   }
 
+  /**
+   * Trims the `srcString` string from both ends of the string using the specified `trimString`
+   * characters, with respect to the UTF8_LCASE collation. String trimming is performed by
+   * first trimming the left side of the string, and then trimming the right side of the string.
+   * The method returns the trimmed string. If the `trimString` is null, the method returns null.
+   *
+   * @param srcString the input string to be trimmed from both ends of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for UTF8_LCASE collation)
+   */
   public static UTF8String lowercaseTrim(
       final UTF8String srcString,
       final UTF8String trimString) {
     return lowercaseTrimRight(lowercaseTrimLeft(srcString, trimString), trimString);
   }
 
+  /**
+   * Trims the `srcString` string from both ends of the string using the specified `trimString`
+   * characters, with respect to all ICU collations in Spark. String trimming is performed by
+   * first trimming the left side of the string, and then trimming the right side of the string.
+   * The method returns the trimmed string. If the `trimString` is null, the method returns null.
+   *
+   * @param srcString the input string to be trimmed from both ends of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for ICU collations)
+   */
   public static UTF8String trim(
       final UTF8String srcString,
       final UTF8String trimString,
@@ -704,106 +758,218 @@ public class CollationAwareUTF8String {
     return trimRight(trimLeft(srcString, trimString, collationId), trimString, collationId);
   }
 
+  /**
+   * Trims the `srcString` string from the left side using the specified `trimString` characters,
+   * with respect to the UTF8_LCASE collation. For UTF8_LCASE, the method first creates a hash
+   * set of lowercased code points in `trimString`, and then iterates over the `srcString` from
+   * the left side, until reaching a character whose lowercased code point is not in the hash set.
+   * Finally, the method returns the substring from that position to the end of `srcString`.
+   * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
+   *
+   * @param srcString the input string to be trimmed from the left end of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for UTF8_LCASE collation)
+   */
   public static UTF8String lowercaseTrimLeft(
       final UTF8String srcString,
       final UTF8String trimString) {
-    // Matching UTF8String behavior for null `trimString`.
+    // Matching the default UTF8String behavior for null `trimString`.
     if (trimString == null) {
       return null;
     }
 
+    // Create a hash set of lowercased code points for all characters of `trimString`.
     HashSet<Integer> trimChars = new HashSet<>();
     Iterator<Integer> trimIter = trimString.codePointIterator();
-    while (trimIter.hasNext()) trimChars.add(UCharacter.toLowerCase(trimIter.next()));
+    while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
-    int searchIndex = 0;
+    // Iterate over `srcString` from the left to find the first character that is not in the set.
+    int searchIndex = 0, codePoint;
     Iterator<Integer> srcIter = srcString.codePointIterator();
     while (srcIter.hasNext()) {
-      if (!trimChars.contains(UCharacter.toLowerCase(srcIter.next()))) break;
-      ++searchIndex;
+      codePoint = getLowercaseCodePoint(srcIter.next());
+      // Special handling for Turkish dotted uppercase letter I.
+      if (codePoint == CODE_POINT_LOWERCASE_I && srcIter.hasNext() &&
+          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
+        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
+        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
+          || nextCodePoint == CODE_POINT_COMBINING_DOT) searchIndex += 2;
+        else {
+          if (trimChars.contains(codePoint)) ++searchIndex;
+          break;
+        }
+      } else if (trimChars.contains(codePoint)) ++searchIndex;
+      else break;
     }
 
-    return srcString.substring(searchIndex, srcString.numChars());
+    // Return the substring from that position to the end of the string.
+    return searchIndex == 0 ? srcString : srcString.substring(searchIndex, srcString.numChars());
   }
 
+  /**
+   * Trims the `srcString` string from the left side using the specified `trimString` characters,
+   * with respect to ICU collations. For these collations, the method iterates over `srcString`
+   * from left to right, and repeatedly skips the longest possible substring that matches any
+   * character in `trimString`, until reaching a character that is not found in `trimString`.
+   * Finally, the method returns the substring from that position to the end of `srcString`.
+   * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
+   *
+   * @param srcString the input string to be trimmed from the left end of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for ICU collations)
+   */
   public static UTF8String trimLeft(
       final UTF8String srcString,
       final UTF8String trimString,
       final int collationId) {
-    // Matching UTF8String behavior for null `trimString`.
-    if (trimString == null) {
-      return null;
-    }
+    // Short-circuit for base cases.
+    if (trimString == null) return null;
+    if (srcString.numBytes() == 0) return srcString;
 
-    // Create a set of collation keys for all characters of the trim string, for fast lookup.
-    String trim = trimString.toString();
-    HashSet<String> trimChars = new HashSet<>();
-    for (int i = 0; i < trim.length(); i++) {
-      trimChars.add(CollationFactory.getCollationKey(String.valueOf(trim.charAt(i)), collationId));
+    // Create an array of Strings for all characters of `trimString`.
+    int trimCharIndex = 0;
+    String[] trimChars = new String[trimString.numChars()];
+    Iterator<Integer> trimIter = trimString.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    while (trimIter.hasNext()) {
+      trimChars[trimCharIndex++] = String.valueOf((char) trimIter.next().intValue());
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
-    String input = srcString.toString();
-    int i = 0;
-    while (i < input.length()) {
-      String key = CollationFactory.getCollationKey(String.valueOf(input.charAt(i)), collationId);
-      if (!trimChars.contains(key)) break;
-      ++i;
+    String src = srcString.toValidString();
+    CharacterIterator target = new StringCharacterIterator(src);
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    int charIndex = 0, longestMatchLen;
+    while (charIndex < src.length()) {
+      longestMatchLen = 0;
+      for (String trim : trimChars) {
+        StringSearch stringSearch = new StringSearch(trim, target, (RuleBasedCollator) collator);
+        stringSearch.setIndex(charIndex);
+        int matchIndex = stringSearch.next();
+        if (matchIndex == charIndex) {
+          int matchLen = stringSearch.getMatchLength();
+          if (matchLen > longestMatchLen) {
+            longestMatchLen = matchLen;
+          }
+        }
+      }
+      if (longestMatchLen == 0) break;
+      else charIndex += longestMatchLen;
     }
-    // Return the substring from that position to the end of the string.
-    return UTF8String.fromString(input.substring(i, srcString.numChars()));
+
+    // Return the substring from the calculated position until the end of the string.
+    return UTF8String.fromString(src.substring(charIndex));
   }
 
+  /**
+   * Trims the `srcString` string from the right side using the specified `trimString` characters,
+   * with respect to the UTF8_LCASE collation. For UTF8_LCASE, the method first creates a hash
+   * set of lowercased code points in `trimString`, and then iterates over the `srcString` from
+   * the right side, until reaching a character whose lowercased code point is not in the hash set.
+   * Finally, the method returns the substring from the start of `srcString` until that position.
+   * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
+   *
+   * @param srcString the input string to be trimmed from the right end of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for UTF8_LCASE collation)
+   */
   public static UTF8String lowercaseTrimRight(
       final UTF8String srcString,
       final UTF8String trimString) {
-    // Matching UTF8String behavior for null `trimString`.
+    // Matching the default UTF8String behavior for null `trimString`.
     if (trimString == null) {
       return null;
     }
 
+    // Create a hash set of lowercased code points for all characters of `trimString`.
     HashSet<Integer> trimChars = new HashSet<>();
     Iterator<Integer> trimIter = trimString.codePointIterator();
-    while (trimIter.hasNext()) trimChars.add(UCharacter.toLowerCase(trimIter.next()));
+    while (trimIter.hasNext()) trimChars.add(getLowercaseCodePoint(trimIter.next()));
 
-    int searchIndex = srcString.numChars();
+    // Iterate over `srcString` from the right to find the first character that is not in the set.
+    int searchIndex = srcString.numChars(), codePoint;
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
     while (srcIter.hasNext()) {
-      if (!trimChars.contains(UCharacter.toLowerCase(srcIter.next()))) {
-        break;
-      }
-      --searchIndex;
+      codePoint = getLowercaseCodePoint(srcIter.next());
+      // Special handling for Turkish dotted uppercase letter I.
+      if (codePoint == CODE_POINT_COMBINING_DOT && srcIter.hasNext() &&
+          trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
+        int nextCodePoint = getLowercaseCodePoint(srcIter.next());
+        if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
+          || nextCodePoint == CODE_POINT_LOWERCASE_I) searchIndex -= 2;
+        else {
+          if (trimChars.contains(codePoint)) --searchIndex;
+          break;
+        }
+      } else if (trimChars.contains(codePoint)) --searchIndex;
+      else break;
     }
 
-    return srcString.substring(0, searchIndex);
+    // Return the substring from the start of the string to the calculated position.
+    return searchIndex == srcString.numChars() ? srcString : srcString.substring(0, searchIndex);
   }
 
+  /**
+   * Trims the `srcString` string from the right side using the specified `trimString` characters,
+   * with respect to ICU collations. For these collations, the method iterates over `srcString`
+   * from right to left, and repeatedly skips the longest possible substring that matches any
+   * character in `trimString`, until reaching a character that is not found in `trimString`.
+   * Finally, the method returns the substring from the start of `srcString` until that position.
+   * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
+   *
+   * @param srcString the input string to be trimmed from the right end of the string
+   * @param trimString the trim string characters to trim
+   * @return the trimmed string (for ICU collations)
+   */
   public static UTF8String trimRight(
       final UTF8String srcString,
       final UTF8String trimString,
       final int collationId) {
-    // Matching UTF8String behavior for null `trimString`.
-    if (trimString == null) {
-      return null;
+    // Short-circuit for base cases.
+    if (trimString == null) return null;
+    if (srcString.numBytes() == 0) return srcString;
+
+    // Create an array of Strings for all characters of `trimString`.
+    int trimCharIndex = 0;
+    String[] trimChars = new String[trimString.numChars()];
+    Iterator<Integer> trimIter = trimString.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    while (trimIter.hasNext()) {
+      trimChars[trimCharIndex++] = String.valueOf((char) trimIter.next().intValue());
     }
 
-    // Create a set of collation keys for all characters of the trim string, for fast lookup.
-    String trim = trimString.toString();
-    HashSet<String> trimChars = new HashSet<>();
-    for (int i = 0; i < trim.length(); i++) {
-      trimChars.add(CollationFactory.getCollationKey(String.valueOf(trim.charAt(i)), collationId));
+    // Iterate over srcString from the left and find the first character that is not in trimChars.
+    String src = srcString.toValidString();
+    CharacterIterator target = new StringCharacterIterator(src);
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    int charIndex = src.length(), longestMatchLen;
+    while (charIndex >= 0) {
+      longestMatchLen = 0;
+      for (String trim : trimChars) {
+        StringSearch stringSearch = new StringSearch(trim, target, (RuleBasedCollator) collator);
+        // Note: stringSearch.previous() is NOT consistent with stringSearch.next()!
+        //  Example: StringSearch("İ", "i\\u0307İi\\u0307İi\\u0307İ", "UNICODE_CI")
+        //    stringSearch.next() gives: [0, 2, 3, 5, 6, 8].
+        //    stringSearch.previous() gives: [8, 6, 3, 0].
+        stringSearch.setIndex(Math.max(charIndex - 3, 0));
+        int matchIndex = stringSearch.next();
+        int matchLen = stringSearch.getMatchLength();
+        while (matchIndex != StringSearch.DONE && matchIndex < charIndex - matchLen) {
+          matchIndex = stringSearch.next();
+          matchLen = stringSearch.getMatchLength();
+        }
+        if (matchIndex == charIndex - matchLen) {
+          if (matchLen > longestMatchLen) {
+            longestMatchLen = matchLen;
+          }
+        }
+      }
+      if (longestMatchLen == 0) break;
+      else charIndex -= longestMatchLen;
     }
 
-    // Iterate over srcString from the right and find the first character that is not in trimChars.
-    String input = srcString.toString();
-    int i = input.length() - 1;
-    while (i >= 0) {
-      String key = CollationFactory.getCollationKey(String.valueOf(input.charAt(i)), collationId);
-      if (!trimChars.contains(key)) break;
-      --i;
-    }
     // Return the substring from the start of the string until that position.
-    return UTF8String.fromString(input.substring(0, i + 1));
+    return UTF8String.fromString(src.substring(0, charIndex));
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
