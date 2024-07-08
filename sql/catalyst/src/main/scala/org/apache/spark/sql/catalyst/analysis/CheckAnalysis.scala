@@ -919,7 +919,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             log"Query would be rejected with non-legacy behavior but is allowed by " +
             log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
             log"subquery's group-by outputs multiple rows.")
-            
         }
         invalidColsLegacy
       }
