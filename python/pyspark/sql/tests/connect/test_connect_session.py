@@ -270,6 +270,17 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
         session.range(3).collect()
 
+    def test_stop_invalid_session(self):  # SPARK-47986
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        # run a simple query so the session id is synchronized.
+        session.range(3).collect()
+
+        # change the server side session id to simulate that the server has terminated this session.
+        session._client._server_session_id = str(uuid.uuid4())
+
+        # Should not throw any error
+        session.stop()
+
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
