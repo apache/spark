@@ -96,10 +96,10 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 
       if (sourceOptions.readChangeFeed) {
         new StructType()
+          .add("batch_id", LongType)
+          .add("change_type", StringType)
           .add("key", keySchema)
           .add("value", valueSchema)
-          .add("change_type", StringType)
-          .add("batch_id", LongType)
           .add("partition_id", IntegerType)
       } else {
         new StructType()

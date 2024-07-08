@@ -100,15 +100,15 @@ class StateTable(
 
   private def isValidChangeDataSchema(schema: StructType): Boolean = {
     if (schema.fieldNames.toImmutableArraySeq !=
-      Seq("key", "value", "change_type", "batch_id", "partition_id")) {
+      Seq("batch_id", "change_type", "key", "value", "partition_id")) {
+      false
+    } else if (!SchemaUtil.getSchemaAsDataType(schema, "batch_id").isInstanceOf[LongType]) {
+      false
+    } else if (!SchemaUtil.getSchemaAsDataType(schema, "change_type").isInstanceOf[StringType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "change_type").isInstanceOf[StringType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "batch_id").isInstanceOf[LongType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
       false

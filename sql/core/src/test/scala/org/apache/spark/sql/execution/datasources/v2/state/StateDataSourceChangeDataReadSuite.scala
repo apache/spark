@@ -186,9 +186,9 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(Row(null), Row(4), "update", 0L, 0),
-        Row(Row(null), Row(8), "update", 1L, 0),
-        Row(Row(null), Row(10), "update", 2L, 0)
+        Row(0L, "update", Row(null), Row(4), 0),
+        Row(1L, "update", Row(null), Row(8), 0),
+        Row(2L, "update", Row(null), Row(10), 0)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -216,18 +216,18 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(Row(3), Row(1), "update", 0L, 1),
-        Row(Row(3), Row(2), "update", 1L, 1),
-        Row(Row(5), Row(1), "update", 1L, 1),
-        Row(Row(3), Row(3), "update", 2L, 1),
-        Row(Row(5), Row(2), "update", 2L, 1),
-        Row(Row(4), Row(1), "update", 0L, 2),
-        Row(Row(4), Row(2), "update", 1L, 2),
-        Row(Row(4), Row(3), "update", 2L, 2),
-        Row(Row(1), Row(1), "update", 0L, 3),
-        Row(Row(2), Row(1), "update", 0L, 4),
-        Row(Row(2), Row(2), "update", 1L, 4),
-        Row(Row(6), Row(1), "update", 2L, 4)
+        Row(0L, "update", Row(3), Row(1), 1),
+        Row(1L, "update", Row(3), Row(2), 1),
+        Row(1L, "update", Row(5), Row(1), 1),
+        Row(2L, "update", Row(3), Row(3), 1),
+        Row(2L, "update", Row(5), Row(2), 1),
+        Row(0L, "update", Row(4), Row(1), 2),
+        Row(1L, "update", Row(4), Row(2), 2),
+        Row(2L, "update", Row(4), Row(3), 2),
+        Row(0L, "update", Row(1), Row(1), 3),
+        Row(0L, "update", Row(2), Row(1), 4),
+        Row(1L, "update", Row(2), Row(2), 4),
+        Row(2L, "update", Row(6), Row(1), 4)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -255,12 +255,12 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val expectedDf = Seq(
-        Row(Row(1), Row(null), "update", 0L, 3),
-        Row(Row(2), Row(null), "update", 0L, 4),
-        Row(Row(3), Row(null), "update", 0L, 1),
-        Row(Row(4), Row(null), "update", 0L, 2),
-        Row(Row(5), Row(null), "update", 1L, 1),
-        Row(Row(6), Row(null), "update", 2L, 4)
+        Row(0L, "update", Row(1), Row(null), 3),
+        Row(0L, "update", Row(2), Row(null), 4),
+        Row(0L, "update", Row(3), Row(null), 1),
+        Row(0L, "update", Row(4), Row(null), 2),
+        Row(1L, "update", Row(5), Row(null), 1),
+        Row(2L, "update", Row(6), Row(null), 4)
       )
 
       checkAnswer(stateDf, expectedDf)
@@ -292,11 +292,11 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val keyWithIndexToValueExpectedDf = Seq(
-        Row(Row(3, 0L), Row(3, 3L, false), "update", 1L, 1),
-        Row(Row(4, 0L), Row(4, 4L, true), "update", 1L, 2),
-        Row(Row(1, 0L), Row(1, 1L, false), "update", 0L, 3),
-        Row(Row(2, 0L), Row(2, 2L, false), "update", 0L, 4),
-        Row(Row(2, 0L), Row(2, 2L, true), "update", 0L, 4)
+        Row(1L, "update", Row(3, 0L), Row(3, 3L, false), 1),
+        Row(1L, "update", Row(4, 0L), Row(4, 4L, true), 2),
+        Row(0L, "update", Row(1, 0L), Row(1, 1L, false), 3),
+        Row(0L, "update", Row(2, 0L), Row(2, 2L, false), 4),
+        Row(0L, "update", Row(2, 0L), Row(2, 2L, true), 4)
       )
 
       checkAnswer(keyWithIndexToValueDf, keyWithIndexToValueExpectedDf)
@@ -309,10 +309,10 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         .load(tempDir.getAbsolutePath)
 
       val keyToNumValuesDfExpectedDf = Seq(
-        Row(Row(3), Row(1L), "update", 1L, 1),
-        Row(Row(4), Row(1L), "update", 1L, 2),
-        Row(Row(1), Row(1L), "update", 0L, 3),
-        Row(Row(2), Row(1L), "update", 0L, 4)
+        Row(1L, "update", Row(3), Row(1L), 1),
+        Row(1L, "update", Row(4), Row(1L), 2),
+        Row(0L, "update", Row(1), Row(1L), 3),
+        Row(0L, "update", Row(2), Row(1L), 4)
       )
 
       checkAnswer(keyToNumValuesDf, keyToNumValuesDfExpectedDf)

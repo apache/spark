@@ -181,10 +181,10 @@ class StateStoreChangeDataPartitionReader(
   private def unifyStateChangeDataRow(row: (RecordType, UnsafeRow, UnsafeRow, Long)):
     InternalRow = {
     val result = new GenericInternalRow(5)
-    result.update(0, row._2)
-    result.update(1, row._3)
-    result.update(2, UTF8String.fromString(getRecordTypeAsString(row._1)))
-    result.update(3, row._4)
+    result.update(0, row._4)
+    result.update(1, UTF8String.fromString(getRecordTypeAsString(row._1)))
+    result.update(2, row._2)
+    result.update(3, row._3)
     result.update(4, partition.partition)
     result
   }
