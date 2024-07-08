@@ -119,7 +119,9 @@ class MergingSessionsIterator(
       nextGroupingKey = groupingWithoutSessionProjection(inputRow).copy()
       val session = sessionProjection(inputRow)
       val groupingSession = session.getStruct(0, 2)
-      assert(groupingSession != null, "Grouping Session should not be null.")
+      if (groupingSession == null) {
+        throw SparkException.internalError("Grouping Session should not be null.")
+      }
       nextGroupingSession = groupingSession.copy()
       firstRowInNextGroup = inputRow.copy()
       sortedInputHasNewGroup = true
@@ -129,13 +131,7 @@ class MergingSessionsIterator(
     }
   }
 
-  try {
-    initialize()
-  } catch {
-    case e: Exception =>
-      errorOnIterator = true
-      throw SparkException.internalError(e.getMessage)
-  }
+  initialize()
 
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
@@ -157,6 +153,11 @@ class MergingSessionsIterator(
 
       val session = sessionProjection(currentRow)
       val sessionStruct = session.getStruct(0, 2)
+
+      if (sessionStruct == null) {
+        throw SparkException.internalError("Grouping Session should not be null.")
+      }
+
       val sessionStart = getSessionStart(sessionStruct)
       val sessionEnd = getSessionEnd(sessionStruct)
 
