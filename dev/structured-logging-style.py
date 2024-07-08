@@ -24,22 +24,26 @@ import glob
 
 from sparktestsupport import SPARK_HOME
 
+
 def main():
-    log_pattern = r'log(?:Info|Warning|Error)\((.*?)\)'
+    log_pattern = r"log(?:Info|Warning|Error)\((.*?)\)"
     inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?(?:\$|\+(?!.*?[ |\t].*s?")).*'
     compiled_inner_log_pattern = re.compile(inner_log_pattern, flags=re.DOTALL)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
-        '[Tt]est',
-        '/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala',
-        '/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala'
+        "[Tt]est",
+        "/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala",
+        "/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala",
     ]
 
     nonmigrated_files = {}
 
-    files = [file for ext in ('*.scala', '*.java')
-             for file in glob.glob(os.path.join(SPARK_HOME, '**', ext), recursive=True)]
+    files = [
+        file
+        for ext in ("*.scala", "*.java")
+        for file in glob.glob(os.path.join(SPARK_HOME, "**", ext), recursive=True)
+    ]
 
     for file in files:
         skip_file = False
@@ -49,7 +53,7 @@ def main():
                 break
 
         if not skip_file:
-            with open(file, 'r') as f:
+            with open(file, "r") as f:
                 content = f.read()
 
                 log_statements = re.finditer(log_pattern, content, re.DOTALL)
@@ -60,8 +64,8 @@ def main():
                         if compiled_inner_log_pattern.fullmatch(log_statement.group(1)):
                             start_pos = log_statement.start()
                             preceding_content = content[:start_pos]
-                            line_number = preceding_content.count('\n') + 1
-                            start_char = start_pos - preceding_content.rfind('\n') - 1
+                            line_number = preceding_content.count("\n") + 1
+                            start_char = start_pos - preceding_content.rfind("\n") - 1
                             nonmigrated_files[file].append((line_number, start_char))
 
     if not nonmigrated_files:
@@ -72,10 +76,13 @@ def main():
             for line_number, start_char in issues:
                 pass
                 print(f"[error] {file_path}:{line_number}:{start_char}")
-                print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
-                Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
+                print(
+                    """[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
+                Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`."""
+                )
 
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     main()
