@@ -276,10 +276,11 @@ private[streaming] class BlockGenerator(
       }
 
       // At this point, state is StoppedGeneratingBlock. So drain the queue of to-be-pushed blocks.
-      logInfo("Pushing out the last " + blocksForPushing.size() + " blocks")
+      logInfo(log"Pushing out the last " +
+        log"${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())} blocks")
       while (!blocksForPushing.isEmpty) {
         val block = blocksForPushing.take()
-        logDebug(s"Pushing block $block")
+        logDebug(log"Pushing block ${MDC(LogKeys.BLOCK, block)}")
         pushBlock(block)
         logInfo(log"Blocks left to push ${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())}")
       }
