@@ -94,6 +94,7 @@ private[spark] object LogKeys {
   case object BATCH_TIMESTAMP extends LogKey
   case object BATCH_WRITE extends LogKey
   case object BIND_ADDRESS extends LogKey
+  case object BLOCK extends LogKey
   case object BLOCK_ID extends LogKey
   case object BLOCK_IDS extends LogKey
   case object BLOCK_MANAGER_ID extends LogKey
