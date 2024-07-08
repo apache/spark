@@ -25,8 +25,9 @@ import glob
 from sparktestsupport import SPARK_HOME
 
 def main():
-    nonmigrated_pattern = r'log(?:Info|Warning|Error)\((?:".*"\.format\(.*\)|(?:s|\\)".*[\n\r]*(\$|\+).*\))'
-    pattern = re.compile(nonmigrated_pattern)
+    log_pattern = r'log(?:Info|Warning|Error)\((.*?)\)'
+    inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?(?:\$|\+(?!.*?[ |\t].*s?")).*'
+    compiled_inner_log_pattern = re.compile(inner_log_pattern, flags=re.DOTALL)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
@@ -49,26 +50,53 @@ def main():
         if not skip_file:
             with open(file, 'r') as f:
                 content = f.read()
-                matches = list(pattern.finditer(content))
 
-                if matches:
+                log_statements = re.finditer(log_pattern, content, re.DOTALL)
+                # log_statements = [statement.group(1).strip() for statement in log_statements]
+
+                if log_statements:
                     nonmigrated_files[file] = []
-                    for match in matches:
-                        start_pos = match.start()
-                        preceding_content = content[:start_pos]
-                        line_number = preceding_content.count('\n') + 1
-                        start_char = start_pos - preceding_content.rfind('\n') - 1
-                        nonmigrated_files[file].append((line_number, start_char))
+                    for log_statement in log_statements:
+                        if compiled_inner_log_pattern.fullmatch(log_statement.group(1)):
+                            start_pos = log_statement.start()
+                            preceding_content = content[:start_pos]
+                            line_number = preceding_content.count('\n') + 1
+                            start_char = start_pos - preceding_content.rfind('\n') - 1
+                            nonmigrated_files[file].append((line_number, start_char, log_statement.group(1)))
+
+                # for log_statement in log_statements:
+                #     if compiled_inner_log_pattern.search(log_statement):
+                #         nonmigrated_files[file].append()
+
+
+                # matches = list(pattern.finditer(content))
+                # matches2 = pattern.findall(content)
+                #
+                # for m in matches2:
+                #     print(f"****** ${m}")
+                #
+                # if matches:
+                #     nonmigrated_files[file] = []
+                #     for match in matches:
+                #         start_pos = match.start()
+                #         preceding_content = content[:start_pos]
+                #         line_number = preceding_content.count('\n') + 1
+                #         start_char = start_pos - preceding_content.rfind('\n') - 1
+                #         nonmigrated_files[file].append((line_number, start_char))
 
     if not nonmigrated_files:
         print("Structured logging style check passed.")
         sys.exit(0)
     else:
         for file_path, issues in nonmigrated_files.items():
-            for line_number, start_char in issues:
-                print(f"[error] {file_path}:{line_number}:{start_char}")
-                print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s. 
-                Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
+            if issues:
+                print(file_path)
+        # for file_path, issues in nonmigrated_files.items():
+        #     for line_number, start_char in issues:
+        #         pass
+        #         print(f"[error] {file_path}:{line_number}:{start_char}")
+        #         print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
+        #         Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
 
         sys.exit(-1)
 
