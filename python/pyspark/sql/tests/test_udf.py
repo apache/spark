@@ -39,6 +39,8 @@ from pyspark.sql.types import (
     StructField,
     TimestampNTZType,
     DayTimeIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
@@ -329,6 +331,25 @@ class BaseUDFTestsMixin(object):
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        from pyspark.sql.functions import col
+
+        u = udf(lambda u: str(u), StringType())
+        expectedErrorStr = 'UDFs do not support "VARIANT" type input data'
+        with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            df.select(u(col("v"))).collect()
+
+    def test_udf_with_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+        expectedErrorStr = 'UDFs do not support "VARIANT" type output data'
+        with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            self.spark.range(0, 10).select(u()).collect()
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])

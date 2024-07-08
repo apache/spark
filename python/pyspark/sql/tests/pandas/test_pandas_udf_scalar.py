@@ -47,6 +47,8 @@ from pyspark.sql.types import (
     DateType,
     BinaryType,
     YearMonthIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -747,6 +749,31 @@ class ScalarPandasUDFTestsMixin:
         for f in [scalar_f, iter_f]:
             with self.assertRaisesRegex(Exception, "Return.*type.*Series"):
                 df.select(f(col("id"))).collect()
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        from pyspark.sql.functions import col
+
+        scalar_f = pandas_udf(lambda u: str(u), StringType())
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: str(u), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+        expectedErrorStr = 'UDFs do not support "VARIANT" type input data'
+        for f in [scalar_f, iter_f]:
+            with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+                df.select(f(col("v"))).collect()
+
+    def test_udf_with_variant_output(self):
+        # Corresponds to a JSON string of {"a": "b"}.
+        returned_variant = VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))
+        scalar_f = pandas_udf(lambda x: returned_variant, VariantType())
+        iter_f = pandas_udf(
+            lambda it: map(lambda x: returned_variant, it), VariantType(), PandasUDFType.SCALAR_ITER
+        )
+        expectedErrorStr = 'UDFs do not support "VARIANT" type output data'
+        for f in [scalar_f, iter_f]:
+            with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+                self.spark.range(0, 10).select(f()).collect()
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)

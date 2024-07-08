@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType, VariantType}
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -79,6 +79,10 @@ case class PythonUDF(
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
 
+  if (dataType.isInstanceOf[VariantType]) {
+    throw QueryCompilationErrors.unsupportedUDFOuptutType(sql, dataType)
+  }
+
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
 
@@ -92,6 +96,20 @@ case class PythonUDF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
     copy(children = newChildren)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else if (children.exists(e => e.dataType.isInstanceOf[VariantType])) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
+        messageParameters = Map("dataType" -> "\"VARIANT\"")
+      )
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 }
 
 abstract class UnevaluableAggregateFunc extends AggregateFunction {

@@ -359,7 +359,7 @@ object ArrowDeserializers {
           }
         }
 
-      case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
+      case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
         throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
