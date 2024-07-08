@@ -136,12 +136,12 @@ class StateDataSource extends TableProvider with DataSourceRegister {
 }
 
 case class FromSnapshotOptions(
-  snapshotStartBatchId: Long,
-  snapshotPartitionId: Int)
+    snapshotStartBatchId: Long,
+    snapshotPartitionId: Int)
 
 case class ReadChangeFeedOptions(
-  changeStartBatchId: Long,
-  changeEndBatchId: Long
+    changeStartBatchId: Long,
+    changeEndBatchId: Long
 )
 
 case class StateSourceOptions(

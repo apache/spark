@@ -90,10 +90,12 @@ class StateTable(
       false
     } else if (sourceOptions.readChangeFeed) {
       isValidChangeDataSchema(schema)
-    } else if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
-      false
     } else {
-      true
+      if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
+        false
+      } else {
+        true
+      }
     }
   }
 
