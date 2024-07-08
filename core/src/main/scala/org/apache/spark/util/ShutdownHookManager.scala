@@ -66,7 +66,7 @@ private[spark] object ShutdownHookManager extends Logging {
     // shutdownDeletePaths as we are traversing through it.
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
-        logInfo(log"Deleting directory ${MDC(LogKeys.DIR_PATH, dirPath)}")
+        logInfo(log"Deleting directory ${MDC(LogKeys.PATH, dirPath)}")
         Utils.deleteRecursively(new File(dirPath))
       } catch {
         case e: Exception =>

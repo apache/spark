@@ -204,7 +204,6 @@ private[spark] object LogKeys {
   case object DESTINATION_PATH extends LogKey
   case object DFS_FILE extends LogKey
   case object DIFF_DELTA extends LogKey
-  case object DIR_PATH extends LogKey
   case object DIVISIBLE_CLUSTER_INDICES_SIZE extends LogKey
   case object DRIVER_ID extends LogKey
   case object DRIVER_MEMORY_SIZE extends LogKey
@@ -216,6 +215,7 @@ private[spark] object LogKeys {
   case object EFFECTIVE_STORAGE_LEVEL extends LogKey
   case object ELAPSED_TIME extends LogKey
   case object ENCODING extends LogKey
+  case object ENDPOINT_NAME extends LogKey
   case object END_INDEX extends LogKey
   case object END_POINT extends LogKey
   case object END_VERSION extends LogKey
@@ -338,7 +338,6 @@ private[spark] object LogKeys {
   case object JOIN_CONDITION_SUB_EXPR extends LogKey
   case object JOIN_TYPE extends LogKey
   case object K8S_CONTEXT extends LogKey
-  case object KAFKA_CONSUMER_CONFIG extends LogKey
   case object KEY extends LogKey
   case object KEY2 extends LogKey
   case object KEYTAB extends LogKey
@@ -503,7 +502,6 @@ private[spark] object LogKeys {
   case object NUM_MERGER_LOCATIONS extends LogKey
   case object NUM_META_FILES extends LogKey
   case object NUM_NODES extends LogKey
-  case object NUM_OLD_FILES extends LogKey
   case object NUM_PARTITIONS extends LogKey
   case object NUM_PARTITIONS2 extends LogKey
   case object NUM_PATHS extends LogKey

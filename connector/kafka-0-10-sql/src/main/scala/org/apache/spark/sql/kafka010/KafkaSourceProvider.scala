@@ -276,9 +276,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (params.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
       if (params.contains(GROUP_ID_PREFIX)) {
-        logWarning(log"Option ${MDC(LogKeys.PREFIX, "groupIdPrefix")} will be ignored as " +
-          log"option ${MDC(LogKeys.KAFKA_CONSUMER_CONFIG,
-            s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")} has been set.")
+        logWarning(log"Option groupIdPrefix will be ignored as " +
+          log"option kafka.${MDC(LogKeys.CONFIG, ConsumerConfig.GROUP_ID_CONFIG)} has been set.")
       }
     }
 

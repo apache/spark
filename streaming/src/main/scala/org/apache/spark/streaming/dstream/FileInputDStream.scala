@@ -169,9 +169,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
       batchTimeToSelectedFiles --= oldFiles.keys
       recentlySelectedFiles --= oldFiles.values.flatten
-      logInfo(log"Cleared ${MDC(LogKeys.NUM_OLD_FILES, oldFiles.size)} old files that were older " +
+      logInfo(log"Cleared ${MDC(LogKeys.COUNT, oldFiles.size)} old files that were older " +
         log"than ${MDC(LogKeys.TIME, time - rememberDuration)}: " +
-        log"${MDC(LogKeys.FILE_NAMES, oldFiles.keys.mkString(", "))}")
+        log"${MDC(LogKeys.FILES, oldFiles.keys.mkString(", "))}")
       logDebug("Cleared files are:\n" +
         oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
     }

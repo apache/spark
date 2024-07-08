@@ -227,12 +227,12 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Batches that were unprocessed before failure
     val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
     logInfo(log"Batches pending processing (" +
-      log"${MDC(LogKeys.NUM_PENDING_LAUNCH_TASKS, pendingTimes.length)} batches): " +
+      log"${MDC(LogKeys.COUNT, pendingTimes.length)} batches): " +
       log"${MDC(LogKeys.PENDING_TIMES, pendingTimes.mkString(","))}")
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
       .distinct.sorted(Time.ordering)
-    logInfo(log"Batches to reschedule (${MDC(LogKeys.NUM_BATCHES, timesToReschedule.length)} " +
+    logInfo(log"Batches to reschedule (${MDC(LogKeys.COUNT, timesToReschedule.length)} " +
       log"batches): ${MDC(LogKeys.BATCH_TIMES, timesToReschedule.mkString(","))}")
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were

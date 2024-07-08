@@ -914,7 +914,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         val invalidColsLegacy = groupByCols -- correlatedCols
         if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
           logWarning(log"Using legacy behavior for " +
-            log"${MDC(LogKeys.CONFIG_KEY_UPDATED, SQLConf
+            log"${MDC(LogKeys.CONFIG, SQLConf
             .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
             log"Query would be rejected with non-legacy behavior but is allowed by " +
             log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
