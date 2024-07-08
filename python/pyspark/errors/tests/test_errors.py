@@ -24,7 +24,7 @@ from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
 
-class ErrorsTest(unittest.TestCase):
+class ErrorsTestsMixin:
     def test_error_classes_sorted(self):
         # Test error classes is sorted alphabetically
         error_reader = ErrorClassesReader()
@@ -53,6 +53,10 @@ class ErrorsTest(unittest.TestCase):
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
             PySparkValueError(error_class="invalid", message_parameters={})
+
+
+class ErrorsTests(ErrorsTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":
