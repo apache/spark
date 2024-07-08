@@ -1124,7 +1124,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
 
           // prefix scan
-          if (!keyEncoder.getClass.toString.contains("No")) {
+          if (!keyEncoder.isInstanceOf[NoPrefixKeyStateEncoderSpec]) {
             val keyRow = dataToPrefixKeyRow("a")
             assert(store.prefixScan(keyRow, cfName).toSeq.length
               == timerTimestamps.filter(_ < 0).length)
