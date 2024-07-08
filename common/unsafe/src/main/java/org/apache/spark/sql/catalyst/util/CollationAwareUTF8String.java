@@ -28,10 +28,12 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.Platform.copyMemory;
+import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -488,10 +490,11 @@ public class CollationAwareUTF8String {
   }
 
   private static UTF8String lowerCaseCodePointsSlow(final UTF8String target) {
-    String targetString = target.toValidString();
+    Iterator<Integer> targetIter = target.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < targetString.length(); ++i) {
-      appendLowercaseCodePoint(targetString.codePointAt(i), sb);
+    while (targetIter.hasNext()) {
+      appendLowercaseCodePoint(targetIter.next(), sb);
     }
     return UTF8String.fromString(sb.toString());
   }
@@ -714,7 +717,7 @@ public class CollationAwareUTF8String {
    * String translation is performed by iterating over the input string, from left to right, and
    * repeatedly translating the longest possible substring that matches a key in the dictionary.
    * For UTF8_LCASE, the method uses the lowercased substring to perform the lookup in the
-   * lowercase version of the translation map.
+   * lowercased version of the translation map.
    *
    * @param input the string to be translated
    * @param dict the lowercase translation dictionary
@@ -722,24 +725,48 @@ public class CollationAwareUTF8String {
    */
   public static UTF8String lowercaseTranslate(final UTF8String input,
       final Map<String, String> dict) {
+    // Iterator for the input string.
+    Iterator<Integer> inputIter = input.codePointIterator(
+      CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
+    // Lowercased translation dictionary.
     Map<Integer, String> lowercaseDict = getLowercaseDict(dict);
+    // StringBuilder to store the translated string.
     StringBuilder sb = new StringBuilder();
-    for (int charIndex = 0; charIndex < input.numChars(); ++charIndex) {
-      int codePoint = input.getChar(charIndex);
-      if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
-          codePoint == CODE_POINT_LOWERCASE_I && charIndex + 1 < input.numChars() &&
-          input.getChar(charIndex + 1) == CODE_POINT_COMBINING_DOT) {
-        // Special handling for letter i (U+0069) followed by a combining dot (U+0307)
-        codePoint = CODE_POINT_COMBINED_LOWERCASE_I_DOT;
-        ++charIndex;
+
+    // Buffered code point iteration to handle one-to-many case mappings.
+    int codePointBuffer = -1, codePoint;
+    while (inputIter.hasNext()) {
+      if (codePointBuffer != -1) {
+        codePoint = codePointBuffer;
+        codePointBuffer = -1;
+      } else {
+        codePoint = inputIter.next();
       }
+      // Special handling for letter i (U+0069) followed by a combining dot (U+0307).
+      if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
+          codePoint == CODE_POINT_LOWERCASE_I && inputIter.hasNext()) {
+        int nextCodePoint = inputIter.next();
+        if (nextCodePoint == CODE_POINT_COMBINING_DOT) {
+          codePoint = CODE_POINT_COMBINED_LOWERCASE_I_DOT;
+        } else {
+          codePointBuffer = nextCodePoint;
+        }
+      }
+      // Translate the code point using the lowercased dictionary.
       String translated = lowercaseDict.get(getLowercaseCodePoint(codePoint));
       if (translated == null) {
+        // Append the original code point if no translation is found.
         sb.appendCodePoint(codePoint);
       } else if (!"\0".equals(translated)) {
+        // Append the translated code point if the translation is not the null character.
         sb.append(translated);
       }
+      // Skip the code point if it maps to the null character.
     }
+    // Append the last code point if it was buffered.
+    if (codePointBuffer != -1) sb.appendCodePoint(codePointBuffer);
+
+    // Return the translated string.
     return UTF8String.fromString(sb.toString());
   }
 

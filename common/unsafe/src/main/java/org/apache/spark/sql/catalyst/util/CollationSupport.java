@@ -212,7 +212,7 @@ public final class CollationSupport {
         return useICU ? execBinaryICU(v) : execBinary(v);
       } else if (collation.supportsLowercaseEquality) {
         return execLowercase(v);
-      }  else {
+      } else {
         return execICU(v, collationId);
       }
     }
@@ -224,7 +224,7 @@ public final class CollationSupport {
         return String.format(expr + "%s(%s)", funcName, v);
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", v);
-      }  else {
+      } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
@@ -261,7 +261,7 @@ public final class CollationSupport {
         return String.format(expr + "%s(%s)", funcName, v);
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", v);
-      }  else {
+      } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
@@ -514,7 +514,7 @@ public final class CollationSupport {
         return String.format(expr + "Binary(%s, %s)", source, dict);
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s, %s)", source, dict);
-      }  else {
+      } else {
         return String.format(expr + "ICU(%s, %s, %d)", source, dict, collationId);
       }
     }
