@@ -1001,17 +1001,9 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   protected lazy val ordering: Ordering[Any] = new Ordering[Any] {
     override def compare(x: Any, y: Any): Int = {
       (x, y) match {
-        // Handle comparison when the left side is a String and the right side is an Integer
-        case (xs: String, yi: Int) => xs.toIntOption match {
-          case Some(xi) => xi.compareTo(yi)
-          case None => xs.compareTo(yi.toString)
-        }
-        // Handle comparison when the left side is an Integer and the right side is a String
-        case (xi: Int, ys: String) => ys.toIntOption match {
-          case Some(yi) => xi.compareTo(yi)
-          case None => xi.toString.compareTo(ys)
-        }
-        case _ => TypeUtils.getInterpretedOrdering(left.dataType).compare(x, y)
+        case (xs: String, yi: Int) => xs.compare(yi.toString)
+        case (xi: Int, ys: String) => xi.toString.compare(ys)
+        case _ => super.compare(x, y)
       }
     }
   }
