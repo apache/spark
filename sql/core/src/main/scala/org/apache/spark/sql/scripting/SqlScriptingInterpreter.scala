@@ -79,5 +79,7 @@ case class SqlScriptingInterpreter() {
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           isInternal = false)
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported statement type: $node")
     }
 }

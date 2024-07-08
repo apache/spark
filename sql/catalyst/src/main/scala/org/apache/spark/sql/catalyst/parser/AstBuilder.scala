@@ -170,6 +170,37 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
 
+  override def visitConditionValue(ctx: ConditionValueContext): String = {
+    ctx.SQLSTATE_VALUE().getText
+  }
+
+  override def visitConditionValueList(ctx: ConditionValueListContext): Seq[String] = {
+    if (ctx.SQLEXCEPTION() != null) {
+      return Seq("SQLEXCEPTION")
+    }
+
+    val buff = ListBuffer[String]()
+    ctx.conditionValues.forEach(conditionValue => {
+      buff += visit(conditionValue).asInstanceOf[String]
+    })
+    buff.toSeq
+  }
+
+  override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {
+    val conditionName = ctx.multipartIdentifier().getText
+    val conditionValue = visit(ctx.conditionValue()).asInstanceOf[String]
+
+    ErrorCondition(conditionName, conditionValue)
+  }
+
+  override def visitDeclareHandler(ctx: DeclareHandlerContext): ErrorHandler = {
+    val conditions = visit(ctx.conditionValueList()).asInstanceOf[Seq[String]]
+    val body = visit(ctx.compoundBody()).asInstanceOf[CompoundBody]
+    val handlerType = if (ctx.EXIT() != null) HandlerType.EXIT else HandlerType.CONTINUE
+
+    ErrorHandler(conditions, body, handlerType)
+  }
+
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
     visit(ctx.statement).asInstanceOf[LogicalPlan]
   }

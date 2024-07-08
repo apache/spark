@@ -62,10 +62,28 @@ compoundBody
 compoundStatement
     : statement
     | beginEndCompoundBlock
+    | declareCondition
+    | declareHandler
     ;
 
 singleStatement
     : statement SEMICOLON* EOF
+    ;
+
+conditionValue
+    : SQLSTATE SQLSTATE_VALUE
+    ;
+
+conditionValueList
+    : ((conditionValues+=conditionValue (COMMA conditionValues+=conditionValue)*) | SQLEXCEPTION)
+    ;
+
+declareCondition
+    : DECLARE multipartIdentifier CONDITION FOR conditionValue
+    ;
+
+declareHandler
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValueList (BEGIN compoundBody END | statement)
     ;
 
 beginLabel

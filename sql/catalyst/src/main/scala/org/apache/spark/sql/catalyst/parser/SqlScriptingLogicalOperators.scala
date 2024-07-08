@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
@@ -58,18 +59,26 @@ case class CompoundBody(
 
 /**
  * Logical operator for an error condition.
- * @param sqlstate SQLSTATE.
  * @param conditionName Name of the error condition.
+ * @param value SQLSTATE or Error Code.
  */
 case class ErrorCondition(
-    sqlstate: String,
-    conditionName: String) extends CompoundPlanStatement
+    conditionName: String,
+    value: String) extends CompoundPlanStatement
+
+object HandlerType extends Enumeration {
+  type HandlerType = Value
+  val EXIT, CONTINUE = Value
+}
 
 /**
  * Logical operator for an error condition.
- * @param conditionName Name of the error condition variable for which the handler is built.
+ * @param conditions Name of the error condition variable for which the handler is built.
  * @param body CompoundBody of the handler.
+ * @param handlerType Type of the handler (CONTINUE or EXIT).
  */
 case class ErrorHandler(
-    conditionName: String,
-    body: CompoundBody) extends CompoundPlanStatement
+    conditions: Seq[String],
+    body: CompoundBody,
+    handlerType: HandlerType) extends CompoundPlanStatement
+

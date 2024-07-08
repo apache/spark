@@ -145,3 +145,6 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  */
 class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: String = "")
   extends CompoundNestedStatementIteratorExec(statements)
+
+class HandlerExec(statements: Seq[CompoundStatementExec])
+  extends CompoundNestedStatementIteratorExec(statements)
