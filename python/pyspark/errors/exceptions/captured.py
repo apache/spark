@@ -189,21 +189,17 @@ class CapturedException(PySparkException):
                 logger = PySparkLogger.get_logger("DataFrameQueryContextLogger")
                 call_site = query_context.callSite().split(":")
                 line_no = call_site[1] if len(call_site) == 2 else ""
-                context = {
-                    "file": call_site[0],
-                    "line_no": line_no,
-                    "fragment": query_context.fragment(),
-                }
                 logger.log_error(
                     self._desc,
-                    context=context,
+                    file=call_site[0],
+                    line_no=line_no,
+                    fragment=query_context.fragment(),
                     error_class=self.getErrorClass(),
                 )
             else:
                 logger = PySparkLogger.get_logger("SQLQueryContextLogger")
                 logger.log_error(
                     self._desc,
-                    context="SQLQueryContext",
                     error_class=self.getErrorClass(),
                 )
 

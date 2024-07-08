@@ -1429,6 +1429,7 @@ pyspark_logging = Module(
     python_test_goals=[
         # unittests
         "pyspark.logger.tests.test_logger",
+        "pyspark.logger.tests.connect.test_parity_logger",
     ],
 )
 

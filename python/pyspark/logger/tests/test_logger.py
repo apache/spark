@@ -22,7 +22,7 @@ from io import StringIO
 from pyspark.logger.logger import PySparkLogger
 
 
-class LoggerTest(unittest.TestCase):
+class LoggerTestsMixin:
     def setUp(self):
         self.logger = PySparkLogger.get_logger("TestLogger", stream=StringIO())
 
@@ -32,9 +32,10 @@ class LoggerTest(unittest.TestCase):
         )
         log_json = json.loads(self.logger.handler.stream.getvalue().strip())
 
-        self.assertEqual(log_json["message"], "This is an info log")
-        self.assertEqual(log_json["user"], "test_user_info")
-        self.assertEqual(log_json["action"], "test_action_info")
+        self.assertEqual(log_json["msg"], "This is an info log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_info", "user": "test_user_info"}
+        )
 
     def test_log_warn(self):
         self.logger.log_warn(
@@ -42,9 +43,10 @@ class LoggerTest(unittest.TestCase):
         )
         log_json = json.loads(self.logger.handler.stream.getvalue().strip())
 
-        self.assertEqual(log_json["message"], "This is an warn log")
-        self.assertEqual(log_json["user"], "test_user_warn")
-        self.assertEqual(log_json["action"], "test_action_warn")
+        self.assertEqual(log_json["msg"], "This is an warn log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_warn", "user": "test_user_warn"}
+        )
 
     def test_log_error(self):
         self.logger.log_error(
@@ -52,9 +54,14 @@ class LoggerTest(unittest.TestCase):
         )
         log_json = json.loads(self.logger.handler.stream.getvalue().strip())
 
-        self.assertEqual(log_json["message"], "This is an error log")
-        self.assertEqual(log_json["user"], "test_user_error")
-        self.assertEqual(log_json["action"], "test_action_error")
+        self.assertEqual(log_json["msg"], "This is an error log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_error", "user": "test_user_error"}
+        )
+
+
+class LoggerTests(LoggerTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

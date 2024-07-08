@@ -43,16 +43,16 @@ Example log entry:
 .. code-block:: python
 
     {
-      "timestamp": "2024-06-28T10:53:48.528Z",
+      "ts": "2024-06-28T10:53:48.528Z",
       "level": "ERROR",
-      "name": "DataFrameQueryContextLogger",
-      "message": "[DIVIDE_BY_ZERO] Division by zero.",
+      "logger": "DataFrameQueryContextLogger",
+      "msg": "[DIVIDE_BY_ZERO] Division by zero.",
       "context": {
         "file": "/path/to/file.py",
         "line_no": "17",
-        "fragment": "__truediv__"
+        "fragment": "__truediv__",
+        "error_class": "DIVIDE_BY_ZERO"
       },
-      "error_class": "DIVIDE_BY_ZERO"
     }
 
 Setting Up
@@ -121,12 +121,14 @@ This logs an information in the following JSON format:
 .. code-block:: python
 
     {
-      "timestamp": "2024-06-28 19:44:19,030",
+      "ts": "2024-06-28 19:44:19,030",
       "level": "INFO",
-      "name": "ConsoleLogger",
-      "message": "User test_user takes an test_action",
-      "user": "test_user",
-      "action": "test_action"
+      "logger": "ConsoleLogger",
+      "msg": "User test_user takes an test_action",
+      "context": {
+        "user": "test_user",
+        "action": "test_action"
+      },
     }
 
 Logging to a File

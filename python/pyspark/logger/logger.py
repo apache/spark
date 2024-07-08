@@ -49,12 +49,12 @@ class JSONFormatter(logging.Formatter):
             The formatted log record as a JSON string.
         """
         log_entry = {
-            "timestamp": self.formatTime(record, self.datefmt),
+            "ts": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "name": record.name,
-            "message": record.getMessage(),
+            "logger": record.name,
+            "msg": record.getMessage(),
+            "context": record.__dict__.get("kwargs", {}),
         }
-        log_entry.update(record.__dict__.get("kwargs", {}))
         return json.dumps(log_entry, ensure_ascii=False)
 
 
