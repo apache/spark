@@ -220,7 +220,6 @@ class IncrementalExecution(
             val metadata = stateStoreWriter.operatorStateMetadata()
             stateStoreWriter match {
               case tws: TransformWithStateExec =>
-                logError(s"### checkpointLocation: $checkpointLocation")
                 val metadataPath = OperatorStateMetadataV2.metadataFilePath(new Path(
                   checkpointLocation, tws.getStateInfo.operatorId.toString))
                 val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
