@@ -14040,8 +14040,8 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
 
     See Also
     --------
-    :meth:`get`
-    :meth:`try_element_at`
+    :meth:`pyspark.sql.functions.get`
+    :meth:`pyspark.sql.functions.try_element_at`
 
     Examples
     --------
@@ -14131,8 +14131,8 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`get`
-    :meth:`element_at`
+    :meth:`pyspark.sql.functions.get`
+    :meth:`pyspark.sql.functions.element_at`
 
     Examples
     --------
@@ -14233,7 +14233,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     See Also
     --------
-    :meth:`element_at`
+    :meth:`pyspark.sql.functions.element_at`
 
     Examples
     --------
@@ -15153,9 +15153,9 @@ def explode(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.functions.posexplode`
-    :meth:`pyspark.functions.explode_outer`
-    :meth:`pyspark.functions.posexplode_outer`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode_outer`
 
     Notes
     -----
@@ -15342,8 +15342,8 @@ def inline(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.functions.explode`
-    :meth:`pyspark.functions.inline_outer`
+    :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.inline_outer`
 
     Examples
     --------
@@ -15570,8 +15570,8 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`explode_outer`
-    :meth:`inline`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.inline`
 
     Notes
     -----
