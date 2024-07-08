@@ -22,17 +22,16 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 /**
- * This base suite contains unified tests for the `ALTER TABLE .. SET TBLPROPERTIES`
+ * This base suite contains unified tests for the `ALTER TABLE .. UNSET TBLPROPERTIES`
  * command that check V1 table catalogs. The tests that cannot run for all V1 catalogs
  * are located in more specific test suites:
  *
  *   - V1 In-Memory catalog:
- *      `org.apache.spark.sql.execution.command.v1.AlterTableSetTblPropertiesSuite`
+ *      `org.apache.spark.sql.execution.command.v1.AlterTableUnsetTblPropertiesSuite`
  *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableSetTblPropertiesSuite`
+ *     `org.apache.spark.sql.hive.execution.command.AlterTableUnsetTblPropertiesSuite`
  */
-trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblPropertiesSuiteBase {
-
+trait AlterTableUnsetTblPropertiesSuiteBase extends command.AlterTableUnsetTblPropertiesSuiteBase {
   private[sql] lazy val sessionCatalog = spark.sessionState.catalog
 
   private def isUsingHiveMetastore: Boolean = {
@@ -62,5 +61,5 @@ trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblProper
   }
 }
 
-class AlterTableSetTblPropertiesSuite
-  extends AlterTableSetTblPropertiesSuiteBase with CommandSuiteBase
+class AlterTableUnsetTblPropertiesSuite
+  extends AlterTableUnsetTblPropertiesSuiteBase with CommandSuiteBase

@@ -2937,6 +2937,29 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_FROM_PARQUET" : {
+    "message" : [
+      "Invalid variant."
+    ],
+    "subClass" : {
+      "MISSING_FIELD" : {
+        "message" : [
+          "Missing <field> field."
+        ]
+      },
+      "NULLABLE_OR_NOT_BINARY_FIELD" : {
+        "message" : [
+          "The <field> must be a non-nullable binary."
+        ]
+      },
+      "WRONG_NUM_FIELDS" : {
+        "message" : [
+          "Variant column must contain exactly two fields."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_GET_PATH" : {
     "message" : [
       "The path `<path>` is not a valid variant extraction path in `<functionName>`.",
@@ -4251,12 +4274,6 @@
       "Cannot resolve variable <variableName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
-  },
-  "UNSET_NONEXISTENT_PROPERTIES" : {
-    "message" : [
-      "Attempted to unset non-existent properties [<properties>] in table <table>."
-    ],
-    "sqlState" : "42K0J"
   },
   "UNSUPPORTED_ADD_FILE" : {
     "message" : [

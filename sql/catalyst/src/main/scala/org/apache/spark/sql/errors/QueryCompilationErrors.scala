@@ -1921,6 +1921,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("col" -> col, "schema" -> schema.catalogString))
   }
 
+  def invalidVariantMissingFieldError(field: String): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD",
+      messageParameters = Map("field" -> field))
+  }
+
+  def invalidVariantNullableOrNotBinaryFieldError(field: String): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
+      messageParameters = Map("field" -> field))
+  }
+
+  def invalidVariantWrongNumFieldsError(): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS",
+      messageParameters = Map.empty)
+  }
+
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1172",
@@ -2656,16 +2671,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def unsetNonExistentPropertiesError(
-      properties: Seq[String], table: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      messageParameters = Map(
-        "properties" -> properties.map(toSQLId).mkString(", "),
-        "table" -> toSQLId(table.nameParts))
-    )
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(
