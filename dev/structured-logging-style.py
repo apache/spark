@@ -38,9 +38,10 @@ def main():
 
     nonmigrated_files = {}
 
-    scala_files = glob.glob(os.path.join(SPARK_HOME, '**', '*.scala'), recursive=True)
+    files = [file for ext in ('*.scala', '*.java')
+             for file in glob.glob(os.path.join(SPARK_HOME, '**', ext), recursive=True)]
 
-    for file in scala_files:
+    for file in files:
         skip_file = False
         for exclude_pattern in excluded_file_patterns:
             if re.search(exclude_pattern, file):
@@ -52,7 +53,6 @@ def main():
                 content = f.read()
 
                 log_statements = re.finditer(log_pattern, content, re.DOTALL)
-                # log_statements = [statement.group(1).strip() for statement in log_statements]
 
                 if log_statements:
                     nonmigrated_files[file] = []
@@ -62,41 +62,18 @@ def main():
                             preceding_content = content[:start_pos]
                             line_number = preceding_content.count('\n') + 1
                             start_char = start_pos - preceding_content.rfind('\n') - 1
-                            nonmigrated_files[file].append((line_number, start_char, log_statement.group(1)))
-
-                # for log_statement in log_statements:
-                #     if compiled_inner_log_pattern.search(log_statement):
-                #         nonmigrated_files[file].append()
-
-
-                # matches = list(pattern.finditer(content))
-                # matches2 = pattern.findall(content)
-                #
-                # for m in matches2:
-                #     print(f"****** ${m}")
-                #
-                # if matches:
-                #     nonmigrated_files[file] = []
-                #     for match in matches:
-                #         start_pos = match.start()
-                #         preceding_content = content[:start_pos]
-                #         line_number = preceding_content.count('\n') + 1
-                #         start_char = start_pos - preceding_content.rfind('\n') - 1
-                #         nonmigrated_files[file].append((line_number, start_char))
+                            nonmigrated_files[file].append((line_number, start_char))
 
     if not nonmigrated_files:
         print("Structured logging style check passed.")
         sys.exit(0)
     else:
         for file_path, issues in nonmigrated_files.items():
-            if issues:
-                print(file_path)
-        # for file_path, issues in nonmigrated_files.items():
-        #     for line_number, start_char in issues:
-        #         pass
-        #         print(f"[error] {file_path}:{line_number}:{start_char}")
-        #         print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
-        #         Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
+            for line_number, start_char in issues:
+                pass
+                print(f"[error] {file_path}:{line_number}:{start_char}")
+                print("""[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
+                Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`.""")
 
         sys.exit(-1)
 
