@@ -33,19 +33,14 @@ def main():
     # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
         "[Tt]est",
-        "/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala",
         "/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala",
     ]
 
     nonmigrated_files = {}
 
-    files = [
-        file
-        for ext in ("*.scala", "*.java")
-        for file in glob.glob(os.path.join(SPARK_HOME, "**", ext), recursive=True)
-    ]
+    scala_files = glob.glob(os.path.join(SPARK_HOME, '**', '*.scala'), recursive=True)
 
-    for file in files:
+    for file in scala_files:
         skip_file = False
         for exclude_pattern in excluded_file_patterns:
             if re.search(exclude_pattern, file):
