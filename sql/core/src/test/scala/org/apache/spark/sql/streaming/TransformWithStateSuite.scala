@@ -1085,24 +1085,86 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
 class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
 
-  test("schema") {
+  import testImplicits._
+
+  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      StateTypesEncoder(keySerializer = encoderFor(Encoders.scalaInt).createSerializer(),
-        valEncoder = Encoders.STRING, stateName = "someState", hasTtl = false)
+      withTempDir { checkpointDir =>
+        val metadataPathPostfix = "state/0/default/_metadata"
+        val stateSchemaPath = new Path(checkpointDir.toString,
+          s"$metadataPathPostfix/schema/0")
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
-      val keyExprEncoderSer = encoderFor(Encoders.scalaInt).schema
-      println("keyExprEncoder here: " + JString(keyExprEncoderSer.json))
-      println("valueEncoder here: " + JString(Encoders.STRING.schema.json))
-      println("composite schema: " +
-        new StructType().add("key", BinaryType)
-        .add("userKey", BinaryType))
-      val keySchema = new StructType().add("key", BinaryType)
-      val userkeySchema = new StructType().add("userkeySchema", BinaryType)
-      println("composite schema copy: " +
-        StructType(keySchema.fields ++ userkeySchema.fields))
+        val schema0 = ColumnFamilySchemaV1(
+          "countState",
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType().add("value", LongType)),
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          None
+        )
+        val schema1 = ColumnFamilySchemaV1(
+          "listState",
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType()
+              .add("id", LongType)
+              .add("name", StringType)),
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          None
+        )
+        val schema2 = ColumnFamilySchemaV1(
+          "mapState",
+          new StructType()
+            .add("key", new StructType().add("value", StringType))
+            .add("userKey", new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType()
+              .add("id", IntegerType)
+              .add("name", StringType)),
+          PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
+          Option(new StructType().add("value", StringType))
+        )
+        println("print out schema0: " + schema0)
+
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithCompositeTypes(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "1"), ("b", "1")),
+          Execute { q =>
+            val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+            val ssv3 = new StateSchemaV3File(hadoopConf, new Path(checkpointDir.toString,
+              metadataPathPostfix).toString)
+            val colFamilySeq = ssv3.deserialize(fm.open(schemaFilePath))
+
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+
+            assert(colFamilySeq.length == 3)
+            assert(colFamilySeq.toSet == Set(
+              schema0, schema1, schema2
+            ))
+          },
+          StopStream
+        )
+      }
     }
   }
 }
