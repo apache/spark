@@ -798,7 +798,9 @@ public class CollationAwareUTF8String {
           if (trimChars.contains(codePoint)) ++searchIndex;
           break;
         }
-      } else if (trimChars.contains(codePoint)) ++searchIndex;
+      } else if (trimChars.contains(codePoint)) {
+        ++searchIndex;
+      }
       else break;
     }
 
@@ -901,7 +903,9 @@ public class CollationAwareUTF8String {
           if (trimChars.contains(codePoint)) --searchIndex;
           break;
         }
-      } else if (trimChars.contains(codePoint)) --searchIndex;
+      } else if (trimChars.contains(codePoint)) {
+        --searchIndex;
+      }
       else break;
     }
 
