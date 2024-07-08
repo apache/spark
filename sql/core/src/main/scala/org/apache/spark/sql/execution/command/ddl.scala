@@ -335,14 +335,6 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    if (!ifExists) {
-      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
-        && key != TableCatalog.PROP_COMMENT)
-      if (nonexistentKeys.nonEmpty) {
-        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
-          nonexistentKeys, table.identifier)
-      }
-    }
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }

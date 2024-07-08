@@ -25,11 +25,11 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `ALTER TABLE .. SET TBLPROPERTIES` command to
+ * The class contains tests for the `ALTER TABLE .. UNSET TBLPROPERTIES` command to
  * check V2 table catalogs.
  */
-class AlterTableSetTblPropertiesSuite
-  extends command.AlterTableSetTblPropertiesSuiteBase with CommandSuiteBase {
+class AlterTableUnsetTblPropertiesSuite
+  extends command.AlterTableUnsetTblPropertiesSuiteBase with CommandSuiteBase {
 
   private def normalizeTblProps(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("provider", "owner").contains(p._1))

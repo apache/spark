@@ -661,6 +661,19 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-48792: Fix INSERT with partial column list to a table with char/varchar") {
+    assume(format != "foo",
+      "TODO: TableOutputResolver.resolveOutputColumns supportColDefaultValue is false")
+    Seq("char", "varchar").foreach { typ =>
+      withTable("students") {
+        sql(s"CREATE TABLE students (name $typ(64), address $typ(64)) USING $format")
+        sql("INSERT INTO students VALUES ('Kent Yao', 'Hangzhou')")
+        sql("INSERT INTO students (address) VALUES ('<unknown>')")
+        checkAnswer(sql("SELECT count(*) FROM students"), Row(2))
+      }
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
