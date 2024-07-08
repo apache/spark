@@ -3799,6 +3799,47 @@ object functions {
     Column.fn("encode", value, lit(charset))
 
   /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column = withExpr {
+    IsValidUTF8(str.expr)
+  }
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column = withExpr {
+    MakeValidUTF8(str.expr)
+  }
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits an error otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column = withExpr {
+    ValidateUTF8(str.expr)
+  }
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column = withExpr {
+    TryValidateUTF8(str.expr)
+  }
+
+  /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places
    * with HALF_EVEN round mode, and returns the result as a string column.
    *

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.functions._
@@ -349,6 +349,44 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("encode(a, 'utf-8')", "decode(c, 'utf-8')"),
       Row(bytes, "大千世界"))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string is valid") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").selectExpr("is_valid_utf8(a)"), Row(true))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").selectExpr("is_valid_utf8(b)"), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").selectExpr("is_valid_utf8(a)"), Row(false))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string make valid") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").selectExpr("make_valid_utf8(a)"), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").selectExpr("make_valid_utf8(b)"), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").selectExpr("make_valid_utf8(a)"), Row("\uFFFD"))
+    // scalastyle:on
+  }
+
+  test("UTF-8 string validate") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").selectExpr("validate_utf8(a)"), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").selectExpr("validate_utf8(b)"), Row(null))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        Seq(Array[Byte](-1)).toDF("a").selectExpr("validate_utf8(a)").collect()
+      },
+      errorClass = "INVALID_UTF8_STRING",
+      parameters = Map("str" -> "\\xFF")
+    )
+    // scalastyle:on
+  }
+
+  test("UTF-8 string try validate") {
+    // scalastyle:off
+    checkAnswer(Seq("大千世界").toDF("a").selectExpr("try_validate_utf8(a)"), Row("大千世界"))
+    checkAnswer(Seq(("abc", null)).toDF("a", "b").selectExpr("try_validate_utf8(b)"), Row(null))
+    checkAnswer(Seq(Array[Byte](-1)).toDF("a").selectExpr("try_validate_utf8(a)"), Row(null))
     // scalastyle:on
   }
 
