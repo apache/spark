@@ -111,8 +111,10 @@ class QueryExecution(
   }
 
   private def eagerlyExecuteCommands(p: LogicalPlan) = {
-    def eagerlyExecute(p: LogicalPlan,
-        name: String, mode: CommandExecutionMode.Value): LogicalPlan = {
+    def eagerlyExecute(
+        p: LogicalPlan,
+        name: String,
+        mode: CommandExecutionMode.Value): LogicalPlan = {
       // Since Command execution will eagerly take place here,
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
@@ -132,11 +134,10 @@ class QueryExecution(
     }
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(u, "commands", CommandExecutionMode.SKIP)
+        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
       case c: Command =>
         val name = commandExecutionName(c)
         eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
-      case other => other
     }
   }
 
