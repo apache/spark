@@ -380,19 +380,37 @@ case class TransformWithStateExec(
     )
   }
 
+  private def fetchOperatorStateMetadataLog(
+      hadoopConf: Configuration,
+      checkpointDir: String,
+      operatorId: Long): OperatorStateMetadataLog = {
+    val checkpointPath = new Path(checkpointDir, operatorId.toString)
+    val operatorStateMetadataPath = OperatorStateMetadataV2.metadataFilePath(checkpointPath)
+    new OperatorStateMetadataLog(hadoopConf, operatorStateMetadataPath.toString)
+  }
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): Array[String] = {
     assert(stateSchemaVersion >= 3)
-    val newColumnFamilySchemas = getColFamilySchemas()
+    val newSchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
     // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
     // and validate it with the new schema
 
+    val operatorStateMetadataLog = fetchOperatorStateMetadataLog(
+      hadoopConf, getStateInfo.checkpointLocation, getStateInfo.operatorId)
+    val mostRecentLog = operatorStateMetadataLog.getLatest()
+    val oldSchemas = mostRecentLog.map(_._2.asInstanceOf[OperatorStateMetadataV2])
+      .map(_.stateStoreInfo.map(_.stateSchemaFilePath)).getOrElse(Array.empty)
+      .flatMap { schemaPath =>
+        schemaFile.getWithPath(new Path(schemaPath))
+      }.toList
+    validateSchemas(oldSchemas, newSchemas)
     // Write the new schema to the schema file
-    val schemaPath = schemaFile.addWithUUID(batchId, newColumnFamilySchemas.values.toList)
+    val schemaPath = schemaFile.addWithUUID(batchId, newSchemas.values.toList)
     Array(schemaPath.toString)
   }
 
