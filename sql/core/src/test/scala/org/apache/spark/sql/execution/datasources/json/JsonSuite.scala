@@ -1779,7 +1779,7 @@ abstract class JsonSuite
         val timestampsWithoutFormatPath = s"${dir.getCanonicalPath}/timestampsWithoutFormat.json"
         val timestampsWithoutFormat = spark.read
           .schema(customSchema)
-          .option("timestampFormat", "dd/MM/yyyy HH:mm")
+          .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
           .json(datesRecords.union(oldDatesRecord))
 
         timestampsWithoutFormat.write
