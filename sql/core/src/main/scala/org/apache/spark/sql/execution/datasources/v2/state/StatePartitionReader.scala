@@ -54,14 +54,13 @@ class StatePartitionReaderFactory(
  * An implementation of [[PartitionReader]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
  */
-class StatePartitionReader(
+abstract class StatePartitionReaderBase(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
     stateStoreMetadata: Array[StateMetadataTableEntry])
   extends PartitionReader[InternalRow] with Logging {
-
   private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
   private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
 
@@ -96,6 +95,40 @@ class StatePartitionReader(
       useMultipleValuesPerKey = false)
   }
 
+  protected val iter: Iterator[InternalRow]
+
+  private var current: InternalRow = _
+
+  override def next(): Boolean = {
+    if (iter.hasNext) {
+      current = iter.next()
+      true
+    } else {
+      current = null
+      false
+    }
+  }
+
+  override def get(): InternalRow = current
+
+  override def close(): Unit = {
+    current = null
+    provider.close()
+  }
+}
+
+/**
+ * An implementation of [[StatePartitionReaderBase]] for the normal mode of State Data
+ * Source. It reads the the state at a particular batchId.
+ */
+class StatePartitionReader(
+    storeConf: StateStoreConf,
+    hadoopConf: SerializableConfiguration,
+    partition: StateStoreInputPartition,
+    schema: StructType,
+    stateStoreMetadata: Array[StateMetadataTableEntry])
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
       case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
@@ -112,28 +145,13 @@ class StatePartitionReader(
     }
   }
 
-  protected lazy val iter: Iterator[InternalRow] = {
+  override lazy val iter: Iterator[InternalRow] = {
     store.iterator().map(pair => unifyStateRowPair((pair.key, pair.value)))
   }
 
-  protected var current: InternalRow = _
-
-  override def next(): Boolean = {
-    if (iter.hasNext) {
-      current = iter.next()
-      true
-    } else {
-      current = null
-      false
-    }
-  }
-
-  override def get(): InternalRow = current
-
   override def close(): Unit = {
-    current = null
     store.abort()
-    provider.close()
+    super.close()
   }
 
   private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
@@ -146,8 +164,8 @@ class StatePartitionReader(
 }
 
 /**
- * An implementation of [[PartitionReader]] for the readChangeFeed mode of State Data Source.
- * It reads the change of state over batches of a particular partition.
+ * An implementation of [[StatePartitionReaderBase]] for the readChangeFeed mode of State Data
+ * Source. It reads the change of state over batches of a particular partition.
  */
 class StateStoreChangeDataPartitionReader(
     storeConf: StateStoreConf,
@@ -155,7 +173,7 @@ class StateStoreChangeDataPartitionReader(
     partition: StateStoreInputPartition,
     schema: StructType,
     stateStoreMetadata: Array[StateMetadataTableEntry])
-  extends StatePartitionReader(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
+  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
 
   private lazy val changeDataReader: StateStoreChangeDataReader = {
     if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
@@ -168,14 +186,13 @@ class StateStoreChangeDataPartitionReader(
         partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1)
   }
 
-  override protected lazy val iter: Iterator[InternalRow] = {
+  override lazy val iter: Iterator[InternalRow] = {
     changeDataReader.iterator.map(unifyStateChangeDataRow)
   }
 
   override def close(): Unit = {
-    current = null
     changeDataReader.close()
-    provider.close()
+    super.close()
   }
 
   private def unifyStateChangeDataRow(row: (RecordType, UnsafeRow, UnsafeRow, Long)):
