@@ -37,7 +37,7 @@ case class SqlScriptingInterpreter() {
    *   Iterator through collection of statements to be executed.
    */
   def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
