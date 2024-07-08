@@ -129,7 +129,7 @@ object SQLExecution extends Logging {
           time = System.currentTimeMillis(),
           modifiedConfigs = redactedConfigs,
           jobTags = sc.getJobTags(),
-          jobGroupId = Some(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+          jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
         )
         try {
           body match {
