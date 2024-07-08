@@ -86,7 +86,6 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 2)
           .load(tempDir.getAbsolutePath)
@@ -99,7 +98,6 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValueIsNegative] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.BATCH_ID, 0)
           .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, -1)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
@@ -113,7 +111,6 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceInvalidOptionValue] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.BATCH_ID, 0)
           .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 1)
           .option(StateSourceOptions.CHANGE_END_BATCH_ID, 0)
@@ -127,7 +124,6 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
     withTempDir { tempDir =>
       val exc = intercept[StateDataSourceConflictOptions] {
         spark.read.format("statestore")
-          .option(StateSourceOptions.BATCH_ID, 0)
           .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
           .option(StateSourceOptions.JOIN_SIDE, "left")
           .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)

@@ -97,17 +97,17 @@ class StatePartitionReader(
   }
 
   private lazy val store: ReadStateStore = {
-    partition.sourceOptions.snapshotStartBatchId match {
+    partition.sourceOptions.fromSnapshotOptions match {
       case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
 
-      case Some(snapshotStartBatchId) =>
+      case Some(fromSnapshotOptions) =>
         if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
           throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             provider.getClass.toString)
         }
         provider.asInstanceOf[SupportsFineGrainedReplay]
           .replayReadStateFromSnapshot(
-            snapshotStartBatchId + 1,
+            fromSnapshotOptions.snapshotStartBatchId + 1,
             partition.sourceOptions.batchId + 1)
     }
   }
@@ -164,8 +164,8 @@ class StateStoreChangeDataPartitionReader(
     }
     provider.asInstanceOf[SupportsFineGrainedReplay]
       .getStateStoreChangeDataReader(
-        partition.sourceOptions.changeStartBatchId.get + 1,
-        partition.sourceOptions.changeEndBatchId.get + 1)
+        partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
+        partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1)
   }
 
   override protected lazy val iter: Iterator[InternalRow] = {

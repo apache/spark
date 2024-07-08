@@ -59,11 +59,17 @@ class StateTable(
     if (sourceOptions.joinSide != JoinSideValues.none) {
       desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
-    if (sourceOptions.snapshotStartBatchId.isDefined) {
-      desc += s"[snapshotStartBatchId=${sourceOptions.snapshotStartBatchId}]"
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
     }
-    if (sourceOptions.snapshotPartitionId.isDefined) {
-      desc += s"[snapshotPartitionId=${sourceOptions.snapshotPartitionId}]"
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
     }
     desc
   }

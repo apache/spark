@@ -136,24 +136,38 @@ class StateDataSource extends TableProvider with DataSourceRegister {
   override def supportsExternalMetadata(): Boolean = false
 }
 
+case class FromSnapshotOptions(
+  snapshotStartBatchId: Long,
+  snapshotPartitionId: Int)
+
+case class ReadChangeFeedOptions(
+  changeStartBatchId: Long,
+  changeEndBatchId: Long
+)
+
 case class StateSourceOptions(
     resolvedCpLocation: String,
     batchId: Long,
     operatorId: Int,
     storeName: String,
     joinSide: JoinSideValues,
-    snapshotStartBatchId: Option[Long],
-    snapshotPartitionId: Option[Int],
     readChangeFeed: Boolean,
-    changeStartBatchId: Option[Long],
-    changeEndBatchId: Option[Long]) {
+    fromSnapshotOptions: Option[FromSnapshotOptions],
+    readChangeFeedOptions: Option[ReadChangeFeedOptions]) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
-    s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
-      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
-      s"snapshotStartBatchId=${snapshotStartBatchId.getOrElse("None")}, " +
-      s"snapshotPartitionId=${snapshotPartitionId.getOrElse("None")})"
+    var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
+      s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide"
+    if (fromSnapshotOptions.isDefined) {
+      desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
+      desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
+    }
+    if (readChangeFeedOptions.isDefined) {
+      desc += s", changeStartBatchId=${readChangeFeedOptions.get.changeStartBatchId}"
+      desc += s", changeEndBatchId=${readChangeFeedOptions.get.changeEndBatchId}"
+    }
+    desc + ")"
   }
 }
 
@@ -189,16 +203,6 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.requiredOptionUnspecified(PATH)
     }.get
 
-    val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
-
-    val batchId = Option(options.get(BATCH_ID)).map(_.toLong).orElse {
-      Some(getLastCommittedBatch(sparkSession, resolvedCpLocation))
-    }.get
-
-    if (batchId < 0) {
-      throw StateDataSourceErrors.invalidOptionValueIsNegative(BATCH_ID)
-    }
-
     val operatorId = Option(options.get(OPERATOR_ID)).map(_.toInt)
       .orElse(Some(0)).get
 
@@ -227,40 +231,40 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
+    val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+
+    var batchId = Option(options.get(BATCH_ID)).map(_.toLong)
+
     val snapshotStartBatchId = Option(options.get(SNAPSHOT_START_BATCH_ID)).map(_.toLong)
-    if (snapshotStartBatchId.exists(_ < 0)) {
-      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
-    } else if (snapshotStartBatchId.exists(_ > batchId)) {
-      throw StateDataSourceErrors.invalidOptionValue(
-        SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to $batchId")
-    }
-
     val snapshotPartitionId = Option(options.get(SNAPSHOT_PARTITION_ID)).map(_.toInt)
-    if (snapshotPartitionId.exists(_ < 0)) {
-      throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
-    }
-
-    // both snapshotPartitionId and snapshotStartBatchId are required at the same time, because
-    // each partition may have different checkpoint status
-    if (snapshotPartitionId.isDefined && snapshotStartBatchId.isEmpty) {
-      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID)
-    } else if (snapshotPartitionId.isEmpty && snapshotStartBatchId.isDefined) {
-      throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
-    }
 
     val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
 
     val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
     var changeEndBatchId = Option(options.get(CHANGE_END_BATCH_ID)).map(_.toLong)
 
+    var fromSnapshotOptions: Option[FromSnapshotOptions] = None
+    var readChangeFeedOptions: Option[ReadChangeFeedOptions] = None
+
     if (readChangeFeed) {
       if (joinSide != JoinSideValues.none) {
         throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, READ_CHANGE_FEED))
       }
+      if (batchId.isDefined) {
+        throw StateDataSourceErrors.conflictOptions(Seq(BATCH_ID, READ_CHANGE_FEED))
+      }
+      if (snapshotStartBatchId.isDefined) {
+        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_START_BATCH_ID, READ_CHANGE_FEED))
+      }
+      if (snapshotPartitionId.isDefined) {
+        throw StateDataSourceErrors.conflictOptions(Seq(SNAPSHOT_PARTITION_ID, READ_CHANGE_FEED))
+      }
+
       if (changeStartBatchId.isEmpty) {
         throw StateDataSourceErrors.requiredOptionUnspecified(CHANGE_START_BATCH_ID)
       }
-      changeEndBatchId = Option(changeEndBatchId.getOrElse(batchId))
+      changeEndBatchId = Option(
+        changeEndBatchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
 
       // changeStartBatchId and changeEndBatchId must all be defined at this point
       if (changeStartBatchId.get < 0) {
@@ -272,6 +276,11 @@ object StateSourceOptions extends DataSourceOptions {
           s"Please check the input to $CHANGE_END_BATCH_ID, or if you are using its default " +
           s"value, make sure that $CHANGE_START_BATCH_ID is less than ${changeEndBatchId.get}.")
       }
+
+      batchId = Option(changeEndBatchId.get)
+
+      readChangeFeedOptions = Option(
+        ReadChangeFeedOptions(changeStartBatchId.get, changeEndBatchId.get))
     } else {
       if (changeStartBatchId.isDefined) {
         throw StateDataSourceErrors.invalidOptionValue(CHANGE_START_BATCH_ID,
@@ -281,12 +290,36 @@ object StateSourceOptions extends DataSourceOptions {
         throw StateDataSourceErrors.invalidOptionValue(CHANGE_END_BATCH_ID,
           s"Only specify this option when $READ_CHANGE_FEED is set to true.")
       }
+
+      batchId = Option(batchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
+
+      if (batchId.get < 0) {
+        throw StateDataSourceErrors.invalidOptionValueIsNegative(BATCH_ID)
+      }
+      if (snapshotStartBatchId.exists(_ < 0)) {
+        throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
+      } else if (snapshotStartBatchId.exists(_ > batchId.get)) {
+        throw StateDataSourceErrors.invalidOptionValue(
+          SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to $batchId")
+      }
+      if (snapshotPartitionId.exists(_ < 0)) {
+        throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
+      }
+      // both snapshotPartitionId and snapshotStartBatchId are required at the same time, because
+      // each partition may have different checkpoint status
+      if (snapshotPartitionId.isDefined && snapshotStartBatchId.isEmpty) {
+        throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_START_BATCH_ID)
+      } else if (snapshotPartitionId.isEmpty && snapshotStartBatchId.isDefined) {
+        throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
+      }
+
+      fromSnapshotOptions = Option(
+        FromSnapshotOptions(snapshotStartBatchId.get, snapshotPartitionId.get))
     }
 
     StateSourceOptions(
-      resolvedCpLocation, batchId, operatorId, storeName,
-      joinSide, snapshotStartBatchId, snapshotPartitionId,
-      readChangeFeed, changeStartBatchId, changeEndBatchId)
+      resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
+      readChangeFeed, fromSnapshotOptions, readChangeFeedOptions)
   }
 
   private def resolvedCheckpointLocation(
