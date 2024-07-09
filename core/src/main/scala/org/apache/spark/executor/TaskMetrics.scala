@@ -29,6 +29,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -150,6 +151,11 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
 
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
+
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
    * data, defined only in tasks with input.
@@ -267,12 +273,7 @@ class TaskMetrics private[spark] () extends Serializable {
   @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
   private[spark] def externalAccums: Seq[AccumulatorV2[_, _]] = withReadLock {
-    _externalAccums.toSeq
-  }
-
-  private val (readLock, writeLock) = {
-    val lock = new ReentrantReadWriteLock()
-    (lock.readLock(), lock.writeLock())
+    _externalAccums.toArray.toImmutableArraySeq
   }
 
   private def withReadLock[B](fn: => B): B = {
