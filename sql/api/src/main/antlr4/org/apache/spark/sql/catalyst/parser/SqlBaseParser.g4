@@ -258,8 +258,6 @@ statement
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
-    | RESET configKey                                                  #resetQuotedConfiguration
-    | RESET .*?                                                        #resetConfiguration
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -281,6 +279,8 @@ setResetStatement
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
     | SET .*?                                                          #setConfiguration
+    | RESET configKey                                                  #resetQuotedConfiguration
+    | RESET .*?                                                        #resetConfiguration
     ;
 
 executeImmediate
