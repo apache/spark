@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -913,11 +913,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         val correlatedCols = AttributeSet(subqueryColumns)
         val invalidColsLegacy = groupByCols -- correlatedCols
         if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
-          logWarning("Using legacy behavior for " +
-            s"${SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE
-              .key}. Query would be rejected with non-legacy behavior but is allowed by " +
-            s"legacy behavior. Query may be invalid and return wrong results if the scalar " +
-            s"subquery's group-by outputs multiple rows.")
+          logWarning(log"Using legacy behavior for " +
+            log"${MDC(LogKeys.CONFIG, SQLConf
+            .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
+            log"Query would be rejected with non-legacy behavior but is allowed by " +
+            log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            log"subquery's group-by outputs multiple rows.")
         }
         invalidColsLegacy
       }

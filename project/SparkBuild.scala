@@ -332,7 +332,8 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.api.python",
         "org.apache.spark.network",
         "org.apache.spark.deploy",
-        "org.apache.spark.util.collection"
+        "org.apache.spark.util.collection",
+        "org.apache.spark.sql.scripting"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     ),
