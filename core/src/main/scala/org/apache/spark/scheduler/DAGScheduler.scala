@@ -1000,11 +1000,11 @@ private[spark] class DAGScheduler(
       case scala.util.Success(_) =>
         logInfo(log"Job ${MDC(LogKeys.JOB_ID, waiter.jobId)} finished: " +
           log"${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}, took " +
-          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e9)} s")
+          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e6)} ms")
       case scala.util.Failure(exception) =>
         logInfo(log"Job ${MDC(LogKeys.JOB_ID, waiter.jobId)} failed: " +
           log"${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}, took " +
-          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e9)} s")
+          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e6)} ms")
         // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
         val callerStackTrace = Thread.currentThread().getStackTrace.tail
         exception.setStackTrace(exception.getStackTrace ++ callerStackTrace)

@@ -132,9 +132,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     conf.get(PYTHON_DAEMON_MODULE).map { value =>
       logInfo(
         log"Python daemon module in PySpark is set to " +
-        log"[${MDC(LogKeys.VALUE, value)}] in '${MDC(LogKeys.PYTHON_DAEMON_MODULE,
+        log"[${MDC(LogKeys.VALUE, value)}] in '${MDC(LogKeys.CONFIG,
           PYTHON_DAEMON_MODULE.key)}', using this to start the daemon up. Note that this " +
-          log"configuration only has an effect when '${MDC(LogKeys.PYTHON_USE_DAEMON,
+          log"configuration only has an effect when '${MDC(LogKeys.CONFIG2,
             PYTHON_USE_DAEMON.key)}' is enabled and the platform is not Windows.")
       value
     }.getOrElse("pyspark.daemon")
@@ -144,9 +144,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     conf.get(PYTHON_WORKER_MODULE).map { value =>
       logInfo(
         log"Python worker module in PySpark is set to ${MDC(LogKeys.VALUE, value)} " +
-        log"in ${MDC(LogKeys.PYTHON_WORKER_MODULE, PYTHON_WORKER_MODULE.key)}, " +
+        log"in ${MDC(LogKeys.CONFIG, PYTHON_WORKER_MODULE.key)}, " +
         log"using this to start the worker up. Note that this configuration only has " +
-        log"an effect when ${MDC(LogKeys.PYTHON_USE_DAEMON, PYTHON_USE_DAEMON.key)} " +
+        log"an effect when ${MDC(LogKeys.CONFIG2, PYTHON_USE_DAEMON.key)} " +
         log"is disabled or the platform is Windows.")
       value
     }.getOrElse("pyspark.worker")
