@@ -1006,7 +1006,7 @@ class HDFSBackedStateStoreChangeDataReader(
     if (reader == null) {
       return null
     }
-    val (recordType, keyArray, valueArray, _) = reader.next()
+    val (recordType, keyArray, valueArray) = reader.next()
     val keyRow = new UnsafeRow(keySchema.fields.length)
     keyRow.pointTo(keyArray, keyArray.length)
     if (valueArray == null) {

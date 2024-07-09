@@ -476,6 +476,7 @@ private[sql] class RocksDBStateStoreProvider
       endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap)
+  }
 
   /**
    * Class for column family related utility functions.
@@ -706,8 +707,10 @@ class RocksDBStateStoreChangeDataReader(
     if (reader == null) {
       return null
     }
-    val (recordType, keyArray, valueArray, columnFamily) = reader.next()
-    val (rocksDBKeyStateEncoder, rocksDBValueStateEncoder) = keyValueEncoderMap.get(columnFamily)
+    val (recordType, keyArray, valueArray) = reader.next()
+    // Todo: does not support multiple virtual column families
+    val (rocksDBKeyStateEncoder, rocksDBValueStateEncoder) =
+      keyValueEncoderMap.get(StateStore.DEFAULT_COL_FAMILY_NAME)
     val keyRow = rocksDBKeyStateEncoder.decodeKey(keyArray)
     if (valueArray == null) {
       (recordType, keyRow, null, currentChangelogVersion - 1)
