@@ -210,8 +210,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`lowerChar`"
+    "parameterName" : "`lowerChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -233,8 +233,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`digitChar`"
+    "parameterName" : "`digitChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -256,8 +256,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -279,9 +279,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
     "index" : "0",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -304,8 +304,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
-    "functionName" : "`mask`",
-    "proposal" : "`str` `upperChar` `otherChar`"
+    "proposal" : "`str` `upperChar` `otherChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",

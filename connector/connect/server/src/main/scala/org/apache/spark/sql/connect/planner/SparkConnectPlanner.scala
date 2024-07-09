@@ -2178,20 +2178,23 @@ class SparkConnectPlanner(
   }
 
   private def transformCast(cast: proto.Expression.Cast): Expression = {
-    val dataType = cast.getCastToTypeCase match {
+    val rawDataType = cast.getCastToTypeCase match {
       case proto.Expression.Cast.CastToTypeCase.TYPE => transformDataType(cast.getType)
       case _ => parser.parseDataType(cast.getTypeStr)
     }
-    val mode = cast.getEvalMode match {
-      case proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY => Some(EvalMode.LEGACY)
-      case proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI => Some(EvalMode.ANSI)
-      case proto.Expression.Cast.EvalMode.EVAL_MODE_TRY => Some(EvalMode.TRY)
-      case _ => None
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
+    val castExpr = cast.getEvalMode match {
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY =>
+        Cast(transformExpression(cast.getExpr), dataType, None, EvalMode.LEGACY)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI =>
+        Cast(transformExpression(cast.getExpr), dataType, None, EvalMode.ANSI)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_TRY =>
+        Cast(transformExpression(cast.getExpr), dataType, None, EvalMode.TRY)
+      case _ =>
+        Cast(transformExpression(cast.getExpr), dataType)
     }
-    mode match {
-      case Some(m) => Cast(transformExpression(cast.getExpr), dataType, None, m)
-      case _ => Cast(transformExpression(cast.getExpr), dataType)
-    }
+    castExpr.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    castExpr
   }
 
   private def transformUnresolvedRegex(regex: proto.Expression.UnresolvedRegex): Expression = {
