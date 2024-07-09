@@ -162,7 +162,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("compound: beginLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl: BEGIN
         |  SELECT 1;
@@ -171,14 +171,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.equals("lbl"))
   }
 
   test("compound: beginLabel + endLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl: BEGIN
         |  SELECT 1;
@@ -187,14 +187,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
     assert(tree.label.equals("lbl"))
   }
 
   test("compound: beginLabel + endLabel with different values") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl_begin: BEGIN
         |  SELECT 1;
@@ -204,14 +204,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
     val e = intercept[SparkException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessage.contains("Both labels should be same."))
   }
 
   test("compound: endLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  SELECT 1;
@@ -221,10 +221,26 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT * FROM T;
         |END lbl""".stripMargin
     val e = intercept[SparkException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessage.contains("End label can't exist without begin label."))
+  }
+
+  test("compound: no labels provided") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(!tree.label.equals(""))
   }
 
   // Helper methods
