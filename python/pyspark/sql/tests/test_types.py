@@ -820,7 +820,7 @@ class TypesTestsMixin:
     def test_array_type_from_json(self):
         arrayWithoutCollations = ArrayType(StringType(), True)
         arrayWithCollations = ArrayType(StringType("UNICODE"), True)
-        array_json = '{"type": "array", "elementType": "string", "containsNull": true}'
+        array_json = {"type": "array", "elementType": "string", "containsNull": "true"}
         collationsMap = {".element": "UNICODE"}
 
         self.assertEqual(arrayWithoutCollations, ArrayType.fromJson(array_json))
@@ -835,9 +835,7 @@ class TypesTestsMixin:
     def test_map_type_from_json(self):
         mapWithoutCollations = MapType(StringType(), StringType(), True)
         mapWithCollations = MapType(StringType("UNICODE"), StringType("UNICODE"), True)
-        map_json = (
-            '{"type": "map", "keyType": "string", "valueType": "string", "valueContainsNull": true}'
-        )
+        map_json = {"type": "map", "keyType": "string", "valueType": "string", "valueContainsNull": "true"}
         collationsMap = {".key": "UNICODE", ".value": "UNICODE"}
 
         self.assertEqual(mapWithoutCollations, MapType.fromJson(map_json))
