@@ -618,10 +618,8 @@ private[spark] object LogKeys {
   case object PUSHED_FILTERS extends LogKey
   case object PUSH_MERGED_LOCAL_BLOCKS_SIZE extends LogKey
   case object PVC_METADATA_NAME extends LogKey
-  case object PYTHON_DAEMON_MODULE extends LogKey
   case object PYTHON_EXEC extends LogKey
   case object PYTHON_PACKAGES extends LogKey
-  case object PYTHON_USE_DAEMON extends LogKey
   case object PYTHON_VERSION extends LogKey
   case object PYTHON_WORKER_MODULE extends LogKey
   case object PYTHON_WORKER_RESPONSE extends LogKey
