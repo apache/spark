@@ -1342,7 +1342,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Finance|                     George|
     +----------+---------------------------+
 
-    Example 4: Non-deterministic when the the maximum 'v' is accociated with multiple 'id'
+    Example 4: Non-deterministic when the maximum 'v' is accociated with multiple 'id'
     >>> import pyspark.sql.functions as sf
     >>> df = spark.range(1000).withColumn("v", sf.lit(1))
     >>> df.repartition(9).select(sf.max_by("id", "v")).show() # doctest: +SKIP
@@ -1452,7 +1452,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     |   Finance|                      Frank|
     +----------+---------------------------+
 
-    Example 4: Non-deterministic when the the minimum 'v' is accociated with multiple 'id'
+    Example 4: Non-deterministic when the minimum 'v' is accociated with multiple 'id'
     >>> import pyspark.sql.functions as sf
     >>> df = spark.range(1000).withColumn("v", sf.lit(1))
     >>> df.repartition(9).select(sf.min_by("id", "v")).show() # doctest: +SKIP
