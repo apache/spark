@@ -4002,7 +4002,7 @@ object functions {
    * @group string_funcs
    * @since 3.4.0
    */
-  def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", e, lit(trimString))
+  def ltrim(e: Column, trimString: String): Column = Column.fn("ltrim", lit(trimString), e)
 
   /**
    * Calculates the byte length for the specified string column.
@@ -4183,7 +4183,7 @@ object functions {
    * @group string_funcs
    * @since 3.4.0
    */
-  def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", e, lit(trimString))
+  def rtrim(e: Column, trimString: String): Column = Column.fn("rtrim", lit(trimString), e)
 
   /**
    * Returns the soundex code for the specified expression.
@@ -4360,7 +4360,7 @@ object functions {
    * @group string_funcs
    * @since 3.4.0
    */
-  def trim(e: Column, trimString: String): Column = Column.fn("trim", e, lit(trimString))
+  def trim(e: Column, trimString: String): Column = Column.fn("trim", lit(trimString), e)
 
   /**
    * Converts a string column to upper case.
