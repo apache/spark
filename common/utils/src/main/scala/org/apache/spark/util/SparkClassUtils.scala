@@ -52,21 +52,21 @@ private[spark] trait SparkClassUtils {
   }
 
   /**
-   * Determines whether the provided class is loadable in the current thread and a subclass
-   * of the given parent class.
+   * Determines whether the provided class is loadable in the current thread and assignable
+   * from the target class.
    *
    * @param clazz the fully qualified class name of the class to check
    *              for loadability and inheritance from `parent`
-   * @param parent the parent class which the class represented. If parent
+   * @param targetClass the target class which the class represented. If target
    *               is null, only checks if the class is loadable
-   * @return true if `clazz` is loadable and a subclass of `parent`, otherwise false
+   * @return true if `clazz` is loadable and assignable from `target`, otherwise false
    */
-  def classIsLoadableAndSubOf(
+  def classIsLoadableAndAssignableFrom(
       clazz: String,
-      parent: Class[_]): Boolean = {
+      targetClass: Class[_]): Boolean = {
     Try {
       val cls = classForName(clazz, initialize = false)
-      parent == null || parent.isAssignableFrom(cls)
+      targetClass == null || targetClass.isAssignableFrom(cls)
     }.getOrElse(false)
   }
 }

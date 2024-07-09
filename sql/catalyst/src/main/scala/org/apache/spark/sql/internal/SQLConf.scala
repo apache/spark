@@ -1164,7 +1164,7 @@ object SQLConf {
     .version("1.5.0")
     .internal()
     .stringConf
-    .checkValue(Utils.classIsLoadableAndSubOf(_, classOf[OutputCommitter]),
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
       s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
 
@@ -1737,7 +1737,7 @@ object SQLConf {
     .version("1.4.0")
     .internal()
     .stringConf
-    .checkValue(Utils.classIsLoadableAndSubOf(_, classOf[OutputCommitter]),
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
       s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createOptional
 
@@ -1746,7 +1746,7 @@ object SQLConf {
       .version("2.1.1")
       .internal()
       .stringConf
-      .checkValue(Utils.classIsLoadableAndSubOf(_, classOf[FileCommitProtocol]),
+      .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[FileCommitProtocol]),
         s"Class must be loadable and subclass of ${classOf[FileCommitProtocol].getName}")
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
