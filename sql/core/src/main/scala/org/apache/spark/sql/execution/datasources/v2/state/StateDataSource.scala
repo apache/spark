@@ -312,8 +312,10 @@ object StateSourceOptions extends DataSourceOptions {
         throw StateDataSourceErrors.requiredOptionUnspecified(SNAPSHOT_PARTITION_ID)
       }
 
-      fromSnapshotOptions = Option(
-        FromSnapshotOptions(snapshotStartBatchId.get, snapshotPartitionId.get))
+      if (snapshotStartBatchId.isDefined && snapshotPartitionId.isDefined) {
+        fromSnapshotOptions = Option(
+          FromSnapshotOptions(snapshotStartBatchId.get, snapshotPartitionId.get))
+      }
     }
 
     StateSourceOptions(
