@@ -382,7 +382,7 @@ case class TransformWithStateExec(
     val newColumnFamilySchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
-    // TODO: Read the schema path from the OperatorStateMetadata file
+    // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
     // and validate it with the new schema
 
     // Write the new schema to the schema file
