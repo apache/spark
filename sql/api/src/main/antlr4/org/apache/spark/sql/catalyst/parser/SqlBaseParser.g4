@@ -274,7 +274,7 @@ setResetStatement
     | SET TIME ZONE .*?                                                #setTimeZone
     | SET (VARIABLE | VAR) assignmentList                              #setVariable
     | SET (VARIABLE | VAR) LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                                 #setVariable
+        LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
     | SET .*? EQ configValue                                           #setQuotedConfiguration
