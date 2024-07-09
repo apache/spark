@@ -47,16 +47,7 @@ class OperatorStateMetadataLog(
   override protected def serialize(metadata: OperatorStateMetadata, out: OutputStream): Unit = {
     val fsDataOutputStream = out.asInstanceOf[FSDataOutputStream]
     fsDataOutputStream.write(s"v${metadata.version}\n".getBytes(StandardCharsets.UTF_8))
-<<<<<<< HEAD
     OperatorStateMetadataUtils.serialize(fsDataOutputStream, metadata)
-=======
-    metadata.version match {
-      case 1 =>
-        OperatorStateMetadataV1.serialize(fsDataOutputStream, metadata)
-      case 2 =>
-        OperatorStateMetadataV2.serialize(fsDataOutputStream, metadata)
-    }
->>>>>>> 0acb7055d11 (checking the OperatorStateMetadata log for the state schema file)
   }
 
   override protected def deserialize(in: InputStream): OperatorStateMetadata = {
