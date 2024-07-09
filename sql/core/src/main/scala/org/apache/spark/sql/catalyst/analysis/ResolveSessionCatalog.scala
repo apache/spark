@@ -199,6 +199,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
+    case c @ CreateTableLike(
+        ResolvedV1Identifier(targetIdent), ResolvedV1TableOrViewIdentifier(sourceIdent),
+        tableSpec: TableSpec, _) =>
+      val (storageFormat, _) = getStorageFormatAndProvider(
+        c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
+        ctas = false)
+      if (tableSpec.provider.isEmpty || !isV2Provider(tableSpec.provider.get)) {
+        CreateTableLikeCommand(targetIdent, sourceIdent, storageFormat, tableSpec.provider,
+          tableSpec.properties, c.ignoreIfExists)
+      } else {
+        c
+      }
+
     case RefreshTable(ResolvedV1TableOrViewIdentifier(ident)) =>
       RefreshTableCommand(ident)
 

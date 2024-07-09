@@ -1556,6 +1556,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("MSCK REPAIR TABLE")
   }
 
+  def createTableLikeNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("CREATE TABLE ... LIKE")
+  }
+
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1125",

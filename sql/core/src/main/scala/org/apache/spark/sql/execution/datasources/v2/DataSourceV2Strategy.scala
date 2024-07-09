@@ -202,6 +202,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
 
+    case CreateTableLike(_, _, _, _) =>
+      throw QueryCompilationErrors.createTableLikeNotSupportedForV2TablesError()
+
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
