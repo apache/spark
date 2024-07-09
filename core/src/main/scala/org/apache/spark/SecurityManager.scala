@@ -26,7 +26,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -89,17 +89,18 @@ private[spark] class SecurityManager(
   private val sslRpcEnabled = sparkConf.getBoolean(
     "spark.ssl.rpc.enabled", false)
 
-  logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
-    "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users with view permissions: " +
-    (if (viewAcls.nonEmpty) viewAcls.mkString(", ") else "EMPTY") +
-    "; groups with view permissions: " +
-    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY") +
-    "; users with modify permissions: " +
-    (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
-    "; groups with modify permissions: " +
-    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY") +
-    "; RPC SSL " + (if (sslRpcEnabled) "enabled" else "disabled"))
+  logInfo(log"SecurityManager: authentication ${MDC(LogKeys.AUTH_ENABLED,
+    if (authOn) "enabled" else "disabled")}" +
+    log"; ui acls ${MDC(LogKeys.UI_ACLS, if (aclsOn) "enabled" else "disabled")}" +
+    log"; users with view permissions: ${MDC(LogKeys.VIEW_ACLS,
+      if (viewAcls.nonEmpty) viewAcls.mkString(", ")
+    else "EMPTY")} groups with view permissions: ${MDC(LogKeys.VIEW_ACLS_GROUPS,
+      if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY")}" +
+    log"; users with modify permissions: ${MDC(LogKeys.MODIFY_ACLS,
+      if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY")}" +
+    log"; groups with modify permissions: ${MDC(LogKeys.MODIFY_ACLS_GROUPS,
+      if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY")}" +
+    log"; RPC SSL ${MDC(LogKeys.RPC_SSL_ENABLED, if (sslRpcEnabled) "enabled" else "disabled")}")
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
@@ -213,7 +214,7 @@ private[spark] class SecurityManager(
 
   def setAcls(aclSetting: Boolean): Unit = {
     aclsOn = aclSetting
-    logInfo("Changing acls enabled to: " + aclsOn)
+    logInfo(log"Changing acls enabled to: ${MDC(LogKeys.AUTH_ENABLED, aclsOn)}")
   }
 
   def getIOEncryptionKey(): Option[Array[Byte]] = ioEncryptionKey
