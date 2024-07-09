@@ -2398,6 +2398,18 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CREATE TABLE ... LIKE") {
+    val t = "testcat.ns1.ns2.tbl"
+    val t1 = "testcat.ns1.ns2.tbl1"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      testNotSupportedV2Command("CREATE TABLE",
+        s"$t1 LIKE $t",
+        Some("CREATE TABLE ... LIKE"))
+    }
+  }
+
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     checkError(
