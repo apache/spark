@@ -37,6 +37,12 @@ nbsphinx
 numpydoc
 jinja2
 sphinx==4.5.0
+# With sphinx 4.5.0, we need to pin 'sphinxcontrib-*', it should unpin 'sphinxcontrib-*' after upgrading sphinx>5
+sphinxcontrib-applehelp == 1.0.4
+sphinxcontrib-devhelp == 1.0.2
+sphinxcontrib-htmlhelp == 2.0.1
+sphinxcontrib-qthelp == 1.0.3
+sphinxcontrib-serializinghtml == 1.1.5
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
