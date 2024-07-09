@@ -21,11 +21,12 @@ import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Base64
+
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.LogKeys.JOB_ID
-import org.apache.spark.internal.{LogKeys, Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher

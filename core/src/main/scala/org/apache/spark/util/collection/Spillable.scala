@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{LogKeys, Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 
@@ -147,7 +147,5 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
       log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
         org.apache.spark.util.Utils.bytesToString(size))} to disk " +
       log"(${MDC(LogKeys.SPILL_TIMES, _spillCount)} times so far)")
-
-    ${MDC(LogKeys.AUTH_ENABLED, aclsOn)}
   }
 }

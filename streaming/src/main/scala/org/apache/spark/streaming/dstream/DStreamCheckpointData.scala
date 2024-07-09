@@ -118,7 +118,7 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
     currentCheckpointFiles.foreach {
       case(time, file) =>
         logInfo(log"Restoring checkpointed RDD for time ${MDC(LogKeys.TIME, time)} from file " +
-          log"'${MDC(LogKeys.FILE, file)}'")
+          log"'${MDC(LogKeys.FILE_NAME, file)}'")
         dstream.generatedRDDs += ((time, dstream.context.sparkContext.checkpointFile[T](file)))
     }
   }

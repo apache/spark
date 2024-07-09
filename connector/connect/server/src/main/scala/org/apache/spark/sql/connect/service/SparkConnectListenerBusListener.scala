@@ -18,14 +18,17 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch}
+
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
 import io.grpc.stub.StreamObserver
+
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
-import org.apache.spark.internal.{LogKeys, Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._
 
