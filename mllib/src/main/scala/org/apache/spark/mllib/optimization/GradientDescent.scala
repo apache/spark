@@ -299,8 +299,8 @@ object GradientDescent extends Logging {
       i += 1
     }
 
-    logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
-      stochasticLossHistory.takeRight(10).mkString(", ")))
+    logInfo(log"GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses " +
+      log"${MDC(LogKeys.LOSSES, stochasticLossHistory.takeRight(10).mkString(", "))}")
 
     (weights, stochasticLossHistory.toArray)
   }

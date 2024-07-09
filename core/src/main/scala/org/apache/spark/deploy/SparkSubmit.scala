@@ -136,13 +136,13 @@ private[spark] class SparkSubmit extends Logging {
 
   /** Print version information to the log. */
   private def printVersion(): Unit = {
-    logInfo("""Welcome to
+    logInfo(log"""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version %s
+   /___/ .__/\_,_/_/ /_/\_\   version ${MDC(LogKeys.SPARK_VERSION, SPARK_VERSION)}
       /_/
-                        """.format(SPARK_VERSION))
+                        """)
     logInfo(log"Using Scala ${MDC(LogKeys.SCALA_VERSION, Properties.versionString)}," +
       log" ${MDC(LogKeys.JAVA_VM_NAME, Properties.javaVmName)}," +
       log" ${MDC(LogKeys.JAVA_VERSION, Properties.javaVersion)}")

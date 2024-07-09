@@ -87,7 +87,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
       val dataBuffer = ByteBuffer.allocate(length)
       readFully(channel, dataBuffer)
       dataBuffer.flip()
-      logInfo("Read a block with " + length + " bytes")
+      logInfo(log"Read a block with ${MDC(LogKeys.BYTE_SIZE, length)} bytes")
       queue.put(dataBuffer)
     }
   }
