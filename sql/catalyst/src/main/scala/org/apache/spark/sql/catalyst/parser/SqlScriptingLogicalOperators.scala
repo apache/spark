@@ -54,4 +54,4 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: String) extends CompoundPlanStatement
+    label: Option[String]) extends CompoundPlanStatement
