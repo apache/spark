@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{JobContext, OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 
@@ -111,6 +111,15 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
         }
     }
     result
+  }
+
+  test("SPARK-48804: Fail fast on unloadable or invalid committers") {
+    Seq("invalid", getClass.getName).foreach { committer =>
+      val e = intercept[IllegalArgumentException] {
+        withSQLConf(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key -> committer)()
+      }
+      assert(e.getMessage.contains(classOf[OutputCommitter].getName))
+    }
   }
 }
 

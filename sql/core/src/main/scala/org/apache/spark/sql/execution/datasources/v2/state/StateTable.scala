@@ -24,6 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -35,7 +36,8 @@ class StateTable(
     session: SparkSession,
     override val schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateConf: StateStoreConf)
+    stateConf: StateStoreConf,
+    stateStoreMetadata: Array[StateMetadataTableEntry])
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
@@ -49,22 +51,27 @@ class StateTable(
   }
 
   override def name(): String = {
-    val desc = s"StateTable " +
+    var desc = s"StateTable " +
       s"[stateCkptLocation=${sourceOptions.stateCheckpointLocation}]" +
       s"[batchId=${sourceOptions.batchId}][operatorId=${sourceOptions.operatorId}]" +
       s"[storeName=${sourceOptions.storeName}]"
 
     if (sourceOptions.joinSide != JoinSideValues.none) {
-      desc + s"[joinSide=${sourceOptions.joinSide}]"
-    } else {
-      desc
+      desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
+    if (sourceOptions.snapshotStartBatchId.isDefined) {
+      desc += s"[snapshotStartBatchId=${sourceOptions.snapshotStartBatchId}]"
+    }
+    if (sourceOptions.snapshotPartitionId.isDefined) {
+      desc += s"[snapshotPartitionId=${sourceOptions.snapshotPartitionId}]"
+    }
+    desc
   }
 
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, sourceOptions, stateConf)
+    new StateScanBuilder(session, schema, sourceOptions, stateConf, stateStoreMetadata)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 

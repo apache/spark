@@ -353,14 +353,14 @@ case class TransformWithStateExec(
     validateTimeMode()
 
     if (hasInitialState) {
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -393,8 +393,8 @@ case class TransformWithStateExec(
           KEY_ROW_SCHEMA,
           VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          session.sqlContext.sessionState,
-          Some(session.sqlContext.streams.stateStoreCoordinator),
+          session.sessionState,
+          Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
@@ -404,7 +404,7 @@ case class TransformWithStateExec(
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast = sparkContext.broadcast(
-          new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+          new SerializableConfiguration(session.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>

@@ -1626,6 +1626,57 @@ class XmlSuite
     assert(df.collect().head.getAs[Timestamp](2).getTime === 1322936130000L)
   }
 
+  test("Write timestamps correctly in ISO8601 format by default") {
+    val originalSchema =
+      buildSchema(
+        field("author"),
+        field("time", TimestampType),
+        field("time2", TimestampType),
+        field("time3", TimestampType),
+        field("time4", TimestampType),
+        field("time5", TimestampType)
+      )
+
+    val df = spark.read
+      .option("rowTag", "book")
+      .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
+      .schema(originalSchema)
+      .xml(getTestResourcePath(resDir + "timestamps.xml"))
+
+    withTempDir { dir =>
+      // use los angeles as old dates have wierd offsets
+      withSQLConf("spark.session.timeZone" -> "America/Los_Angeles") {
+        df
+          .write
+          .option("rowTag", "book")
+          .xml(dir.getCanonicalPath + "/xml")
+        val schema =
+          buildSchema(
+            field("author"),
+            field("time", StringType),
+            field("time2", StringType),
+            field("time3", StringType),
+            field("time4", StringType),
+            field("time5", StringType)
+          )
+        val df2 = spark.read
+          .option("rowTag", "book")
+          .schema(schema)
+          .xml(dir.getCanonicalPath + "/xml")
+
+        val expectedStringDatesWithoutFormat = Seq(
+          Row("John Smith",
+            "1800-01-01T10:07:02.000-07:52:58",
+            "1885-01-01T10:30:00.000-08:00",
+            "2014-10-27T18:30:00.000-07:00",
+            "2015-08-26T18:00:00.000-07:00",
+            "2016-01-28T20:00:00.000-08:00"))
+
+        checkAnswer(df2, expectedStringDatesWithoutFormat)
+      }
+    }
+  }
+
   test("Test custom timestampFormat without timezone") {
     val xml = s"""<book>
                  |    <author>John Smith</author>
