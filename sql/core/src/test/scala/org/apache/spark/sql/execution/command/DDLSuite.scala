@@ -327,27 +327,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
 
   protected val reversedProperties = Seq(PROP_OWNER)
 
-  test("alter table: unset properties (datasource table)") {
-    testUnsetProperties(isDatasourceTable = true)
-  }
-
-  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
-    val tableName = "test_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
-        },
-        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-        parameters = Map(
-          "properties" -> "`test_prop1`, `test_prop2`",
-          "table" -> "`spark_catalog`.`default`.`test_table`")
-      )
-    }
-  }
-
   test("alter table: change column (datasource table)") {
     testChangeColumn(isDatasourceTable = true)
   }
@@ -1111,52 +1090,6 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "requiredType" -> "VIEW",
         "objectName" -> "spark_catalog.dbx.tab1")
     )
-  }
-
-  protected def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    def getProps: Map[String, String] = {
-      if (isUsingHiveMetastore) {
-        normalizeCatalogTable(catalog.getTableMetadata(tableIdent)).properties
-      } else {
-        catalog.getTableMetadata(tableIdent).properties
-      }
-    }
-    // unset table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
-    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
-    // unset table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(getProps == Map("c" -> "lan", "x" -> "y"))
-    // table to alter does not exist
-    val sql1 = "ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')"
-    checkError(
-      exception = intercept[ParseException] {
-        sql(sql1)
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [c]"),
-      context = ExpectedContext(fragment = sql1, start = 0, stop = 59)
-    )
-    // property to unset does not exist
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
-      },
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      parameters = Map("properties" -> "`xyz`", "table" -> "`spark_catalog`.`dbx`.`tab1`")
-    )
-    // property to unset does not exist, but "IF EXISTS" is specified
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(getProps == Map("x" -> "y"))
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {

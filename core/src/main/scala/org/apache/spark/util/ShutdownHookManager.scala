@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 
@@ -66,7 +66,7 @@ private[spark] object ShutdownHookManager extends Logging {
     // shutdownDeletePaths as we are traversing through it.
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
-        logInfo("Deleting directory " + dirPath)
+        logInfo(log"Deleting directory ${MDC(LogKeys.PATH, dirPath)}")
         Utils.deleteRecursively(new File(dirPath))
       } catch {
         case e: Exception =>

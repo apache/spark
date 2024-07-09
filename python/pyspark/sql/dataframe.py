@@ -38,6 +38,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.resource import ResourceProfile
 from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
@@ -1886,7 +1887,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.dropDuplicates
+        DataFrame.dropDuplicates : Remove duplicate rows from this DataFrame.
 
         Examples
         --------
@@ -2950,7 +2951,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.summary
+        DataFrame.summary : Computes summary statistics for numeric and string columns.
         """
         ...
 
@@ -3021,7 +3022,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.display
+        DataFrame.describe : Computes basic statistics for numeric and string columns.
         """
         ...
 
@@ -3789,7 +3790,7 @@ class DataFrame:
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
         """
-        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
         grouping sets, so we can run aggregation on them.
 
         .. versionadded:: 4.0.0
@@ -3872,7 +3873,7 @@ class DataFrame:
 
         See Also
         --------
-        GroupedData
+        DataFrame.rollup : Compute hierarchical summaries at multiple levels.
         """
         ...
 
@@ -5419,7 +5420,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnsRenamed`
+        DataFrame.withColumnsRenamed
 
         Examples
         --------
@@ -5479,7 +5480,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnRenamed`
+        DataFrame.withColumnRenamed
 
         Examples
         --------
@@ -5986,6 +5987,41 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        """
+        Merges a set of updates, insertions, and deletions based on a source table into
+        a target table.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        table : str
+            Target table name to merge into.
+        condition : :class:`Column`
+            The condition that determines whether a row in the target table matches one in the
+            source DataFrame.
+
+        Returns
+        -------
+        :class:`MergeIntoWriter`
+            MergeIntoWriter to use further to specify how to merge the source DataFrame
+            into the target table.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import expr
+        >>> source = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["id", "name"])
+        >>> (source.mergeInto("target", "id")  # doctest: +SKIP
+        ...     .whenMatched().update({ "name": source.name })
+        ...     .whenNotMatched().insertAll()
+        ...     .whenNotMatchedBySource().delete()
+        ...     .merge())
+        """
+        ...
+
+    @dispatch_df_method
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
@@ -6147,6 +6183,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
+        DataFrame.mapInArrow
         """
         ...
 
@@ -6223,7 +6260,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
-        pyspark.sql.DataFrame.mapInPandas
+        DataFrame.mapInPandas
         """
         ...
 
