@@ -411,7 +411,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       countBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)
-      intervalBenchmark(rowsNum = 300_1000, numIters)
+      intervalBenchmark(rowsNum = 300 * 1000, numIters)
     }
   }
 }
