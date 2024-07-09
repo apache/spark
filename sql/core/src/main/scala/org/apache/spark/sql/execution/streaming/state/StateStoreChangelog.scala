@@ -299,7 +299,7 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
-  def close(): Unit = { if (input != null) input.close() }
+  override protected def close(): Unit = { if (input != null) input.close() }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte], String)
 }
@@ -458,7 +458,8 @@ abstract class StateStoreChangeDataReader(
   protected def currentChangelogReader(): StateStoreChangelogReader = {
     while (changelogReader == null || !changelogReader.hasNext) {
       if (changelogReader != null) {
-        changelogReader.close()
+        changelogReader.closeIfNeeded()
+        changelogReader = null
       }
       if (!fileIterator.hasNext) {
         finished = true
@@ -476,7 +477,7 @@ abstract class StateStoreChangeDataReader(
 
   override def close(): Unit = {
     if (changelogReader != null) {
-      changelogReader.close()
+      changelogReader.closeIfNeeded()
     }
   }
 }

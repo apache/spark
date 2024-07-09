@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -479,7 +479,7 @@ trait SupportsFineGrainedReplay {
    * @return
    */
   def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
-    StateStoreChangeDataReader
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 
 /**

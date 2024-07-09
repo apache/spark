@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
@@ -175,7 +175,8 @@ class StateStoreChangeDataPartitionReader(
     stateStoreMetadata: Array[StateMetadataTableEntry])
   extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema, stateStoreMetadata) {
 
-  private lazy val changeDataReader: StateStoreChangeDataReader = {
+  private lazy val changeDataReader:
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] = {
     if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {
       throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
         provider.getClass.toString)
@@ -191,7 +192,7 @@ class StateStoreChangeDataPartitionReader(
   }
 
   override def close(): Unit = {
-    changeDataReader.close()
+    changeDataReader.closeIfNeeded()
     super.close()
   }
 
