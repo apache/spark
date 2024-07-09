@@ -1104,7 +1104,7 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
           new StructType().add("key",
             new StructType().add("value", StringType)),
           new StructType().add("value",
-            new StructType().add("value", LongType)),
+            new StructType().add("value", LongType, false)),
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           None
         )
@@ -1114,7 +1114,7 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
             new StructType().add("value", StringType)),
           new StructType().add("value",
             new StructType()
-              .add("id", LongType)
+              .add("id", LongType, false)
               .add("name", StringType)),
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           None
@@ -1126,12 +1126,11 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
             .add("userKey", new StructType().add("value", StringType)),
           new StructType().add("value",
             new StructType()
-              .add("id", IntegerType)
+              .add("id", IntegerType, false)
               .add("name", StringType)),
           PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
           Option(new StructType().add("value", StringType))
         )
-        println("print out schema0: " + schema0)
 
         val inputData = MemoryStream[String]
         val result = inputData.toDS()
@@ -1158,9 +1157,9 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
               q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
             assert(colFamilySeq.length == 3)
-            assert(colFamilySeq.toSet == Set(
+            assert(colFamilySeq.map(_.toString).toSet == Set(
               schema0, schema1, schema2
-            ))
+            ).map(_.toString))
           },
           StopStream
         )
