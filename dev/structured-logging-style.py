@@ -26,8 +26,8 @@ from sparktestsupport import SPARK_HOME
 
 
 def main():
-    log_pattern = r"log(?:Info|Warning|Error)\((.*?)\)"
-    inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?(?:\$|\+(?!.*?[ |\t].*s?")).*'
+    log_pattern = r"log(?:Info|Warning|Error)\(.*?\)\n"
+    inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?(?:\$|\+(?!.*?[ |\t].*s?")).*|.* \+ ".*?"'
     compiled_inner_log_pattern = re.compile(inner_log_pattern, flags=re.DOTALL)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
@@ -57,7 +57,13 @@ def main():
                 if log_statements:
                     nonmigrated_files[file] = []
                     for log_statement in log_statements:
-                        if compiled_inner_log_pattern.fullmatch(log_statement.group(1)):
+                        log_statement_str = log_statement.group(0).strip()
+                        # trim first ( and last )
+                        first_paren_index = log_statement_str.find('(')
+                        inner_log_statement = log_statement_str[first_paren_index + 1:-1]
+
+                        if compiled_inner_log_pattern.fullmatch(inner_log_statement):
+                            # print(f"log statement: ${inner_log_statement}")
                             start_pos = log_statement.start()
                             preceding_content = content[:start_pos]
                             line_number = preceding_content.count("\n") + 1
