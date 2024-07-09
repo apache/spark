@@ -101,7 +101,7 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
 
     if (otherFunc == BucketFunction) {
       val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
-      if (gcd>1 && gcd!=thisNumBuckets) {
+      if (gcd > 1 && gcd != thisNumBuckets) {
         return BucketReducer(gcd)
       }
     }
