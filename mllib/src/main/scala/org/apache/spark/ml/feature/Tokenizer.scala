@@ -141,14 +141,28 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
 
-  override protected def createTransformFunc: String => Seq[String] = { originStr =>
+  override protected def createTransformFunc: String => Seq[String] = {
     val re = $(pattern).r
-    // scalastyle:off caselocale
-    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
-    // scalastyle:on caselocale
-    val tokens = if ($(gaps)) re.split(str).toImmutableArraySeq else re.findAllIn(str).toSeq
-    val minLength = $(minTokenLength)
-    tokens.filter(_.length >= minLength)
+    val localMinTokenLength = $(minTokenLength)
+
+    ($(toLowercase), $(gaps)) match {
+      case (true, true) =>
+        (originStr: String) =>
+          re.split(originStr.toLowerCase()).toImmutableArraySeq
+            .filter(_.length >= localMinTokenLength)
+
+      case (true, false) =>
+        (originStr: String) => re.findAllIn(originStr.toLowerCase()).toSeq
+          .filter(_.length >= localMinTokenLength)
+
+      case (false, true) =>
+        (originStr: String) => re.split(originStr).toImmutableArraySeq
+          .filter(_.length >= localMinTokenLength)
+
+      case (false, false) =>
+        (originStr: String) => re.findAllIn(originStr).toSeq
+          .filter(_.length >= localMinTokenLength)
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
