@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.functions.{array, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -111,5 +111,17 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
     val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+      },
+      errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+      parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
+      context = ExpectedContext(
+        "transform", s".*${this.getClass.getSimpleName}.*"))
   }
 }

@@ -91,7 +91,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
               "tempObj" -> "VIEW",
               "tempObjName" -> "`temp_jtv1`"))
-          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          val globalTempDB = spark.sharedState.globalTempDB
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
           checkError(
             exception = intercept[AnalysisException] {
@@ -1102,7 +1102,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("local temp view refers global temp view") {
     withGlobalTempView("v1") {
       withTempView("v2") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE GLOBAL TEMPORARY VIEW v1 AS SELECT 1")
         sql(s"CREATE TEMPORARY VIEW v2 AS SELECT * FROM ${globalTempDB}.v1")
         checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1)))
@@ -1113,7 +1113,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("global temp view refers local temp view") {
     withTempView("v1") {
       withGlobalTempView("v2") {
-        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        val globalTempDB = spark.sharedState.globalTempDB
         sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
         sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
         checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))

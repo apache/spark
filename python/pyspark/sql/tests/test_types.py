@@ -32,6 +32,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
+    PySparkNotImplementedError,
 )
 from pyspark.sql.types import (
     DataType,
@@ -192,6 +193,7 @@ class TypesTestsMixin:
             Row(a=1),
             Row("a")(1),
             A(),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
 
         df = self.spark.createDataFrame([data])
@@ -214,6 +216,7 @@ class TypesTestsMixin:
             "struct<a:bigint>",
             "struct<a:bigint>",
             "struct<a:bigint>",
+            "struct<b:struct<c:timestamp>>",
         ]
         self.assertEqual(actual, expected)
 
@@ -236,14 +239,25 @@ class TypesTestsMixin:
             Row(a=1),
             Row(a=1),
             Row(a=1),
+            Row(b=Row(c=datetime.datetime(1970, 1, 1, 0, 0))),
         ]
         self.assertEqual(actual, expected)
 
         with self.sql_conf({"spark.sql.timestampType": "TIMESTAMP_NTZ"}):
             with self.sql_conf({"spark.sql.session.timeZone": "America/Sao_Paulo"}):
-                df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1, 0, 0),)])
+                data = [
+                    (
+                        datetime.datetime(1970, 1, 1, 0, 0),
+                        Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))),
+                    )
+                ]
+                df = self.spark.createDataFrame(data)
                 self.assertEqual(list(df.schema)[0].dataType.simpleString(), "timestamp_ntz")
                 self.assertEqual(df.first()[0], datetime.datetime(1970, 1, 1, 0, 0))
+                self.assertEqual(
+                    list(df.schema)[1].dataType.simpleString(), "struct<a:struct<a:timestamp_ntz>>"
+                )
+                self.assertEqual(df.first()[1], Row(a=Row(a=datetime.datetime(1970, 1, 1, 0, 0))))
 
             df = self.spark.createDataFrame(
                 [
@@ -478,14 +492,11 @@ class TypesTestsMixin:
         self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
-        try:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+        with self.sql_conf({"spark.sql.legacy.allowNegativeScaleOfDecimal": True}):
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
             ret = df.select(F.col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
             self.assertEqual(actual, [0, 10])
-        finally:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -1830,7 +1841,7 @@ class TypesTestsMixin:
             NullType(),
             StringType(),
             StringType("UTF8_BINARY"),
-            StringType("UTF8_BINARY_LCASE"),
+            StringType("UTF8_LCASE"),
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
@@ -2207,18 +2218,18 @@ class TypesTestsMixin:
 
     def test_collated_string(self):
         dfs = [
-            self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
+            self.spark.sql("SELECT 'abc' collate UTF8_LCASE"),
             self.spark.createDataFrame(
-                [], StructType([StructField("id", StringType("UTF8_BINARY_LCASE"))])
+                [], StructType([StructField("id", StringType("UTF8_LCASE"))])
             ),
         ]
         for df in dfs:
             # performs both datatype -> proto & proto -> datatype conversions
             self.assertEqual(
-                df.to(StructType([StructField("new", StringType("UTF8_BINARY_LCASE"))]))
+                df.to(StructType([StructField("new", StringType("UTF8_LCASE"))]))
                 .schema[0]
                 .dataType,
-                StringType("UTF8_BINARY_LCASE"),
+                StringType("UTF8_LCASE"),
             )
 
     def test_infer_array_element_type_with_struct(self):
@@ -2230,6 +2241,20 @@ class TypesTestsMixin:
                 ArrayType(ArrayType(LongType())),
                 self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
             )
+
+    def test_ym_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
+        with self.temp_env({"PYSPARK_YM_INTERVAL_LEGACY": "1"}):
+            self.assertEqual(
+                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first(),
+                Row(interval=128),
+            )
+
+    def test_cal_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
 
 
 class DataTypeTests(unittest.TestCase):
@@ -2368,7 +2393,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
-            ("", StringType("UTF8_BINARY_LCASE")),
+            ("", StringType("UTF8_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -2437,7 +2462,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
-            (None, StringType("UTF8_BINARY_LCASE"), ValueError),
+            (None, StringType("UTF8_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)

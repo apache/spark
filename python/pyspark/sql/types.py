@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -288,25 +289,12 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
     providerSpark = "spark"
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    @classmethod
-    def collationIdToName(cls, collationId: int) -> str:
-        return StringType.collationNames[collationId]
-
-    @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
@@ -319,7 +307,7 @@ class StringType(AtomicType):
         if self.isUTF8BinaryCollation():
             return "string"
 
-        return f"string collate ${self.collationIdToName(self.collationId)}"
+        return f"string collate ${self.collation}"
 
     # For backwards compatibility and compatibility with other readers all string types
     # are serialized in json as regular strings and the collation info is written to
@@ -329,13 +317,11 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collationId == 0
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -448,8 +434,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
-                microsecond=ts % 1000000
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
@@ -601,7 +587,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard
+
+    Notes
+    -----
+    This data type doesn't support collection: df.collect/take/head.
+    """
 
     YEAR = 0
     MONTH = 1
@@ -643,6 +634,24 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     jsonValue = _str_repr
 
+    def needConversion(self) -> bool:
+        # If PYSPARK_YM_INTERVAL_LEGACY is not set, needConversion is true,
+        # 'df.collect' fails with PySparkNotImplementedError;
+        # otherwise, no conversion is needed, and 'df.collect' returns the internal integers.
+        return not os.environ.get("PYSPARK_YM_INTERVAL_LEGACY") == "1"
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "YearMonthIntervalType.fromInternal"},
+        )
+
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
@@ -659,6 +668,21 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     @classmethod
     def typeName(cls) -> str:
         return "interval"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "CalendarIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "CalendarIntervalType.fromInternal"},
+        )
 
 
 class ArrayType(DataType):
@@ -1065,7 +1089,7 @@ class StructField(DataType):
 
     def schemaCollationValue(self, dt: DataType) -> str:
         assert isinstance(dt, StringType)
-        collationName = StringType.collationIdToName(dt.collationId)
+        collationName = dt.collation
         provider = StringType.collationProvider(collationName)
         return f"{provider}.{collationName}"
 

@@ -27,6 +27,7 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -685,6 +686,146 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         assert(f.size == 1)
         assert(f.head.stateFormatVersion == 1)
       }
+    )
+  }
+
+  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+   "changing the join condition (key schema) should fail the query") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint.
+    // In the checkpoint we define the input schema as (Int, Long), which does not have name
+    // in both left and right.
+    val inputStream = MemoryStream[(Int, Long, String)]
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
+        col("_3").as("name"))
+
+    val leftStream = df.select(col("value").as("leftId"),
+      col("timestamp").as("leftTime"), col("name").as("leftName"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"),
+        col("timestamp").as("rightTime"), col("name").as("rightName"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("rightId = leftId AND leftName = rightName AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "inner")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("leftName"),
+        col("rightId"), col("rightTime").cast("int"),
+        col("rightName"))
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.5.1-streaming-join/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
+
+    val ex = intercept[StreamingQueryException] {
+      testStream(query)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        /*
+        Note: The checkpoint was generated using the following input in Spark version 3.5.1
+        The base query is different because it does not use the leftName/rightName columns
+        as part of the join keys/condition that is used as part of the key schema.
+
+        AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        // batch 1 - global watermark = 0
+        // states
+        // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+        // right: (2, 2L), (4, 4L)
+        CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+        */
+        AddData(inputStream, (6, 6L, "a"), (7, 7L, "a"), (8, 8L, "a"), (9, 9L, "a"),
+          (10, 10L, "a")),
+        CheckNewAnswer((6, 6L, "a", 6, 6L, "a"), (8, 8L, "a", 8, 8L, "a"),
+          (10, 10L, "a", 10, 10L, "a"))
+      )
+    }
+
+    checkError(
+      ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+      parameters = Map("storedKeySchema" -> ".*",
+        "newKeySchema" -> ".*"),
+      matchPVals = true
+    )
+  }
+
+  test("SPARK-48687 - restore the stream-stream inner join query from Spark 3.5 and " +
+   "changing the value schema should fail the query") {
+    // NOTE: We are also changing the schema of input compared to the checkpoint.
+    // In the checkpoint we define the input schema as (Int, Long), which does not have name
+    // in both left and right.
+    val inputStream = MemoryStream[(Int, Long, String)]
+    val df = inputStream.toDS()
+      .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"),
+        col("_3").as("name"))
+
+    val leftStream = df.select(col("value").as("leftId"),
+      col("timestamp").as("leftTime"), col("name").as("leftName"))
+
+    val rightStream = df
+      // Introduce misses for ease of debugging
+      .where(col("value") % 2 === 0)
+      .select(col("value").as("rightId"),
+        col("timestamp").as("rightTime"), col("name").as("rightName"))
+
+    val query = leftStream
+      .withWatermark("leftTime", "5 seconds")
+      .join(
+        rightStream.withWatermark("rightTime", "5 seconds"),
+        expr("rightId = leftId AND rightTime >= leftTime AND " +
+          "rightTime <= leftTime + interval 5 seconds"),
+        joinType = "inner")
+      .select(col("leftId"), col("leftTime").cast("int"),
+        col("leftName"),
+        col("rightId"), col("rightTime").cast("int"),
+        col("rightName"))
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-3.5.1-streaming-join/").toURI
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
+
+    val ex = intercept[StreamingQueryException] {
+      testStream(query)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        /*
+        Note: The checkpoint was generated using the following input in Spark version 3.5.1
+        The base query is different because it does not use the leftName/rightName columns
+        as part of the generated output that is used as part of the value schema.
+
+        AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        // batch 1 - global watermark = 0
+        // states
+        // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+        // right: (2, 2L), (4, 4L)
+        CheckNewAnswer((2, 2L, 2, 2L), (4, 4L, 4, 4L)),
+        */
+        AddData(inputStream, (6, 6L, "a"), (7, 7L, "a"), (8, 8L, "a"), (9, 9L, "a"),
+          (10, 10L, "a")),
+        CheckNewAnswer((6, 6L, "a", 6, 6L, "a"), (8, 8L, "a", 8, 8L, "a"),
+          (10, 10L, "a", 10, 10L, "a"))
+      )
+    }
+
+    checkError(
+      ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+      parameters = Map("storedValueSchema" -> ".*",
+        "newValueSchema" -> ".*"),
+      matchPVals = true
     )
   }
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
-private case class DatabricksDialect() extends JdbcDialect {
+private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean = {
     url.startsWith("jdbc:databricks")

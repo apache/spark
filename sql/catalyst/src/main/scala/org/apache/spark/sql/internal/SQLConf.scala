@@ -30,10 +30,12 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.OutputCommitter
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -535,8 +537,7 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
-        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .version("2.3.0")
       .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
@@ -772,13 +773,27 @@ object SQLConf {
         " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
-      .checkValue(CollationFactory.isValidCollation,
+      .checkValue(
+        collationName => {
+          try {
+            CollationFactory.fetchCollation(collationName)
+            true
+          } catch {
+            case e: SparkException if e.getErrorClass == "COLLATION_INVALID_NAME" => false
+          }
+        },
         "DEFAULT_COLLATION",
-        name =>
-          Map(
-            "proposal" -> CollationFactory.getClosestCollation(name)
-          ))
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
+
+  val ICU_CASE_MAPPINGS_ENABLED =
+    buildConf("spark.sql.icu.caseMappings.enabled")
+      .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +
+        " for strings under UTF8_BINARY collation.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
@@ -1149,6 +1164,8 @@ object SQLConf {
     .version("1.5.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
 
   val PARQUET_VECTORIZED_READER_ENABLED =
@@ -1716,12 +1733,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  // The output committer class used by data sources. The specified class needs to be a
-  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
@@ -1729,6 +1746,8 @@ object SQLConf {
       .version("2.1.1")
       .internal()
       .stringConf
+      .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[FileCommitProtocol]),
+        s"Class must be loadable and subclass of ${classOf[FileCommitProtocol].getName}")
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
@@ -1969,6 +1988,14 @@ object SQLConf {
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
       "and ORC.")
     .version("2.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
+    .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
+      "the option is enabled, table with two partition directories 'table/invalid' and " +
+      "'table/col=1' will only load the latter directory and ignore the invalid partition")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -2296,7 +2323,9 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins. " +
-      "The number of skipped null values will be shown as custom metric of stream join operator.")
+      "The number of skipped null values will be shown as custom metric of stream join operator. " +
+      "If the streaming query was started with Spark 3.5 or above, please exercise caution " +
+      "before enabling this config since it may hide potential data loss/corruption issues.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2326,6 +2355,17 @@ object SQLConf {
         "may show unexpected behavior including duplication, data loss, etc. So use with " +
         "extreme care! The ideal direction is to persuade developers of source(s) to " +
         "support Trigger.AvailableNow.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_OPTIMIZE_ONE_ROW_PLAN_ENABLED =
+    buildConf("spark.sql.streaming.optimizeOneRowPlan.enabled")
+      .internal()
+      .doc("When true, enable OptimizeOneRowPlan rule for the case where the child is a " +
+        "streaming Dataset. This is a fallback flag to revert the 'incorrect' behavior, hence " +
+        "this configuration must not be used without understanding in depth. Use this only to " +
+        "quickly recover failure in existing query!")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2581,6 +2621,14 @@ object SQLConf {
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR =
+    buildConf("spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr")
+      .doc("Whether to avoid collapsing projections that would duplicate expensive expressions " +
+        "in UDFs.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -4590,6 +4638,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
+    .internal()
+    .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
+      s"comparison predicates, when '${READ_SIDE_CHAR_PADDING.key}' is false.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val CLI_PRINT_HEADER =
     buildConf("spark.sql.cli.print.header")
      .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
@@ -4897,6 +4953,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE =
+    buildConf("spark.sql.legacy.scalarSubqueryAllowGroupByNonEqualityCorrelatedPredicate")
+      .internal()
+      .doc("When set to true, use incorrect legacy behavior for checking whether a scalar " +
+        "subquery with a group-by on correlated columns is allowed. See SPARK-48503")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SCALAR_SUBQUERY_ALLOW_GROUP_BY_COLUMN_EQUAL_TO_CONSTANT =
+    buildConf("spark.sql.analyzer.scalarSubqueryAllowGroupByColumnEqualToConstant")
+      .internal()
+      .doc("When set to true, allow scalar subqueries with group-by on a column that also " +
+        " has an equality filter with a constant (SPARK-48557).")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
     buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()
@@ -4906,6 +4980,16 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  val SUPPORT_SECOND_OFFSET_FORMAT =
+    buildConf("spark.sql.files.supportSecondOffsetFormat")
+      .internal()
+      .doc("When set to true, datetime formatter used for csv, json and xml " +
+        "will support zone offsets that have seconds in it. e.g. LA timezone offset prior to 1883" +
+        "was -07:52:58. When this flag is not set we lose seconds information." )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
 
   // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
   // currently optional because we don't want to break existing users who are using the old config.
@@ -4946,6 +5030,14 @@ object SQLConf {
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
       "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_CODING_ERROR_ACTION = buildConf("spark.sql.legacy.codingErrorAction")
+    .internal()
+    .doc("When set to true, encode/decode functions replace unmappable characters with mojibake " +
+      "instead of reporting coding errors.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -5222,6 +5314,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
+  def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
@@ -5856,6 +5950,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
+  def supportSecondOffsetFormat: Boolean = getConf(SQLConf.SUPPORT_SECOND_OFFSET_FORMAT)
+
   def disabledJdbcConnectionProviders: String = getConf(
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
@@ -5906,6 +6002,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
+  def globalTempDatabase: String = getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
@@ -5921,6 +6019,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
