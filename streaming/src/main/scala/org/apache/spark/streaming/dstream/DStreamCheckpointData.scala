@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{PATH, TIME}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
@@ -89,7 +89,8 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
               if (fileSystem.delete(path, true)) {
-                logInfo("Deleted checkpoint file '" + file + "' for time " + time)
+                logInfo(log"Deleted checkpoint file ${MDC(LogKeys.FILE_NAME, file)} " +
+                  log"for time ${MDC(LogKeys.TIME, time)}")
               } else {
                 logWarning(log"Error deleting old checkpoint file '${MDC(PATH, file)}' for time " +
                   log"${MDC(TIME, time)}")
