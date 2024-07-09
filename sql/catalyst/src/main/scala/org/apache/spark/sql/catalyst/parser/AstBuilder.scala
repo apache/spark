@@ -149,7 +149,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-              el.multipartIdentifier(toLowerCase(Locale.ROOT) =>
+              el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         throw SqlScriptingErrors.labelsMismatch(
           bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
       case (None, Some(el: EndLabelContext)) =>
