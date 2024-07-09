@@ -30,10 +30,12 @@ import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.OutputCommitter
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -535,8 +537,7 @@ object SQLConf {
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
-      .doc("When true, use OffHeapColumnVector in ColumnarBatch. " +
-        s"Defaults to $MEMORY_OFFHEAP_ENABLED.")
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
       .version("2.3.0")
       .fallbackConf(MEMORY_OFFHEAP_ENABLED)
 
@@ -782,7 +783,8 @@ object SQLConf {
           }
         },
         "DEFAULT_COLLATION",
-        _ => Map())
+        collationName => Map(
+          "proposals" -> CollationFactory.getClosestSuggestionsOnInvalidName(collationName, 3)))
       .createWithDefault("UTF8_BINARY")
 
   val ICU_CASE_MAPPINGS_ENABLED =
@@ -1162,6 +1164,8 @@ object SQLConf {
     .version("1.5.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
 
   val PARQUET_VECTORIZED_READER_ENABLED =
@@ -1729,12 +1733,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  // The output committer class used by data sources. The specified class needs to be a
-  // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
     .internal()
     .stringConf
+    .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[OutputCommitter]),
+      s"Class must be loadable and subclass of ${classOf[OutputCommitter].getName}")
     .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
@@ -1742,6 +1746,8 @@ object SQLConf {
       .version("2.1.1")
       .internal()
       .stringConf
+      .checkValue(Utils.classIsLoadableAndAssignableFrom(_, classOf[FileCommitProtocol]),
+        s"Class must be loadable and subclass of ${classOf[FileCommitProtocol].getName}")
       .createWithDefault(
         "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
@@ -4975,6 +4981,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUPPORT_SECOND_OFFSET_FORMAT =
+    buildConf("spark.sql.files.supportSecondOffsetFormat")
+      .internal()
+      .doc("When set to true, datetime formatter used for csv, json and xml " +
+        "will support zone offsets that have seconds in it. e.g. LA timezone offset prior to 1883" +
+        "was -07:52:58. When this flag is not set we lose seconds information." )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
   // currently optional because we don't want to break existing users who are using the old config.
   // If this config is set, then we override the deprecated config.
@@ -5014,6 +5030,14 @@ object SQLConf {
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
       "encoding or decoding string values. If it is false, such functions support only one of " +
       "the charsets: 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_CODING_ERROR_ACTION = buildConf("spark.sql.legacy.codingErrorAction")
+    .internal()
+    .doc("When set to true, encode/decode functions replace unmappable characters with mojibake " +
+      "instead of reporting coding errors.")
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -5926,6 +5950,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
+  def supportSecondOffsetFormat: Boolean = getConf(SQLConf.SUPPORT_SECOND_OFFSET_FORMAT)
+
   def disabledJdbcConnectionProviders: String = getConf(
     StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
@@ -5993,6 +6019,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stackTracesInDataFrameContext: Int = getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
+
+  def legacyCodingErrorAction: Boolean = getConf(SQLConf.LEGACY_CODING_ERROR_ACTION)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 

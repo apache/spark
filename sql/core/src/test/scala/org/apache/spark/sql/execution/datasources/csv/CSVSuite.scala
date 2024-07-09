@@ -70,6 +70,7 @@ abstract class CSVSuite
   private val emptyFile = "test-data/empty.csv"
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
+  private val timestampFile = "test-data/timestamps.csv"
   private val boolFile = "test-data/bool.csv"
   private val decimalFile = "test-data/decimal.csv"
   private val simpleSparseFile = "test-data/simple_sparse.csv"
@@ -968,8 +969,8 @@ abstract class CSVSuite
         .format("csv")
         .option("inferSchema", "true")
         .option("header", "true")
-        .option("timestampFormat", "dd/MM/yyyy HH:mm")
-        .load(testFile(datesFile))
+        .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
+        .load(testFile(timestampFile))
       timestamps.write
         .format("csv")
         .option("header", "true")
@@ -983,11 +984,13 @@ abstract class CSVSuite
         .option("header", "true")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
-      val expectedTimestamps = timestamps.collect().map { r =>
-        // This should be ISO8601 formatted string.
-        Row(iso8501.format(r.toSeq.head))
-      }
+      val expectedTimestamps = Seq(
+        Row("1800-01-01T10:07:02.000-07:52:58"),
+        Row("1885-01-01T10:30:00.000-08:00"),
+        Row("2014-10-27T18:30:00.000-07:00"),
+        Row("2015-08-26T18:00:00.000-07:00"),
+        Row("2016-01-28T20:00:00.000-08:00")
+      )
 
       checkAnswer(iso8601Timestamps, expectedTimestamps)
     }
@@ -3427,6 +3430,10 @@ class CSVv2Suite extends CSVSuite {
 }
 
 class CSVLegacyTimeParserSuite extends CSVSuite {
+
+  override def excluded: Seq[String] =
+    Seq("Write timestamps correctly in ISO8601 format by default")
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf

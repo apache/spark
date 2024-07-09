@@ -25,8 +25,9 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.StateStoreConf
+import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, StateStoreErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -35,8 +36,10 @@ class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateStoreConf: StateStoreConf) extends ScanBuilder {
-  override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf)
+    stateStoreConf: StateStoreConf,
+    stateStoreMetadata: Array[StateMetadataTableEntry]) extends ScanBuilder {
+  override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
+    stateStoreMetadata)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -50,7 +53,8 @@ class StateScan(
     session: SparkSession,
     schema: StructType,
     sourceOptions: StateSourceOptions,
-    stateStoreConf: StateStoreConf) extends Scan with Batch {
+    stateStoreConf: StateStoreConf,
+    stateStoreMetadata: Array[StateMetadataTableEntry]) extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val hadoopConfBroadcast = session.sparkContext.broadcast(
@@ -62,7 +66,8 @@ class StateScan(
     val fs = stateCheckpointPartitionsLocation.getFileSystem(hadoopConfBroadcast.value.value)
     val partitions = fs.listStatus(stateCheckpointPartitionsLocation, new PathFilter() {
       override def accept(path: Path): Boolean = {
-        fs.isDirectory(path) && Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
+        fs.getFileStatus(path).isDirectory &&
+        Try(path.getName.toInt).isSuccess && path.getName.toInt >= 0
       }
     })
 
@@ -81,9 +86,20 @@ class StateScan(
       assert((tail - head + 1) == partitionNums.length,
         s"No continuous partitions in state: ${partitionNums.mkString("Array(", ", ", ")")}")
 
-      partitionNums.map {
-        pn => new StateStoreInputPartition(pn, queryId, sourceOptions)
-      }.toArray
+      sourceOptions.snapshotPartitionId match {
+        case None => partitionNums.map { pn =>
+          new StateStoreInputPartition(pn, queryId, sourceOptions)
+        }.toArray
+
+        case Some(snapshotPartitionId) =>
+          if (partitionNums.contains(snapshotPartitionId)) {
+            Array(new StateStoreInputPartition(snapshotPartitionId, queryId, sourceOptions))
+          } else {
+            throw StateStoreErrors.stateStoreSnapshotPartitionNotFound(
+              snapshotPartitionId, sourceOptions.operatorId,
+              sourceOptions.stateCheckpointLocation.toString)
+          }
+      }
     }
   }
 
@@ -105,7 +121,8 @@ class StateScan(
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.none =>
-      new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema)
+      new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
+        stateStoreMetadata)
   }
 
   override def toBatch: Batch = this

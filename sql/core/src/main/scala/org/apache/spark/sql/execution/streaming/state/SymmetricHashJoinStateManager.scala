@@ -87,7 +87,8 @@ class SymmetricHashJoinStateManager(
     partitionId: Int,
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
-    useStateStoreCoordinator: Boolean = true) extends Logging {
+    useStateStoreCoordinator: Boolean = true,
+    snapshotStartVersion: Option[Long] = None) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -480,6 +481,8 @@ class SymmetricHashJoinStateManager(
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = if (useStateStoreCoordinator) {
+        assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
+          "when reading state as data source.")
         StateStore.get(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           stateInfo.get.storeVersion, useColumnFamilies = false, storeConf, hadoopConf)
@@ -489,7 +492,16 @@ class SymmetricHashJoinStateManager(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           useColumnFamilies = false, storeConf, hadoopConf,
           useMultipleValuesPerKey = false)
-        stateStoreProvider.getStore(stateInfo.get.storeVersion)
+        if (snapshotStartVersion.isDefined) {
+          if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
+            throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
+              stateStoreProvider.getClass.toString)
+          }
+          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+            .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
+        } else {
+          stateStoreProvider.getStore(stateInfo.get.storeVersion)
+        }
       }
       logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
       store
@@ -765,6 +777,35 @@ object SymmetricHashJoinStateManager {
     for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
       getStateStoreName(joinSide, stateStoreType)
     }
+  }
+
+  def getSchemaForStateStores(
+      joinSide: JoinSide,
+      inputValueAttributes: Seq[Attribute],
+      joinKeys: Seq[Expression],
+      stateFormatVersion: Int): Map[String, (StructType, StructType)] = {
+    var result: Map[String, (StructType, StructType)] = Map.empty
+
+    // get the key and value schema for the KeyToNumValues state store
+    val keySchema = StructType(
+      joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
+    val longValueSchema = new StructType().add("value", "long")
+    result += (getStateStoreName(joinSide, KeyToNumValuesType) -> (keySchema, longValueSchema))
+
+    // get the key and value schema for the KeyWithIndexToValue state store
+    val keyWithIndexSchema = keySchema.add("index", LongType)
+    val valueSchema = if (stateFormatVersion == 1) {
+      inputValueAttributes
+    } else if (stateFormatVersion == 2) {
+      inputValueAttributes :+ AttributeReference("matched", BooleanType)()
+    } else {
+      throw new IllegalArgumentException("Incorrect state format version! " +
+        s"version=$stateFormatVersion")
+    }
+    result += (getStateStoreName(joinSide, KeyWithIndexToValueType) ->
+      (keyWithIndexSchema, valueSchema.toStructType))
+
+    result
   }
 
   private sealed trait StateStoreType

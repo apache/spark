@@ -514,7 +514,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       errorClass = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
       parameters = Map(
         "confValue" -> "UNICODE_C",
-        "confName" -> "spark.sql.session.collation.default"
+        "confName" -> "spark.sql.session.collation.default",
+        "proposals" -> "UNICODE"
       ))
 
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {

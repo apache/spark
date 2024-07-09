@@ -2118,7 +2118,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2171,7 +2171,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
     Returns
     -------
@@ -2432,7 +2432,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionadded:: 4.0.0
+        .. versionadded:: 4.0.0
 
 
     Returns
@@ -5474,8 +5474,8 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch first value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if first value is null then look for first non-null value.
+    ignorenulls : bool
+        if first value is null then look for first non-null value. ``False``` by default.
 
     Returns
     -------
@@ -5747,8 +5747,8 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         column to fetch last value for.
-    ignorenulls : :class:`~pyspark.sql.Column` or str
-        if last value is null then look for non-null value.
+    ignorenulls : bool
+        if last value is null then look for non-null value. ``False``` by default.
 
     Returns
     -------
@@ -5912,29 +5912,8 @@ def percentile(
     |  2|  19.967859769284075|
     +---+--------------------+
     """
-    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
-
-    sc = _get_active_spark_context()
-
-    if isinstance(percentage, (list, tuple)):
-        # A local list
-        percentage = _invoke_function(
-            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
-        )._jc
-    elif isinstance(percentage, Column):
-        # Already a Column
-        percentage = _to_java_column(percentage)
-    else:
-        # Probably scalar
-        percentage = _create_column_from_literal(percentage)
-
-    frequency = (
-        _to_java_column(frequency)
-        if isinstance(frequency, Column)
-        else _create_column_from_literal(frequency)
-    )
-
-    return _invoke_function("percentile", _to_java_column(col), percentage, frequency)
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
 
 
 @_try_remote_functions
@@ -5991,29 +5970,8 @@ def percentile_approx(
      |-- key: long (nullable = true)
      |-- median: double (nullable = true)
     """
-    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
-
-    sc = _get_active_spark_context()
-
-    if isinstance(percentage, (list, tuple)):
-        # A local list
-        percentage = _invoke_function(
-            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
-        )._jc
-    elif isinstance(percentage, Column):
-        # Already a Column
-        percentage = _to_java_column(percentage)
-    else:
-        # Probably scalar
-        percentage = _create_column_from_literal(percentage)
-
-    accuracy = (
-        _to_java_column(accuracy)
-        if isinstance(accuracy, Column)
-        else _create_column_from_literal(accuracy)
-    )
-
-    return _invoke_function("percentile_approx", _to_java_column(col), percentage, accuracy)
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
 
 
 @_try_remote_functions
@@ -6067,29 +6025,8 @@ def approx_percentile(
      |-- key: long (nullable = true)
      |-- approx_percentile(value, 0.5, 1000000): double (nullable = true)
     """
-    from pyspark.sql.classic.column import _to_seq, _create_column_from_literal, _to_java_column
-
-    sc = _get_active_spark_context()
-
-    if isinstance(percentage, (list, tuple)):
-        # A local list
-        percentage = _invoke_function(
-            "array", _to_seq(sc, [_create_column_from_literal(x) for x in percentage])
-        )._jc
-    elif isinstance(percentage, Column):
-        # Already a Column
-        percentage = _to_java_column(percentage)
-    else:
-        # Probably scalar
-        percentage = _create_column_from_literal(percentage)
-
-    accuracy = (
-        _to_java_column(accuracy)
-        if isinstance(accuracy, Column)
-        else _create_column_from_literal(accuracy)
-    )
-
-    return _invoke_function("approx_percentile", _to_java_column(col), percentage, accuracy)
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
 
 
 @_try_remote_functions
@@ -6216,8 +6153,8 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -6271,8 +6208,8 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
 
-            .. versionchanged:: 4.0.0
-                Support Column type.
+        .. versionchanged:: 4.0.0
+            Support Column type.
 
     Returns
     -------
@@ -10938,11 +10875,15 @@ def substring(
         target column to work on.
     pos : :class:`~pyspark.sql.Column` or str or int
         starting position in str.
+
+        .. versionchanged:: 4.0.0
+            `pos` now accepts column and column name.
+
     len : :class:`~pyspark.sql.Column` or str or int
         length of chars.
 
         .. versionchanged:: 4.0.0
-            `pos` and `len` now also accept Columns or names of Columns.
+            `len` now accepts column and column name.
 
     Returns
     -------
@@ -10962,11 +10903,9 @@ def substring(
     >>> df.select(substring(df.s, df.p, df.l).alias('s')).collect()
     [Row(s='par')]
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    pos = _to_java_column(lit(pos) if isinstance(pos, int) else pos)
-    len = _to_java_column(lit(len) if isinstance(len, int) else len)
-    return _invoke_function("substring", _to_java_column(str), pos, len)
+    pos = lit(pos) if isinstance(pos, int) else pos
+    len = lit(len) if isinstance(len, int) else len
+    return _invoke_function_over_columns("substring", str, pos, len)
 
 
 @_try_remote_functions
@@ -13618,10 +13557,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |      true|
     +----------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = value._jc if isinstance(value, Column) else value
-    return _invoke_function("array_contains", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_contains", col, lit(value))
 
 
 @_try_remote_functions
@@ -14064,10 +14000,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     +-------------------------+
 
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("array_position", _to_java_column(col), value)
+    return _invoke_function_over_columns("array_position", col, lit(value))
 
 
 @_try_remote_functions
@@ -14102,10 +14035,13 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     Notes
     -----
     The position is not zero based, but 1 based index.
+    If extraction is a string, :meth:`element_at` treats it as a literal string,
+    while :meth:`try_element_at` treats it as a column name.
 
     See Also
     --------
-    :meth:`get`
+    :meth:`pyspark.sql.functions.get`
+    :meth:`pyspark.sql.functions.try_element_at`
 
     Examples
     --------
@@ -14152,6 +14088,17 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     +-------------------+
     |               NULL|
     +-------------------+
+
+    Example 5: Getting a value from a map using a literal string as the key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
+    >>> df.select(sf.element_at(df.data, 'b')).show()
+    +-------------------+
+    |element_at(data, b)|
+    +-------------------+
+    |                2.0|
+    +-------------------+
     """
     return _invoke_function_over_columns("element_at", col, lit(extraction))
 
@@ -14175,6 +14122,17 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
         name of column containing array or map
     extraction :
         index to check for in array or key to check for in map
+
+    Notes
+    -----
+    The position is not zero based, but 1 based index.
+    If extraction is a string, :meth:`try_element_at` treats it as a column name,
+    while :meth:`element_at` treats it as a literal string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.get`
+    :meth:`pyspark.sql.functions.element_at`
 
     Examples
     --------
@@ -14232,6 +14190,17 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     +-----------------------+
     |                   NULL|
     +-----------------------+
+
+    Example 6: Getting a value from a map using a column name as the key
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0}, "a")], ['data', 'b'])
+    >>> df.select(sf.try_element_at(df.data, 'b')).show()
+    +-----------------------+
+    |try_element_at(data, b)|
+    +-----------------------+
+    |                    1.0|
+    +-----------------------+
     """
     return _invoke_function_over_columns("try_element_at", col, extraction)
 
@@ -14264,7 +14233,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
     See Also
     --------
-    :meth:`element_at`
+    :meth:`pyspark.sql.functions.element_at`
 
     Examples
     --------
@@ -14515,10 +14484,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     |                 [2, 3]|
     +-----------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    element = _to_java_column(element) if isinstance(element, Column) else element
-    return _invoke_function("array_remove", _to_java_column(col), element)
+    return _invoke_function_over_columns("array_remove", col, lit(element))
 
 
 @_try_remote_functions
@@ -15187,9 +15153,9 @@ def explode(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.functions.posexplode`
-    :meth:`pyspark.functions.explode_outer`
-    :meth:`pyspark.functions.posexplode_outer`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode_outer`
 
     Notes
     -----
@@ -15376,8 +15342,8 @@ def inline(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`pyspark.functions.explode`
-    :meth:`pyspark.functions.inline_outer`
+    :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.inline_outer`
 
     Examples
     --------
@@ -15604,8 +15570,8 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     See Also
     --------
-    :meth:`explode_outer`
-    :meth:`inline`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.inline`
 
     Notes
     -----
@@ -17327,10 +17293,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     |                       true|
     +---------------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    value = _to_java_column(value) if isinstance(value, Column) else value
-    return _invoke_function("map_contains_key", _to_java_column(col), value)
+    return _invoke_function_over_columns("map_contains_key", col, lit(value))
 
 
 @_try_remote_functions

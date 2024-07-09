@@ -86,6 +86,7 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
     logical.foreach {
       case LogicalQueryStage(_, physical) =>
         physical.cleanupResources()
+      case _ =>
     }
     super.cleanupResources()
   }

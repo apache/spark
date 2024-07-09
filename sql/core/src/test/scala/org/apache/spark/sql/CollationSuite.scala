@@ -153,7 +153,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       exception = intercept[SparkException] { sql("select 'aaa' collate UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("collationName" -> "UTF8_BS"))
+      parameters = Map("collationName" -> "UTF8_BS", "proposals" -> "UTF8_LCASE"))
   }
 
   test("disable bucketing on collated string column") {

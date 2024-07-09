@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -195,6 +195,16 @@ class IncrementalExecution(
           checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
         metadataWriter.write(metadata)
         stateStoreWriter
+    }
+  }
+
+  // Planning rule used to record the state schema for the first run and validate state schema
+  // changes across query runs.
+  object StateSchemaValidationRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case statefulOp: StatefulOperator if isFirstBatch =>
+        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf)
+        statefulOp
     }
   }
 
@@ -432,12 +442,8 @@ class IncrementalExecution(
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
               new SerializableConfiguration(hadoopConf))
-            val opMetadataList = reader.allOperatorStateMetadata
-            ret = opMetadataList.map { operatorMetadata =>
-              val metadataInfoV1 = operatorMetadata
-                .asInstanceOf[OperatorStateMetadataV1]
-                .operatorInfo
-              metadataInfoV1.operatorId -> metadataInfoV1.operatorName
+            ret = reader.stateMetadata.map { metadataTableEntry =>
+              metadataTableEntry.operatorId -> metadataTableEntry.operatorName
             }.toMap
           } catch {
             case e: Exception =>
@@ -471,9 +477,12 @@ class IncrementalExecution(
       if (isFirstBatch && currentBatchId != 0) {
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
-      // The rule doesn't change the plan but cause the side effect that metadata is written
-      // in the checkpoint directory of stateful operator.
+
+      // The two rules below don't change the plan but can cause the side effect that
+      // metadata/schema is written in the checkpoint directory of stateful operator.
+      planWithStateOpId transform StateSchemaValidationRule.rule
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule
     }

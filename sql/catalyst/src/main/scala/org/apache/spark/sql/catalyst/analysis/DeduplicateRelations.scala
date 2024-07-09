@@ -255,12 +255,18 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 val newRightGroup = rewriteAttrs(c.rightGroup, rightAttrMap)
                 val newLeftOrder = rewriteAttrs(c.leftOrder, leftAttrMap)
                 val newRightOrder = rewriteAttrs(c.rightOrder, rightAttrMap)
-                val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newLeftGroup)
-                val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newLeftAttr)
-                val newRightDes = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newRightAttr)
+                val newKeyDes = c.keyDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftGroup)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                }
+                val newLeftDes = c.leftDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftAttr)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                }
+                val newRightDes = c.rightDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newRightAttr)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, rightAttrMap))
+                }
                 c.copy(keyDeserializer = newKeyDes, leftDeserializer = newLeftDes,
                   rightDeserializer = newRightDes, leftGroup = newLeftGroup,
                   rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,

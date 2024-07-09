@@ -617,7 +617,7 @@ class RelationCommon(google.protobuf.message.Message):
     PLAN_ID_FIELD_NUMBER: builtins.int
     ORIGIN_FIELD_NUMBER: builtins.int
     source_info: builtins.str
-    """(Optional) Shared relation metadata."""
+    """(Required) Shared relation metadata."""
     plan_id: builtins.int
     """(Optional) A per-client globally unique id for a given connect plan."""
     @property

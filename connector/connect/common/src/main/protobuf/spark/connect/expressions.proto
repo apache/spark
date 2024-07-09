@@ -373,6 +373,8 @@ message PythonUDF {
   bytes command = 3;
   // (Required) Python version being used in the client.
   string python_ver = 4;
+  // (Optional) Additional includes for the Python UDF.
+  repeated string additional_includes = 5;
 }
 
 message ScalarScalaUDF {

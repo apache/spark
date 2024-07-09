@@ -679,7 +679,7 @@ class Frame(object, metaclass=ABCMeta):
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df.sort_values(by="date")  # doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
