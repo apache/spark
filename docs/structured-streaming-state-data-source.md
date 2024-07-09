@@ -158,7 +158,6 @@ The following configurations are optional:
 </tr>
 </table>
 
-
 ### Reading state for stream-stream join
 
 Structured Streaming implements the stream-stream join feature via leveraging multiple instances of state store internally.
