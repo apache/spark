@@ -2969,16 +2969,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   }
 
   /**
-   * Create an [[UnresolvedRelation]] from an identifier reference.
+   * Create an [[UnresolvedRelation]] from an identifier reference and an options clause.
    */
-  private def createUnresolvedRelation(identifier: IdentifierReferenceContext,
-      optionsClause: Option[OptionsClauseContext] = None): LogicalPlan =
-    withOrigin(identifier) {
-      val options = optionsClause.map{clause =>
-        new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
-      }.getOrElse(CaseInsensitiveStringMap.empty)
-      withIdentClause(identifier, parts =>
-        new UnresolvedRelation(parts, options, isStreaming = false))
+  private def createUnresolvedRelation(
+      ctx: IdentifierReferenceContext,
+      optionsClause: Option[OptionsClauseContext] = None): LogicalPlan = withOrigin(ctx) {
+    val options = optionsClause.map{ clause =>
+      new CaseInsensitiveStringMap(visitPropertyKeyValues(clause.options).asJava)
+    }.getOrElse(CaseInsensitiveStringMap.empty)
+    withIdentClause(ctx, parts =>
+      new UnresolvedRelation(parts, options, isStreaming = false))
   }
 
   /**

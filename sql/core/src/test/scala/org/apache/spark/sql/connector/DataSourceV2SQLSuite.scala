@@ -3522,7 +3522,7 @@ class DataSourceV2SQLSuiteV1Filter
       assert (collected.size == 1)
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
-      df = sql(s"SELECT * FROM $t1 WITH OPTIONS (`split-size` = 5)")
+      df = sql(s"SELECT * FROM $t1 WITH (`split-size` = 5)")
       collected = df.queryExecution.optimizedPlan.collect {
         case scan: DataSourceV2ScanRelation =>
           assert(scan.relation.options.get("split-size") == "5")
@@ -3531,7 +3531,7 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
 
       val noValues = intercept[AnalysisException](
-        sql(s"SELECT * FROM $t1 WITH OPTIONS (`split-size`)"))
+        sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
       assert(noValues.message.contains(
         "Operation not allowed: Values must be specified for key(s): [split-size]"))
     }
