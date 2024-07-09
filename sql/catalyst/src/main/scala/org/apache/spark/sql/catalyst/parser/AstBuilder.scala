@@ -19,12 +19,15 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
+
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
@@ -119,7 +122,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
       CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        java.util.UUID.randomUUID.toString)
+        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -127,11 +130,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
   }
 
-  private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String = ""): CompoundBody = {
+  private def visitCompoundBodyImpl(
+      ctx: CompoundBodyContext,
+      label: Option[String]): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
+
     CompoundBody(buff.toSeq, label)
   }
 
@@ -142,7 +148,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     (beginLabelCtx, endLabelCtx) match {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText != el.multipartIdentifier().getText =>
+          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
+            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         throw SqlScriptingErrors.labelsMismatch(
           bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
       case (None, Some(el: EndLabelContext)) =>
@@ -151,12 +158,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     val labelText = beginLabelCtx.
-      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString)
-    visitCompoundBodyImpl(ctx.compoundBody(), labelText)
+      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
+      toLowerCase(Locale.ROOT)
+    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx)
+    visitCompoundBodyImpl(ctx, None)
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =

@@ -163,7 +163,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("compound: beginLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl: BEGIN
         |  SELECT 1;
@@ -172,14 +172,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    assert(tree.label.equals("lbl"))
+    assert(tree.label.contains("lbl"))
   }
 
   test("compound: beginLabel + endLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl: BEGIN
         |  SELECT 1;
@@ -188,14 +188,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-    val tree = parseScript(batch)
+    val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    assert(tree.label.equals("lbl"))
+    assert(tree.label.contains("lbl"))
   }
 
   test("compound: beginLabel + endLabel with different values") {
-    val batch =
+    val sqlScriptText =
       """
         |lbl_begin: BEGIN
         |  SELECT 1;
@@ -205,14 +205,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
     val e = intercept[SqlScriptingException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "SQL_SCRIPTING_LABEL_ERROR.LABELS_MISMATCH")
     assert(e.getMessage.contains("Begin label lbl_begin does not match end label lbl_end."))
   }
 
   test("compound: endLabel") {
-    val batch =
+    val sqlScriptText =
       """
         |BEGIN
         |  SELECT 1;
@@ -222,10 +222,42 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT * FROM T;
         |END lbl""".stripMargin
     val e = intercept[SqlScriptingException] {
-      parseScript(batch)
+      parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "SQL_SCRIPTING_LABEL_ERROR.END_LABEL_WITHOUT_BEGIN_LABEL")
     assert(e.getMessage.contains("End label lbl can not exist without begin label."))
+  }
+
+  test("compound: beginLabel + endLabel with different casing") {
+    val sqlScriptText =
+      """
+        |LBL: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: no labels provided") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.nonEmpty)
   }
 
   // Helper methods

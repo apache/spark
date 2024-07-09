@@ -153,5 +153,5 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: String = "")
+class CompoundBodyExec(statements: Seq[CompoundStatementExec])
   extends CompoundNestedStatementIteratorExec(statements)
