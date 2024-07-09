@@ -1800,7 +1800,7 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)

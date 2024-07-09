@@ -25,7 +25,7 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -57,11 +57,11 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
   def onStart(): Unit = {
     // Open a socket to the target address and keep reading from it
-    logInfo("Connecting to " + host + ":" + port)
+    logInfo(log"Connecting to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
     val channel = SocketChannel.open()
     channel.configureBlocking(true)
     channel.connect(new InetSocketAddress(host, port))
-    logInfo("Connected to " + host + ":" + port)
+    logInfo(log"Connected to ${MDC(LogKeys.HOST, host)}:${MDC(LogKeys.PORT, port)}")
 
     val queue = new ArrayBlockingQueue[ByteBuffer](2)
 
