@@ -99,6 +99,8 @@ object OperatorStateMetadataUtils {
     version match {
       case 1 =>
         Serialization.read[OperatorStateMetadataV1](in)
+      case 2 =>
+        Serialization.read[OperatorStateMetadataV2](in)
 
       case _ =>
         throw new IllegalArgumentException(s"Failed to deserialize operator metadata with " +
@@ -112,7 +114,8 @@ object OperatorStateMetadataUtils {
     operatorStateMetadata.version match {
       case 1 =>
         Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV1], out)
-
+      case 2 =>
+        Serialization.write(operatorStateMetadata.asInstanceOf[OperatorStateMetadataV2], out)
       case _ =>
         throw new IllegalArgumentException(s"Failed to serialize operator metadata with " +
           s"version=${operatorStateMetadata.version}")

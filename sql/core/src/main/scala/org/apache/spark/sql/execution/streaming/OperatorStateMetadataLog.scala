@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataOutputStream
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataV1, OperatorStateMetadataV2}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataUtils}
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -47,12 +47,7 @@ class OperatorStateMetadataLog(
   override protected def serialize(metadata: OperatorStateMetadata, out: OutputStream): Unit = {
     val fsDataOutputStream = out.asInstanceOf[FSDataOutputStream]
     fsDataOutputStream.write(s"v${metadata.version}\n".getBytes(StandardCharsets.UTF_8))
-    metadata.version match {
-      case 1 =>
-        OperatorStateMetadataV1.serialize(fsDataOutputStream, metadata)
-      case 2 =>
-        OperatorStateMetadataV2.serialize(fsDataOutputStream, metadata)
-    }
+    OperatorStateMetadataUtils.serialize(fsDataOutputStream, metadata)
   }
 
   override protected def deserialize(in: InputStream): OperatorStateMetadata = {
@@ -62,8 +57,8 @@ class OperatorStateMetadataLog(
     // read first line for version number, in the format "v{version}"
     val version = bufferedReader.readLine()
     version match {
-      case "v1" => OperatorStateMetadataV1.deserialize(bufferedReader)
-      case "v2" => OperatorStateMetadataV2.deserialize(bufferedReader)
+      case "v1" => OperatorStateMetadataUtils.deserialize(1, bufferedReader)
+      case "v2" => OperatorStateMetadataUtils.deserialize(2, bufferedReader)
     }
   }
 }
