@@ -70,4 +70,20 @@ class OperatorStateMetadataLog(
       case "v2" => OperatorStateMetadataUtils.deserialize(2, bufferedReader)
     }
   }
+
+  /**
+   * Purges all log entries so that we only keep minLogEntriesToMaintain log files
+   */
+  override def purge(minLogEntriesToMaintain: Long): Unit = {
+    val batches = listBatches.sorted
+    if (batches.length > minLogEntriesToMaintain) {
+      val batchesToRemove = batches.take(batches.length - minLogEntriesToMaintain.toInt)
+      batchesToRemove.foreach { batchId =>
+        val batchPath = batchIdToPath(batchId)
+        if (fileManager.exists(batchPath)) {
+          fileManager.delete(batchPath)
+        }
+      }
+    }
+  }
 }

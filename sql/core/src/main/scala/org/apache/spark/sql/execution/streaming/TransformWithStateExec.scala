@@ -389,6 +389,11 @@ case class TransformWithStateExec(
     new OperatorStateMetadataLog(hadoopConf, operatorStateMetadataPath.toString)
   }
 
+  override def metadataFilePath(): Path = {
+    OperatorStateMetadataV2.metadataFilePath(
+      new Path(getStateInfo.checkpointLocation, getStateInfo.operatorId.toString))
+  }
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
