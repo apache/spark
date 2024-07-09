@@ -85,7 +85,6 @@ class IncrementalExecution(
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
-  private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
   /**
    * This value dictates which schema format version the state schema should be written in
    * for all operators other than TransformWithState.
@@ -217,7 +216,7 @@ class IncrementalExecution(
         // write out the state schema paths to the metadata file
         statefulOp match {
           case stateStoreWriter: StateStoreWriter =>
-            val metadata = stateStoreWriter.operatorStateMetadata()
+            val metadata = stateStoreWriter.operatorStateMetadata(stateSchemaPaths)
             stateStoreWriter match {
               case tws: TransformWithStateExec =>
                 val metadataPath = OperatorStateMetadataV2.metadataFilePath(new Path(

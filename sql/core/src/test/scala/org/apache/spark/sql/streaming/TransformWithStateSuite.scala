@@ -29,8 +29,8 @@ import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, OperatorStateMetadataV2, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException, TestClass}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, OperatorInfoV1, OperatorStateMetadataV2, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMetadataV2, StateStoreMultipleColumnFamiliesNotSupportedException, StateStoreValueSchemaNotCompatible, TestClass}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -56,6 +56,32 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+}
+
+class RunningCountStatefulProcessorInt extends StatefulProcessor[String, String, (String, String)]
+  with Logging {
+  @transient protected var _countState: ValueState[Int] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0) + 1
     if (count == 3) {
       _countState.clear()
       Iterator.empty
@@ -862,9 +888,12 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val expected = ColumnFamilySchemaV1(
           "countState",
-          KEY_ROW_SCHEMA,
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType().add("value", LongType, false)),
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false, Encoders.scalaLong.schema, None
+          None
         )
         val actual = columnFamilySchemas.head.asInstanceOf[ColumnFamilySchemaV1]
         assert(expected == actual)
@@ -899,18 +928,20 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val expected = List(
           ColumnFamilySchemaV1(
             "countState",
-            KEY_ROW_SCHEMA,
+            new StructType().add("key",
+              new StructType().add("value", StringType)),
+            new StructType().add("value",
+              new StructType().add("value", LongType, false)),
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.scalaLong.schema,
             None
           ),
           ColumnFamilySchemaV1(
             "mostRecent",
-            KEY_ROW_SCHEMA,
+            new StructType().add("key",
+              new StructType().add("value", StringType)),
+            new StructType().add("value",
+              new StructType().add("value", StringType, true)),
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.STRING.schema,
             None
           )
         )
@@ -994,8 +1025,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       withTempDir { checkpointDir =>
         val schema = List(ColumnFamilySchemaV1(
           "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType().add("value", LongType, false)),
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           None
         ))
@@ -1019,8 +1052,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val schema0 = List(ColumnFamilySchemaV1(
           "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType().add("value", LongType, false)),
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           None
         ))
@@ -1028,15 +1063,19 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema1 = List(
           ColumnFamilySchemaV1(
             "countState",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
+            new StructType().add("key",
+              new StructType().add("value", StringType)),
+            new StructType().add("value",
+              new StructType().add("value", LongType, false)),
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
             None
           ),
           ColumnFamilySchemaV1(
             "mostRecent",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
+            new StructType().add("key",
+              new StructType().add("value", StringType)),
+            new StructType().add("value",
+              new StructType().add("value", StringType, false)),
             NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
             None
           )
@@ -1058,85 +1097,40 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
-    " works with one batch") {
+  test("test that invalid schema evolution fails query for column family") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        withTempDir { checkpointDir =>
+          val inputData = MemoryStream[String]
+          val result1 = inputData.toDS()
+            .groupByKey(x => x)
+            .transformWithState(new RunningCountStatefulProcessor(),
+              TimeMode.None(),
+              OutputMode.Update())
 
-      val schema = List(ColumnFamilySchemaV1(
-        "countState",
-        KEY_ROW_SCHEMA,
-        VALUE_ROW_SCHEMA,
-        NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-        None
-      ))
-
-      val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(), "/tmp/schema")
-      schemaFile.add(0, schema)
-
-      assert(schemaFile.get(0).isDefined)
-      assert(schemaFile.get(0).get == schema)
-    }
-  }
-
-  test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
-    " works with multiple batches") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      withTempDir { checkpointDir =>
-
-
-        val schema0 = List(ColumnFamilySchemaV1(
-          "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          false,
-          Encoders.scalaLong.schema,
-          None
-        ))
-
-        val schema1 = List(
-          ColumnFamilySchemaV1(
-            "countState",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
-            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.scalaLong.schema,
-            None
-          ),
-          ColumnFamilySchemaV1(
-            "mostRecent",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
-            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-            false,
-            Encoders.STRING.schema,
-            None
+          testStream(result1, OutputMode.Update())(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(inputData, "a"),
+            CheckNewAnswer(("a", "1")),
+            StopStream
           )
-        )
-
-        val schemaFile = new StateSchemaV3File(spark.sessionState.newHadoopConf(),
-          checkpointDir.getCanonicalPath)
-        schemaFile.add(0, schema0)
-
-        assert(schemaFile.get(0).isDefined)
-        assert(schemaFile.get(0).get == schema0)
-
-        // test the case where we are trying to add the schema after
-        // restarting after a few batches
-        schemaFile.add(3, schema1)
-        val latestFile = schemaFile.getLatest()
-
-        assert(latestFile.isDefined)
-        assert(latestFile.get._1 == 3)
-        assert(latestFile.get._2 == schema1)
-      }
+          val result2 = inputData.toDS()
+            .groupByKey(x => x)
+            .transformWithState(new RunningCountStatefulProcessorInt(),
+              TimeMode.None(),
+              OutputMode.Update())
+          testStream(result2, OutputMode.Update())(
+            StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+            AddData(inputData, "a"),
+            ExpectFailure[StateStoreValueSchemaNotCompatible] {
+              (t: Throwable) => {
+                assert(t.getMessage.contains("Please check number and type of fields."))
+              }
+            }
+          )
+        }
     }
   }
 
