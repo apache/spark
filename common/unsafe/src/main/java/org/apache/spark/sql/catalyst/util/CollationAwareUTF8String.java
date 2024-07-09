@@ -467,7 +467,9 @@ public class CollationAwareUTF8String {
       return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
     else if (codePoint == 0x03C2) {
-      // Greek final and non-final capital letter sigma should be mapped the same.
+      // Greek final and non-final letter sigma should be mapped the same. This is achieved by
+      // mapping Greek small final sigma (U+03C2) to Greek small non-final sigma (U+03C3). Capital
+      // letter sigma (U+03A3) is mapped to small non-final sigma (U+03C3) in the `else` branch.
       return 0x03C3;
     }
     else {
