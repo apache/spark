@@ -403,7 +403,7 @@ class StateStoreChangelogReaderV2(
 
 /**
  * Base class representing a iterator that iterates over a range of changelog files in a state
- * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
+ * store. In each iteration, it will return a ByteArrayPair of (changeType: [[RecordType]],
  * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
  * @param fm checkpoint file manager used to manage streaming query checkpoint

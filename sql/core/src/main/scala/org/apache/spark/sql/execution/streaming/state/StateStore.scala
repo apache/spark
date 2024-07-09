@@ -471,12 +471,17 @@ trait SupportsFineGrainedReplay {
   }
 
   /**
-   * Return a [[StateStoreChangeDataReader]] that reads the changelogs entries from startVersion to
+   * Return an iterator that reads all the entries of changelogs from startVersion to
    * endVersion.
+   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
+   * value: [[UnsafeRow]], batchId: [[Long]])
+   * A put record is returned as a tuple(recordType, key, value, batchId)
+   * A delete record is return as a tuple(recordType, key, null, batchId)
    *
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
-   * @return
+   * @return tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
   def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
     NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
