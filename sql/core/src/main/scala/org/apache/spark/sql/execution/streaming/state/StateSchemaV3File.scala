@@ -70,9 +70,7 @@ class StateSchemaV3File(
   }
 
   def addWithUUID(batchId: Long, metadata: List[ColumnFamilySchema]): Path = {
-    val batchMetadataPath = batchIdToPath(batchId)
-    val schemaFilePath = new Path(batchMetadataPath, UUID.randomUUID().toString)
-    fileManager.mkdirs(batchMetadataPath)
+    val schemaFilePath = new Path(metadataPath, s"${batchId}_${UUID.randomUUID().toString}")
     write(schemaFilePath, out => serialize(metadata, out))
     schemaFilePath
   }
@@ -93,10 +91,6 @@ class StateSchemaV3File(
         output.cancel()
         throw e
     }
-  }
-
-  protected def batchIdToPath(batchId: Long): Path = {
-    new Path(metadataPath, batchId.toString)
   }
 }
 
