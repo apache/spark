@@ -129,7 +129,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // join keys, but for transitive join keys we need to check the join type.
         // We assume other rules have already pushed predicates through join if possible.
         // So the predicate references won't pass on anymore.
-        if (left.output.exists(_.semanticEquals(targetKey))) {
+        if (targetKey.references.subsetOf(left.outputSet)) {
           extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
             currentPlan = left, targetKey = targetKey).orElse {
             // An example that extract from the right side if the join keys are transitive.
@@ -148,7 +148,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               None
             }
           }
-        } else if (right.output.exists(_.semanticEquals(targetKey))) {
+        } else if (targetKey.references.subsetOf(right.outputSet)) {
           extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false,
             currentPlan = right, targetKey = targetKey).orElse {
             // An example that extract from the left side if the join keys are transitive.

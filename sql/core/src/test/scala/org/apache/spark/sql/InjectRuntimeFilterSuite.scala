@@ -316,6 +316,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
       assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
         "bf1.c1 = bf2.c2 and bf3.c3 = bf2.c2 where bf2.a2 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = if(bf2.c2 < 5, 5, bf2.c2) where bf2.a2 = 5", 2)
       // bf1 and bf2 hasn't shuffle. bf1 as creation side and inject runtime filter for bf3.
       assertRewroteWithBloomFilter("select * from (select * from bf1 left semi join bf2 on " +
         "bf1.c1 = bf2.c2 where bf1.a1 = 5) as a join bf3 on bf3.c3 = a.c1")
@@ -328,6 +330,8 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5", 2)
       assertRewroteWithBloomFilter("select * from bf1 right outer join bf2 join bf3 on " +
         "bf1.c1 = bf2.c2 and bf3.c3 = bf1.c1 where bf1.a1 = 5", 2)
+      assertRewroteWithBloomFilter("select * from bf1 left outer join bf2 join bf3 on " +
+        "bf1.c1 = bf2.c2 and bf3.c3 = if(bf1.c1 < 5, 5, bf1.c1) where bf1.a1 < 10", 2)
       // bf2 as creation side and inject runtime filter for bf1 and bf3(join keys are transitive).
       assertRewroteWithBloomFilter("select * from (select * from bf1 join bf2 on " +
         "bf1.c1 = bf2.c2 where bf2.a2 = 5) as a join bf3 on bf3.c3 = a.c1", 2)
