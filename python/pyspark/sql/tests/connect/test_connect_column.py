@@ -1046,6 +1046,21 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             ),
         )
 
+    def test_cast_default_column_name(self):
+        cdf = self.connect.range(1).select(
+            CF.lit(b"123").cast("STRING"),
+            CF.lit(123).cast("STRING"),
+            CF.lit(123).cast("LONG"),
+            CF.lit(123).cast("DOUBLE"),
+        )
+        sdf = self.spark.range(1).select(
+            SF.lit(b"123").cast("STRING"),
+            SF.lit(123).cast("STRING"),
+            SF.lit(123).cast("LONG"),
+            SF.lit(123).cast("DOUBLE"),
+        )
+        self.assertEqual(cdf.columns, sdf.columns)
+
 
 if __name__ == "__main__":
     import unittest
