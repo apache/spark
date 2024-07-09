@@ -136,7 +136,7 @@ private[hive] case class HiveGenericUDF(
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.foreach {
-      case (child, idx) => evaluator.setArg(idx, child.eval(input))
+      case (child, idx) => evaluator.setFuncArg(idx, () => child.eval(input))
     }
     evaluator.evaluate()
   }
@@ -157,10 +157,15 @@ private[hive] case class HiveGenericUDF(
     val setValues = evals.zipWithIndex.map {
       case (eval, i) =>
         s"""
-           |if (${eval.isNull}) {
-           |  $refEvaluator.setArg($i, null);
-           |} else {
-           |  $refEvaluator.setArg($i, ${eval.value});
+           |try {
+           |  ${eval.code}
+           |  if (${eval.isNull}) {
+           |    $refEvaluator.setArg($i, null);
+           |  } else {
+           |    $refEvaluator.setArg($i, ${eval.value});
+           |  }
+           |} catch (Exception exp) {
+           |  $refEvaluator.setException($i, exp);
            |}
            |""".stripMargin
     }
@@ -169,7 +174,6 @@ private[hive] case class HiveGenericUDF(
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
       code"""
-         |${evals.map(_.code).mkString("\n")}
          |${setValues.mkString("\n")}
          |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
          |boolean ${ev.isNull} = $resultTerm == null;

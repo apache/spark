@@ -131,6 +131,13 @@ class HiveGenericUDFEvaluator(
   def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
 
+  def setFuncArg(index: Int, arg: () => Any): Unit =
+    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
+
+  def setException(index: Int, exp: Exception): Unit = {
+    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => throw exp)
+  }
+
   override def doEvaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
 

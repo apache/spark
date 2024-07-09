@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -797,6 +798,25 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             "reason" -> reason
           )
         )
+      }
+    }
+  }
+
+  test("SPARK-48845: GenericUDF catch exceptions from child UDFs") {
+    withTable("test_catch_exception") {
+      Seq("9", "9-1").toDF("a").write.saveAsTable("test_catch_exception")
+      sql("create temporary function udf_exception as " +
+        s"'${classOf[UDFException].getName}'")
+      sql("create temporary function udf_catch_exception as " +
+        s"'${classOf[UDFCatchException].getName}'")
+      Seq(
+        CodegenObjectFactoryMode.FALLBACK.toString,
+        CodegenObjectFactoryMode.NO_CODEGEN.toString
+      ).foreach { codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          val df = sql("SELECT udf_catch_exception(udf_exception(a)) from test_catch_exception")
+          checkAnswer(df, Seq(Row(null), Row(null)))
+        }
       }
     }
   }
