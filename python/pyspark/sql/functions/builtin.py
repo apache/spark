@@ -5767,7 +5767,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     |  Bob|        5|
     +-----+---------+
 
-    Now, to ignore any nulls we need to set ``ignorenulls`` to `True`
+    To ignore any null values, set ``ignorenulls`` to `True`
 
     >>> df.groupby("name").agg(last("age", ignorenulls=True)).orderBy("name").show()
     +-----+---------+
