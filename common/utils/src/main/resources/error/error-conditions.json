@@ -2925,24 +2925,6 @@
     ],
     "sqlState" : "22029"
   },
-  "SQL_SCRIPTING_LABEL_ERROR" : {
-    "message" : [
-      "Invalid usage of labels."
-    ],
-    "subClass" : {
-      "LABELS_MISMATCH" : {
-        "message" : [
-          "Begin label <beginLabel> does not match end label <endLabel>."
-        ]
-      },
-      "END_LABEL_WITHOUT_BEGIN_LABEL" : {
-        "message" : [
-          "End label <endLabel> can not exist without begin label."
-        ]
-      }
-    },
-    "sqlState" : "42K0L"
-  },
   "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Variable type must be string type but got <varType>."
@@ -3748,6 +3730,24 @@
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ],
     "sqlState" : "42K0I"
+  },
+  "SQL_SCRIPTING_LABEL_ERROR" : {
+    "message" : [
+      "Invalid usage of labels."
+    ],
+    "subClass" : {
+      "LABELS_MISMATCH" : {
+        "message" : [
+          "Begin label <beginLabel> does not match end label <endLabel>."
+        ]
+      },
+      "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+        "message" : [
+          "End label <endLabel> can not exist without begin label."
+        ]
+      }
+    },
+    "sqlState" : "42K0L"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
