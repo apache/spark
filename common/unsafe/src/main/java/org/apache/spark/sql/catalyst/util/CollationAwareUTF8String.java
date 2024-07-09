@@ -466,7 +466,9 @@ public class CollationAwareUTF8String {
       return CODE_POINT_COMBINED_LOWERCASE_I_DOT;
     }
     else if (codePoint == 0x03C2) {
-      // Greek final and non-final capital letter sigma should be mapped the same.
+      // Greek final and non-final letter sigma should be mapped the same. This is achieved by
+      // mapping Greek small final sigma (U+03C2) to Greek small non-final sigma (U+03C3). Capital
+      // letter sigma (U+03A3) is mapped to small non-final sigma (U+03C3) in the `else` branch.
       return 0x03C3;
     }
     else {
@@ -733,7 +735,10 @@ public class CollationAwareUTF8String {
     // StringBuilder to store the translated string.
     StringBuilder sb = new StringBuilder();
 
-    // Buffered code point iteration to handle one-to-many case mappings.
+    // We use buffered code point iteration to handle one-to-many case mappings. We need to handle
+    // at most two code points at a time (for `CODE_POINT_COMBINED_LOWERCASE_I_DOT`), a buffer of
+    // size 1 enables us to match two codepoints in the input string with a single codepoint in
+    // the lowercase translation dictionary.
     int codePointBuffer = -1, codePoint;
     while (inputIter.hasNext()) {
       if (codePointBuffer != -1) {
@@ -742,7 +747,8 @@ public class CollationAwareUTF8String {
       } else {
         codePoint = inputIter.next();
       }
-      // Special handling for letter i (U+0069) followed by a combining dot (U+0307).
+      // Special handling for letter i (U+0069) followed by a combining dot (U+0307). By ensuring
+      // that `CODE_POINT_LOWERCASE_I` is buffered, we guarantee finding a max-length match.
       if (lowercaseDict.containsKey(CODE_POINT_COMBINED_LOWERCASE_I_DOT) &&
           codePoint == CODE_POINT_LOWERCASE_I && inputIter.hasNext()) {
         int nextCodePoint = inputIter.next();
@@ -784,19 +790,32 @@ public class CollationAwareUTF8String {
    */
   public static UTF8String translate(final UTF8String input,
       final Map<String, String> dict, final int collationId) {
+    // Replace invalid UTF-8 sequences with the Unicode replacement character U+FFFD.
     String inputString = input.toValidString();
+    // Create a character iterator for the validated input string. This will be used for searching
+    // inside the string using ICU `StringSearch` class. We only need to do it once before the
+    // main loop of the translate algorithm.
     CharacterIterator target = new StringCharacterIterator(inputString);
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     StringBuilder sb = new StringBuilder();
+    // Index for the current character in the (validated) input string. This is the character we
+    // want to determine if we need to replace or not.
     int charIndex = 0;
     while (charIndex < inputString.length()) {
+      // We search the replacement dictionary to find a match. If there are more than one matches
+      // (which is possible for collated strings), we want to choose the match of largest length.
       int longestMatchLen = 0;
       String longestMatch = "";
       for (String key : dict.keySet()) {
         StringSearch stringSearch = new StringSearch(key, target, (RuleBasedCollator) collator);
+        // Point `stringSearch` to start at the current character.
         stringSearch.setIndex(charIndex);
         int matchIndex = stringSearch.next();
         if (matchIndex == charIndex) {
+          // We have found a match (that is the current position matches with one of the characters
+          // in the dictionary). However, there might be other matches of larger length, so we need
+          // to continue searching against the characters in the dictionary and keep track of the
+          // match of largest length.
           int matchLen = stringSearch.getMatchLength();
           if (matchLen > longestMatchLen) {
             longestMatchLen = matchLen;
@@ -805,15 +824,20 @@ public class CollationAwareUTF8String {
         }
       }
       if (longestMatchLen == 0) {
+        // No match was found, so output the current character.
         sb.append(inputString.charAt(charIndex));
-        charIndex++;
+        // Move on to the next character in the input string.
+        ++charIndex;
       } else {
+        // We have found at least one match. Append the match of longest match length to the output.
         if (!"\0".equals(dict.get(longestMatch))) {
           sb.append(dict.get(longestMatch));
         }
+        // Skip as many characters as the longest match.
         charIndex += longestMatchLen;
       }
     }
+    // Return the translated string.
     return UTF8String.fromString(sb.toString());
   }
 

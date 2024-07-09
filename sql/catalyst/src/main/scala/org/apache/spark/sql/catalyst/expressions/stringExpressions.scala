@@ -1103,7 +1103,6 @@ object StringTranslate {
     }
     dict
   }
-
 }
 
 /**
