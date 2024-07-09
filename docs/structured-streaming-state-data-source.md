@@ -42,7 +42,7 @@ Users can read an instance of state store, which is matched to a single stateful
 Note that there could be an exception, e.g. stream-stream join, which leverages multiple state store instances internally. The data source abstracts the internal representation away from users and
 provides a user-friendly approach to read the state. See the section for stream-stream join for more details.
 
-### Creating a State store for Batch Queries (all defaults)
+### Creating a state store for batch queries (all defaults)
 
 <div class="codetabs">
 
@@ -144,9 +144,22 @@ The following configurations are optional:
   <td>(none)</td>
   <td>Represents the target side to read from. This option is used when users want to read the state from stream-stream join.</td>
 </tr>
+<tr>
+  <td>snapshotStartBatchId</td>
+  <td>numeric value</td>
+  <td></td>
+  <td>If specified, force to read the snapshot at this batch ID, then changelogs will be replayed until 'batchId' or its default. Note that snapshot batch ID starts with 0 and equals to snapshot version ID minus 1. This option must be used together with 'snapshotPartitionId'.</td>
+</tr>
+<tr>
+  <td>snapshotPartitionId</td>
+  <td>numeric value</td>
+  <td></td>
+  <td>If specified, only this specific partition will be read. Note that partition ID starts with 0. This option must be used together with 'snapshotStartBatchId'.</td>
+</tr>
 </table>
 
-### Reading state for Stream-stream join
+
+### Reading state for stream-stream join
 
 Structured Streaming implements the stream-stream join feature via leveraging multiple instances of state store internally.
 These instances logically compose buffers to store the input rows for left and right.
@@ -179,7 +192,6 @@ df = spark \
 
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-
 val df = spark
 .read
 .format("state-metadata")
