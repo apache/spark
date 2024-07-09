@@ -262,7 +262,7 @@ object StateSourceOptions extends DataSourceOptions {
       if (changeStartBatchId.isEmpty) {
         throw StateDataSourceErrors.requiredOptionUnspecified(CHANGE_START_BATCH_ID)
       }
-      changeEndBatchId = Option(
+      changeEndBatchId = Some(
         changeEndBatchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
 
       // changeStartBatchId and changeEndBatchId must all be defined at this point
@@ -276,7 +276,7 @@ object StateSourceOptions extends DataSourceOptions {
           s"value, make sure that $CHANGE_START_BATCH_ID is less than ${changeEndBatchId.get}.")
       }
 
-      batchId = Option(changeEndBatchId.get)
+      batchId = Some(changeEndBatchId.get)
 
       readChangeFeedOptions = Option(
         ReadChangeFeedOptions(changeStartBatchId.get, changeEndBatchId.get))
@@ -290,7 +290,7 @@ object StateSourceOptions extends DataSourceOptions {
           s"Only specify this option when $READ_CHANGE_FEED is set to true.")
       }
 
-      batchId = Option(batchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
+      batchId = Some(batchId.getOrElse(getLastCommittedBatch(sparkSession, resolvedCpLocation)))
 
       if (batchId.get < 0) {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(BATCH_ID)
@@ -299,7 +299,7 @@ object StateSourceOptions extends DataSourceOptions {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_START_BATCH_ID)
       } else if (snapshotStartBatchId.exists(_ > batchId.get)) {
         throw StateDataSourceErrors.invalidOptionValue(
-          SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to $batchId")
+          SNAPSHOT_START_BATCH_ID, s"value should be less than or equal to ${batchId.get}")
       }
       if (snapshotPartitionId.exists(_ < 0)) {
         throw StateDataSourceErrors.invalidOptionValueIsNegative(SNAPSHOT_PARTITION_ID)
@@ -313,7 +313,7 @@ object StateSourceOptions extends DataSourceOptions {
       }
 
       if (snapshotStartBatchId.isDefined && snapshotPartitionId.isDefined) {
-        fromSnapshotOptions = Option(
+        fromSnapshotOptions = Some(
           FromSnapshotOptions(snapshotStartBatchId.get, snapshotPartitionId.get))
       }
     }
