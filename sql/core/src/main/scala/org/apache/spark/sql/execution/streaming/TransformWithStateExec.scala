@@ -384,6 +384,7 @@ case class TransformWithStateExec(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
     // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
     // and validate it with the new schema
+    // https://github.com/apache/spark/pull/47273
 
     // Write the new schema to the schema file
     val schemaPath = schemaFile.addWithUUID(batchId, newColumnFamilySchemas.values.toList)

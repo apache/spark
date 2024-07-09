@@ -218,6 +218,7 @@ class IncrementalExecution(
           case stateStoreWriter: StateStoreWriter =>
             val metadata = stateStoreWriter.operatorStateMetadata()
             // TODO: [SPARK-48849] Populate metadata with stateSchemaPaths if metadata version is v2
+            // https://github.com/apache/spark/pull/47273
             val metadataWriter = new OperatorStateMetadataWriter(new Path(
               checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
             metadataWriter.write(metadata)
