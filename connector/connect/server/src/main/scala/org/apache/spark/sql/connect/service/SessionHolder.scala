@@ -63,7 +63,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(
         log"Session plan cache is disabled due to non-positive cache size." +
-        log" Current value of '${MDC(LogKeys.CACHE_SIZE_KEY,
+        log" Current value of '${MDC(LogKeys.CONFIG,
           Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key)}' is" +
         log"${MDC(LogKeys.CACHE_SIZE,
           SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))}")
@@ -249,15 +249,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def updateAccessTime(): Unit = {
     lastAccessTimeMs = System.currentTimeMillis()
     logInfo(
-      log"Session ${MDC(LogKeys.SESSION_KEY, key)} accessed, " +
-      log"time ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
+      log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed," +
+        log"time ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
     logInfo(
-      log"Session ${MDC(LogKeys.SESSION_KEY, key)} " +
-      log"inactive timeout set to ${MDC(LogKeys.TIMEOUT, customInactiveTimeoutMs)} ms.")
+      log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} inactive timeout set to " +
+        log"${MDC(LogKeys.TIMEOUT, customInactiveTimeoutMs)} ms")
   }
 
   /**

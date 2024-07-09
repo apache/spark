@@ -112,7 +112,6 @@ private[spark] object LogKeys {
   case object CACHED_TABLE_PARTITION_METADATA_SIZE extends LogKey
   case object CACHE_AUTO_REMOVED_SIZE extends LogKey
   case object CACHE_SIZE extends LogKey
-  case object CACHE_SIZE_KEY extends LogKey
   case object CACHE_UNTIL_HIGHEST_CONSUMED_SIZE extends LogKey
   case object CACHE_UNTIL_LAST_PRODUCED_SIZE extends LogKey
   case object CALL_SITE_LONG_FORM extends LogKey
