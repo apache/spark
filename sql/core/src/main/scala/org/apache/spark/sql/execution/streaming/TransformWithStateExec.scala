@@ -382,11 +382,7 @@ case class TransformWithStateExec(
     val newColumnFamilySchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
-<<<<<<< HEAD
     // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
-=======
-    // TODO: Read the schema path from the OperatorStateMetadata file
->>>>>>> ede31363422 (feedback)
     // and validate it with the new schema
 
     // Write the new schema to the schema file
@@ -426,14 +422,14 @@ case class TransformWithStateExec(
     validateTimeMode()
 
     if (hasInitialState) {
-      val storeConf = new StateStoreConf(session.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.streams.stateStoreCoordinator) {
+        session.sqlContext.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -466,8 +462,8 @@ case class TransformWithStateExec(
           KEY_ROW_SCHEMA,
           VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
-          session.sessionState,
-          Some(session.streams.stateStoreCoordinator),
+          session.sqlContext.sessionState,
+          Some(session.sqlContext.streams.stateStoreCoordinator),
           useColumnFamilies = true
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
@@ -477,7 +473,7 @@ case class TransformWithStateExec(
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
         val hadoopConfBroadcast = sparkContext.broadcast(
-          new SerializableConfiguration(session.sessionState.newHadoopConf()))
+          new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
