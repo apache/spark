@@ -249,8 +249,7 @@ case class StreamingSymmetricHashJoinExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
-      stateSchemaVersion: Int
-  ): Array[String] = {
+      stateSchemaVersion: Int): Array[String] = {
     var result: Map[String, (StructType, StructType)] = Map.empty
     // get state schema for state stores on left side of the join
     result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,

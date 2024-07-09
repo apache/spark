@@ -73,7 +73,7 @@ object ColumnFamilySchemaV1 {
       s"Expected Map but got ${colFamilyMap.getClass}")
     val keySchema = StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String])
     val valueSchema = StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String])
-    new ColumnFamilySchemaV1(
+    ColumnFamilySchemaV1(
       colFamilyMap("columnFamilyName").asInstanceOf[String],
       keySchema,
       valueSchema,

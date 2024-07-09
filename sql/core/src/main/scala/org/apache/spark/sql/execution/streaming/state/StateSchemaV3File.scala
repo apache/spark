@@ -33,14 +33,13 @@ import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVers
  * The StateSchemaV3File is used to write the schema of multiple column families.
  * Right now, this is primarily used for the TransformWithState operator, which supports
  * multiple column families to keep the data for multiple state variables.
+ * We only expect ColumnFamilySchemaV1 to be written and read from this file.
  * @param hadoopConf Hadoop configuration that is used to read / write metadata files.
  * @param path Path to the directory that will be used for writing metadata.
  */
 class StateSchemaV3File(
     hadoopConf: Configuration,
     path: String) {
-
-  val VERSION = 3
 
   val metadataPath = new Path(path)
 
@@ -51,7 +50,7 @@ class StateSchemaV3File(
     fileManager.mkdirs(metadataPath)
   }
 
-  def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+  private def deserialize(in: InputStream): List[ColumnFamilySchema] = {
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
 
     if (!lines.hasNext) {
@@ -59,13 +58,13 @@ class StateSchemaV3File(
     }
 
     val version = lines.next().trim
-    validateVersion(version, VERSION)
+    validateVersion(version, StateSchemaV3File.VERSION)
 
     lines.map(ColumnFamilySchemaV1.fromJson).toList
   }
 
-  def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
-    out.write(s"v${VERSION}".getBytes(UTF_8))
+  private def serialize(schemas: List[ColumnFamilySchema], out: OutputStream): Unit = {
+    out.write(s"v${StateSchemaV3File.VERSION}".getBytes(UTF_8))
     out.write('\n')
     out.write(schemas.map(_.json).mkString("\n").getBytes(UTF_8))
   }
@@ -85,7 +84,6 @@ class StateSchemaV3File(
   protected def write(
       batchMetadataFile: Path,
       fn: OutputStream => Unit): Unit = {
-    // Only write metadata when the batch has not yet been written
     val output = fileManager.createAtomic(batchMetadataFile, overwriteIfPossible = false)
     try {
       fn(output)
@@ -100,4 +98,8 @@ class StateSchemaV3File(
   protected def batchIdToPath(batchId: Long): Path = {
     new Path(metadataPath, batchId.toString)
   }
+}
+
+object StateSchemaV3File {
+  val VERSION = 3
 }

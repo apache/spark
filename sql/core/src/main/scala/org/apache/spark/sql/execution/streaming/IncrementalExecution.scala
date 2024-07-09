@@ -85,6 +85,10 @@ class IncrementalExecution(
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
+  /**
+   * This value dictates which schema format version the state schema should be written in
+   * for all operators other than TransformWithState.
+   */
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
   /**

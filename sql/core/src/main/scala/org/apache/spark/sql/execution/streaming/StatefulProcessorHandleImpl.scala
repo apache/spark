@@ -309,16 +309,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
 
   def getColumnFamilySchemas: Map[String, ColumnFamilySchema] = columnFamilySchemas.toMap
 
-  /**
-   * Function to add the ValueState schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   *
-   * @param stateName  - name of the state variable
-   * @param valEncoder - SQL encoder for state variable
-   * @tparam T - type of state variable
-   * @return - instance of ValueState of type T that can be used to store state persistently
-   */
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
@@ -327,17 +317,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
     null.asInstanceOf[ValueState[T]]
   }
 
-  /**
-   * Function to add the ValueStateWithTTL schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   *
-   * @param stateName  - name of the state variable
-   * @param valEncoder - SQL encoder for state variable
-   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
-   * @tparam T - type of state variable
-   * @return - instance of ValueState of type T that can be used to store state persistently
-   */
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
@@ -349,16 +328,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
     null.asInstanceOf[ValueState[T]]
   }
 
-  /**
-   * Function to add the ListState schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   *
-   * @param stateName  - name of the state variable
-   * @param valEncoder - SQL encoder for state variable
-   * @tparam T - type of state variable
-   * @return - instance of ListState of type T that can be used to store state persistently
-   */
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
     val colFamilySchema = columnFamilySchemaUtils.
@@ -367,17 +336,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
     null.asInstanceOf[ListState[T]]
   }
 
-  /**
-   * Function to add the ListStateWithTTL schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   *
-   * @param stateName  - name of the state variable
-   * @param valEncoder - SQL encoder for state variable
-   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
-   * @tparam T - type of state variable
-   * @return - instance of ListState of type T that can be used to store state persistently
-   */
   override def getListState[T](
       stateName: String,
       valEncoder: Encoder[T],
@@ -389,17 +347,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
     null.asInstanceOf[ListState[T]]
   }
 
-  /**
-   * Function to add the MapState schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   * @param stateName  - name of the state variable
-   * @param userKeyEnc - spark sql encoder for the map key
-   * @param valEncoder - spark sql encoder for the map value
-   * @tparam K - type of key for map state variable
-   * @tparam V - type of value for map state variable
-   * @return - instance of MapState of type [K,V] that can be used to store state persistently
-   */
   override def getMapState[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],
@@ -411,18 +358,6 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
     null.asInstanceOf[MapState[K, V]]
   }
 
-  /**
-   * Function to add the MapStateWithTTL schema to the list of column family schemas.
-   * The user must ensure to call this function only within the `init()` method of the
-   * StatefulProcessor.
-   * @param stateName  - name of the state variable
-   * @param userKeyEnc - spark sql encoder for the map key
-   * @param valEncoder - SQL encoder for state variable
-   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
-   * @tparam K - type of key for map state variable
-   * @tparam V - type of value for map state variable
-   * @return - instance of MapState of type [K,V] that can be used to store state persistently
-   */
   override def getMapState[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],

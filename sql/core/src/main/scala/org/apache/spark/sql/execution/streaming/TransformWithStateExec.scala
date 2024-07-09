@@ -98,7 +98,7 @@ case class TransformWithStateExec(
    * and fetch the schemas of the state variables initialized in this processor.
    * @return a new instance of the driver processor handle
    */
-  private def getDriverProcessorHandle: DriverStatefulProcessorHandleImpl = {
+  private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
     val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
@@ -111,12 +111,16 @@ case class TransformWithStateExec(
    * after init is called.
    */
   private def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
-    val driverProcessorHandle = getDriverProcessorHandle
-    val columnFamilySchemas = driverProcessorHandle.getColumnFamilySchemas
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
   }
 
+  /**
+   * This method is used for the driver-side stateful processor after we
+   * have collected all the necessary schemas.
+   * This instance of the stateful processor won't be used again.
+   */
   private def closeProcessorHandle(): Unit = {
     statefulProcessor.close()
     statefulProcessor.setHandle(null)
@@ -373,12 +377,11 @@ case class TransformWithStateExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
-      stateSchemaVersion: Int):
-    Array[String] = {
+      stateSchemaVersion: Int): Array[String] = {
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
-      hadoopConf, stateSchemaFilePath(StateStoreId.DEFAULT_STORE_NAME).toString)
+      hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
     // TODO: Read the schema path from the OperatorStateMetadata file
     // and validate it with the new schema
 
@@ -402,7 +405,7 @@ case class TransformWithStateExec(
     }
   }
 
-  private def stateSchemaFilePath(storeName: String): Path = {
+  private def stateSchemaDirPath(storeName: String): Path = {
     assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
     def stateInfo = getStateInfo
     val stateCheckpointPath =

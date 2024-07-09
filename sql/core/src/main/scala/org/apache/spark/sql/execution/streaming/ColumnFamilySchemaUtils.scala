@@ -21,15 +21,9 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec}
 
 trait ColumnFamilySchemaUtils {
-  def getValueStateSchema[T](
-      stateName: String,
-      hasTtl: Boolean): ColumnFamilySchema
+  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchema
 
-
-  def getListStateSchema[T](
-      stateName: String,
-      hasTtl: Boolean): ColumnFamilySchema
-
+  def getListStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchema
 
   def getMapStateSchema[K, V](
       stateName: String,
@@ -39,10 +33,8 @@ trait ColumnFamilySchemaUtils {
 
 object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
 
-  def getValueStateSchema[T](
-      stateName: String,
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
+  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchemaV1 = {
+    ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -53,10 +45,8 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
   }
 
-  def getListStateSchema[T](
-      stateName: String,
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
+  def getListStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchemaV1 = {
+    ColumnFamilySchemaV1(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -71,7 +61,7 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       stateName: String,
       userKeyEnc: Encoder[K],
       hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    new ColumnFamilySchemaV1(
+    ColumnFamilySchemaV1(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
       if (hasTtl) {

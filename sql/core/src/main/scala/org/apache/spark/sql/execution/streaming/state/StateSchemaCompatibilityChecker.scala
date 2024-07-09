@@ -113,7 +113,6 @@ class StateSchemaCompatibilityChecker(
 object StateSchemaCompatibilityChecker extends Logging {
   val VERSION = 2
 
-
   /**
    * Function to check if new state store schema is compatible with the existing schema.
    * @param oldSchema - old state schema
