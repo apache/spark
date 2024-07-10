@@ -4424,7 +4424,7 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
-  val POSTGRES_DIALECT_VERSION = buildConf("spark.sql.connector.postgres dialectVersion")
+  val POSTGRES_DIALECT_VERSION = buildConf("spark.sql.connector.postgres.dialectVersion")
     .internal()
     .doc("JDBC version used for postgres connector.")
     .version("4.0.0")
