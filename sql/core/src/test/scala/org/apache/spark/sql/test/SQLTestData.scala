@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLImplicits}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
@@ -33,15 +33,15 @@ import org.apache.spark.unsafe.types.CalendarInterval
 private[sql] trait SQLTestData { self =>
   protected def spark: SparkSession
 
-  // Helper object to import SQL implicits without a concrete SQLContext
+  // Helper object to import SQL implicits without a concrete SparkSession
   private object internalImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.sqlContext
+    protected override def session: SparkSession = self.spark
   }
 
   import internalImplicits._
   import SQLTestData._
 
-  // Note: all test data should be lazy because the SQLContext is not set up yet.
+  // Note: all test data should be lazy because the SparkSession is not set up yet.
 
   protected lazy val emptyTestData: DataFrame = {
     val df = spark.sparkContext.parallelize(

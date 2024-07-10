@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -436,6 +436,55 @@ object StateStoreProvider {
       }
     }
   }
+}
+
+/**
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read the change
+ * of state store over batches. This is used by State Data Source with additional options like
+ * snapshotStartBatchId or readChangeFeed.
+ */
+trait SupportsFineGrainedReplay {
+
+  /**
+   * Return an instance of [[StateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * The State Store will be constructed from the snapshot at snapshotVersion, and applying delta
+   * files up to the endVersion. If there is no snapshot file at snapshotVersion, an exception will
+   * be thrown.
+   * Only implement this if there is read-only optimization for the state store.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
+    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
+  }
+
+  /**
+   * Return an iterator that reads all the entries of changelogs from startVersion to
+   * endVersion.
+   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
+   * value: [[UnsafeRow]], batchId: [[Long]])
+   * A put record is returned as a tuple(recordType, key, value, batchId)
+   * A delete record is return as a tuple(recordType, key, null, batchId)
+   *
+   * @param startVersion starting changelog version
+   * @param endVersion ending changelog version
+   * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   *         nested value: [[UnsafeRow]], batchId: [[Long]])
+   */
+  def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 
 /**

@@ -218,10 +218,10 @@ class RocksDBFileManager(
 
   /** Save all the files in given local checkpoint directory as a committed version in DFS */
   def saveCheckpointToDfs(
-    checkpointDir: File,
-    version: Long,
-    numKeys: Long,
-    capturedFileMappings: RocksDBFileMappings): Unit = {
+      checkpointDir: File,
+      version: Long,
+      numKeys: Long,
+      capturedFileMappings: RocksDBFileMappings): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
@@ -779,8 +779,8 @@ class RocksDBFileManager(
  */
 
 case class RocksDBFileMappings(
-  versionToRocksDBFiles: ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]],
-  localFilesToDfsFiles: ConcurrentHashMap[String, RocksDBImmutableFile])
+    versionToRocksDBFiles: ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]],
+    localFilesToDfsFiles: ConcurrentHashMap[String, RocksDBImmutableFile])
 
 /**
  * Metrics regarding RocksDB file sync between local and DFS.
