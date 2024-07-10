@@ -21,10 +21,12 @@ import java.io.File
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
+import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
@@ -1078,5 +1080,22 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         }
       }
     )
+  }
+}
+
+class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
+
+  test("schema") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      StateTypesEncoder(keySerializer = encoderFor(Encoders.scalaInt).createSerializer(),
+        valEncoder = Encoders.STRING, stateName = "someState", hasTtl = false)
+
+      val keyExprEncoderSer = encoderFor(Encoders.scalaInt).schema
+      println("keyExprEncoder here: " + JString(keyExprEncoderSer.json))
+      println("valueEncoder here: " + JString(Encoders.STRING.schema.json))
+    }
   }
 }
