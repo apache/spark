@@ -1096,6 +1096,13 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
       val keyExprEncoderSer = encoderFor(Encoders.scalaInt).schema
       println("keyExprEncoder here: " + JString(keyExprEncoderSer.json))
       println("valueEncoder here: " + JString(Encoders.STRING.schema.json))
+      println("composite schema: " +
+        new StructType().add("key", BinaryType)
+        .add("userKey", BinaryType))
+      val keySchema = new StructType().add("key", BinaryType)
+      val userkeySchema = new StructType().add("userkeySchema", BinaryType)
+      println("composite schema copy: " +
+        StructType(keySchema.fields ++ userkeySchema.fields))
     }
   }
 }

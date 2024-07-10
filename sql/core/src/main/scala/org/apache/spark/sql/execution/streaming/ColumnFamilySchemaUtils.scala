@@ -42,6 +42,7 @@ trait ColumnFamilySchemaUtils {
       valEncoder: Encoder[V],
       hasTtl: Boolean): ColumnFamilySchema
 }
+
 object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
 
   def getValueStateSchema[T](
