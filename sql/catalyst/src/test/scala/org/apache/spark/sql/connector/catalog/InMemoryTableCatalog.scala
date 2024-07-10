@@ -256,7 +256,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     if (namespace.isEmpty || namespaceExists(namespace)) {
       super.listTables(namespace)
     } else {
-      throw new NoSuchNamespaceException(namespace)
+      throw new NoSuchNamespaceException(name() +: namespace)
     }
   }
 }
