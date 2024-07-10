@@ -480,7 +480,7 @@ trait SupportsFineGrainedReplay {
    *
    * @param startVersion starting changelog version
    * @param endVersion ending changelog version
-   * @return tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
    *         nested value: [[UnsafeRow]], batchId: [[Long]])
    */
   def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):

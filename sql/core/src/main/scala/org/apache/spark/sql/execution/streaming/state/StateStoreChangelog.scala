@@ -277,10 +277,10 @@ abstract class StateStoreChangelogReader(
 
 /**
  * Read an iterator of change record from the changelog file.
- * A record is represented by ByteArrayPair(recordType: RecordType.Value,
+ * A record is represented by tuple(recordType: RecordType.Value,
  *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
- * A put record is returned as a ByteArrayPair(recordType, key, value, colFamilyName)
- * A delete record is return as a ByteArrayPair(recordType, key, null, colFamilyName)
+ * A put record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
@@ -317,10 +317,10 @@ class StateStoreChangelogReaderV1(
 
 /**
  * Read an iterator of change record from the changelog file.
- * A record is represented by ByteArrayPair(recordType: RecordType.Value,
+ * A record is represented by tuple(recordType: RecordType.Value,
  *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
- * A put record is returned as a ByteArrayPair(recordType, key, value, colFamilyName)
- * A delete record is return as a ByteArrayPair(recordType, key, null, colFamilyName)
+ * A put record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
@@ -368,7 +368,7 @@ class StateStoreChangelogReaderV2(
 
 /**
  * Base class representing a iterator that iterates over a range of changelog files in a state
- * store. In each iteration, it will return a ByteArrayPair of (changeType: [[RecordType]],
+ * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
  * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
  * @param fm checkpoint file manager used to manage streaming query checkpoint
