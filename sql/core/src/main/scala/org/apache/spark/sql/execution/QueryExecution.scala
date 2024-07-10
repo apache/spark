@@ -60,10 +60,22 @@ class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
-    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+
+  def shuffleCleanupMode: ShuffleCleanupMode = {
+    val conf = sparkSession.sessionState.conf
+    val shuffleCleanupMode =
+      if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+        RemoveShuffleFiles
+      } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
+        SkipMigration
+      } else {
+        DoNotCleanup
+      }
+    shuffleCleanupMode
+  }
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner

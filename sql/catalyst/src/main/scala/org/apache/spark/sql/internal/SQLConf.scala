@@ -2989,19 +2989,19 @@ object SQLConf {
 
   val SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED =
     buildConf("spark.sql.shuffleDependency.skipMigration.enabled")
-      .doc("When enabled, shuffle dependencies for a Spark Connect SQL execution are marked at " +
+      .doc("When enabled, shuffle dependencies for a Spark SQL execution are marked at " +
         "the end of the execution, and they will not be migrated during decommissions.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(false)
 
   val SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
     buildConf("spark.sql.shuffleDependency.fileCleanup.enabled")
-      .doc("When enabled, shuffle files will be cleaned up at the end of Spark Connect " +
+      .doc("When enabled, shuffle files will be cleaned up at the end of Spark " +
         "SQL executions.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(false)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
