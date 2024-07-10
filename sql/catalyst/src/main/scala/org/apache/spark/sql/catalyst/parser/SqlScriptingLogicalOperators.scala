@@ -52,7 +52,7 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  * Logical operator for a compound body. Contains all statements within the compound body.
  * @param collection Collection of statements within the compound body.
  * @param label Label set to CompoundBody by user or UUID otherwise.
- *              It can be None in case of CompoundBody is inside loop or conditional block.
+ *              It can be None in case when CompoundBody is inside loop or conditional block.
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
