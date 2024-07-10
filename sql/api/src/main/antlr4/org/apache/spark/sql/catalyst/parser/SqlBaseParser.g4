@@ -71,15 +71,17 @@ singleStatement
     ;
 
 conditionValue
-    : SQLSTATE SQLSTATE_VALUE
+    : SQLSTATE
+    | multipartIdentifier
     ;
 
+
 conditionValueList
-    : ((conditionValues+=conditionValue (COMMA conditionValues+=conditionValue)*) | SQLEXCEPTION)
+    : ((conditionValues+=conditionValue (COMMA conditionValues+=conditionValue)*) | SQLEXCEPTION | NOT FOUND)
     ;
 
 declareCondition
-    : DECLARE multipartIdentifier CONDITION FOR conditionValue
+    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE)?
     ;
 
 declareHandler
