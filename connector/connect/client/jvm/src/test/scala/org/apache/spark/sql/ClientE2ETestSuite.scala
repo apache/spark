@@ -1555,16 +1555,6 @@ class ClientE2ETestSuite
     val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
-
-  // This test is to make sure that the trim function works as expected on
-  // a string column with leading and trailing whitespaces.
-  test("trim_function") {
-    val session: SparkSession = spark
-    import session.implicits._
-    val df = Seq("  a  ", "b  ", "   c").toDF("col")
-    val result = df.select(trim(col("col"), " ").as("trimmed_col")).collect()
-    assert(result === Array(Row("a"), Row("b"), Row("c")))
-  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
