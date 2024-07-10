@@ -33,9 +33,9 @@ def main():
     # Regex patterns for file paths to exclude from the Structured Logging style check
     excluded_file_patterns = [
         "[Tt]est",
-        "/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala",
-        "/Users/amanda.liu/Documents/Databricks/spark/streaming/src/main/scala/org/apache/spark/streaming/scheduler/JobScheduler.scala",
-        "/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala",
+        "sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala",
+        "streaming/src/main/scala/org/apache/spark/streaming/scheduler/JobScheduler.scala",
+        "sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala",
         "core/src/main/scala/org/apache/spark/deploy/SparkSubmit.scala",
     ]
 
@@ -81,7 +81,7 @@ def main():
             for line_number, start_char in issues:
                 print(f"[error] {file_path}:{line_number}:{start_char}")
                 print(
-                    """[error]\tLogging message should use Structured Logging Framework style, such as log"...${MDC(TASK_ID, taskId)..."
+                    """[error]\tPlease use the Structured Logging Framework for logging messages with variables. For example: log"...${MDC(TASK_ID, taskId)...".
                 Refer to the guidelines in the file `internal/Logging.scala`."""
                 )
 
