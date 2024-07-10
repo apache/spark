@@ -10654,6 +10654,8 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     :class:`~pyspark.sql.Column`
         the column of formatted results.
 
+    Examples
+    --------
     >>> spark.createDataFrame([(5,)], ['a']).select(format_number('a', 4).alias('v')).collect()
     [Row(v='5.0000')]
     """
