@@ -5385,7 +5385,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
-    
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -5402,7 +5402,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |count(DISTINCT value)|
     +---------------------+
     |                    2|
-    +---------------------+        
+    +---------------------+
     """
     return count_distinct(col, *cols)
 
