@@ -100,8 +100,8 @@ private[spark] object LogKeys {
   case object BLOCK_MANAGER_IDS extends LogKey
   case object BLOCK_TYPE extends LogKey
   case object BOOT extends LogKey
-  case object BOOT_TIME extends LogKey
   case object BOOTSTRAP_TIME extends LogKey
+  case object BOOT_TIME extends LogKey
   case object BROADCAST extends LogKey
   case object BROADCAST_ID extends LogKey
   case object BROADCAST_OUTPUT_STATUS_SIZE extends LogKey
