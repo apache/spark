@@ -286,6 +286,16 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(DataSourceUtils.decodePartitioningColumns(partColumns) === Seq("col1", "col2"))
   }
 
+  test("pass clusterBy as options") {
+    Seq(1).toDF().write
+      .format("org.apache.spark.sql.test")
+      .clusterBy("col1", "col2")
+      .save()
+
+    val clusteringColumns = LastOptions.parameters(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
+    assert(DataSourceUtils.decodePartitioningColumns(clusteringColumns) === Seq("col1", "col2"))
+  }
+
   test ("SPARK-29537: throw exception when user defined a wrong base path") {
     withTempPath { p =>
       val path = new Path(p.toURI).toString
@@ -490,7 +500,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
-  test("check jdbc() does not support partitioning, bucketBy or sortBy") {
+  test("check jdbc() does not support partitioning, bucketBy, clusterBy or sortBy") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
@@ -502,6 +512,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "does not support bucketBy right now").foreach { s =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+    }
+
+    w = df.write.clusterBy("value")
+    e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("jdbc", "clustering").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 

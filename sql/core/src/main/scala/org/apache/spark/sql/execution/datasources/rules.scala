@@ -198,6 +198,18 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           tableName, specifiedBucketString, existingBucketString)
       }
 
+      // Check if the specified clustering columns match the existing table.
+      val specifiedClusterBySpec = tableDesc.clusterBySpec
+      val existingClusterBySpec = existingTable.clusterBySpec
+      if (specifiedClusterBySpec != existingClusterBySpec) {
+        val specifiedClusteringString =
+          specifiedClusterBySpec.map(_.toString).getOrElse("")
+        val existingClusteringString =
+          existingClusterBySpec.map(_.toString).getOrElse("")
+        throw QueryCompilationErrors.mismatchedTableClusteringError(
+          tableName, specifiedClusteringString, existingClusteringString)
+      }
+
       val newQuery = if (adjustedColumns != query.output) {
         Project(adjustedColumns, query)
       } else {

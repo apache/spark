@@ -1373,6 +1373,65 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test("Clustering columns should match when appending to existing data source tables") {
+    import testImplicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    withTable("clusteredTable") {
+      df.write.mode("overwrite").clusterBy("a", "b").saveAsTable("clusteredTable")
+      // Misses some clustering columns
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").clusterBy("a").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> """[["a"]]""",
+          "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      // Wrong order
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").clusterBy("b", "a").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> """[["b"],["a"]]""",
+          "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      // Clustering columns not specified
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.write.mode("append").saveAsTable("clusteredTable")
+        },
+        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.clusteredtable",
+          "specifiedClusteringString" -> "", "existingClusteringString" -> """[["a"],["b"]]""")
+      )
+      assert(sql("select * from clusteredTable").collect().length == 1)
+      // Inserts new data successfully when clustering columns are correctly specified in
+      // clusterBy(...).
+      Seq((4, 5, 6)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .clusterBy("a", "b")
+        .saveAsTable("clusteredTable")
+
+      Seq((7, 8, 9)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .clusterBy("a", "b")
+        .saveAsTable("clusteredTable")
+
+      checkAnswer(
+        sql("select a, b, c from clusteredTable"),
+        Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
+      )
+    }
+  }
+
   test("show columns - negative test") {
     // When case sensitivity is true, the user supplied database name in table identifier
     // should match the supplied database name in case sensitive way.
