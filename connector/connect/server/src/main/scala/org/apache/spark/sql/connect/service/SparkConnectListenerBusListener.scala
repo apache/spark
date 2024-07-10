@@ -131,11 +131,10 @@ private[sql] class SparkConnectListenerBusListener(
           .build())
     } catch {
       case NonFatal(e) =>
-        logError(
-          log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
-            log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
-            log"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
-            log"because of exception: ${MDC(LogKeys.EXCEPTION, e)}")
+        logError(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
+          log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
+          log"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
+          log"because of exception: ${MDC(LogKeys.EXCEPTION, e)}")
         // This likely means that the client is not responsive even with retry, we should
         // remove this listener and cleanup resources.
         serverSideListenerHolder.cleanUp()
