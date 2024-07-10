@@ -528,7 +528,7 @@ class SessionCatalog(
    * We replace char/varchar with "annotated" string type in the table schema, as the query
    * engine doesn't support char/varchar yet.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   @throws[NoSuchTableException]
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val t = getTableRawMetadata(name)
@@ -539,7 +539,7 @@ class SessionCatalog(
    * Retrieve the metadata of an existing permanent table/view. If no database is specified,
    * assume the table/view is in the current database.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   @throws[NoSuchTableException]
   def getTableRawMetadata(name: TableIdentifier): CatalogTable = {
     val qualifiedIdent = qualifyIdentifier(name)
@@ -557,7 +557,7 @@ class SessionCatalog(
    * For example, if none of the requested tables could be retrieved, an empty list is returned.
    * There is no guarantee of ordering of the returned tables.
    */
-  @throws[NoSuchDatabaseException]
+  @throws[NoSuchNamespaceException]
   def getTablesByName(names: Seq[TableIdentifier]): Seq[CatalogTable] = {
     if (names.nonEmpty) {
       val qualifiedIdents = names.map(qualifyIdentifier)
@@ -1057,7 +1057,6 @@ class SessionCatalog(
         getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
       } catch {
         case _: NoSuchTableException => false
-        case _: NoSuchDatabaseException => false
         case _: NoSuchNamespaceException => false
       }
     }
