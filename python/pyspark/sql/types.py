@@ -1575,6 +1575,7 @@ class VariantType(AtomicType):
             message_parameters={"feature": "VariantType.toInternal"},
         )
 
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 

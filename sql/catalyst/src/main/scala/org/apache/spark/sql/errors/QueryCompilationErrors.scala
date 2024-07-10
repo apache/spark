@@ -3828,7 +3828,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> toSQLType(dt)))
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {

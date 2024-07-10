@@ -956,12 +956,12 @@
       },
       "UNSUPPORTED_UDF_INPUT_TYPE" : {
         "message" : [
-          "UDFs do not support <dataType> type input data."
+          "UDFs do not support '<dataType>' as an input data type."
         ]
       },
       "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
         "message" : [
-          "UDFs do not support <dataType> type output data."
+          "UDFs do not support '<dataType>' as an output data type."
         ]
       },
       "VALUE_OUT_OF_RANGE" : {

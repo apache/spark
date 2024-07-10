@@ -97,7 +97,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         df.agg(testUdf(df("v"))).collect()
       },
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(v)\"", "dataType" -> "\"VARIANT\""))
+      parameters = Map("sqlExpr" -> "\"pandas_udf(v)\"", "dataType" -> "VARIANT"))
   }
 
   test("complex variant input to pandas grouped agg UDF") {
@@ -110,7 +110,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         df.agg(testUdf(df("arr_v"))).collect()
       },
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(arr_v)\"", "dataType" -> "\"ARRAY<VARIANT>\""))
+      parameters = Map("sqlExpr" -> "\"pandas_udf(arr_v)\"", "dataType" -> "ARRAY<VARIANT>"))
   }
 
   test("variant output to pandas grouped agg UDF") {
@@ -123,7 +123,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         df.agg(testUdf(df("id"))).collect()
       },
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(id)\"", "dataType" -> "\"VARIANT\""))
+      parameters = Map("sqlExpr" -> "\"pandas_udf(id)\"", "dataType" -> "VARIANT"))
   }
 
   test("complex variant output to pandas grouped agg UDF") {
@@ -138,7 +138,7 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"pandas_udf(id)\"",
-        "dataType" -> "\"STRUCT<a: STRUCT<v: VARIANT>>\""))
+        "dataType" -> "STRUCT<a: STRUCT<v: VARIANT>>"))
   }
 
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {

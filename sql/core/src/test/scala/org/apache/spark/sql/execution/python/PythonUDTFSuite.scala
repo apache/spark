@@ -136,7 +136,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
-          "dataType" -> "\"VARIANT\""),
+          "dataType" -> "VARIANT"),
         matchPVals = true,
         queryContext = Array(ExpectedContext(
           fragment = "variantInputUDTF(v) udtf",
@@ -159,7 +159,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
-          "dataType" -> "\"MAP<BIGINT, VARIANT>\""),
+          "dataType" -> "MAP<BIGINT, VARIANT>"),
         matchPVals = true,
         queryContext = Array(ExpectedContext(
           fragment = "variantInputUDTF(map_v) udtf",
@@ -178,7 +178,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
-          "dataType" -> "\"VARIANT\""),
+          "dataType" -> "VARIANT"),
         context = ExpectedContext(
           fragment = "variantOutUDTF()",
           start = 14,
@@ -195,7 +195,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
-          "dataType" -> "\"ARRAY<VARIANT>\""),
+          "dataType" -> "ARRAY<VARIANT>"),
         context = ExpectedContext(
           fragment = "arrayOfVariantOutUDTF()",
           start = 14,

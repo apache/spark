@@ -75,6 +75,16 @@ object VariantExpressionEvalUtils {
     new VariantVal(v.getValue, v.getMetadata)
   }
 
+  /** Returns `true` if a data type is or has a child variant type. */
+  def typeContainsVariant(dt: DataType): Boolean = dt match {
+    case _: VariantType => true
+    case st: StructType => st.fields.exists(f => typeContainsVariant(f.dataType))
+    case at: ArrayType => typeContainsVariant(at.elementType)
+    // Variants cannot be map keys.
+    case mt: MapType => typeContainsVariant(mt.valueType)
+    case _ => false
+  }
+
   private def buildVariant(builder: VariantBuilder, input: Any, dataType: DataType): Unit = {
     if (input == null) {
       builder.appendNull()
