@@ -23,7 +23,8 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{StatefulProcessorHandle, TimeMode}
 
 abstract class StatefulProcessorHandleImplBase(
-    timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any]) extends StatefulProcessorHandle {
+    timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
+  extends StatefulProcessorHandle {
 
   protected var currState: StatefulProcessorHandleState = PRE_INIT
 
