@@ -52,9 +52,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
   // This class is instantiated by Spark, so `initialize` method will not be called.
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    catalog.catalogName = Some(name)
-  }
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
   override def capabilities(): util.Set[TableCatalogCapability] = {
     Set(

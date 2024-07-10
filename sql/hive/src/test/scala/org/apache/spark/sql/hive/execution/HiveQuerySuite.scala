@@ -1394,7 +1394,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         sql("USE not_existing_db")
       },
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`not_existing_db`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`not_existing_db`"))
 
     sql(s"USE $currentDatabase")
     assert(currentDatabase == sql("select current_database()").first().getString(0))
@@ -1409,7 +1409,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sqlState = None,
       parameters = Map(
         "routineName" -> "`not_a_udf`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext(
         fragment = "not_a_udf()",
         start = 0,
@@ -1426,7 +1426,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           sqlState = None,
           parameters = Map(
             "routineName" -> "`not_a_udf`",
-            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`a`]"),
+            "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
           context = ExpectedContext(
             fragment = "not_a_udf()",
             start = 0,

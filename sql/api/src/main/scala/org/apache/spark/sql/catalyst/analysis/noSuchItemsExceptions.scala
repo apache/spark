@@ -52,13 +52,6 @@ class NoSuchDatabaseException private(
       messageParameters = Map("schemaName" -> quoteIdentifier(db)),
       cause = None)
   }
-
-  def this(db: Seq[String]) = {
-    this(
-      errorClass = "SCHEMA_NOT_FOUND",
-      messageParameters = Map("schemaName" -> quoteNameParts(db)),
-      cause = None)
-  }
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors

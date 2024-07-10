@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -1427,12 +1427,12 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {
-    val exception = intercept[NoSuchDatabaseException] {
+    val exception = intercept[AnalysisException] {
       sql("USE ns1")
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`ns1`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
@@ -2588,7 +2588,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`abc`"))
 
     // V2 non-session catalog is used.
     sql("CREATE NAMESPACE testcat.ns1")
@@ -2598,7 +2598,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE testcat.abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`testcat`.`abc`"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
