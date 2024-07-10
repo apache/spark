@@ -780,8 +780,8 @@ public class CollationAwareUTF8String {
    * Translates the `input` string using the translation map `dict`, for all ICU collations.
    * String translation is performed by iterating over the input string, from left to right, and
    * repeatedly translating the longest possible substring that matches a key in the dictionary.
-   * For ICU collations, the method uses the collation key of the substring to perform the lookup
-   * in the collation aware version of the translation map.
+   * For ICU collations, the method uses the ICU `StringSearch` class to perform the lookup in
+   * the translation map, while respecting the rules of the specified ICU collation.
    *
    * @param input the string to be translated
    * @param dict the collation aware translation dictionary
