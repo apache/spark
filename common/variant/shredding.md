@@ -233,8 +233,12 @@ The second array element can be fully shredded, but the first and third cannot b
 ]
 ```
 
-# Forward compatibility
+# Backward and forward compatibility
+
+Shredding is an optional features of Variant, and readers must continue to be able to read a group containing only a `value` and `metadata` column.
 
 We will follow the convention defined in https://github.com/delta-io/delta/blob/master/protocol_rfcs/variant-type.md#variant-data-in-parquet, and ignore any fields in the same group as typed_value/untyped_value that start with `_` (underscore).
 This is intended to allow future backwards-compatible extensions. In particular, the field names `_metadata_key_paths` and any name starting with `_spark` are reserved, and should not be used by other implementations.
 Any extra field names that do not start with an underscore should be assumed to be backwards incompatible, and readers should fail when reading such a schema.
+
+Engines without shredding support are not expected to be able to read Parquet files that use shredding. Since different files may contain conflicting schemas (e.g. a `typed_value` column with incompatible types in two files), it may not be possible to infer or specify a single schema that would allow all Parquet files for a table to be read.
