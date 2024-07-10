@@ -97,7 +97,3 @@ class StateSchemaV3File(
 object StateSchemaV3File {
   val VERSION = 3
 }
-
-object StateSchemaV3File {
-  val VERSION = 3
-}
