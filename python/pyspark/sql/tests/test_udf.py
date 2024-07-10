@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     ArrayType,
+    MapType,
     StructType,
     StructField,
     TimestampNTZType,
@@ -326,7 +327,6 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import col
 
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
@@ -334,12 +334,20 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_variant_input(self):
         df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
-        from pyspark.sql.functions import col
 
         u = udf(lambda u: str(u), StringType())
         expectedErrorStr = 'UDFs do not support "VARIANT" type input data'
         with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
             df.select(u(col("v"))).collect()
+
+    def test_udf_with_complex_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v")
+
+        u = udf(lambda u: str(u), StringType())
+        expectedErrorStr = 'UDFs do not support "STRUCT<v: VARIANT NOT NULL>" type input data'
+        with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            df.select(u(col("struct_of_v"))).collect()
 
     def test_udf_with_variant_output(self):
         # The variant value returned corresponds to a JSON string of {"a": "b"}.
@@ -348,6 +356,16 @@ class BaseUDFTestsMixin(object):
             VariantType(),
         )
         expectedErrorStr = 'UDFs do not support "VARIANT" type output data'
+        with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            self.spark.range(0, 10).select(u()).collect()
+    
+    def test_udf_with_complex_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: {'v', VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))},
+            MapType(StringType(), VariantType()),
+        )
+        expectedErrorStr = 'UDFs do not support "MAP<STRING, VARIANT>" type output data'
         with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
             self.spark.range(0, 10).select(u()).collect()
 

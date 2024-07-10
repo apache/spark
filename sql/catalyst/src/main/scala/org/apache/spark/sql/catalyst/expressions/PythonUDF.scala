@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType, VariantType}
+import org.apache.spark.sql.types._
 
 /**
  * Helper functions for [[PythonUDF]]
@@ -63,6 +63,32 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else {
+      val exprReturningVariant = children.collectFirst {
+        case e: Expression if typeContainsVariant(e.dataType) => e
+      }
+      exprReturningVariant match {
+        case Some(e) => TypeCheckResult.DataTypeMismatch(
+          errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
+          messageParameters = Map("dataType" -> s"\"${e.dataType.sql}\""))
+        case None => TypeCheckResult.TypeCheckSuccess
+      }
+    }
+  }
+
+  def typeContainsVariant(dt: DataType): Boolean = dt match {
+    case _: VariantType => true
+    case st: StructType => st.fields.exists(f => typeContainsVariant(f.dataType))
+    case at: ArrayType => typeContainsVariant(at.elementType)
+    // Variants cannot be map keys.
+    case mt: MapType => typeContainsVariant(mt.valueType)
+    case _ => false
+  }
 }
 
 /**
@@ -79,8 +105,8 @@ case class PythonUDF(
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
 
-  if (dataType.isInstanceOf[VariantType]) {
-    throw QueryCompilationErrors.unsupportedUDFOuptutType(sql, dataType)
+  if (typeContainsVariant(dataType)) {
+    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
   }
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
@@ -96,20 +122,6 @@ case class PythonUDF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
     copy(children = newChildren)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val check = super.checkInputDataTypes()
-    if (check.isFailure) {
-      check
-    } else if (children.exists(e => e.dataType.isInstanceOf[VariantType])) {
-      TypeCheckResult.DataTypeMismatch(
-        errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
-        messageParameters = Map("dataType" -> "\"VARIANT\"")
-      )
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
 }
 
 abstract class UnevaluableAggregateFunc extends AggregateFunction {
@@ -138,6 +150,10 @@ case class PythonUDAF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
+
+  if (typeContainsVariant(dataType)) {
+    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
+  }
 
   override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
@@ -204,6 +220,13 @@ case class PythonUDTF(
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
+
+  elementSchema.collectFirst {
+    case sf: StructField if typeContainsVariant(sf.dataType) => sf
+  } match {
+    case Some(sf) => throw QueryCompilationErrors.unsupportedUDFOuptutType(this, sf.dataType)
+    case None =>
+  }
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)

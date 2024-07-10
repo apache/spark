@@ -3825,10 +3825,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "class" -> unsupported.getClass.toString))
   }
 
-  def unsupportedUDFOuptutType(sqlExpr: String, dt: DataType): Throwable = {
+  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
     new AnalysisException(
       errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      messageParameters = Map("sqlExpr" -> sqlExpr, "dataType" -> toSQLType(dt)))
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> toSQLType(dt)))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {
