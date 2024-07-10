@@ -286,11 +286,11 @@ def with_origin_to_class(
         return lambda cls: with_origin_to_class(cls, ignores)
     else:
         cls = cls_or_ignores
-        skipping = set(
-            ["__init__", "__new__", "__iter__", "__nonzero__", "__repr__", "__bool__"]
-            + (ignores or [])
-        )
         if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+            skipping = set(
+                ["__init__", "__new__", "__iter__", "__nonzero__", "__repr__", "__bool__"]
+                + (ignores or [])
+            )
             for name, method in cls.__dict__.items():
                 # Excluding Python magic methods that do not utilize JVM functions.
                 if callable(method) and name not in skipping:
