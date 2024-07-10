@@ -884,6 +884,9 @@ object functions {
   /**
    * Aggregate function: returns the value associated with the maximum value of ord.
    *
+   * @note The function is non-deterministic when the maximum value from `ord` is associated
+   * with multiple values from `e`.
+   *
    * @group agg_funcs
    * @since 3.4.0
    */
@@ -931,6 +934,9 @@ object functions {
 
   /**
    * Aggregate function: returns the value associated with the minimum value of ord.
+   *
+   * @note The function is non-deterministic when the minimum value from `ord` is associated
+   * with multiple values from `e`.
    *
    * @group agg_funcs
    * @since 3.4.0

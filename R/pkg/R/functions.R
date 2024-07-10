@@ -1558,6 +1558,9 @@ setMethod("max",
 #' @details
 #' \code{max_by}: Returns the value associated with the maximum value of ord.
 #'
+#' Note: the function is non-deterministic when the maximum value from `y` is associated
+#' with multiple values from `x`.
+#'
 #' @rdname column_aggregate_functions
 #' @aliases max_by max_by,Column-method
 #' @note max_by since 3.3.0
@@ -1632,6 +1635,9 @@ setMethod("min",
 
 #' @details
 #' \code{min_by}: Returns the value associated with the minimum value of ord.
+#'
+#' Note: the function is non-deterministic when the minimum value from `y` is associated
+#' with multiple values from `x`.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases min_by min_by,Column-method
