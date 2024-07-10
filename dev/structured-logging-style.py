@@ -36,7 +36,7 @@ def main():
         "/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala",
         "/Users/amanda.liu/Documents/Databricks/spark/streaming/src/main/scala/org/apache/spark/streaming/scheduler/JobScheduler.scala",
         "/sql/hive-thriftserver/src/main/scala/org/apache/spark/sql/hive/thriftserver/SparkSQLCLIService.scala",
-        "core/src/main/scala/org/apache/spark/deploy/SparkSubmit.scala"
+        "core/src/main/scala/org/apache/spark/deploy/SparkSubmit.scala",
     ]
 
     nonmigrated_files = {}
@@ -61,14 +61,12 @@ def main():
                     for log_statement in log_statements:
                         log_statement_str = log_statement.group(0).strip()
                         # trim first ( and last )
-                        first_paren_index = log_statement_str.find('(')
-                        inner_log_statement = re.sub(r'\s+', '', log_statement_str[first_paren_index + 1:-1])
-
-                        # log_statement_str[first_paren_index + 1:-1].replace(" ", "").replace("\t", "").replace("\n", "")
+                        first_paren_index = log_statement_str.find("(")
+                        inner_log_statement = re.sub(
+                            r"\s+", "", log_statement_str[first_paren_index + 1 : -1]
+                        )
 
                         if compiled_inner_log_pattern.fullmatch(inner_log_statement):
-                            print(file)
-                            print(f"log statement: ${inner_log_statement}")
                             start_pos = log_statement.start()
                             preceding_content = content[:start_pos]
                             line_number = preceding_content.count("\n") + 1
@@ -80,16 +78,12 @@ def main():
         sys.exit(0)
     else:
         for file_path, issues in nonmigrated_files.items():
-            if issues:
-                pass
-                # print(file_path)
             for line_number, start_char in issues:
-                pass
-                # print(f"[error] {file_path}:{line_number}:{start_char}")
-                # print(
-                #     """[error]\t\tLogging message should use log"..." instead of s"..." and variables should be wrapped in `MDC`s.
-                # Refer to Structured Logging Framework guidelines in the file `internal/Logging.scala`."""
-                # )
+                print(f"[error] {file_path}:{line_number}:{start_char}")
+                print(
+                    """[error]\tLogging message should use Structured Logging Framework style, such as log"...${MDC(TASK_ID, taskId)..."
+                Refer to the guidelines in the file `internal/Logging.scala`."""
+                )
 
         sys.exit(-1)
 
