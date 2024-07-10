@@ -48,7 +48,6 @@ provides a user-friendly approach to read the state. See the section for stream-
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-
 df = spark \
 .read \
 .format("statestore") \
@@ -156,7 +155,26 @@ The following configurations are optional:
   <td></td>
   <td>If specified, only this specific partition will be read. Note that partition ID starts with 0. This option must be used together with 'snapshotStartBatchId'.</td>
 </tr>
+<tr>
+  <td>readChangeFeed</td>
+  <td>boolean</td>
+  <td>false</td>
+  <td>If set to true, will read the change of state over microbatches. The output table schema will also change. Two columns 'batch_id'(long) and 'change_type'(string) will be appended to the front. Option 'changeStartBatchId' must be specified with this option. Option 'batchId', 'joinSide', 'snapshotStartBatchId', 'snapshotPartitionId' is conflict with this option. An example usage of this option can be found below.</td>
+</tr>
+<tr>
+  <td>changeStartBatchId</td>
+  <td>numeric value</td>
+  <td></td>
+  <td>Represents the first batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
+</tr>
+<tr>
+  <td>changeEndBatchId</td>
+  <td>numeric value</td>
+  <td>latest commited batchId</td>
+  <td>Represents the last batch to read in the read change feed mode. This option requires 'readChangeFeed' to be set to true.</td>
+</tr>
 </table>
+
 
 ### Reading state for stream-stream join
 
@@ -165,6 +183,85 @@ These instances logically compose buffers to store the input rows for left and r
 
 Since it is more obvious to users to reason about, the data source provides the option 'joinSide' to read the buffered input for specific side of the join.
 To enable the functionality to read the internal state store instance directly, we also allow specifying the option 'storeName', with restriction that 'storeName' and 'joinSide' cannot be specified together.
+
+### Reading state change over microbatches
+
+If we want to understand the change of state store over microbatches instead of the whole state store at a particular microbatch, 'readChangeFeed' is the option to use.
+For example, this is the code to read the change of state from batch 2 to the latest committed batch.
+
+<div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+df = spark \
+.read \
+.format("statestore") \
+.option("readChangeFeed", true) \
+.option("changeStartBatchId", 2) \
+.load("<checkpointLocation>")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+val df = spark
+.read
+.format("statestore")
+.option("readChangeFeed", true)
+.option("changeStartBatchId", 2)
+.load("<checkpointLocation>")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+Dataset<Row> df = spark
+.read()
+.format("statestore")
+.option("readChangeFeed", true)
+.option("changeStartBatchId", 2)
+.load("<checkpointLocation>");
+
+{% endhighlight %}
+</div>
+
+</div>
+
+The output schema will also be different from the normal output.
+
+<table>
+<thead><tr><th>Column</th><th>Type</th><th>Note</th></tr></thead>
+<tr>
+  <td>batch_id</td>
+  <td>long</td>
+  <td></td>
+</tr>
+<tr>
+  <td>change_type</td>
+  <td>string</td>
+  <td>There are two possible values: 'update' and 'delete'. Update represents either inserting a non-existing key-value pair or updating an existing key with new value. The 'value' field will be null for delete records.</td>
+</tr>
+<tr>
+  <td>key</td>
+  <td>struct (depends on the type for state key)</td>
+  <td></td>
+</tr>
+<tr>
+  <td>value</td>
+  <td>struct (depends on the type for state value)</td>
+  <td></td>
+</tr>
+<tr>
+  <td>partition_id</td>
+  <td>int</td>
+  <td></td>
+</tr>
+</table>
 
 ## State metadata source
 
