@@ -186,7 +186,7 @@ class CapturedException(PySparkException):
         query_context = query_contexts[0] if len(query_contexts) != 0 else None
         if query_context:
             if isinstance(query_context, DataFrameQueryContext):
-                logger = PySparkLogger.get_logger("DataFrameQueryContextLogger")
+                logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
                 call_site = query_context.callSite().split(":")
                 line_no = call_site[1] if len(call_site) == 2 else ""
                 logger.log_error(
@@ -197,7 +197,7 @@ class CapturedException(PySparkException):
                     error_class=self.getErrorClass(),
                 )
             else:
-                logger = PySparkLogger.get_logger("SQLQueryContextLogger")
+                logger = PySparkLogger.getLogger("SQLQueryContextLogger")
                 logger.log_error(
                     self._desc,
                     error_class=self.getErrorClass(),

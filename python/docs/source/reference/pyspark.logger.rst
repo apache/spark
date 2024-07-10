@@ -39,7 +39,7 @@ Methods
 .. autosummary::
     :toctree: api/
 
-    PySparkLogger.get_logger
-    PySparkLogger.log_info
-    PySparkLogger.log_warn
-    PySparkLogger.log_error
+    PySparkLogger.getLogger
+    PySparkLogger.info
+    PySparkLogger.warn
+    PySparkLogger.error

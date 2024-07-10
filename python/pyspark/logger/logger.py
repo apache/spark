@@ -75,15 +75,15 @@ class PySparkLogger(logging.Logger):
     ):
         super().__init__(name, level)
         if not self.hasHandlers():
-            self.handler = (
+            self._handler = (
                 logging.FileHandler(filename) if filename else logging.StreamHandler(stream)
             )
-            self.handler.setFormatter(JSONFormatter())
-            self.addHandler(self.handler)
+            self._handler.setFormatter(JSONFormatter())
+            self.addHandler(self._handler)
             self.setLevel(level)
 
     @staticmethod
-    def get_logger(
+    def getLogger(
         name: str = "PySparkLogger",
         level: int = logging.INFO,
         stream: Optional[Union[None, io.TextIOWrapper]] = None,
@@ -110,7 +110,7 @@ class PySparkLogger(logging.Logger):
         """
         return PySparkLogger(name, level, stream, filename)
 
-    def log_info(self, message: str, **kwargs: Any) -> None:
+    def info(self, message: str, **kwargs: Any) -> None:
         """
         Log an info message with additional keyword arguments.
 
@@ -121,9 +121,9 @@ class PySparkLogger(logging.Logger):
         **kwargs
             Additional keyword arguments to include in the log entry.
         """
-        self.info(message, exc_info=False, extra={"kwargs": kwargs})
+        super().info(message, exc_info=False, extra={"kwargs": kwargs})
 
-    def log_warn(self, message: str, **kwargs: Any) -> None:
+    def warn(self, message: str, **kwargs: Any) -> None:
         """
         Log a warning message with additional keyword arguments.
 
@@ -134,9 +134,9 @@ class PySparkLogger(logging.Logger):
         **kwargs
             Additional keyword arguments to include in the log entry.
         """
-        self.warning(message, exc_info=False, extra={"kwargs": kwargs})
+        super().warning(message, exc_info=False, extra={"kwargs": kwargs})
 
-    def log_error(self, message: str, **kwargs: Any) -> None:
+    def error(self, message: str, **kwargs: Any) -> None:
         """
         Log an error message with additional keyword arguments.
 
@@ -147,4 +147,4 @@ class PySparkLogger(logging.Logger):
         **kwargs
             Additional keyword arguments to include in the log entry.
         """
-        self.error(message, exc_info=False, extra={"kwargs": kwargs})
+        super().error(message, exc_info=False, extra={"kwargs": kwargs})

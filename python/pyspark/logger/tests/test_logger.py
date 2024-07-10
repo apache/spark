@@ -24,13 +24,18 @@ from pyspark.logger.logger import PySparkLogger
 
 class LoggerTestsMixin:
     def setUp(self):
-        self.logger = PySparkLogger.get_logger("TestLogger", stream=StringIO())
+        self.logger = PySparkLogger.getLogger("TestLogger", stream=StringIO())
+
+    def test_log_structure(self):
+        self.logger.info("Test logging structure")
+        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
+        keys = ["ts", "level", "logger", "msg", "context"]
+        for key in keys:
+            self.assertTrue(key in log_json)
 
     def test_log_info(self):
-        self.logger.log_info(
-            "This is an info log", user="test_user_info", action="test_action_info"
-        )
-        log_json = json.loads(self.logger.handler.stream.getvalue().strip())
+        self.logger.info("This is an info log", user="test_user_info", action="test_action_info")
+        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an info log")
         self.assertEqual(
@@ -38,10 +43,8 @@ class LoggerTestsMixin:
         )
 
     def test_log_warn(self):
-        self.logger.log_warn(
-            "This is an warn log", user="test_user_warn", action="test_action_warn"
-        )
-        log_json = json.loads(self.logger.handler.stream.getvalue().strip())
+        self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
+        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an warn log")
         self.assertEqual(
@@ -49,10 +52,10 @@ class LoggerTestsMixin:
         )
 
     def test_log_error(self):
-        self.logger.log_error(
+        self.logger.error(
             "This is an error log", user="test_user_error", action="test_action_error"
         )
-        log_json = json.loads(self.logger.handler.stream.getvalue().strip())
+        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an error log")
         self.assertEqual(
