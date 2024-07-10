@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableCatalogCapability, TableChange, V1Table}
@@ -123,7 +123,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         V1Table(table)
       }
     } catch {
-      case _: NoSuchDatabaseException =>
+      case _: NoSuchNamespaceException =>
         throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
@@ -390,7 +390,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
         try {
           catalog.getDatabaseMetadata(db).toMetadata
         } catch {
-          case _: NoSuchDatabaseException =>
+          case _: NoSuchNamespaceException =>
             throw QueryCompilationErrors.noSuchNamespaceError(namespace)
         }
 
