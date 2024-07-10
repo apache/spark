@@ -278,7 +278,7 @@ abstract class StateStoreChangelogReader(
 /**
  * Read an iterator of change record from the changelog file.
  * A record is represented by tuple(recordType: RecordType.Value,
- *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
+ *  key: Array[Byte], value: Array[Byte])
  * A put record is returned as a tuple(recordType, key, value)
  * A delete record is return as a tuple(recordType, key, null)
  */
@@ -318,7 +318,7 @@ class StateStoreChangelogReaderV1(
 /**
  * Read an iterator of change record from the changelog file.
  * A record is represented by tuple(recordType: RecordType.Value,
- *  key: Array[Byte], value: Array[Byte], colFamilyName: String)
+ * key: Array[Byte], value: Array[Byte])
  * A put record is returned as a tuple(recordType, key, value)
  * A delete record is return as a tuple(recordType, key, null)
  */
