@@ -164,8 +164,8 @@ private[hive] case class HiveGenericUDF(
            |  } else {
            |    $refEvaluator.setArg($i, ${eval.value});
            |  }
-           |} catch (Exception exp) {
-           |  $refEvaluator.setException($i, exp);
+           |} catch (Throwable t) {
+           |  $refEvaluator.setException($i, t);
            |}
            |""".stripMargin
     }

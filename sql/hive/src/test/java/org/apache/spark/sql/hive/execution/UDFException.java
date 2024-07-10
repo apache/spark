@@ -21,6 +21,10 @@ import org.apache.hadoop.hive.ql.exec.UDF;
 
 public class UDFException extends UDF {
     public String evaluate(String data) {
-        throw new RuntimeException("UDFException");
+        if (Integer.parseInt(data) > 0) {
+            return data;
+        } else {
+            throw new RuntimeException("UDFException");
+        }
     }
 }

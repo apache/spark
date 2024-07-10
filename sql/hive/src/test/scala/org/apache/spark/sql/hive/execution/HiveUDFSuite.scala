@@ -816,7 +816,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       ).foreach { codegenMode =>
         withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
           val df = sql("SELECT udf_catch_exception(udf_exception(a)) from test_catch_exception")
-          checkAnswer(df, Seq(Row(null), Row(null)))
+          checkAnswer(df, Seq(Row("9"), Row(null)))
         }
       }
     }
