@@ -68,7 +68,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
           .map(ident => Identifier.of(ident.database.map(Array(_)).getOrElse(Array()), ident.table))
           .toArray
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
     }
   }
 
@@ -380,7 +380,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       case Array(db) if catalog.databaseExists(db) =>
         Array()
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
     }
   }
 
@@ -391,11 +391,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
           catalog.getDatabaseMetadata(db).toMetadata
         } catch {
           case _: NoSuchNamespaceException =>
-            throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+            throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
         }
 
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
     }
   }
 
@@ -430,7 +430,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
           toCatalogDatabase(db, CatalogV2Util.applyNamespaceChanges(metadata, changes)))
 
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
     }
   }
 
@@ -446,7 +446,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       false
 
     case _ =>
-      throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+      throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
   }
 
   def isTempView(ident: Identifier): Boolean = {
@@ -465,7 +465,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
           Identifier.of(Array(funcIdent.database.get), funcIdent.identifier)
         }.toArray
       case _ =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(name() +: namespace)
     }
   }
 
