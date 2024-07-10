@@ -135,8 +135,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         },
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"InputVariantUDTF(outer(v#2))\"",
-          "dataType" -> "\"VARIANT\""))
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
+          "dataType" -> "\"VARIANT\""),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(v) udtf",
+          start = 30,
+          stop = 53)))
     }
   }
 
@@ -153,8 +158,13 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         },
         errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"InputVariantUDTF(outer(map_v#2))\"",
-          "dataType" -> "\"MAP<BIGINT, VARIANT>\""))
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
+          "dataType" -> "\"MAP<BIGINT, VARIANT>\""),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(map_v) udtf",
+          start = 30,
+          stop = 57)))
     }
   }
 
