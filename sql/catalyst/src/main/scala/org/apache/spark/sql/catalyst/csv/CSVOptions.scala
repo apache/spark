@@ -105,8 +105,9 @@ class CSVOptions(
     parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = parameters.getOrElse(ENCODING,
-    parameters.getOrElse(CHARSET, StandardCharsets.UTF_8.name()))
+  val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
+    .map(CharsetProvider.forName(_, SQLConf.get.legacyJavaCharsets, caller = "CSVOptions"))
+    .getOrElse(StandardCharsets.UTF_8).name()
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
