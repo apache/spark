@@ -50,7 +50,7 @@ def main():
                 skip_file = True
                 break
 
-        if not skip_file:
+        if not skip_file and not os.path.isdir(file):
             with open(file, "r") as f:
                 content = f.read()
 
