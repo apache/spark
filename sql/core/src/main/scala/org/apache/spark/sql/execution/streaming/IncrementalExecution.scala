@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaV3File, StateStoreId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -94,7 +94,13 @@ class IncrementalExecution(
           checkpointLocation, tws.getStateInfo.operatorId.toString))
         val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
           metadataPath.toString)
-        operatorStateMetadataLog.purge(minLogEntriesToMaintain)
+        val thresholdBatchId =
+          operatorStateMetadataLog.findThresholdBatchId(minLogEntriesToMaintain)
+        operatorStateMetadataLog.purge(thresholdBatchId)
+        val stateSchemaV3File = new StateSchemaV3File(
+          sparkSession.sessionState.newHadoopConf(),
+          path = tws.stateSchemaFilePath(Some(StateStoreId.DEFAULT_STORE_NAME)).toString)
+        stateSchemaV3File.purge(thresholdBatchId)
       case _ =>
     }
   }

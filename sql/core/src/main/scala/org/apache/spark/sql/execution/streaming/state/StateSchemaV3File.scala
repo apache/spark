@@ -96,18 +96,34 @@ class StateSchemaV3File(
 
   // list all the files in the metadata directory
   // sort by the batchId
-  def listFiles(): Seq[Path] = {
-    fileManager.list(metadataPath).sorted.map(_.getPath)
+  private[sql] def listFiles(): Seq[Path] = {
+    fileManager.list(metadataPath).sorted.map(_.getPath).toSeq
   }
 
-  def listFilesBeforeBatch(batchId: Long): Seq[Path] = {
+  private[sql] def listFilesBeforeBatch(batchId: Long): Seq[Path] = {
     listFiles().filter { path =>
       val batchIdInPath = path.getName.split("_").head.toLong
       batchIdInPath < batchId
+    }
+  }
+
+  /**
+   * purge schema files that are before thresholdBatchId, exclusive
+   */
+  def purge(thresholdBatchId: Long): Unit = {
+    if (thresholdBatchId != -1) {
+      listFilesBeforeBatch(thresholdBatchId).foreach {
+        schemaFilePath =>
+          fileManager.delete(schemaFilePath)
+      }
     }
   }
 }
 
 object StateSchemaV3File {
   val VERSION = 3
+
+  private[sql] def getBatchFromPath(path: Path): Long = {
+    path.getName.split("_").head.toLong
+  }
 }

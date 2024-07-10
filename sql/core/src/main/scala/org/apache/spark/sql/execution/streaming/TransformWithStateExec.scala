@@ -402,9 +402,6 @@ case class TransformWithStateExec(
     val newSchemas = getColFamilySchemas()
     val schemaFile = new StateSchemaV3File(
       hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
-    // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
-    // and validate it with the new schema
-
     val operatorStateMetadataLog = fetchOperatorStateMetadataLog(
       hadoopConf, getStateInfo.checkpointLocation, getStateInfo.operatorId)
     val mostRecentLog = operatorStateMetadataLog.getLatest()

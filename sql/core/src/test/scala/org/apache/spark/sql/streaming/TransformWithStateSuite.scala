@@ -861,7 +861,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       operatorId: Int): StateSchemaV3File = {
       val hadoopConf = spark.sessionState.newHadoopConf()
       val stateChkptPath = new Path(checkpointDir, s"state/$operatorId")
-      val stateSchemaPath = new Path(new Path(stateChkptPath, "_metadata"), "schema")
+      val storeNamePath = new Path(stateChkptPath, "default")
+      val stateSchemaPath = new Path(new Path(storeNamePath, "_metadata"), "schema")
       new StateSchemaV3File(hadoopConf, stateSchemaPath.toString)
   }
 
@@ -989,6 +990,49 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             Row("""{"timeMode":"NoTime","outputMode":"Update"}""")
           )
         )
+      }
+    }
+  }
+
+
+  test("transformWithState - verify that metadata logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "2")),
+          StopStream,
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(),
+          StopStream
+        )
+        val operatorStateMetadataLogs =
+          fetchOperatorStateMetadataLog(chkptDir.getCanonicalPath, 0)
+          .listBatchesOnDisk
+        assert(operatorStateMetadataLogs.length == 1)
+        // Make sure that only the latest batch has the schema file
+        assert(operatorStateMetadataLogs.head == 2)
+
+        val schemaV3Files = fetchStateSchemaV3File(chkptDir.getCanonicalPath, 0).listFiles()
+        assert(schemaV3Files.length == 1)
+        assert(StateSchemaV3File.getBatchFromPath(schemaV3Files.head) == 2)
       }
     }
   }
