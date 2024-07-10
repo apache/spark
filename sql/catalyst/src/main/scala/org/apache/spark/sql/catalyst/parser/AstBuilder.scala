@@ -166,7 +166,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       Option(ctx.statement()).map {s =>
         SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
       }.getOrElse {
-        visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundPlanStatement]
+        val stmt = Option(ctx.beginEndCompoundBlock()).
+          getOrElse(Option(ctx.declareHandler()).getOrElse(ctx.declareCondition()))
+        visit(stmt).asInstanceOf[CompoundPlanStatement]
       }
     }
 
@@ -195,7 +197,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   override def visitDeclareHandler(ctx: DeclareHandlerContext): ErrorHandler = {
     val conditions = visit(ctx.conditionValueList()).asInstanceOf[Seq[String]]
-    val body = visit(ctx.compoundBody()).asInstanceOf[CompoundBody]
+
+    val body = Option(ctx.compoundBody()).map(visit).getOrElse {
+      val logicalPlan = visit(ctx.statement()).asInstanceOf[LogicalPlan]
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
+        java.util.UUID.randomUUID.toString)
+    }.asInstanceOf[CompoundBody]
+
     val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
 
     ErrorHandler(conditions, body, handlerType)

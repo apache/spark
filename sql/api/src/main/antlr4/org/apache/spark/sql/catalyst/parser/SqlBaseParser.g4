@@ -75,7 +75,6 @@ conditionValue
     | multipartIdentifier
     ;
 
-
 conditionValueList
     : ((conditionValues+=conditionValue (COMMA conditionValues+=conditionValue)*) | SQLEXCEPTION | NOT FOUND)
     ;
