@@ -103,8 +103,8 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
   private def validateAndTransformField(
       schema: StructType,
       inputColName: String,
+      inputDataType: DataType,
       outputColName: String): StructField = {
-    val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
       s"The input column $inputColName must be either string type or numeric type, " +
         s"but got $inputDataType.")
@@ -122,11 +122,31 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
+    def extractInputDataType(inputColName: String): Option[DataType] = {
+      val inputSplits = inputColName.split("\\.")
+      var dtype: Option[DataType] = Some(schema)
+      var i = 0
+      while (i < inputSplits.length && dtype.isDefined) {
+        val s = inputSplits(i)
+        dtype = if (dtype.get.isInstanceOf[StructType]) {
+          val struct = dtype.get.asInstanceOf[StructType]
+          if (struct.fieldNames.contains(s)) {
+            Some(struct(s).dataType)
+          } else None
+        } else None
+        i += 1
+      }
+
+      dtype
+    }
+
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
-        schema.fieldNames.contains(inputColName) match {
-          case true => Some(validateAndTransformField(schema, inputColName, outputColName))
-          case false if skipNonExistsCol => None
+        extractInputDataType(inputColName) match {
+          case Some(dtype) => Some(
+            validateAndTransformField(schema, inputColName, dtype, outputColName)
+          )
+          case None if skipNonExistsCol => None
           case _ => throw new SparkException(s"Input column $inputColName does not exist.")
         }
     }
