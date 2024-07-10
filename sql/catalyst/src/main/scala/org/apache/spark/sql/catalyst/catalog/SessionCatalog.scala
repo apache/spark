@@ -71,7 +71,9 @@ class SessionCatalog(
     functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
-    defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
+    defaultDatabase: String = SQLConf.get.defaultDatabase,
+    var catalogName: Option[String] = Some(CatalogManager.SESSION_CATALOG_NAME))
+  extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -250,7 +252,8 @@ class SessionCatalog(
 
   private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
+      val nameParts = catalogName.map(Seq(_, db)).getOrElse(Seq(db))
+      throw new NoSuchDatabaseException(nameParts)
     }
   }
 
