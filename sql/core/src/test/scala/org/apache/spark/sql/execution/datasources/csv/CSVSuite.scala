@@ -38,9 +38,11 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
+import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -3173,22 +3175,24 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-42237: change binary to unsupported dataType") {
-    withTempPath { path =>
-      val colName: String = "value"
-      checkError(
-        exception = intercept[AnalysisException] {
-          Seq(Array[Byte](1, 2))
-            .toDF(colName)
-            .write
-            .csv(path.getCanonicalPath)
-        },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> s"`$colName`",
-          "columnType" -> "\"BINARY\"",
-          "format" -> "CSV")
-      )
+  test("SPARK-48807: Binary support for csv") {
+    BinaryOutputStyle.values.foreach { style =>
+      withTempPath { path =>
+        withSQLConf(SQLConf.BINARY_OUTPUT_STYLE.key -> style.toString) {
+          val df = Seq((1, "Spark SQL".getBytes())).toDF("id", "value")
+          df.write
+            .option("ds_option", "value")
+            .format(dataSourceFormat)
+            .save(path.getCanonicalPath)
+          val expectedStr = ToStringBase.getBinaryFormatter("Spark SQL".getBytes())
+          checkAnswer(
+            spark.read.csv(path.getCanonicalPath),
+            Row("1", expectedStr.toString))
+          checkAnswer(
+            spark.read.schema(df.schema).csv(path.getCanonicalPath),
+            Row(1, expectedStr.getBytes))
+        }
+      }
     }
   }
 
