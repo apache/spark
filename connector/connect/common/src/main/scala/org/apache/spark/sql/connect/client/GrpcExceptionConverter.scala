@@ -220,9 +220,7 @@ private[client] object GrpcExceptionConverter {
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
-      new NoSuchNamespaceException(
-        params.errorClass.orNull,
-        params.messageParameters)),
+      new NoSuchNamespaceException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
       new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
