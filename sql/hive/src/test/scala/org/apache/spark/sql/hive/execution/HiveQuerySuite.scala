@@ -847,6 +847,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD JAR '${jarFile.getAbsolutePath}'")
       assert(sql("LIST JARS").
         filter(_.getString(0).contains(s"${jarFile.getName}".replace(" ", "%20"))).count() > 0)
+      TestHive.cleanTempArtifacts(List(), List(s"${jarFile.getName}".replace(" ", "%20")), List())
     }
   }
 
@@ -866,8 +867,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     val testFile = TestHive.getHiveFile("data/files/v1.txt").toURI
     sql(s"ADD FILE $testFile")
 
+    val fileName = s"${spark.sessionUUID}/v1.txt"
     val checkAddFileRDD = sparkContext.parallelize(1 to 2, 1).mapPartitions { _ =>
-      Iterator.single(new File(SparkFiles.get("v1.txt")).canRead)
+      Iterator.single(new File(SparkFiles.get(fileName)).canRead)
     }
 
     assert(checkAddFileRDD.first())
@@ -894,6 +896,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVE ${zipFile.getAbsolutePath}#foo")
       sql(s"ADD ARCHIVE ${jarFile.getAbsolutePath}#bar")
 
+      val sessionUUID = spark.sessionUUID
       val checkAddArchive =
         sparkContext.parallelize(
           Seq(
@@ -902,7 +905,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             "nonexistence",
             "bar",
             s"bar/${file2.getName}"), 1).map { name =>
-          val file = new File(SparkFiles.get(name))
+          val file = new File(SparkFiles.get(s"${sessionUUID}/$name"))
           val contents =
             if (file.isFile) {
               Some(String.join("", new String(Files.readAllBytes(file.toPath))))
@@ -925,6 +928,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(sql(s"list archives ${zipFile.getAbsolutePath} nonexistence").count() === 1)
       assert(sql(s"list archives ${zipFile.getAbsolutePath} " +
         s"${jarFile.getAbsolutePath}").count() === 2)
+      TestHive.cleanTempArtifacts(List(),
+        List(),
+        List(s"${zipFile.getName}", s"${jarFile.getName}"))
     }
   }
 
@@ -945,12 +951,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVE ${bz2File.getAbsolutePath}#foo")
       sql(s"ADD ARCHIVE ${xzFile.getAbsolutePath}#bar")
 
+      val sessionUUID = spark.sessionUUID
       val checkAddArchive =
         sparkContext.parallelize(
           Seq(
             "foo",
             "bar"), 1).map { name =>
-          val file = new File(SparkFiles.get(name))
+          val file = new File(SparkFiles.get(s"$sessionUUID/$name"))
           val contents =
             if (file.isFile) {
               Some(Files.readAllBytes(file.toPath).toSeq)
@@ -969,6 +976,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(sql(s"list archive ${bz2File.getAbsolutePath}").count() === 1)
       assert(sql(s"list archives ${bz2File.getAbsolutePath} " +
         s"${xzFile.getAbsolutePath}").count() === 2)
+      TestHive.cleanTempArtifacts(List(),
+        List(),
+        List(s"${bz2File.getName}", s"${xzFile.getName}"))
     }
   }
 
@@ -995,6 +1005,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(listFiles.filter(
         _.getString(0).contains(file3.getName.replace(" ", "%20"))).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(file4.getName)).count() === 1)
+      TestHive.cleanTempArtifacts(List(s"${file1.getName}", s"${file2.getName}".replace(" ", "%20"),
+        s"${file3.getName}".replace(" ", "%20"), s"${file4.getName}"),
+        List(),
+        List())
     }
   }
 
@@ -1031,6 +1045,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(listFiles.filter(_.getString(0).contains(jarFile3.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile4.getName.replace(" ", "%20"))).count() === 1)
+      TestHive.cleanTempArtifacts(List(),
+        List(s"${jarFile1.getName}".replace(" ", "%20"), s"${jarFile2.getName}",
+          s"${jarFile3.getName}", s"${jarFile4.getName}".replace(" ", "%20")),
+        List())
     }
   }
 
@@ -1067,6 +1085,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(listFiles.filter(_.getString(0).contains(jarFile3.getName)).count() === 1)
       assert(listFiles.filter(
         _.getString(0).contains(jarFile4.getName.replace(" ", "%20"))).count() === 1)
+      TestHive.cleanTempArtifacts(List(),
+        List(),
+        List(s"${jarFile1.getName}", s"${jarFile2.getName}".replace(" ", "%20"),
+          s"${jarFile3.getName}", s"${jarFile4.getName}".replace(" ", "%20")))
     }
   }
 
@@ -1142,6 +1164,15 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       assert(listJars.filter(_.getString(0).contains(jarFile5.getName)).count() === 1)
       assert(listJars.filter(
         _.getString(0).contains(jarFile6.getName.replace(" ", "%20"))).count() === 1)
+      TestHive.cleanTempArtifacts(List(s"${file1.getName}",
+        s"${file2.getName}",
+        s"${file3.getName}".replace(" ", "%20")),
+        List(s"${jarFile4.getName}",
+          s"${jarFile5.getName}",
+          s"${jarFile6.getName}".replace(" ", "%20")),
+        List(s"${jarFile1.getName}",
+          s"${jarFile2.getName}",
+          s"${jarFile3.getName}".replace(" ", "%20")))
     }
   }
 

@@ -159,6 +159,50 @@ class TestHiveContext(
     sparkSession.reset()
   }
 
+  def cleanTempArtifacts(cleanFiles: Seq[String],
+                         cleanJars: Seq[String],
+                         cleanArchives: Seq[String]): Unit = {
+    cleanFiles.flatMap { file =>
+      sparkContext.allAddedFiles.keys.map { addedFile =>
+        if (addedFile.contains(file)) {
+          addedFile
+        } else {
+          ""
+        }
+      }.filter(_ != "").toSeq
+    }.foreach { file =>
+      sparkContext.addedFiles.keys.foreach { key =>
+        sparkContext.addedFiles(key).remove(file)
+      }
+    }
+    cleanJars.flatMap { jar =>
+      sparkContext.allAddedJars.keys.map { addedJar =>
+        if (addedJar.contains(jar)) {
+          addedJar
+        } else {
+          ""
+        }
+      }.filter(_ != "").toSeq
+    }.foreach { jar =>
+      sparkContext.addedJars.keys.foreach { key =>
+        sparkContext.addedJars(key).remove(jar)
+      }
+    }
+    cleanArchives.flatMap { archive =>
+      sparkContext.allAddedArchives.keys.map { addedArchive =>
+        if (addedArchive.contains(archive)) {
+          addedArchive
+        } else {
+          ""
+        }
+      }.filter(_ != "").toSeq
+    }.foreach { archive =>
+      sparkContext.addedArchives.keys.foreach { key =>
+        sparkContext.addedArchives(key).remove(archive)
+      }
+    }
+  }
+
 }
 
 /**
@@ -251,6 +295,7 @@ private[hive] class TestHiveSparkSession(
       Some(sessionState),
       loadTestTables)
     result.sessionState // force copy of SessionState
+    cloneJobArtifactSet(sessionUUID, result.sessionUUID)
     result
   }
 

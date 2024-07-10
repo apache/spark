@@ -1178,6 +1178,11 @@ private[spark] class Executor(
           log" timestamp ${LogMDC(TIMESTAMP, timestamp)}")
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, root, conf, hadoopConf, timestamp, useCache = !isLocal)
+        // Hack here, fetch file to SparkFiles.getRootDirectory() also for python udf use
+        if (!root.getAbsolutePath.equals(new File(SparkFiles.getRootDirectory()).getAbsolutePath)) {
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()),
+            conf, hadoopConf, timestamp, useCache = !isLocal)
+        }
         state.currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newArchives if

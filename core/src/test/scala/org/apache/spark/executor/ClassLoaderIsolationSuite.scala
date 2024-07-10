@@ -45,9 +45,6 @@ class ClassLoaderIsolationSuite extends SparkFunSuite with LocalSparkContext  {
 
   test("Executor classloader isolation with JobArtifactSet") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    sc.addJar(jar1)
-    sc.addJar(jar2)
-    sc.addJar(jar3)
 
     // TestHelloV2's test method returns '2'
     val artifactSetWithHelloV2 = new JobArtifactSet(

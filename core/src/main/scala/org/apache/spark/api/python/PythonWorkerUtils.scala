@@ -66,9 +66,13 @@ private[spark] object PythonWorkerUtils extends Logging {
       pythonIncludes: Set[String],
       dataOut: DataOutputStream): Unit = {
     // sparkFilesDir
-    val root = jobArtifactUUID.map { uuid =>
-      new File(SparkFiles.getRootDirectory(), uuid).getAbsolutePath
-    }.getOrElse(SparkFiles.getRootDirectory())
+    var root = SparkFiles.getRootDirectory()
+    // sparkFiles add by context.addPyFile is in default jobArtifact
+    // sparkFiles add by sql add file is in session jobArtifact
+    jobArtifactUUID.foreach { uuid =>
+      val sessionRoot = new File(SparkFiles.getRootDirectory(), uuid).getAbsolutePath
+       root = s"$root;$sessionRoot"
+    }
     writeUTF(root, dataOut)
 
     // Python includes (*.zip and *.egg files)

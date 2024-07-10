@@ -494,16 +494,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 
   test("test add jar") {
-    withMultipleConnectionJdbcStatement("smallKV", "addJar")(
+    withJdbcStatement("smallKV", "addJar")(
       {
         statement =>
           val jarFile = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
 
           statement.executeQuery(s"ADD JAR $jarFile")
-      },
 
-      {
-        statement =>
           val queries = Seq(
             "CREATE TABLE smallKV(key INT, val STRING) USING hive",
             s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV",
