@@ -320,7 +320,6 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
           Execute { q =>
-            println("last progress:" + q.lastProgress)
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
             val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
             val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))

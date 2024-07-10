@@ -1083,6 +1083,26 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   }
 }
 
+case class TWSTestUtils() {
+  import java.io.InputStream
+  import java.nio.charset.StandardCharsets.UTF_8
+  import scala.io.{Source => IOSource}
+  import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
+
+  def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+
+    if (!lines.hasNext) {
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
+    }
+
+    val version = lines.next().trim
+    validateVersion(version, StateSchemaV3File.VERSION)
+
+    lines.map(ColumnFamilySchemaV1.fromJson).toList
+  }
+}
+
 class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -1095,7 +1115,7 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
       withTempDir { checkpointDir =>
         val metadataPathPostfix = "state/0/default/_metadata"
         val stateSchemaPath = new Path(checkpointDir.toString,
-          s"$metadataPathPostfix/schema/0")
+          s"$metadataPathPostfix/schema")
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
@@ -1145,9 +1165,7 @@ class TransformWithStateSchemaSuite extends StateStoreMetricsTest {
           CheckNewAnswer(("a", "1"), ("b", "1")),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val ssv3 = new StateSchemaV3File(hadoopConf, new Path(checkpointDir.toString,
-              metadataPathPostfix).toString)
-            val colFamilySeq = ssv3.deserialize(fm.open(schemaFilePath))
+            val colFamilySeq = TWSTestUtils().deserialize(fm.open(schemaFilePath))
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
