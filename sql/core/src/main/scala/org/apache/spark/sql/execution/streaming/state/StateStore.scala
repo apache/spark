@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -439,9 +439,9 @@ object StateStoreProvider {
 }
 
 /**
- * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read fine
- * grained state data which is replayed from a specific snapshot version. It is used by the
- * snapshotStartBatchId option in state data source.
+ * This is an optional trait to be implemented by [[StateStoreProvider]]s that can read the change
+ * of state store over batches. This is used by State Data Source with additional options like
+ * snapshotStartBatchId or readChangeFeed.
  */
 trait SupportsFineGrainedReplay {
 
@@ -469,6 +469,22 @@ trait SupportsFineGrainedReplay {
   def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
     new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
   }
+
+  /**
+   * Return an iterator that reads all the entries of changelogs from startVersion to
+   * endVersion.
+   * Each record is represented by a tuple of (recordType: [[RecordType.Value]], key: [[UnsafeRow]],
+   * value: [[UnsafeRow]], batchId: [[Long]])
+   * A put record is returned as a tuple(recordType, key, value, batchId)
+   * A delete record is return as a tuple(recordType, key, null, batchId)
+   *
+   * @param startVersion starting changelog version
+   * @param endVersion ending changelog version
+   * @return iterator that gives tuple(recordType: [[RecordType.Value]], nested key: [[UnsafeRow]],
+   *         nested value: [[UnsafeRow]], batchId: [[Long]])
+   */
+  def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)]
 }
 
 /**

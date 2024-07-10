@@ -1311,4 +1311,13 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("SPARK-48806: url_decode exception") {
+    val e = intercept[SparkIllegalArgumentException] {
+      sql("select url_decode('https%3A%2F%2spark.apache.org')").collect()
+    }
+    assert(e.getCause.isInstanceOf[IllegalArgumentException] &&
+      e.getCause.getMessage
+        .startsWith("URLDecoder: Illegal hex characters in escape (%) pattern - "))
+  }
 }
