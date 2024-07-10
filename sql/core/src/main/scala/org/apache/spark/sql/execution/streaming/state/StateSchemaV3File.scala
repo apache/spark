@@ -26,6 +26,7 @@ import scala.io.{Source => IOSource}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
 
@@ -39,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVers
  */
 class StateSchemaV3File(
     hadoopConf: Configuration,
-    path: String) {
+    path: String) extends Logging {
 
   val metadataPath = new Path(path)
 
@@ -90,6 +91,19 @@ class StateSchemaV3File(
       case e: Throwable =>
         output.cancel()
         throw e
+    }
+  }
+
+  // list all the files in the metadata directory
+  // sort by the batchId
+  def listFiles(): Seq[Path] = {
+    fileManager.list(metadataPath).sorted.map(_.getPath)
+  }
+
+  def listFilesBeforeBatch(batchId: Long): Seq[Path] = {
+    listFiles().filter { path =>
+      val batchIdInPath = path.getName.split("_").head.toLong
+      batchIdInPath < batchId
     }
   }
 }

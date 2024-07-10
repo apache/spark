@@ -95,6 +95,7 @@ class IncrementalExecution(
         val operatorStateMetadataLog = new OperatorStateMetadataLog(sparkSession,
           metadataPath.toString)
         operatorStateMetadataLog.purge(minLogEntriesToMaintain)
+      case _ =>
     }
   }
 
