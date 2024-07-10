@@ -2677,6 +2677,10 @@ class PlanGenerationTestSuite
     fn.url_decode(fn.col("g"))
   }
 
+  functionTest("try_url_decode") {
+    fn.try_url_decode(fn.col("g"))
+  }
+
   functionTest("url_encode") {
     fn.url_encode(fn.col("g"))
   }
