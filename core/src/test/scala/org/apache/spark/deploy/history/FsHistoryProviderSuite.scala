@@ -180,6 +180,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
   }
 
   test("SPARK-3697: ignore files that cannot be read.") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume(currentUser != "root", "Test skipped for root user")
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
 
@@ -1878,6 +1881,12 @@ class TestGroupsMappingProvider extends GroupMappingServiceProvider {
 class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.LEVELDB
+
+    // Skip tests on macOS
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    assume(!Utils.isMac, "Test skipped on macOS")
+  }
 }
 
 @ExtendedLevelDBTest

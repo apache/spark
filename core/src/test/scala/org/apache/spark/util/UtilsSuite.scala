@@ -47,6 +47,8 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
+
+
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("timeConversion") {
@@ -480,6 +482,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("SPARK-35907: createDirectory") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume("root" != currentUser)
+
     val tmpDir = new File(System.getProperty("java.io.tmpdir"))
     val testDir = new File(tmpDir, "createDirectory" + System.nanoTime())
     val testDirPath = testDir.getCanonicalPath

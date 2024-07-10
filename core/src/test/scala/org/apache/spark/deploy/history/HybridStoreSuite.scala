@@ -208,6 +208,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
 
 @ExtendedLevelDBTest
 class LevelDBHybridStoreSuite extends HybridStoreSuite {
+  assume(!Utils.isMac, "Test skipped on macOS")
   before {
     dbpath = File.createTempFile("test.", ".ldb")
     dbpath.delete()

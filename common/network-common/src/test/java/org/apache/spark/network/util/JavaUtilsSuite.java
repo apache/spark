@@ -22,6 +22,7 @@ import java.io.IOException;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeFalse;
 
 public class JavaUtilsSuite {
 
@@ -48,11 +49,16 @@ public class JavaUtilsSuite {
     assertTrue(JavaUtils.createDirectory(testDirPath, "scenario3").exists());
     assertTrue(testDir.setReadable(true));
 
+    // Skip test if the current user is root
+    String currentUser = System.getProperty("user.name");
+    assumeFalse("Test skipped for root user", "root".equals(currentUser));
+
     // 4. The parent directory cannot write
     assertTrue(testDir.canWrite());
     assertTrue(testDir.setWritable(false));
     assertThrows(IOException.class,
-      () -> JavaUtils.createDirectory(testDirPath, "scenario4"));
+            () -> JavaUtils.createDirectory(testDirPath, "scenario4"));
     assertTrue(testDir.setWritable(true));
+
   }
 }

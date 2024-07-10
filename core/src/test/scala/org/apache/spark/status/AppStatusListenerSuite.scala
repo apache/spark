@@ -1977,6 +1977,7 @@ class AppStatusListenerWithInMemoryStoreSuite extends AppStatusListenerSuite {
 
 @ExtendedLevelDBTest
 class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
+  assume(!Utils.isMac, "Test skipped on macOS")
   override def conf: SparkConf = super.conf
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
 }

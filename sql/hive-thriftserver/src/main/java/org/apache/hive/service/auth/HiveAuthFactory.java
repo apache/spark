@@ -17,11 +17,19 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import javax.net.ssl.SSLServerSocket;
 import javax.security.auth.login.LoginException;
 import javax.security.sasl.Sasl;
 
@@ -42,6 +50,11 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.thrift.TProcessorFactory;
+import org.apache.thrift.transport.TFramedTransport;
+import org.apache.thrift.transport.TSSLTransportFactory;
+import org.apache.thrift.transport.TServerSocket;
+import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
 import org.apache.thrift.TConfiguration;
@@ -228,24 +241,6 @@ public class HiveAuthFactory {
     } else {
       return UserGroupInformation.loginUserFromKeytabAndReturnUGI(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile);
     }
-  }
-
-  public static TTransport getSocketTransport(String host, int port, int loginTimeout) throws TTransportException {
-    return new TSocket(new TConfiguration(), host, port, loginTimeout);
-  }
-
-  public static TTransport getSSLSocket(String host, int port, int loginTimeout)
-    throws TTransportException {
-    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout);
-  }
-
-  public static TTransport getSSLSocket(String host, int port, int loginTimeout,
-    String trustStorePath, String trustStorePassWord) throws TTransportException {
-    TSSLTransportFactory.TSSLTransportParameters params =
-      new TSSLTransportFactory.TSSLTransportParameters();
-    params.setTrustStore(trustStorePath, trustStorePassWord);
-    params.requireClientAuth(true);
-    return TSSLTransportFactory.getClientSocket(host, port, loginTimeout, params);
   }
 
   public static TServerSocket getServerSocket(String hiveHost, int portNum)

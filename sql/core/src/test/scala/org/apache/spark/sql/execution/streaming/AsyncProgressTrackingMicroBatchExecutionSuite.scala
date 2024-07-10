@@ -763,6 +763,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   // to the main stream execution thread
   test("bubble up async offset log write errors 2:" +
     " cannot write offset files due to permissions issue") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume("root" != currentUser)
     testAsyncWriteErrorsPermissionsIssue("/offsets")
   }
 
@@ -770,6 +773,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   // to the main stream execution thread
   test("bubble up async commit log write errors 2" +
     ": commit file already exists for a batch") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume("root" != currentUser)
     testAsyncWriteErrorsPermissionsIssue("/commits")
   }
 

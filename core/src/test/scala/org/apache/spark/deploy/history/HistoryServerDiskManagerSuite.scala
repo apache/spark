@@ -229,6 +229,8 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
 
 @ExtendedLevelDBTest
 class HistoryServerDiskManagerUseLevelDBSuite extends HistoryServerDiskManagerSuite {
+  // Skip test on macOS
+  assume(!Utils.isMac, "Test skipped on macOS")
   override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.LEVELDB
   override protected def extension: String = ".ldb"
 }

@@ -41,12 +41,16 @@ class PersistenceEngineSuite extends SparkFunSuite {
   }
 
   test("ZooKeeperPersistenceEngine") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume("root" != currentUser)
     val conf = new SparkConf()
     // TestingServer logs the port conflict exception rather than throwing an exception.
     // So we have to find a free port by ourselves. This approach cannot guarantee always starting
     // zkTestServer successfully because there is a time gap between finding a free port and
     // starting zkTestServer. But the failure possibility should be very low.
     val zkTestServer = new TestingServer(findFreePort(conf))
+    println("Test.. Inside ZooKeeperPersistenceEngine")
     try {
       testPersistenceEngine(conf, serializer => {
         conf.set(ZOOKEEPER_URL, zkTestServer.getConnectString)

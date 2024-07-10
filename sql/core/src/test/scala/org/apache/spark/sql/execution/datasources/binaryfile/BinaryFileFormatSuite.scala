@@ -323,6 +323,9 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   }
 
   test("column pruning - non-readable file") {
+    // Skip test if the current user is root
+    val currentUser = System.getProperty("user.name")
+    assume("root" != currentUser)
     withTempPath { file =>
       val content = "abc".getBytes
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
