@@ -31,7 +31,6 @@ from typing import (
     Optional,
     Union,
     TYPE_CHECKING,
-    cast,
     overload,
 )
 import pyspark
@@ -284,7 +283,7 @@ def with_origin_to_class(
     """
     if cls_or_ignores is None or isinstance(cls_or_ignores, list):
         ignores = cls_or_ignores or []
-        return lambda cls: cast(Type[T], with_origin_to_class(cls, ignores))
+        return lambda cls: with_origin_to_class(cls, ignores)
     else:
         cls = cls_or_ignores
         skipping = set(
