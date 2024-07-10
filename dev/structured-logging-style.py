@@ -27,7 +27,7 @@ from sparktestsupport import SPARK_HOME
 
 def main():
     log_pattern = r"log(?:Info|Warning|Error)\(.*?\)\n"
-    inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?"(?:\$|\+[^"]+)|[^"]+\+\s*".*?"'
+    inner_log_pattern = r'".*?"\.format\(.*\)|s?".*?(?:\$|\+).*|[^"]+\+\s*".*?"'
     compiled_inner_log_pattern = re.compile(inner_log_pattern)
 
     # Regex patterns for file paths to exclude from the Structured Logging style check
