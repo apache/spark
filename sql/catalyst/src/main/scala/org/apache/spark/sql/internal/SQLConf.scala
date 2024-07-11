@@ -4438,7 +4438,7 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
-  val NOOP_DIALECT_VERSION = buildConf("spark.sql.connector.noop dialectVersion")
+  val NOOP_DIALECT_VERSION = buildConf("spark.sql.connector.noop.dialectVersion")
     .internal()
     .doc("JDBC version used for noop jdbc connector.")
     .version("4.0.0")
