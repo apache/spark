@@ -1631,9 +1631,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
     implicit val formats: DefaultFormats.type = DefaultFormats
-    val encoderSpec = NoPrefixKeyStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA)
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
-    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(COMPOSITE_KEY_ROW_SCHEMA, jsonMap)
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(KEY_ROW_SCHEMA, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
   }
 
