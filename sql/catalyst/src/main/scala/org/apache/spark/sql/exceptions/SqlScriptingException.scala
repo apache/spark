@@ -18,16 +18,14 @@
 package org.apache.spark.sql.exceptions
 
 import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
 class SqlScriptingException protected (
     val message: String,
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
-    val cause: Option[Throwable] = None,
-    val sourceLine: Option[Int] = None,
-    val sourceStart: Option[Int] = None,
-    val sourceEnd: Option[Int] = None)
-  extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
+    val cause: Option[Throwable] = None)
+  extends Exception(message, cause.orNull) with SparkThrowable with Serializable with WithOrigin {
 
   def this(
       errorClass: String,
@@ -38,4 +36,6 @@ class SqlScriptingException protected (
       messageParameters = messageParameters)
 
   override def getErrorClass: String = errorClass.orNull
+
+  override def origin: Origin = CurrentOrigin.get
 }

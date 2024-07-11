@@ -21,7 +21,7 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
- * of the SQL Batch Language interpreter.
+ * of the SQL Scripting Language interpreter.
  */
 private[sql] object SqlScriptingErrors extends QueryErrorsBase {
 

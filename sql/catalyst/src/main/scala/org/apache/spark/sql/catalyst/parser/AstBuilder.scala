@@ -142,27 +142,28 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     CompoundBody(buff.toSeq, label)
   }
 
-  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    val beginLabelCtx = Option(ctx.beginLabel())
-    val endLabelCtx = Option(ctx.endLabel())
+  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody =
+    withOrigin(ctx) {
+      val beginLabelCtx = Option(ctx.beginLabel())
+      val endLabelCtx = Option(ctx.endLabel())
 
-    (beginLabelCtx, endLabelCtx) match {
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-              el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        throw SqlScriptingErrors.labelsMismatch(
-          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
-      case (None, Some(el: EndLabelContext)) =>
-        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
-      case _ =>
+      (beginLabelCtx, endLabelCtx) match {
+        case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
+          if bl.multipartIdentifier().getText.nonEmpty &&
+            bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
+                el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
+          throw SqlScriptingErrors.labelsMismatch(
+            bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+        case (None, Some(el: EndLabelContext)) =>
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
+        case _ =>
+      }
+
+      val labelText = beginLabelCtx.
+        map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
+        toLowerCase(Locale.ROOT)
+      visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
     }
-
-    val labelText = beginLabelCtx.
-      map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
-      toLowerCase(Locale.ROOT)
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
-  }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
     visitCompoundBodyImpl(ctx, None)
