@@ -512,8 +512,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-47307: base64 encoding without chunking") {
     val longString = "a" * 58
     val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
-
-    checkEvaluation(Base64(Literal(longString.getBytes), false), encoded, create_row("abcdefgh"))
+    withSQLConf(SQLConf.CHUNK_BASE_64_STRING_ENABLED.key -> "false") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), encoded, create_row("abcdefgh"))
+    }
   }
 
   test("initcap unit test") {

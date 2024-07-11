@@ -2682,9 +2682,10 @@ case class Chr(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Base64(child: Expression, chunkBase64: Boolean = SQLConf.get.chunkBase64StringEnabled)
+case class Base64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  lazy val chunkBase64: Boolean = SQLConf.get.chunkBase64StringEnabled
   lazy val encoder: JBase64.Encoder = if (chunkBase64) {
     JBase64.getMimeEncoder
   } else {
