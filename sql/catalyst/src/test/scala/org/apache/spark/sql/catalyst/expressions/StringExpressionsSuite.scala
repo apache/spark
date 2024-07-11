@@ -513,7 +513,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longString = "a" * 58
     val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
     withSQLConf(SQLConf.CHUNK_BASE_64_STRING_ENABLED.key -> "false") {
-      checkEvaluation(Base64(Literal(longString.getBytes)), encoded, create_row("abcdefgh"))
+      checkEvaluation(Base64(Literal(longString.getBytes)), encoded)
+    }
+    val chunkEncoded =
+      s"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh\r\nYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE_64_STRING_ENABLED.key -> "true") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
     }
   }
 
