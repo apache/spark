@@ -3797,6 +3797,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
@@ -3853,7 +3859,7 @@
   "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
     "message" : [
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.SupportsFineGrainedReplay.",
-      "Therefore, it does not support option snapshotStartBatchId in state data source."
+      "Therefore, it does not support option snapshotStartBatchId or readChangeFeed in state data source."
     ],
     "sqlState" : "42K06"
   },

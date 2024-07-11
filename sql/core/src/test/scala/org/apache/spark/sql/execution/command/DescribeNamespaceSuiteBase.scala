@@ -44,7 +44,7 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`db1`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   test("Keep the legacy output schema") {

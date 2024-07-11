@@ -169,7 +169,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"SHOW TABLES IN $catalog.nonexist")
       },
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`nonexist`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`nonexist`"))
   }
 
   test("show table extended in a not existing namespace") {
@@ -178,7 +178,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"SHOW TABLE EXTENDED IN $catalog.nonexist LIKE '*tbl*'")
       },
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`nonexist`"))
+      parameters = Map("schemaName" -> s"`$catalog`.`nonexist`"))
   }
 
   test("show table extended with no matching table") {

@@ -126,11 +126,6 @@ object Main extends Logging {
       sparkContext = sparkSession.sparkContext
       sparkSession
     } catch {
-      case e: ClassNotFoundException if isShellSession && e.getMessage.contains(
-        "org.apache.spark.sql.connect.SparkConnectPlugin") =>
-        logError("Failed to load spark connect plugin.")
-        logError("You need to build Spark with -Pconnect.")
-        sys.exit(1)
       case e: Exception if isShellSession =>
         logError("Failed to initialize Spark session.", e)
         sys.exit(1)
