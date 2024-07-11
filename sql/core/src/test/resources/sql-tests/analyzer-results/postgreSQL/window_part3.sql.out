@@ -336,12 +336,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1
 -- !query analysis
-Project [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, count(1)#xL]
-+- Project [count(1)#xL, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
-   +- Window [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [1 ASC NULLS FIRST]
-      +- Aggregate [rank(1) windowspecdefinition(1 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$()))], [count(1) AS count(1)#xL]
-         +- SubqueryAlias spark_catalog.default.empsalary
-            +- Relation spark_catalog.default.empsalary[depname#x,empno#x,salary#x,enroll_date#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 58,
+    "stopIndex" : 67,
+    "fragment" : "GROUP BY 1"
+  } ]
+}
 
 
 -- !query

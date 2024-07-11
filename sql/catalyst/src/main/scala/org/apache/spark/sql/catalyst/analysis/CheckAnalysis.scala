@@ -144,11 +144,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
   }
 
   private def checkForUnspecifiedWindow(expressions: Seq[Expression]): Unit = {
+    print("test1")
     expressions.foreach(_.transformDownWithPruning(
       _.containsPattern(UNRESOLVED_WINDOW_EXPRESSION)) {
       case UnresolvedWindowExpression(_, windowSpec) =>
         throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowSpec.name)
-    })
+      }
+    )
+    print("test2")
   }
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
@@ -667,7 +670,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
 
-          case agg@Aggregate(_, aggregateExpressions, _) =>
+          case agg@Aggregate(_, aggregateExpressions, _) if
+          !PlanHelper.specialExpressionsInUnsupportedOperator(agg).nonEmpty =>
             checkForUnspecifiedWindow(aggregateExpressions)
 
           case j: Join if !j.duplicateResolved =>
@@ -758,6 +762,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "expressionList" -> invalidExprSqls.mkString(", ")))
 
           case other if PlanHelper.specialExpressionsInUnsupportedOperator(other).nonEmpty =>
+            other match {
+              case agg@Aggregate(_, aggregateExpressions, _) =>
+                checkForUnspecifiedWindow(aggregateExpressions)
+                val invalidExprSqls =
+                  PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
+                other.failAnalysis(
+                  errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+                  messageParameters = Map(
+                    "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+            }
+
             val invalidExprSqls =
               PlanHelper.specialExpressionsInUnsupportedOperator(other).map(toSQLExpr)
             other.failAnalysis(
