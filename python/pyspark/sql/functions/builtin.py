@@ -12418,8 +12418,8 @@ def url_decode(str: "ColumnOrName") -> Column:
 @_try_remote_functions
 def try_url_decode(str: "ColumnOrName") -> Column:
     """
-    This is a special version of `url_decode` that performs the same operation, but returns a NULL value
-    instead of raising an error if the decoding cannot be performed.
+    This is a special version of `url_decode` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
 
     .. versionadded:: 4.0.0
 
