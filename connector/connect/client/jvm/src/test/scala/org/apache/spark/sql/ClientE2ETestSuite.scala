@@ -1555,6 +1555,14 @@ class ClientE2ETestSuite
     val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
+
+  test("SPARK-48852: trim function on a string column returns correct results") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val df = Seq("  a  ", "b  ", "   c").toDF("col")
+    val result = df.select(trim(col("col"), " ").as("trimmed_col")).collect()
+    assert(result sameElements Array(Row("a"), Row("b"), Row("c")))
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

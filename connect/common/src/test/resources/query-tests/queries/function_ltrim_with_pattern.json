@@ -15,12 +15,12 @@
       "unresolvedFunction": {
         "functionName": "ltrim",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "g"
-          }
-        }, {
           "literal": {
             "string": "xxx"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }
