@@ -14,16 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import re
 import functools
 import inspect
+import itertools
 import os
 import threading
 from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Match,
     TypeVar,
@@ -179,11 +180,19 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     """
     # Filtering out PySpark code and keeping user code only
     pyspark_root = os.path.dirname(pyspark.__file__)
-    stack = [
-        frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
-    ]
 
-    selected_frames = stack[:depth]
+    def inspect_stack() -> Iterator[inspect.FrameInfo]:
+        frame = inspect.currentframe()
+        while frame:
+            frameinfo = (frame,) + inspect.getframeinfo(frame, context=0)
+            yield inspect.FrameInfo(*frameinfo)
+            frame = frame.f_back
+
+    stack = (
+        frame_info for frame_info in inspect_stack() if pyspark_root not in frame_info.filename
+    )
+
+    selected_frames: Iterator[inspect.FrameInfo] = itertools.islice(stack, depth)
 
     # We try import here since IPython is not a required dependency
     try:
@@ -196,11 +205,11 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
         # Filtering out IPython related frames
         ipy_root = os.path.dirname(IPython.__file__)
         ipykernel_root = os.path.dirname(ipykernel.__file__)
-        selected_frames = [
+        selected_frames = (
             frame
             for frame in selected_frames
             if (ipy_root not in frame.filename) and (ipykernel_root not in frame.filename)
-        ]
+        )
     except ImportError:
         ipython = None
 
