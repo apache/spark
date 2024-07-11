@@ -712,8 +712,8 @@ object StreamExecution {
       //                      exception
       // UncheckedExecutionException - thrown by codes that cannot throw a checked
       //                               ExecutionException, such as BiFunction.apply
-      case e2@(_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
-        if e2.getCause != null =>
+      case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
         isInterruptionException(e2.getCause, sc)
       case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
       case se: SparkException =>
