@@ -627,7 +627,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         errorClass = "FAILED_JDBC.CREATE_TABLE",
         parameters = Map(
           "url" -> "jdbc:.*",
-          "tableName" -> "`test`.`new_table`"))
+          "tableName" -> "`h2`.`test`.`new_table`"))
     }
   }
 
@@ -646,7 +646,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       errorClass = "FAILED_JDBC.CREATE_TABLE",
       parameters = Map(
         "url" -> "jdbc:.*",
-        "tableName" -> "`test`.`new_table`"))
+        "tableName" -> "`h2`.`test`.`new_table`"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
