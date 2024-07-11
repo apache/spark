@@ -208,7 +208,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
       val result = inputStream.toDS()
         .groupByKey(x => x.key)
         .transformWithState(
-          MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig),
+          new MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig),
           TimeMode.ProcessingTime(),
           OutputMode.Append())
 
