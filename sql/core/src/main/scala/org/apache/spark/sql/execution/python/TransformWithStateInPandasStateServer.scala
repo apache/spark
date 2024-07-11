@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.ServerSocket
+import java.io.{DataInputStream, DataOutputStream, EOFException}
+import java.nio.channels.Channels
 
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
+import jnr.unixsocket.UnixServerSocketChannel
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Encoder, Encoders, Row}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType,
  * This class is used to handle the state requests from the Python side.
  */
 class TransformWithStateInPandasStateServer(
-    private val stateServerSocket: ServerSocket,
+    private val serverChannel: UnixServerSocketChannel,
     private val statefulProcessorHandle: StatefulProcessorHandleImpl,
     private val groupingKeySchema: StructType)
   extends Runnable
@@ -48,16 +49,16 @@ class TransformWithStateInPandasStateServer(
 
   def run(): Unit = {
     logWarning(s"Waiting for connection from Python worker")
-    val listeningSocket = stateServerSocket.accept()
-    logWarning(s"listening on socket - ${listeningSocket.getLocalAddress}")
+    val channel = serverChannel.accept()
+    logWarning(s"listening on channel - ${channel.getLocalAddress}")
 
     inputStream = new DataInputStream(
-      new BufferedInputStream(listeningSocket.getInputStream))
+      Channels.newInputStream(channel))
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(listeningSocket.getOutputStream)
+      Channels.newOutputStream(channel)
     )
 
-    while (listeningSocket.isConnected &&
+    while (channel.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
 
       try {
@@ -273,5 +274,14 @@ class TransformWithStateInPandasStateServer(
       case BooleanType => Encoders.BOOLEAN
       case _ => Encoders.STRING
     }
+  }
+}
+
+object TransformWithStateInPandasStateServer {
+  @volatile private var id = 0
+
+  def allocateServerId(): Int = synchronized {
+    id = id + 1
+    return id
   }
 }

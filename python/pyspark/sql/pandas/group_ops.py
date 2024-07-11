@@ -368,6 +368,92 @@ class PandasGroupedOpsMixin:
             outputStructType: Union[StructType, str],
             outputMode: str,
             timeMode: str) -> DataFrame:
+        """
+        Invokes methods defined in the stateful processor used in arbitrary state API v2.
+        We allow the user to act on per-group set of input rows along with keyed state and the
+        user can choose to output/return 0 or more rows.
+
+        For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
+        in each trigger and the user's state/state variables will be stored persistently across
+        invocations.
+
+        The `stateful_processor` should be a Python class that implements the interface defined in
+        pyspark.sql.streaming.stateful_processor. The stateful processor consists 3 functions:
+        `init`, `handleInputRows`, and `close`.
+
+        The `init` function will be invoked as the first method that allows for users to initialize
+        all their state variables and perform other init actions before handling data.
+
+        The `handleInputRows` function will allow users to interact with input data rows. It should
+        take parameters (key, Iterator[`pandas.DataFrame`]) and return another
+        Iterator[`pandas.DataFrame`]. For each group, all columns are passed together as
+        `pandas.DataFrame` to the `handleInputRows` function, and the returned `pandas.DataFrame`
+        across all invocations are combined as a :class:`DataFrame`. Note that the `handleInputRows`
+        function should not make a guess of the number of elements in the iterator. To process all
+        data, the `handleInputRows` function needs to iterate all elements and process them. On the
+        other hand, the `handleInputRows` function is not strictly required toiterate through all
+        elements in the iterator if it intends to read a part of data.
+
+        The `close` function will be called as the last method that allows for users to perform any
+        cleanup or teardown operations.
+
+        The `outputStructType` should be a :class:`StructType` describing the schema of all
+        elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
+        returned `pandas.DataFrame` must either match the field names in the defined schema if
+        specified as strings, or match the field data types by position if not strings,
+        e.g. integer indices.
+
+        The size of each `pandas.DataFrame` in both the input and output can be arbitrary. The
+        number of `pandas.DataFrame` in both the input and output can also be arbitrary.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        stateful_processor : StatefulProcessor
+            Instance of statefulProcessor whose functions will be invoked by the operator.
+        outputStructType : :class:`pyspark.sql.types.DataType` or str
+            the type of the output records. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        outputMode : str
+            the output mode of the stateful processor.
+        timeMode : str
+            The time mode semantics of the stateful processor for timers and TTL.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
+        >>> from pyspark.sql.types import StructType, StructField, LongType, StringType
+        >>> from typing import Iterator
+        >>> output_schema = StructType([
+        ...     StructField("value", LongType(), True)
+        ... ])
+        >>> state_schema = StructType([
+        ...     StructField("value", StringType(), True)
+        ... ])
+        >>> class SimpleStatefulProcessor(StatefulProcessor):
+        ...   def init(self, handle: StatefulProcessorHandle) -> None:
+        ...     self.value_state = handle.getValueState("testValueState", state_schema)
+        ...   def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
+        ...     self.value_state.update("test_value")
+        ...     exists = self.value_state.exists()
+        ...     value = self.value_state.get()
+        ...     self.value_state.clear()
+        ...     return rows
+        ...   def close(self) -> None:
+        ...     pass
+        ...
+        >>> df.groupBy("value").transformWithStateInPandas(stateful_processor =
+        ...         SimpleStatefulProcessor(), outputStructType=output_schema, outputMode="Update",
+        ...         timeMode="None") # doctest: +SKIP
+
+        Notes
+        -----
+        This function requires a full shuffle.
+
+        This API is experimental.
+        """
         
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf

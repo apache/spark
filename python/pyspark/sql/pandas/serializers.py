@@ -1124,6 +1124,20 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
 
 class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate UDF for transformWithStateInPandasSerializer.
+
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    assign_cols_by_name : bool
+        If True, then Pandas DataFrames will get columns by name
+    arrow_max_records_per_batch : int
+        Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
+    """
 
     def __init__(
             self,
@@ -1145,6 +1159,17 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
     # Nothing special here, we need to create the handle and read
     # data in groups.
     def load_stream(self, stream):
+        """
+        Read ArrowRecordBatches from stream, deserialize them to populate a list of pair
+        (data chunk, state), and convert the data into a list of pandas.Series.
+
+        Please refer the doc of inner function `gen_data_and_state` for more details how
+        this function works in overall.
+
+        In addition, this function further groups the return of `gen_data_and_state` by the state
+        instance (same semantic as grouping by grouping key) and produces an iterator of data
+        chunks for each group, so that the caller can lazily materialize the data chunk.
+        """
         import pyarrow as pa
         from itertools import tee
 
@@ -1165,6 +1190,10 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
 
     def dump_stream(self, iterator, stream):
+        """
+        Read through an iterator of (iterator of pandas DataFrame, state), serialize them to Arrow
+        RecordBatches, and write batches to stream.
+        """
         result = [(b, t) for x in iterator for y, t in x for b in y]    
         super().dump_stream(result, stream)
     

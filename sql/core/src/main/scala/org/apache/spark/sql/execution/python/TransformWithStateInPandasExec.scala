@@ -118,7 +118,6 @@ case class TransformWithStateInPandasExec(
 
         val data = groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
 
-        // TOOD (sahnib): fix this
         val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
           groupingKeyExprEncoder, timeMode)
         val runner = new TransformWithStateInPandasPythonRunner(
