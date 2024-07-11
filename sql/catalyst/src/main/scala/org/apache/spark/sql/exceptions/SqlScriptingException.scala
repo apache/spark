@@ -18,7 +18,7 @@
 package org.apache.spark.sql.exceptions
 
 import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.trees.Origin
 
 class SqlScriptingException protected (
     val message: String,
