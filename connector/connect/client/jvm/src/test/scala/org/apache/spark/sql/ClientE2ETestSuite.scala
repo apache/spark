@@ -1556,14 +1556,12 @@ class ClientE2ETestSuite
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
 
-  // This test is to make sure that the trim function works as expected on
-  // a string column with leading and trailing whitespaces.
-  test("trim_function") {
+  test("SPARK-48852: trim function on a string column returns correct results") {
     val session: SparkSession = spark
     import session.implicits._
     val df = Seq("  a  ", "b  ", "   c").toDF("col")
     val result = df.select(trim(col("col"), " ").as("trimmed_col")).collect()
-    assert(result === Array(Row("a"), Row("b"), Row("c")))
+    assert(result sameElements Array(Row("a"), Row("b"), Row("c")))
   }
 }
 
