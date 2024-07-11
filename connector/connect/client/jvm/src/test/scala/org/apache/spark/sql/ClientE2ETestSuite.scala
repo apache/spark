@@ -308,7 +308,6 @@ class ClientE2ETestSuite
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
         "connect",
         "common",
         "src",
@@ -348,7 +347,6 @@ class ClientE2ETestSuite
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
         "connect",
         "common",
         "src",
@@ -379,7 +377,6 @@ class ClientE2ETestSuite
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
-        "connector",
         "connect",
         "common",
         "src",
