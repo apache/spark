@@ -122,8 +122,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)), Seq())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, Seq())
     }
   }
 
@@ -137,14 +136,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val buff = ListBuffer[CompoundPlanStatement]()
     val handlers = ListBuffer[ErrorHandler]()
     ctx.compoundStatements.forEach(compoundStatement => {
-      Option(compoundStatement.declareHandler()).map(visit).
-        foreach(handlers += _.asInstanceOf[ErrorHandler])
-      Option(compoundStatement.declareCondition()).map(visit).
-        foreach(buff += _.asInstanceOf[ErrorCondition])
-      Option(compoundStatement.statement()).map(visit).
-        foreach(buff += _.asInstanceOf[CompoundPlanStatement])
-      Option(compoundStatement.beginEndCompoundBlock()).map(visit).
-        foreach(buff += _.asInstanceOf[CompoundPlanStatement])
+      val stmt = visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
+
+      stmt match {
+        case handler: ErrorHandler => handlers += handler
+        case s => buff += s
+      }
     })
     CompoundBody(buff.toSeq, label, handlers.toSeq)
   }
@@ -203,10 +200,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
-//    val conditionValue = Option(ctx.stringLit()).map(_.getText).getOrElse("45000")
+    val conditionValue = Option(ctx.stringLit()).map(_.getText).getOrElse("'45000'").
+      replace("'", "")
 
-//    ErrorCondition(conditionName, conditionValue.asInstanceOf[String])
-    ErrorCondition(conditionName, "20000")
+    ErrorCondition(conditionName, conditionValue)
   }
 
   override def visitDeclareHandler(ctx: DeclareHandlerContext): ErrorHandler = {
@@ -214,8 +211,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     val body = Option(ctx.compoundBody()).map(visit).getOrElse {
       val logicalPlan = visit(ctx.statement()).asInstanceOf[LogicalPlan]
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        java.util.UUID.randomUUID.toString, Seq())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, Seq())
     }.asInstanceOf[CompoundBody]
 
     val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)

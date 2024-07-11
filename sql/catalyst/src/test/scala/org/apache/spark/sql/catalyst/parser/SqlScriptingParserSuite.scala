@@ -268,19 +268,30 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[ErrorCondition])
-//    assert(tree.collection.head.asInstanceOf[ErrorCondition].value.equals("45000"))
+    assert(tree.collection.head.asInstanceOf[ErrorCondition].value.equals("45000"))
+  }
+
+  test("declare condition: custom sqlstate") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE test CONDITION FOR '12000';
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[ErrorCondition])
+    assert(tree.collection.head.asInstanceOf[ErrorCondition].value.equals("12000"))
   }
 
   test("declare handler") {
     val sqlScriptText =
       """
         |BEGIN
-        |  SELECT 1;
         |  DECLARE CONTINUE HANDLER FOR test BEGIN SELECT 1; END;
         |END""".stripMargin
     val tree = parseScript(sqlScriptText)
     assert(tree.handlers.length == 1)
-    assert(tree.collection.head.isInstanceOf[ErrorHandler])
+    assert(tree.handlers.head.isInstanceOf[ErrorHandler])
   }
 
   test("declare handler single statement") {
