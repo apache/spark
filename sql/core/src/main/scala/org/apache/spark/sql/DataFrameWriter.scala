@@ -216,18 +216,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Clusters the data by the given columns to optimize query performance.
-   *
-   * @since 4.0
-   */
-  @scala.annotation.varargs
-  def clusterBy(colName: String, colNames: String*): DataFrameWriter[T] = {
-    this.clusteringColumns = Option(colName +: colNames)
-    validatePartitioning()
-    this
-  }
-
-  /**
    * Sorts the output in each bucket by the given columns.
    *
    * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
@@ -238,6 +226,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   @scala.annotation.varargs
   def sortBy(colName: String, colNames: String*): DataFrameWriter[T] = {
     this.sortColumnNames = Option(colName +: colNames)
+    this
+  }
+
+  /**
+   * Clusters the output by the given columns on the file system. The rows with matching values in
+   * the specified clustering columns will be consolidated within the same file.
+   *
+   * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
+   * together in a file. This arrangement improves query efficiency when you apply selective
+   * filters to these clustering columns, thanks to data skipping.
+   *
+   * @since 4.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colName: String, colNames: String*): DataFrameWriter[T] = {
+    this.clusteringColumns = Option(colName +: colNames)
+    validatePartitioning()
     this
   }
 
@@ -966,7 +971,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private var numBuckets: Option[Int] = None
 
-  private var clusteringColumns: Option[Seq[String]] = None
-
   private var sortColumnNames: Option[Seq[String]] = None
+
+  private var clusteringColumns: Option[Seq[String]] = None
 }
