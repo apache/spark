@@ -84,7 +84,7 @@ object HiveThriftServer2 extends Logging {
    *
    * @param sqlContext SQLContext to use for the server
    */
-  @deprecated("use startWithSparkSession instead", since = "4.0.0")
+  @deprecated("Use startWithSparkSession instead", since = "4.0.0")
   @Since("2.0.0")
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
