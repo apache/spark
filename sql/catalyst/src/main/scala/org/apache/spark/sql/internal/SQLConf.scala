@@ -4367,6 +4367,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_USE_UNSAFE_ROW =
+    buildConf("spark.sql.json.useUnsafeRow")
+      .internal()
+      .doc("When set to true, use UnsafeRow to represent struct result in the JSON parser.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()
