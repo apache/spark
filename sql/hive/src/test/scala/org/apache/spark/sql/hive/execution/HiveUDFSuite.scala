@@ -805,18 +805,20 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("SPARK-48845: GenericUDF catch exceptions from child UDFs") {
     withTable("test_catch_exception") {
-      Seq("9", "9-1").toDF("a").write.saveAsTable("test_catch_exception")
-      sql("create temporary function udf_exception as " +
-        s"'${classOf[UDFException].getName}'")
-      sql("create temporary function udf_catch_exception as " +
-        s"'${classOf[UDFCatchException].getName}'")
-      Seq(
-        CodegenObjectFactoryMode.FALLBACK.toString,
-        CodegenObjectFactoryMode.NO_CODEGEN.toString
-      ).foreach { codegenMode =>
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
-          val df = sql("SELECT udf_catch_exception(udf_exception(a)) from test_catch_exception")
-          checkAnswer(df, Seq(Row("9"), Row(null)))
+      withUserDefinedFunction("udf_exception" -> true, "udf_catch_exception" -> true) {
+        Seq("9", "9-1").toDF("a").write.saveAsTable("test_catch_exception")
+        sql("CREATE TEMPORARY FUNCTION udf_exception AS " +
+          s"'${classOf[UDFException].getName}'")
+        sql("CREATE TEMPORARY FUNCTION udf_catch_exception AS " +
+          s"'${classOf[UDFCatchException].getName}'")
+        Seq(
+          CodegenObjectFactoryMode.FALLBACK.toString,
+          CodegenObjectFactoryMode.NO_CODEGEN.toString
+        ).foreach { codegenMode =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+            val df = sql("SELECT udf_catch_exception(udf_exception(a)) FROM test_catch_exception")
+            checkAnswer(df, Seq(Row("9"), Row(null)))
+          }
         }
       }
     }
