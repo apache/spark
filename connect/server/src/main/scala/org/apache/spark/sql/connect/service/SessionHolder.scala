@@ -62,8 +62,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(log"Session plan cache is disabled due to non-positive cache size." +
-        log" Current value of '${MDC(LogKeys.CONFIG, Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key)}' is ${MDC(
-            LogKeys.CACHE_SIZE,
+        log" Current value of '${MDC(LogKeys.CONFIG,
+          Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key)}' is ${MDC(LogKeys.CACHE_SIZE,
             SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))}")
       None
     } else {
