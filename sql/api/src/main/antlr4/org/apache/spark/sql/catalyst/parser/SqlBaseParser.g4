@@ -71,7 +71,7 @@ singleStatement
     ;
 
 conditionValue
-    : SQLSTATE
+    : stringLit
     | multipartIdentifier
     ;
 
@@ -80,7 +80,7 @@ conditionValueList
     ;
 
 declareCondition
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE)?
+    : DECLARE multipartIdentifier CONDITION (FOR stringLit)?
     ;
 
 declareHandler

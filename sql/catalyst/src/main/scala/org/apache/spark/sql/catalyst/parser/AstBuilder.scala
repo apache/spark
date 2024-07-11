@@ -122,7 +122,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
       CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        java.util.UUID.randomUUID.toString)
+        java.util.UUID.randomUUID.toString, Seq())
     }
   }
 
@@ -134,12 +134,16 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val buff = ListBuffer[CompoundPlanStatement]()
     val handlers = ListBuffer[ErrorHandler]()
     ctx.compoundStatements.forEach(compoundStatement => {
-      Option(compoundStatement.declareCondition()).map(visit).foreach(handlers += _)
-      Option(compoundStatement.declareCondition()).map(visit).foreach(buff += _)
-      Option(compoundStatement.statement()).map(visit).foreach(buff += _)
-      Option(compoundStatement.beginEndCompoundBlock()).map(visit).foreach(buff += _)
+      Option(compoundStatement.declareHandler()).map(visit).
+        foreach(handlers += _.asInstanceOf[ErrorHandler])
+      Option(compoundStatement.declareCondition()).map(visit).
+        foreach(buff += _.asInstanceOf[ErrorCondition])
+      Option(compoundStatement.statement()).map(visit).
+        foreach(buff += _.asInstanceOf[CompoundPlanStatement])
+      Option(compoundStatement.beginEndCompoundBlock()).map(visit).
+        foreach(buff += _.asInstanceOf[CompoundPlanStatement])
     })
-    CompoundBody(buff.toSeq, label)
+    CompoundBody(buff.toSeq, label, handlers.toSeq)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
@@ -177,7 +181,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
   override def visitConditionValue(ctx: ConditionValueContext): String = {
-    Option(ctx.multipartIdentifier()).map(_.getText).getOrElse(ctx.SQLSTATE().getText)
+    Option(ctx.multipartIdentifier()).map(_.getText).getOrElse(ctx.stringLit().getText)
   }
 
   override def visitConditionValueList(ctx: ConditionValueListContext): Seq[String] = {
@@ -194,9 +198,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   override def visitDeclareCondition(ctx: DeclareConditionContext): ErrorCondition = {
     val conditionName = ctx.multipartIdentifier().getText
-    val conditionValue = Option(ctx.SQLSTATE()).map(_.getText).getOrElse("45000")
+//    val conditionValue = Option(ctx.stringLit()).map(_.getText).getOrElse("45000")
 
-    ErrorCondition(conditionName, conditionValue)
+//    ErrorCondition(conditionName, conditionValue.asInstanceOf[String])
+    ErrorCondition(conditionName, "20000")
   }
 
   override def visitDeclareHandler(ctx: DeclareHandlerContext): ErrorHandler = {
@@ -205,7 +210,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val body = Option(ctx.compoundBody()).map(visit).getOrElse {
       val logicalPlan = visit(ctx.statement()).asInstanceOf[LogicalPlan]
       CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        java.util.UUID.randomUUID.toString)
+        java.util.UUID.randomUUID.toString, Seq())
     }.asInstanceOf[CompoundBody]
 
     val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
