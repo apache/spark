@@ -68,13 +68,14 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(namespace)
     JdbcUtils.withConnection(options) { conn =>
       val schemaPattern = if (namespace.length == 1) namespace.head else null
+      val fullTableName = toSQLId(catalogName +: namespace.toSeq)
       val rs = JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.GET_TABLES",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
-          "namespace" -> toSQLId(namespace.toSeq)),
+          "namespace" -> fullTableName),
         dialect,
-        description = s"Failed get tables from: ${namespace.mkString(".")}") {
+        description = s"Failed get tables from: $fullTableName") {
         conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
@@ -88,13 +89,14 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
     JdbcUtils.classifyException(
       errorClass = "FAILED_JDBC.TABLE_EXISTS",
       messageParameters = Map(
         "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
+        "tableName" -> fullTableName),
       dialect,
-      description = s"Failed table existence check: $ident") {
+      description = s"Failed table existence check: $fullTableName") {
       JdbcUtils.withConnection(options)(JdbcUtils.tableExists(_, writeOptions))
     }
   }
@@ -114,14 +116,16 @@ class JDBCTableCatalog extends TableCatalog
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
+      val oldFullTableName = toSQLId(catalogName +: oldIdent.asMultipartIdentifier)
+      val newFullTableName = toSQLId(catalogName +: newIdent.asMultipartIdentifier)
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.RENAME_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
-          "oldName" -> toSQLId(oldIdent),
-          "newName" -> toSQLId(newIdent)),
+          "oldName" -> oldFullTableName,
+          "newName" -> newFullTableName),
         dialect,
-        description = s"Failed table renaming from $oldIdent to $newIdent") {
+        description = s"Failed table renaming from $oldFullTableName to $newFullTableName") {
         JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
@@ -131,13 +135,14 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(ident.namespace())
     val optionsWithTableName = new JDBCOptions(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
     JdbcUtils.classifyException(
       errorClass = "FAILED_JDBC.LOAD_TABLE",
       messageParameters = Map(
         "url" -> options.getRedactUrl(),
-        "tableName" -> toSQLId(ident)),
+        "tableName" -> fullTableName),
       dialect,
-      description = s"Failed to load table: $ident"
+      description = s"Failed to load table: $fullTableName"
     ) {
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
@@ -194,14 +199,15 @@ class JDBCTableCatalog extends TableCatalog
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     val schema = CatalogV2Util.v2ColumnsToStructType(columns)
+    val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
-          "tableName" -> toSQLId(ident)),
+          "tableName" -> fullTableName),
         dialect,
-        description = s"Failed table creation: $ident") {
+        description = s"Failed table creation: $fullTableName") {
         JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
       }
     }
@@ -212,13 +218,14 @@ class JDBCTableCatalog extends TableCatalog
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
     JdbcUtils.withConnection(options) { conn =>
+      val fullTableName = toSQLId(catalogName +: ident.asMultipartIdentifier)
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.ALTER_TABLE",
         messageParameters = Map(
           "url" -> options.getRedactUrl(),
-          "tableName" -> toSQLId(ident)),
+          "tableName" -> fullTableName),
         dialect,
-        description = s"Failed table altering: $ident") {
+        description = s"Failed table altering: $fullTableName") {
         JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
       }
       loadTable(ident)
@@ -228,13 +235,14 @@ class JDBCTableCatalog extends TableCatalog
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
       JdbcUtils.withConnection(options) { conn =>
+        val fullNamespaceName = toSQLId(catalogName +: namespace.toSeq)
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.NAMESPACE_EXISTS",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
-            "namespace" -> toSQLId(namespace.toSeq)),
+            "namespace" -> fullNamespaceName),
           dialect,
-          description = s"Failed namespace exists: ${namespace.mkString}") {
+          description = s"Failed namespace exists: $fullNamespaceName") {
           JdbcUtils.schemaExists(conn, options, db)
         }
       }
@@ -295,13 +303,14 @@ class JDBCTableCatalog extends TableCatalog
         }
       }
       JdbcUtils.withConnection(options) { conn =>
+        val fullNamespaceName = toSQLId(Seq(catalogName, db))
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.CREATE_NAMESPACE",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
-            "namespace" -> toSQLId(db)),
+            "namespace" -> fullNamespaceName),
           dialect,
-          description = s"Failed create name space: $db") {
+          description = s"Failed create name space: $fullNamespaceName") {
           JdbcUtils.createSchema(conn, options, db, comment)
         }
       }
@@ -320,13 +329,14 @@ class JDBCTableCatalog extends TableCatalog
           case set: NamespaceChange.SetProperty =>
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
+                val fullNamespaceName = toSQLId(Seq(catalogName, db))
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.CREATE_NAMESPACE_COMMENT",
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
-                    "namespace" -> toSQLId(db)),
+                    "namespace" -> fullNamespaceName),
                   dialect,
-                  description = s"Failed create comment on name space: $db") {
+                  description = s"Failed create comment on name space: $fullNamespaceName") {
                   JdbcUtils.alterSchemaComment(conn, options, db, set.value)
                 }
               }
@@ -337,13 +347,14 @@ class JDBCTableCatalog extends TableCatalog
           case unset: NamespaceChange.RemoveProperty =>
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               JdbcUtils.withConnection(options) { conn =>
+                val fullNamespaceName = toSQLId(Seq(catalogName, db))
                 JdbcUtils.classifyException(
                   errorClass = "FAILED_JDBC.REMOVE_NAMESPACE_COMMENT",
                   messageParameters = Map(
                     "url" -> options.getRedactUrl(),
-                    "namespace" -> toSQLId(db)),
+                    "namespace" -> fullNamespaceName),
                   dialect,
-                  description = s"Failed remove comment on name space: $db") {
+                  description = s"Failed remove comment on name space: $fullNamespaceName") {
                   JdbcUtils.removeSchemaComment(conn, options, db)
                 }
               }
@@ -365,13 +376,14 @@ class JDBCTableCatalog extends TableCatalog
       cascade: Boolean): Boolean = namespace match {
     case Array(db) if namespaceExists(namespace) =>
       JdbcUtils.withConnection(options) { conn =>
+        val fullNamespaceName = toSQLId(Seq(catalogName, db))
         JdbcUtils.classifyException(
           errorClass = "FAILED_JDBC.DROP_NAMESPACE",
           messageParameters = Map(
             "url" -> options.getRedactUrl(),
-            "namespace" -> toSQLId(db)),
+            "namespace" -> fullNamespaceName),
           dialect,
-          description = s"Failed drop name space: $db") {
+          description = s"Failed drop name space: $fullNamespaceName") {
           JdbcUtils.dropSchema(conn, options, db, cascade)
           true
         }
