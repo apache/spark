@@ -1376,7 +1376,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "expr" -> "\"_w0\"",
       "exprType" -> "\"MAP<STRING, STRING>\""))
 
-  test("SPARK-48871: AllowsNonDeterministicExpression allow lists non-deterministic expressions") {
+  test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
     val nonDeterministicExpressions = Seq(new Rand())
     val tolerantPlan =
       SupportsNonDeterministicExpressionTestOperator(

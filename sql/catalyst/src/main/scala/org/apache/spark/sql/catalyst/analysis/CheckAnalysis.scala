@@ -143,6 +143,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
   private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
     plan match {
       case p: SupportsNonDeterministicExpression =>
