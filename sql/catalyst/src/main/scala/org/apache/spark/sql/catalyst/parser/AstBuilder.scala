@@ -203,6 +203,9 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val conditionValue = Option(ctx.stringLit()).map(_.getText).getOrElse("'45000'").
       replace("'", "")
 
+    val sqlStateRegex = "^[A-Za-z0-9]{5}$".r
+    assert(sqlStateRegex.findFirstIn(conditionValue).isDefined)
+
     ErrorCondition(conditionName, conditionValue)
   }
 
