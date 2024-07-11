@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
@@ -81,4 +81,21 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           sparkStatement.origin,
           isInternal = false)
     }
+
+  def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
+    executionPlan.flatMap {
+      case statement: SingleStatementExec if !statement.isExecuted =>
+        try {
+          statement.isExecuted = true
+          val result = Some(Dataset.ofRows(session, statement.parsedPlan).collect())
+          if (statement.collectResult) result else None
+        } catch {
+          case e: Exception =>
+            // TODO: check handlers for error conditions
+            statement.raisedError = true
+          None
+        }
+      case _ => None
+    }
+  }
 }
