@@ -60,6 +60,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private val conf = new SparkConf()
     .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s")
+    .set(KUBERNETES_ALLOCATION_BATCH_SIZE.key, "5")
 
   private val defaultProfile: ResourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)

@@ -374,10 +374,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def illegalUrlError(url: UTF8String): Throwable = {
+  def illegalUrlError(url: UTF8String, e: IllegalArgumentException): Throwable = {
     new SparkIllegalArgumentException(
       errorClass = "CANNOT_DECODE_URL",
-      messageParameters = Map("url" -> url.toString)
+      messageParameters = Map("url" -> url.toString),
+      cause = e
     )
   }
 
@@ -994,12 +995,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkSQLFeatureNotSupportedException(
       errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
       messageParameters = Map("tableName" -> tableName))
-  }
-
-  def dataTypeUnsupportedYetError(dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2088",
-      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
   def unsupportedOperationForDataTypeError(

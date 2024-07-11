@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, FunctionSignature, Join, LogicalPlan, SerdeInfo, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
@@ -51,11 +51,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[sql] object QueryCompilationErrors extends QueryErrorsBase with CompilationErrors {
 
-  def unexpectedRequiredParameterInFunctionSignature(
-      functionName: String, functionSignature: FunctionSignature) : Throwable = {
-    val errorMessage = s"Function $functionName has an unexpected required argument for" +
-      s" the provided function signature $functionSignature. All required arguments should" +
-      " come before optional arguments."
+  def unexpectedRequiredParameter(
+      routineName: String, parameters: Seq[InputParameter]): Throwable = {
+    val errorMessage = s"Routine ${toSQLId(routineName)} has an unexpected required argument for" +
+      s" the provided routine signature ${parameters.mkString("[", ", ", "]")}." +
+      s" All required arguments should come before optional arguments."
     SparkException.internalError(errorMessage)
   }
 
@@ -67,42 +67,42 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def positionalAndNamedArgumentDoubleReference(
-      functionName: String, parameterName: String) : Throwable = {
+      routineName: String, parameterName: String): Throwable = {
     val errorClass =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
     new AnalysisException(
       errorClass = errorClass,
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName))
     )
   }
 
   def doubleNamedArgumentReference(
-      functionName: String, parameterName: String): Throwable = {
+      routineName: String, parameterName: String): Throwable = {
     val errorClass =
       "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE"
     new AnalysisException(
       errorClass = errorClass,
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName))
     )
   }
 
   def requiredParameterNotFound(
-      functionName: String, parameterName: String, index: Int) : Throwable = {
+      routineName: String, parameterName: String, index: Int) : Throwable = {
     new AnalysisException(
       errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(parameterName),
         "index" -> index.toString)
     )
   }
 
   def unrecognizedParameterName(
-      functionName: String, argumentName: String, candidates: Seq[String]): Throwable = {
+      routineName: String, argumentName: String, candidates: Seq[String]): Throwable = {
     import org.apache.spark.sql.catalyst.util.StringUtils.orderSuggestedIdentifiersBySimilarity
 
     val inputs = candidates.map(candidate => Seq(candidate))
@@ -111,19 +111,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNRECOGNIZED_PARAMETER_NAME",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "argumentName" -> toSQLId(argumentName),
         "proposal" -> recommendations.mkString(" "))
     )
   }
 
   def unexpectedPositionalArgument(
-      functionName: String,
+      routineName: String,
       precedingNamedArgument: String): Throwable = {
     new AnalysisException(
       errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
       messageParameters = Map(
-        "functionName" -> toSQLId(functionName),
+        "routineName" -> toSQLId(routineName),
         "parameterName" -> toSQLId(precedingNamedArgument))
     )
   }
@@ -1072,10 +1072,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("database" -> database))
   }
 
-  def cannotDropDefaultDatabaseError(database: String): Throwable = {
+  def cannotDropDefaultDatabaseError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-      messageParameters = Map("database" -> toSQLId(database)))
+      messageParameters = Map("database" -> toSQLId(nameParts)))
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
@@ -1921,6 +1921,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("col" -> col, "schema" -> schema.catalogString))
   }
 
+  def invalidVariantMissingFieldError(field: String): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD",
+      messageParameters = Map("field" -> field))
+  }
+
+  def invalidVariantNullableOrNotBinaryFieldError(field: String): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
+      messageParameters = Map("field" -> field))
+  }
+
+  def invalidVariantWrongNumFieldsError(): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS",
+      messageParameters = Map.empty)
+  }
+
   def parquetTypeUnsupportedYetError(parquetType: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1172",
@@ -2656,16 +2671,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def unsetNonExistentPropertiesError(
-      properties: Seq[String], table: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      messageParameters = Map(
-        "properties" -> properties.map(toSQLId).mkString(", "),
-        "table" -> toSQLId(table.nameParts))
-    )
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(

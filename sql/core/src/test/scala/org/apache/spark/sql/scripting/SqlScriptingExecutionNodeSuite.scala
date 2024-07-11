@@ -46,7 +46,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
 
   // Tests
   test("test body - single statement") {
-    val iter = TestNestedStatementIterator(Seq(TestLeafStatement("one")))
+    val iter = TestNestedStatementIterator(Seq(TestLeafStatement("one"))).getTreeIterator
     val statements = iter.map {
       case TestLeafStatement(v) => v
       case _ => fail("Unexpected statement type")
@@ -61,6 +61,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         TestLeafStatement("one"),
         TestLeafStatement("two"),
         TestLeafStatement("three")))
+      .getTreeIterator
     val statements = iter.map {
       case TestLeafStatement(v) => v
       case _ => fail("Unexpected statement type")
@@ -75,6 +76,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
         TestNestedStatementIterator(Seq(TestLeafStatement("one"), TestLeafStatement("two"))),
         TestLeafStatement("three"),
         TestNestedStatementIterator(Seq(TestLeafStatement("four"), TestLeafStatement("five")))))
+      .getTreeIterator
     val statements = iter.map {
       case TestLeafStatement(v) => v
       case _ => fail("Unexpected statement type")

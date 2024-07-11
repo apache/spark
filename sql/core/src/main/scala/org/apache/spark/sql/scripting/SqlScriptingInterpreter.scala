@@ -37,7 +37,7 @@ case class SqlScriptingInterpreter() {
    *   Iterator through collection of statements to be executed.
    */
   def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec]
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -79,7 +79,5 @@ case class SqlScriptingInterpreter() {
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           isInternal = false)
-      case _ =>
-        throw new UnsupportedOperationException(s"Unsupported statement type: $node")
     }
 }

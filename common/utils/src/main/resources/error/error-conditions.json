@@ -236,6 +236,11 @@
           "Error reading delta file <fileToRead> of <clazz>: <fileToRead> does not exist."
         ]
       },
+      "CANNOT_READ_MISSING_SNAPSHOT_FILE" : {
+        "message" : [
+          "Error reading snapshot file <fileToRead> of <clazz>: <fileToRead> does not exist."
+        ]
+      },
       "CANNOT_READ_SNAPSHOT_FILE_KEY_SIZE" : {
         "message" : [
           "Error reading snapshot file <fileToRead> of <clazz>: key size cannot be <keySize>."
@@ -249,6 +254,11 @@
       "CANNOT_READ_STREAMING_STATE_FILE" : {
         "message" : [
           "Error reading streaming state file of <fileToRead> does not exist. If the stream job is restarted with a new or updated state operation, please create a new checkpoint location or clear the existing checkpoint location."
+        ]
+      },
+      "SNAPSHOT_PARTITION_ID_NOT_FOUND" : {
+        "message" : [
+          "Partition id <snapshotPartitionId> not found for state of operator <operatorId> at <checkpointLocation>."
         ]
       },
       "UNCATEGORIZED" : {
@@ -1071,7 +1081,7 @@
   },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
-      "Call to routine <functionName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
+      "Call to routine <routineName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
     ],
     "subClass" : {
       "BOTH_POSITIONAL_AND_NAMED" : {
@@ -2927,6 +2937,29 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_FROM_PARQUET" : {
+    "message" : [
+      "Invalid variant."
+    ],
+    "subClass" : {
+      "MISSING_FIELD" : {
+        "message" : [
+          "Missing <field> field."
+        ]
+      },
+      "NULLABLE_OR_NOT_BINARY_FIELD" : {
+        "message" : [
+          "The <field> must be a non-nullable binary."
+        ]
+      },
+      "WRONG_NUM_FIELDS" : {
+        "message" : [
+          "Variant column must contain exactly two fields."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_GET_PATH" : {
     "message" : [
       "The path `<path>` is not a valid variant extraction path in `<functionName>`.",
@@ -3568,7 +3601,7 @@
   },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
-      "Cannot invoke function <functionName> because the parameter named <parameterName> is required, but the function call did not supply a value. Please update the function call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
+      "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -3746,6 +3779,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
@@ -3798,6 +3837,13 @@
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY" : {
+    "message" : [
+      "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.SupportsFineGrainedReplay.",
+      "Therefore, it does not support option snapshotStartBatchId or readChangeFeed in state data source."
+    ],
+    "sqlState" : "42K06"
   },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
@@ -4096,7 +4142,7 @@
   },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
-      "Cannot invoke function <functionName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
+      "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
     ],
     "sqlState" : "4274K"
   },
@@ -4138,7 +4184,7 @@
   },
   "UNRECOGNIZED_PARAMETER_NAME" : {
     "message" : [
-      "Cannot invoke function <functionName> because the function call included a named argument reference for the argument named <argumentName>, but this function does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
+      "Cannot invoke routine <routineName> because the routine call included a named argument reference for the argument named <argumentName>, but this routine does not include any signature containing an argument with this name. Did you mean one of the following? [<proposal>]."
     ],
     "sqlState" : "4274K"
   },
@@ -4234,12 +4280,6 @@
       "Cannot resolve variable <variableName> on search path <searchPath>."
     ],
     "sqlState" : "42883"
-  },
-  "UNSET_NONEXISTENT_PROPERTIES" : {
-    "message" : [
-      "Attempted to unset non-existent properties [<properties>] in table <table>."
-    ],
-    "sqlState" : "42K0J"
   },
   "UNSUPPORTED_ADD_FILE" : {
     "message" : [

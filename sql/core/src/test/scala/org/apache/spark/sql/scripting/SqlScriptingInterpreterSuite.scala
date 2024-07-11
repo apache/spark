@@ -35,7 +35,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val executionPlan = interpreter.buildExecutionPlan(compoundBody)
     val result = executionPlan.flatMap {
       case statement: SingleStatementExec =>
-        if (statement.consumed) {
+        if (statement.isExecuted) {
           None
         } else {
           Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))

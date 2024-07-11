@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
@@ -1039,7 +1039,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
     }
 
@@ -1156,7 +1156,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val exc = intercept[NoSuchDatabaseException] {
+    val exc = intercept[NoSuchNamespaceException] {
       catalog.alterNamespace(testNs, NamespaceChange.setProperty("property", "value"))
     }
 

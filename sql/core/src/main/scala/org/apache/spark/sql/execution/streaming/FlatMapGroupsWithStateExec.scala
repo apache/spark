@@ -189,9 +189,12 @@ trait FlatMapGroupsWithStateExecBase
     })
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): Array[String] = {
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      groupingAttributes.toStructType, stateManager.stateSchema, session.sqlContext.sessionState)
+      groupingAttributes.toStructType, stateManager.stateSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -215,14 +218,14 @@ trait FlatMapGroupsWithStateExecBase
     if (hasInitialState) {
       // If the user provided initial state we need to have the initial state and the
       // data in the same partition so that we can still have just one commit at the end.
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val storeConf = new StateStoreConf(session.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        new SerializableConfiguration(session.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
@@ -246,8 +249,8 @@ trait FlatMapGroupsWithStateExecBase
         groupingAttributes.toStructType,
         stateManager.stateSchema,
         NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
-        session.sqlContext.sessionState,
-        Some(session.sqlContext.streams.stateStoreCoordinator)
+        session.sessionState,
+        Some(session.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processor = createInputProcessor(store)
         processDataWithPartition(singleIterator, store, processor)

@@ -174,7 +174,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    assert(tree.label.equals("lbl"))
+    assert(tree.label.contains("lbl"))
   }
 
   test("compound: beginLabel + endLabel") {
@@ -190,7 +190,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val tree = parseScript(sqlScriptText)
     assert(tree.collection.length == 5)
     assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
-    assert(tree.label.equals("lbl"))
+    assert(tree.label.contains("lbl"))
   }
 
   test("compound: beginLabel + endLabel with different values") {
@@ -225,6 +225,38 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     assert(e.getErrorClass === "INTERNAL_ERROR")
     assert(e.getMessage.contains("End label can't exist without begin label."))
+  }
+
+  test("compound: beginLabel + endLabel with different casing") {
+    val sqlScriptText =
+      """
+        |LBL: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: no labels provided") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.nonEmpty)
   }
 
   test("declare condition: default sqlstate") {

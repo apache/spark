@@ -1394,7 +1394,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         sql("USE not_existing_db")
       },
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`not_existing_db`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`not_existing_db`"))
 
     sql(s"USE $currentDatabase")
     assert(currentDatabase == sql("select current_database()").first().getString(0))
