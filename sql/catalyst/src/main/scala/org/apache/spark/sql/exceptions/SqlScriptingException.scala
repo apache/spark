@@ -24,8 +24,9 @@ class SqlScriptingException protected (
     val message: String,
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
-    val cause: Option[Throwable] = None)
-  extends Exception(message, cause.orNull) with SparkThrowable with Serializable with WithOrigin {
+    val cause: Option[Throwable] = None,
+    val origin: Option[Origin] = None)
+  extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
   def this(
       errorClass: String,
@@ -36,6 +37,4 @@ class SqlScriptingException protected (
       messageParameters = messageParameters)
 
   override def getErrorClass: String = errorClass.orNull
-
-  override def origin: Origin = CurrentOrigin.get
 }
