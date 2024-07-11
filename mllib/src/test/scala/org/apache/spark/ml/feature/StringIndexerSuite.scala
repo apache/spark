@@ -149,6 +149,13 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       (4, 0.0),
       (5, 1.0)
     ).toDF("id", "labelIndex")
+
+    testTransformerByGlobalCheckFunc[(Int, String)](df, indexerModel, "id", "labelIndex") { rows =>
+      val attr = Attribute.fromStructField(rows.head.schema("labelIndex"))
+        .asInstanceOf[NominalAttribute]
+      assert(attr.values.get === Array("a", "c", "b"))
+      assert(rows === expected.collect().toSeq)
+    }
   }
 
   test("StringIndexerUnseen") {

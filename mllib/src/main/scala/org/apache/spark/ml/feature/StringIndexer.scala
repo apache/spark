@@ -122,27 +122,9 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
-    def extractInputDataType(inputColName: String): Option[DataType] = {
-      val inputSplits = inputColName.split("\\.")
-      var dtype: Option[DataType] = Some(schema)
-      var i = 0
-      while (i < inputSplits.length && dtype.isDefined) {
-        val s = inputSplits(i)
-        dtype = if (dtype.get.isInstanceOf[StructType]) {
-          val struct = dtype.get.asInstanceOf[StructType]
-          if (struct.fieldNames.contains(s)) {
-            Some(struct(s).dataType)
-          } else None
-        } else None
-        i += 1
-      }
-
-      dtype
-    }
-
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
-        extractInputDataType(inputColName) match {
+        extractInputDataType(schema, inputColName) match {
           case Some(dtype) => Some(
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
@@ -151,6 +133,24 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
         }
     }
     StructType(schema.fields ++ outputFields)
+  }
+
+  protected def extractInputDataType(schema: StructType, inputColName: String): Option[DataType] = {
+    val inputSplits = inputColName.split("\\.")
+    var dtype: Option[DataType] = Some(schema)
+    var i = 0
+    while (i < inputSplits.length && dtype.isDefined) {
+      val s = inputSplits(i)
+      dtype = if (dtype.get.isInstanceOf[StructType]) {
+        val struct = dtype.get.asInstanceOf[StructType]
+        if (struct.fieldNames.contains(s)) {
+          Some(struct(s).dataType)
+        } else None
+      } else None
+      i += 1
+    }
+
+    dtype
   }
 }
 
@@ -451,7 +451,7 @@ class StringIndexerModel (
       val labelToIndex = labelsToIndexArray(i)
       val labels = labelsArray(i)
 
-      if (!dataset.schema.fieldNames.contains(inputColName)) {
+      if (extractInputDataType(dataset.schema, inputColName).isEmpty) {
         logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
           log"during transformation. Skip StringIndexerModel for this column.")
         outputColNames(i) = null
