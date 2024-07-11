@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
+import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -270,7 +270,8 @@ abstract class CSVSuite
       parameters = Map(
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
-        "parameter" -> toSQLId("charset"))
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
     )
   }
 
@@ -653,7 +654,8 @@ abstract class CSVSuite
       parameters = Map(
         "charset" -> "1-9588-osi",
         "functionName" -> toSQLId("CSVOptions"),
-        "parameter" -> toSQLId("charset"))
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
     )
   }
 
