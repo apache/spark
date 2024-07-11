@@ -242,7 +242,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
         |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
         |FROM src LIMIT 1
-      """.stripMargin)
+    """.stripMargin)
   }
 
   test("CREATE TABLE AS runs once") {
@@ -284,7 +284,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       """
         | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
         | FROM src LIMIT 1
-      """.stripMargin)
+    """.stripMargin)
   }
 
   createQueryTest("Date comparison test 1",
@@ -373,12 +373,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       val analyzedPlan = sql(
         """
-          |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
-          |SELECT 'a', 'c' from ptest
-        """.stripMargin).queryExecution.analyzed
+        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+        |SELECT 'a', 'c' from ptest
+      """.stripMargin).queryExecution.analyzed
 
       assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
-        var hasCast = false
+      var hasCast = false
         analyzedPlan.collect {
           case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
         }
@@ -404,22 +404,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   createQueryTest("transform with custom field delimiter",
     s"""
-      |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter
-      |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter FROM src;
+      |SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
     """.stripMargin.replaceAll("\n", " "),
     skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter2",
     s"""
-      |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter
-      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter FROM src;
+      |SELECT TRANSFORM (key, value) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
     """.stripMargin.replaceAll("\n", " "),
     skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with custom field delimiter3",
     s"""
-      |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter
-      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY $delimiter FROM src;
+      |SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter}
+      |USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY ${delimiter} FROM src;
     """.stripMargin.replaceAll("\n", " "),
     skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
@@ -441,16 +441,16 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val expected = sql("SELECT key FROM small_src").collect().head
       val res = sql(
         """
-          |SELECT TRANSFORM (key) ROW FORMAT SERDE
-          |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-          |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
-          |"testing.hive.avro.serde","name": "src","type": "record","fields":
-          |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
-          |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
-          |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
-          |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
-          |FROM small_src
-        """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
+        |SELECT TRANSFORM (key) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
+        |"testing.hive.avro.serde","name": "src","type": "record","fields":
+        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
+        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
+        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+        |FROM small_src
+      """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
       assert(expected(0) === res(0))
     }
@@ -1233,7 +1233,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           |select '2011-01-11', '2011-01-11+15:18:26' from src tablesample (1 rows)
           |union all
           |select '2011-01-11', '2011-01-11+16:18:26' from src tablesample (1 rows) ) s
-        """.stripMargin)
+    """.stripMargin)
       sql("create table sc_part (key string) partitioned by (ts string) stored as rcfile")
       sql("insert overwrite table sc_part partition(ts) select * from sc")
       sql("drop table sc_part")
@@ -1278,13 +1278,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       sql(
         """
-          SELECT name, message
-          FROM rawLogs
-          JOIN (
-            SELECT name
-            FROM logFiles
-          ) files
-          ON rawLogs.filename = files.name
+        SELECT name, message
+        FROM rawLogs
+        JOIN (
+          SELECT name
+          FROM logFiles
+        ) files
+        ON rawLogs.filename = files.name
         """).createOrReplaceTempView("boom")
 
       // This should be successfully analyzed
