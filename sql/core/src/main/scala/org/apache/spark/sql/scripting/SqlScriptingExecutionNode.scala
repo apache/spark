@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
@@ -81,6 +82,16 @@ class SingleStatementExec(
   var isExecuted = false
 
   /**
+   * Whether an error was raised during the execution of this statement.
+   */
+  var raisedError = false
+
+  /**
+   * Whether the statement result should be collected in the final result.
+   */
+  var collectResult = false
+
+  /**
    * Get the SQL query text corresponding to this statement.
    * @return
    *   SQL query text.
@@ -91,6 +102,24 @@ class SingleStatementExec(
   }
 
   override def reset(): Unit = isExecuted = false
+
+  def execute(session: SparkSession): Option[Seq[Row]] = {
+    if (!isExecuted) {
+      if (collectResult) {
+        try {
+          return Some(Dataset.ofRows(session, parsedPlan).collect())
+        } catch {
+          case e: Exception =>
+            raisedError = true
+            // TODO: check handlers for error conditions
+            logError(s"Error executing statement: ${getText}", e)
+            return None
+        }
+      }
+      Dataset.ofRows(session, parsedPlan).collect()
+    }
+    None
+  }
 }
 
 /**
@@ -99,7 +128,9 @@ class SingleStatementExec(
  * @param collection
  *   Collection of child execution nodes.
  */
-abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
+abstract class CompoundNestedStatementIteratorExec(
+      collection: Seq[CompoundStatementExec],
+      session: SparkSession)
   extends NonLeafStatementExec {
 
   private var localIterator = collection.iterator
@@ -123,8 +154,9 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
-          case Some(statement: LeafStatementExec) =>
+          case Some(statement: SingleStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            statement.execute(session)
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
@@ -153,5 +185,5 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec])
-  extends CompoundNestedStatementIteratorExec(statements)
+class CompoundBodyExec(statements: Seq[CompoundStatementExec], session: SparkSession)
+  extends CompoundNestedStatementIteratorExec(statements, session)
