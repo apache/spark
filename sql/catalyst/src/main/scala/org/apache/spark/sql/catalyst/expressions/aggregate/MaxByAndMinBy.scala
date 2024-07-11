@@ -100,8 +100,8 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
        b
   """,
   note = """
-    The function is non-deterministic when the maximum value from `y` is associated
-    with multiple values from `x`.
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
   """,
   group = "agg_funcs",
   since = "3.0.0")
@@ -127,8 +127,8 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
        a
   """,
   note = """
-    The function is non-deterministic when the minimum value from `y` is associated
-    with multiple values from `x`.
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
   """,
   group = "agg_funcs",
   since = "3.0.0")
