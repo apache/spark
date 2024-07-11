@@ -50,7 +50,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
+    .putBoolean("isTimestampNTZ", value = false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
     .build()
 
@@ -59,11 +59,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     var t = spark.table(s"$catalogName.alt_table")
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
+    var expectedSchema = new StructType().add("ID", StringType, nullable = true, defaultMetadata())
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata())
+    expectedSchema = new StructType().add("ID", StringType, nullable = true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
     val msg = intercept[AnalysisException] {
@@ -75,9 +75,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata())
-      .add("ID1", StringType, true, defaultMetadata())
-      .add("ID2", StringType, true, defaultMetadata())
+    val expectedSchema = new StructType()
+      .add("RENAMED", StringType, nullable = true, defaultMetadata())
+      .add("ID1", StringType, nullable = true, defaultMetadata())
+      .add("ID2", StringType, nullable = true, defaultMetadata())
     assert(t.schema === expectedSchema)
   }
 
@@ -92,7 +93,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       errorClass = errorClass,
       parameters = Map(
         "url" -> "jdbc:.*",
-        "tableName" -> s"`$tbl`")
+        "tableName" -> s"`$catalogName`.`$tbl`")
     )
   }
 
@@ -101,18 +102,18 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
       var expectedSchema = new StructType()
-        .add("ID", StringType, true, defaultMetadata())
+        .add("ID", StringType, nullable = true, defaultMetadata())
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
-        .add("C1", StringType, true, defaultMetadata())
-        .add("C2", StringType, true, defaultMetadata())
+        .add("C1", StringType, nullable = true, defaultMetadata())
+        .add("C2", StringType, nullable = true, defaultMetadata())
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
       expectedSchema = expectedSchema
-        .add("C3", StringType, true, defaultMetadata())
+        .add("C3", StringType, nullable = true, defaultMetadata())
       assert(t.schema === expectedSchema)
       // Add already existing column
       checkError(
@@ -144,7 +145,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
       val expectedSchema = new StructType()
-        .add("C2", StringType, true, defaultMetadata())
+        .add("C2", StringType, nullable = true, defaultMetadata())
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
@@ -253,8 +254,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val jdbcTable = loaded.asInstanceOf[TableCatalog]
           .loadTable(Identifier.of(Array.empty[String], "new_table"))
           .asInstanceOf[SupportsIndex]
-        assert(jdbcTable.indexExists("i1") == false)
-        assert(jdbcTable.indexExists("i2") == false)
+        assert(!jdbcTable.indexExists("i1"))
+        assert(!jdbcTable.indexExists("i2"))
 
         val indexType = "DUMMY"
         val m = intercept[UnsupportedOperationException] {
@@ -292,7 +293,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         )
 
         sql(s"DROP index i1 ON $catalogName.new_table")
-        assert(jdbcTable.indexExists("i1") == false)
+        assert(!jdbcTable.indexExists("i1"))
         if (supportListIndexes) {
           val indexes = jdbcTable.listIndexes()
           assert(indexes.size == 1)
@@ -300,7 +301,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         }
 
         sql(s"DROP index i2 ON $catalogName.new_table")
-        assert(jdbcTable.indexExists("i2") == false)
+        assert(!jdbcTable.indexExists("i2"))
         if (supportListIndexes) {
           assert(jdbcTable.listIndexes().isEmpty)
         }
@@ -637,7 +638,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df6)
-        checkFilterPushed(df6, false)
+        checkFilterPushed(df6, pushed = false)
         checkLimitPushed(df6, None)
         checkColumnPruned(df6, "col1")
         assert(df6.collect().length <= 2)
@@ -646,14 +647,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // Push down order is sample -> filter -> limit
         // only limit is pushed down because in this test sample is after limit
         val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
-        checkSamplePushed(df7, false)
+        checkSamplePushed(df7, pushed = false)
         checkLimitPushed(df7, Some(2))
 
         // sample + filter
         // Push down order is sample -> filter -> limit
         // only filter is pushed down because in this test sample is after filter
         val df8 = spark.read.table(s"$catalogName.new_table").where($"col1" > 1).sample(0.5)
-        checkSamplePushed(df8, false)
+        checkSamplePushed(df8, pushed = false)
         checkFilterPushed(df8)
         assert(df8.collect().length < 10)
       }
@@ -784,8 +785,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   }
 
   protected def caseConvert(tableName: String): String = tableName
-
-  private def withOrWithout(isDistinct: Boolean): String = if (isDistinct) "with" else "without"
 
   Seq(true, false).foreach { isDistinct =>
     val distinct = if (isDistinct) "DISTINCT " else ""
