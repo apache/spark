@@ -20,16 +20,19 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.UUID
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException, TestClass}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types._
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -303,6 +306,22 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
     // Trying to create value state here should fail
     _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
     Iterator.empty
+  }
+}
+
+// class for verify state schema is correctly written for all state var types
+class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor {
+  @transient private var _listState: ListState[TestClass] = _
+  @transient private var _mapState: MapState[String, POJOTestClass] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _listState = getHandle.getListState[TestClass](
+      "listState", Encoders.product[TestClass])
+    _mapState = getHandle.getMapState[String, POJOTestClass](
+      "mapState", Encoders.STRING, Encoders.bean(classOf[POJOTestClass]))
   }
 }
 
@@ -858,6 +877,104 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         assert(latestSchema == schema1)
       }
     }
+  }
+
+  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val metadataPathPostfix = "state/0/default/_metadata"
+        val stateSchemaPath = new Path(checkpointDir.toString,
+          s"$metadataPathPostfix/schema")
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
+
+        val schema0 = ColumnFamilySchemaV1(
+          "countState",
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType().add("value", LongType, false)),
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          None
+        )
+        val schema1 = ColumnFamilySchemaV1(
+          "listState",
+          new StructType().add("key",
+            new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType()
+              .add("id", LongType, false)
+              .add("name", StringType)),
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          None
+        )
+        val schema2 = ColumnFamilySchemaV1(
+          "mapState",
+          new StructType()
+            .add("key", new StructType().add("value", StringType))
+            .add("userKey", new StructType().add("value", StringType)),
+          new StructType().add("value",
+            new StructType()
+              .add("id", IntegerType, false)
+              .add("name", StringType)),
+          PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
+          Option(new StructType().add("value", StringType))
+        )
+
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithCompositeTypes(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "1"), ("b", "1")),
+          Execute { q =>
+            val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
+            val colFamilySeq = TWSTestUtils.deserialize(fm.open(schemaFilePath))
+
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numListStateVars").toInt)
+            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+              q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
+
+            assert(colFamilySeq.length == 3)
+            assert(colFamilySeq.map(_.toString).toSet == Set(
+              schema0, schema1, schema2
+            ).map(_.toString))
+          },
+          StopStream
+        )
+      }
+    }
+  }
+}
+
+object TWSTestUtils {
+  import java.io.InputStream
+  import java.nio.charset.StandardCharsets.UTF_8
+  import scala.io.{Source => IOSource}
+  import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
+
+  def deserialize(in: InputStream): List[ColumnFamilySchema] = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+
+    if (!lines.hasNext) {
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
+    }
+
+    val version = lines.next().trim
+    validateVersion(version, StateSchemaV3File.VERSION)
+
+    lines.map(ColumnFamilySchemaV1.fromJson).toList
   }
 }
 

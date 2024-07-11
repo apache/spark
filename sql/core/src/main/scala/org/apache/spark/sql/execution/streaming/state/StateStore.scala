@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
@@ -292,14 +293,14 @@ object KeyStateEncoderSpec {
     // match on type
     m("keyStateEncoderType").asInstanceOf[String] match {
       case "NoPrefixKeyStateEncoderSpec" =>
-        NoPrefixKeyStateEncoderSpec(keySchema)
+        NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)
       case "RangeKeyScanStateEncoderSpec" =>
         val orderingOrdinals = m("orderingOrdinals").
           asInstanceOf[List[_]].map(_.asInstanceOf[BigInt].toInt)
         RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals)
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
-        PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+        PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, numColsPrefixKey)
     }
   }
 }
