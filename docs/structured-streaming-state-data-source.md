@@ -48,6 +48,7 @@ provides a user-friendly approach to read the state. See the section for stream-
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
+
 df = spark \
 .read \
 .format("statestore") \
@@ -159,7 +160,7 @@ The following configurations are optional:
   <td>readChangeFeed</td>
   <td>boolean</td>
   <td>false</td>
-  <td>If set to true, will read the change of state over microbatches. The output table schema will also change. Two columns 'batch_id'(long) and 'change_type'(string) will be appended to the front. Option 'changeStartBatchId' must be specified with this option. Option 'batchId', 'joinSide', 'snapshotStartBatchId', 'snapshotPartitionId' is conflict with this option. An example usage of this option can be found below.</td>
+  <td>If set to true, will read the change of state over microbatches. The output table schema will also differ. Details can be found in section <a href="#reading-state-changes-over-microbatches">"Reading state changes over microbatches"</a>. Option 'changeStartBatchId' must be specified with this option. Option 'batchId', 'joinSide', 'snapshotStartBatchId' and 'snapshotPartitionId' cannot be used together with this option.</td>
 </tr>
 <tr>
   <td>changeStartBatchId</td>
@@ -184,7 +185,7 @@ These instances logically compose buffers to store the input rows for left and r
 Since it is more obvious to users to reason about, the data source provides the option 'joinSide' to read the buffered input for specific side of the join.
 To enable the functionality to read the internal state store instance directly, we also allow specifying the option 'storeName', with restriction that 'storeName' and 'joinSide' cannot be specified together.
 
-### Reading state change over microbatches
+### Reading state changes over microbatches
 
 If we want to understand the change of state store over microbatches instead of the whole state store at a particular microbatch, 'readChangeFeed' is the option to use.
 For example, this is the code to read the change of state from batch 2 to the latest committed batch.
