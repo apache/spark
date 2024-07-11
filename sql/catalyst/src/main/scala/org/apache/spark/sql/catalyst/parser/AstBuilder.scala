@@ -132,8 +132,12 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def visitCompoundBodyImpl(ctx: CompoundBodyContext, label: String = ""): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
+    val handlers = ListBuffer[ErrorHandler]()
     ctx.compoundStatements.forEach(compoundStatement => {
-      buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
+      Option(compoundStatement.declareCondition()).map(visit).foreach(handlers += _)
+      Option(compoundStatement.declareCondition()).map(visit).foreach(buff += _)
+      Option(compoundStatement.statement()).map(visit).foreach(buff += _)
+      Option(compoundStatement.beginEndCompoundBlock()).map(visit).foreach(buff += _)
     })
     CompoundBody(buff.toSeq, label)
   }

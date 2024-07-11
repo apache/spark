@@ -55,7 +55,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: String) extends CompoundPlanStatement
+    label: String,
+    handlers: Seq[ErrorHandler]) extends CompoundPlanStatement
 
 /**
  * Logical operator for an error condition.
