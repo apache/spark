@@ -851,26 +851,17 @@ NULL	NULL	NULL	NULL
 -- !query
 select base64(c7), base64(c8), base64(v), ascii(s) from char_tbl4
 -- !query schema
-struct<>
+struct<base64(c7):string,base64(c8):string,base64(v):string,ascii(s):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "1",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`base64`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 17,
-    "fragment" : "base64(c7)"
-  } ]
-}
+NULL	NULL	NULL	NULL
+NULL	NULL	Uw==	NULL
+TiAgICAgIA==	TiAgICAgICA=	TiA=	78
+TmUgICAgIA==	TmUgICAgICA=	U3A=	78
+TmV0ICAgIA==	TmV0ICAgICA=	U3BhICA=	78
+TmV0RSAgIA==	TmV0RSAgICA=	U3Bhcg==	78
+TmV0RWEgIA==	TmV0RWEgICA=	U3Bhcmsg	78
+TmV0RWFzIA==	TmV0RWFzICA=	U3Bhcms=	78
+TmV0RWFzZQ==	TmV0RWFzZSA=	U3Bhcmst	78
 
 
 -- !query
