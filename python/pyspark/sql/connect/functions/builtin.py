@@ -2745,6 +2745,7 @@ def try_url_decode(str: "ColumnOrName") -> Column:
 
 try_url_decode.__doc__ = pysparkfuncs.try_url_decode.__doc__
 
+
 def url_encode(str: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("url_encode", str)
 
