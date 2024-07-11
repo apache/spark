@@ -33,7 +33,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, TableAlreadyExistsException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -165,8 +165,8 @@ class ClientE2ETestSuite
     }
   }
 
-  test("throw NoSuchDatabaseException") {
-    val ex = intercept[NoSuchDatabaseException] {
+  test("throw NoSuchNamespaceException") {
+    val ex = intercept[NoSuchNamespaceException] {
       spark.sql("use database123")
     }
     assert(ex.getErrorClass != null)
