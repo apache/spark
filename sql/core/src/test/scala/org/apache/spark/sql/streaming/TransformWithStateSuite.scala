@@ -844,16 +844,12 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   private def fetchColumnFamilySchemas(
       checkpointDir: String,
       operatorId: Int): List[ColumnFamilySchema] = {
-<<<<<<< HEAD
     val operatorStateMetadataLog = fetchOperatorStateMetadataLog(checkpointDir, operatorId)
     val stateSchemaFilePath = operatorStateMetadataLog.
       getLatest().get._2.
       asInstanceOf[OperatorStateMetadataV2].
       stateStoreInfo.head.stateSchemaFilePath
     fetchStateSchemaV3File(checkpointDir, operatorId).getWithPath(new Path(stateSchemaFilePath))
-=======
-    fetchStateSchemaV3File(checkpointDir, operatorId).getLatest().get._2
->>>>>>> 6768eea5a98 (Feedback)
   }
 
   private def fetchStateSchemaV3File(
