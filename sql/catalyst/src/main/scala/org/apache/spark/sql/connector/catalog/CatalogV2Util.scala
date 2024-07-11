@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
@@ -405,6 +405,7 @@ private[sql] object CatalogV2Util {
       Option(getTable(catalog, ident, timeTravelSpec))
     } catch {
       case _: NoSuchTableException => None
+      case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
 
@@ -429,6 +430,7 @@ private[sql] object CatalogV2Util {
       Option(catalog.asFunctionCatalog.loadFunction(ident))
     } catch {
       case _: NoSuchFunctionException => None
+      case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
   }
