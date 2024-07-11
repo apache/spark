@@ -208,7 +208,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parseScript(sqlScriptText)
     }
     assert(e.getErrorClass === "SQL_SCRIPTING_LABEL_ERROR.LABELS_MISMATCH")
-    assert(e.getMessage.contains("Begin label lbl_begin does not match end label lbl_end."))
+    assert(e.getMessage.contains("Begin label lbl_begin does not match the end label lbl_end."))
   }
 
   test("compound: endLabel") {
