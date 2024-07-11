@@ -695,8 +695,8 @@ jobs:
       run: ./dev/lint-scala
     - name: Scala structured logging check
       run: |
-        if [ -f ./dev/structured-logging-style.py ]; then
-            ./dev/structured-logging-style.py
+        if [ -f ./dev/structured_logging_style.py ]; then
+            ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
