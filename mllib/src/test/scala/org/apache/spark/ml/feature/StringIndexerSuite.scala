@@ -117,7 +117,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
   test("StringIndexer.transformSchema nested col") {
     val outputCols = Array("output", "output2", "output3", "output4", "output5")
     val idxToStr = new StringIndexer().setInputCols(
-      Array("input1.a.f1", "input.a.f2", "input2.b1", "input2.b2", "input3")
+      Array("input1.a.f1", "input1.a.f2", "input2.b1", "input2.b2", "input3")
     ).setOutputCols(outputCols)
 
     val inSchema = DataTypeParser.parseTableSchema(
