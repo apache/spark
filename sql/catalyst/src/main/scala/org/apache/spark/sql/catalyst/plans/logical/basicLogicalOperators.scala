@@ -2228,3 +2228,13 @@ object AsOfJoin {
     }
   }
 }
+
+/**
+ * Trait that logical plans can extend to check whether it can allow non-deterministic
+ * expressions and pass the CheckAnalysis rule.
+ */
+trait AllowsNonDeterministicExpression extends LogicalPlan {
+
+  /** Returns whether it can pass the non-deterministic expressions CheckAnalysis rule. */
+  def canPassNonDeterministicExpressionsCheck: Boolean
+}
