@@ -242,7 +242,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         |  2 = true, 2L = true, 2Y = true, true = 2, true = 2L, true = 2Y,
         |  2 = false, 2L = false, 2Y = false, false = 2, false = 2L, false = 2Y
         |FROM src LIMIT 1
-    """.stripMargin)
+      """.stripMargin)
   }
 
   test("CREATE TABLE AS runs once") {
@@ -284,7 +284,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       """
         | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
         | FROM src LIMIT 1
-    """.stripMargin)
+      """.stripMargin)
   }
 
   createQueryTest("Date comparison test 1",
@@ -373,9 +373,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       val analyzedPlan = sql(
         """
-        |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
-        |SELECT 'a', 'c' from ptest
-      """.stripMargin).queryExecution.analyzed
+          |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
+          |SELECT 'a', 'c' from ptest
+        """.stripMargin).queryExecution.analyzed
 
       assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
         var hasCast = false
@@ -441,16 +441,16 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       val expected = sql("SELECT key FROM small_src").collect().head
       val res = sql(
         """
-        |SELECT TRANSFORM (key) ROW FORMAT SERDE
-        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-        |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
-        |"testing.hive.avro.serde","name": "src","type": "record","fields":
-        |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
-        |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
-        |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
-        |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
-        |FROM small_src
-      """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
+          |SELECT TRANSFORM (key) ROW FORMAT SERDE
+          |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
+          |"testing.hive.avro.serde","name": "src","type": "record","fields":
+          |[{"name":"key","type":"int"}]}') USING 'cat' AS (tKey INT) ROW FORMAT SERDE
+          |'org.apache.hadoop.hive.serde2.avro.AvroSerDe' WITH SERDEPROPERTIES
+          |('avro.schema.literal'='{"namespace": "testing.hive.avro.serde","name":
+          |"src","type": "record","fields": [{"name":"key","type":"int"}]}')
+          |FROM small_src
+        """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
       assert(expected(0) === res(0))
     }
@@ -1195,7 +1195,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           sql(
             s"""INSERT INTO TABLE dynamic_part_table PARTITION(partcol1, partcol2)
                |SELECT $value, ${parts.mkString(", ")} FROM src WHERE key=150
-         """.stripMargin)
+             """.stripMargin)
 
           val partFolder = Seq("partcol1", "partcol2")
             .zip(parts)
@@ -1211,11 +1211,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           // Loads partition data to a temporary table to verify contents
           val path = s"${dir.getCanonicalPath}/dynamic_part_table/$partFolder/part-00000*"
 
-          sql("DROP TABLE IF EXISTS dp_verify")
-          sql("CREATE TABLE dp_verify(intcol INT) USING HIVE")
-          sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
+          withTable("dp_verify") {
+            sql("CREATE TABLE dp_verify(intcol INT) USING HIVE")
+            sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE dp_verify")
 
-          assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+            assert(sql("SELECT * FROM dp_verify").collect() === Array(Row(value)))
+          }
         }
       }
     }
@@ -1277,13 +1278,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       sql(
         """
-        SELECT name, message
-        FROM rawLogs
-        JOIN (
-          SELECT name
-          FROM logFiles
-        ) files
-        ON rawLogs.filename = files.name
+          SELECT name, message
+          FROM rawLogs
+          JOIN (
+            SELECT name
+            FROM logFiles
+          ) files
+          ON rawLogs.filename = files.name
         """).createOrReplaceTempView("boom")
 
       // This should be successfully analyzed
@@ -1401,7 +1402,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql("CREATE DATABASE hive_test_db")
       sql("USE hive_test_db")
       assert("hive_test_db" == sql("select current_database()").first().getString(0))
-
       assert("hive_test_db" == sql("select current_schema()").first().getString(0))
 
       checkError(
@@ -1409,7 +1409,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           sql("USE not_existing_db")
         },
         errorClass = "SCHEMA_NOT_FOUND",
-        parameters = Map("schemaName" -> "`not_existing_db`"))
+        parameters = Map("schemaName" -> "`spark_catalog`.`not_existing_db`")
+      )
     }
     assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
