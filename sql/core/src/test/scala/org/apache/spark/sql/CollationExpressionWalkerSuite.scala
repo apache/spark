@@ -604,7 +604,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "unix_timestamp",
       "localtimestamp",
       "now",
-      // need to skip as plans differ in STRING <-> STRING COLLATE UTF8_BINARY_LCASE
+      // need to skip as plans differ in STRING <-> STRING COLLATE UTF8_LCASE
       "current_timezone",
       "schema_of_variant",
       // need to skip as result is expected to differ

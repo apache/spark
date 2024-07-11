@@ -42,36 +42,6 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  /**
-   * Function to check if new state store schema is compatible with the existing schema.
-   * @param oldSchema - old state schema
-   * @param newSchema - new state schema
-   * @param ignoreValueSchema - whether to ignore value schema or not
-   */
-  private def check(
-      oldSchema: (StructType, StructType),
-      newSchema: (StructType, StructType),
-      ignoreValueSchema: Boolean) : Unit = {
-    val (storedKeySchema, storedValueSchema) = oldSchema
-    val (keySchema, valueSchema) = newSchema
-
-    if (storedKeySchema.equals(keySchema) &&
-      (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
-      // schema is exactly same
-    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
-        keySchema.toString)
-    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
-      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
-        valueSchema.toString)
-    } else {
-      logInfo("Detected schema change which is compatible. Allowing to put rows.")
-    }
-  }
-
-  private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
-    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
-
   def readSchemaFile(): (StructType, StructType) = {
     val inStream = fm.open(schemaFileLocation)
     try {
@@ -131,7 +101,8 @@ class StateSchemaCompatibilityChecker(
       createSchemaFile(newKeySchema, newValueSchema)
     } else {
       // validate if the new schema is compatible with the existing schema
-      check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
+      StateSchemaCompatibilityChecker.
+        check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
     }
   }
 
@@ -139,8 +110,38 @@ class StateSchemaCompatibilityChecker(
     new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }
 
-object StateSchemaCompatibilityChecker {
+object StateSchemaCompatibilityChecker extends Logging {
   val VERSION = 2
+
+  /**
+   * Function to check if new state store schema is compatible with the existing schema.
+   * @param oldSchema - old state schema
+   * @param newSchema - new state schema
+   * @param ignoreValueSchema - whether to ignore value schema or not
+   */
+  def check(
+      oldSchema: (StructType, StructType),
+      newSchema: (StructType, StructType),
+      ignoreValueSchema: Boolean) : Unit = {
+    val (storedKeySchema, storedValueSchema) = oldSchema
+    val (keySchema, valueSchema) = newSchema
+
+    if (storedKeySchema.equals(keySchema) &&
+      (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
+      // schema is exactly same
+    } else if (!schemasCompatible(storedKeySchema, keySchema)) {
+      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+        keySchema.toString)
+    } else if (!ignoreValueSchema && !schemasCompatible(storedValueSchema, valueSchema)) {
+      throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
+        valueSchema.toString)
+    } else {
+      logInfo("Detected schema change which is compatible. Allowing to put rows.")
+    }
+  }
+
+  private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
+    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
@@ -172,7 +173,7 @@ object StateSchemaCompatibilityChecker {
       newValueSchema: StructType,
       sessionState: SessionState,
       extraOptions: Map[String, String] = Map.empty,
-      storeName: String = StateStoreId.DEFAULT_STORE_NAME): Unit = {
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): Array[String] = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -201,5 +202,6 @@ object StateSchemaCompatibilityChecker {
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }
+    Array(checker.schemaFileLocation.toString)
   }
 }

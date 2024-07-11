@@ -324,7 +324,7 @@ class RocksDB(
           }
         }
       } finally {
-        if (changelogReader != null) changelogReader.close()
+        if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
     loadedVersion = endVersion
