@@ -758,10 +758,19 @@ class ScalarPandasUDFTestsMixin:
         iter_f = pandas_udf(
             lambda it: map(lambda u: str(u), it), StringType(), PandasUDFType.SCALAR_ITER
         )
-        expectedErrorStr = 'UDFs do not support "VARIANT" type input data'
+
         for f in [scalar_f, iter_f]:
-            with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            with self.assertRaises(AnalysisException) as ae:
                 df.select(f(col("v"))).collect()
+
+            self.check_error(
+                exception=ae.exception,
+                error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+                message_parameters={
+                    "sqlExpr": '"<lambda>(v)"',
+                    "dataType": "VARIANT",
+                },
+            )
 
     def test_udf_with_variant_output(self):
         # Corresponds to a JSON string of {"a": "b"}.
@@ -770,10 +779,19 @@ class ScalarPandasUDFTestsMixin:
         iter_f = pandas_udf(
             lambda it: map(lambda x: returned_variant, it), VariantType(), PandasUDFType.SCALAR_ITER
         )
-        expectedErrorStr = 'UDFs do not support "VARIANT" type output data'
+
         for f in [scalar_f, iter_f]:
-            with self.assertRaisesRegex(AnalysisException, expectedErrorStr):
+            with self.assertRaises(AnalysisException) as ae:
                 self.spark.range(0, 10).select(f()).collect()
+
+            self.check_error(
+                exception=ae.exception,
+                error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+                message_parameters={
+                    "sqlExpr": '"<lambda>()"',
+                    "dataType": "VARIANT",
+                },
+            )
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)
