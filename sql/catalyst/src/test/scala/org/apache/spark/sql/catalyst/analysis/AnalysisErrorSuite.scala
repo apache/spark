@@ -18,12 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -91,18 +90,11 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-case class NonDeterministicExpression() extends LeafExpression with Nondeterministic {
-  override protected def initializeInternal(partitionIndex: Int): Unit = {}
-  override protected def evalInternal(input: InternalRow): Any = 0
-  override def nullable: Boolean = true
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev
-  override def dataType: DataType = LongType
-}
-
-case class AllowsNonDeterministicExpressionTestOperator(actions: Seq[Expression],
-                                                        tolerateNonDeterministicExpression: Boolean)
-    extends AllowsNonDeterministicExpression {
-  override def canPassNonDeterministicExpressionsCheck: Boolean = tolerateNonDeterministicExpression
+case class SupportsNonDeterministicExpressionTestOperator(
+    actions: Seq[Expression],
+    tolerateNonDeterministicExpression: Boolean)
+    extends SupportsNonDeterministicExpression {
+  override def allowNonDeterministicExpression: Boolean = tolerateNonDeterministicExpression
   override def output: Seq[Attribute] = Seq()
   override def children: Seq[LogicalPlan] = Seq()
   override protected def withNewChildrenInternal(
@@ -1385,14 +1377,14 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "exprType" -> "\"MAP<STRING, STRING>\""))
 
   test("SPARK-48871: AllowsNonDeterministicExpression allow lists non-deterministic expressions") {
-    val nonDeterministicExpressions = Seq(NonDeterministicExpression())
+    val nonDeterministicExpressions = Seq(new Rand())
     val tolerantPlan =
-      AllowsNonDeterministicExpressionTestOperator(
+      SupportsNonDeterministicExpressionTestOperator(
         nonDeterministicExpressions, tolerateNonDeterministicExpression = true)
     assertAnalysisSuccess(tolerantPlan)
 
     val intolerantPlan =
-      AllowsNonDeterministicExpressionTestOperator(
+      SupportsNonDeterministicExpressionTestOperator(
         nonDeterministicExpressions, tolerateNonDeterministicExpression = false)
     assertAnalysisError(
       intolerantPlan,
