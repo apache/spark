@@ -23,7 +23,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
@@ -161,11 +160,6 @@ class StatefulProcessorHandleImpl(
   }
 
   private def verifyTimerOperations(operationType: String): Unit = {
-    if (timeMode == NoTime) {
-      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
-        timeMode.toString)
-    }
-
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
       throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
         currState.toString)

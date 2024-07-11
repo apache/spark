@@ -22,6 +22,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 case class InputRow(key: String, action: String, value: String)
 
@@ -139,11 +140,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update()) (
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryAppendingNull", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
@@ -159,11 +164,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryPuttingNullInList", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
@@ -179,11 +188,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryPutNullList", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
@@ -199,11 +212,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryAppendingNullList", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
@@ -219,11 +236,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryPutEmptyList", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE"))
         })
@@ -239,11 +260,15 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, InputRow("k1", "tryAppendingEmptyList", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         ExpectFailure[SparkIllegalArgumentException](e => {
           assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE"))
         })
@@ -259,16 +284,22 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
-          TimeMode.None(),
+          TimeMode.EventTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update()) (
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         // no interaction test
         AddData(inputData, InputRow("k1", "emit", "v1")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "v1")),
         // check simple append
         AddData(inputData, InputRow("k1", "append", "v2")),
         AddData(inputData, InputRow("k1", "emitAllInState", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "v2")),
         // multiple appends are correctly stored and emitted
         AddData(inputData, InputRow("k2", "append", "v1")),
@@ -276,28 +307,40 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, InputRow("k2", "append", "v2")),
         AddData(inputData, InputRow("k1", "emit", "v5")),
         AddData(inputData, InputRow("k2", "emit", "v3")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "v5"), ("k2", "v3")),
         AddData(inputData, InputRow("k1", "emitAllInState", "")),
         AddData(inputData, InputRow("k2", "emitAllInState", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "v1"), ("k2", "v2"), ("k1", "v4")),
         // check appendAll with append
         AddData(inputData, InputRow("k3", "appendAll", "v1,v2,v3")),
         AddData(inputData, InputRow("k3", "emit", "v4")),
         AddData(inputData, InputRow("k3", "append", "v5")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k3", "v4")),
         AddData(inputData, InputRow("k3", "emitAllInState", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k3", "v1"), ("k3", "v2"), ("k3", "v3"), ("k3", "v5")),
         // check removal cleans up all data in state
         AddData(inputData, InputRow("k4", "append", "v2")),
         AddData(inputData, InputRow("k4", "appendList", "v3,v4")),
         AddData(inputData, InputRow("k4", "remove", "")),
         AddData(inputData, InputRow("k4", "emitAllInState", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
         // check put cleans up previous state and adds new state
         AddData(inputData, InputRow("k5", "appendAll", "v1,v2,v3")),
         AddData(inputData, InputRow("k5", "append", "v4")),
         AddData(inputData, InputRow("k5", "put", "v5,v6")),
         AddData(inputData, InputRow("k5", "emitAllInState", "")),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
@@ -314,15 +357,21 @@ class TransformWithListStateSuite extends StreamTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(new ToggleSaveAndEmitProcessor(),
-          TimeMode.None(),
+          TimeMode.ProcessingTime(),
           OutputMode.Update())
 
+      val clock = new StreamManualClock
       testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "k1"),
         AddData(inputData, "k2"),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
         AddData(inputData, "k1"),
         AddData(inputData, "k2"),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer("k1", "k1", "k2", "k2")
       )
     }
