@@ -24,10 +24,12 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.util.ArrayImplicits._
 
 class CannotReplaceMissingTableException(
+    catalogName: String,
     tableIdentifier: Identifier,
     cause: Option[Throwable] = None)
   extends AnalysisException(
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map("relationName"
-        -> quoteNameParts((tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
+        -> quoteNameParts((catalogName +:
+          tableIdentifier.namespace :+ tableIdentifier.name).toImmutableArraySeq)),
       cause = cause)

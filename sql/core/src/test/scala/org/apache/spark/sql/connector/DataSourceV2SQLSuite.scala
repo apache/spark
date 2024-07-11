@@ -640,7 +640,7 @@ class DataSourceV2SQLSuiteV1Filter
             s"AS SELECT id, data FROM source")
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`replaced`"))
+        parameters = Map("relationName" -> s"`$catalog`.`replaced`"))
     }
   }
 
@@ -655,7 +655,7 @@ class DataSourceV2SQLSuiteV1Filter
           s" AS SELECT id, data FROM source")
       },
       errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      parameters = Map("relationName" -> "`replaced`"))
+      parameters = Map("relationName" -> "`testcat_atomic`.`replaced`"))
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {

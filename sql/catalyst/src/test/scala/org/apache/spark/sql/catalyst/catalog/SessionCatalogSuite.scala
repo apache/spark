@@ -818,14 +818,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" -> "`spark_catalog`.`default`.`view1`")
       )
       checkError(
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" -> "`spark_catalog`.`default`.`view1`")
       )
 
       createTempView(catalog, "view1", tempTable, overrideIfExists = false)
@@ -839,7 +839,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
         errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        parameters = Map("relationName" -> "`spark_catalog`.`default`.`view1`")
       )
     }
   }

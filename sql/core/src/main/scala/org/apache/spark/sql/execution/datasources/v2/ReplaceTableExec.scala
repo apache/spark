@@ -45,7 +45,7 @@ case class ReplaceTableExec(
       invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(catalog.name(), ident)
     }
     catalog.createTable(ident, columns, partitioning.toArray, tableProperties.asJava)
     Seq.empty
@@ -79,10 +79,11 @@ case class AtomicReplaceTableExec(
           identifier, columns, partitioning.toArray, tableProperties.asJava)
       } catch {
         case e: NoSuchTableException =>
-          throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier, Some(e))
+          throw QueryCompilationErrors.cannotReplaceMissingTableError(
+            catalog.name(), identifier, Some(e))
       }
     } else {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(catalog.name(), identifier)
     }
     commitOrAbortStagedChanges(staged)
     Seq.empty

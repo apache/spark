@@ -1387,13 +1387,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def cannotReplaceMissingTableError(
+      catalogName: String,
       tableIdentifier: Identifier): Throwable = {
-    new CannotReplaceMissingTableException(tableIdentifier)
+    new CannotReplaceMissingTableException(catalogName, tableIdentifier)
   }
 
   def cannotReplaceMissingTableError(
-      tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
-    new CannotReplaceMissingTableException(tableIdentifier, cause)
+      catalogName: String,
+      tableIdentifier: Identifier,
+      cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(catalogName, tableIdentifier, cause)
   }
 
   def streamingSourcesDoNotSupportCommonExecutionModeError(

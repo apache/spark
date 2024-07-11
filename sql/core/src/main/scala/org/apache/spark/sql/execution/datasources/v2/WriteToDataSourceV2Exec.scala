@@ -160,7 +160,7 @@ case class ReplaceTableAsSelectExec(
       invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(catalog.name(), ident)
     }
     val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
@@ -209,10 +209,11 @@ case class AtomicReplaceTableAsSelectExec(
           ident, columns, partitioning.toArray, properties.asJava)
       } catch {
         case e: NoSuchTableException =>
-          throw QueryCompilationErrors.cannotReplaceMissingTableError(ident, Some(e))
+          throw QueryCompilationErrors.cannotReplaceMissingTableError(
+            catalog.name(), ident, Some(e))
       }
     } else {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(catalog.name(), ident)
     }
     writeToTable(catalog, staged, writeOptions, ident, query)
   }
