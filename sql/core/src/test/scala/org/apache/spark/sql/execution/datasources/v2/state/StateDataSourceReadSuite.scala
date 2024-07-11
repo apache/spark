@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, Offset
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StateStoreMetricsTest, StreamTest, TimeMode}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
@@ -266,6 +266,25 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         Map(
           "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
           "message" -> s"value should be less than or equal to $endBatchId"))
+    }
+  }
+
+  test("ERROR: trying to specify state variable name with " +
+    s"non-transformWithState operator") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "test")
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", Some("42616"),
+        Map("optionName" -> StateSourceOptions.STATE_VAR_NAME,
+          "message" -> ".*"),
+        matchPVals = true)
     }
   }
 }
@@ -1196,5 +1215,66 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       .filter(col("partition_id") === 2)
 
     checkAnswer(stateSnapshotDf, stateDf)
+  }
+}
+
+class StateDataTWSSuite extends StreamTest with StateStoreMetricsTest {
+  import testImplicits._
+
+  test("dedup") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        val inputData = MemoryStream[Int]
+        val deduplicated = inputData.toDS()
+          .dropDuplicates()
+
+        testStream(deduplicated, OutputMode.Append())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, 1),
+          CheckNewAnswer(1),
+          StopStream
+        )
+        val stateReadDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          // skip version and operator ID to test out functionalities
+          .load()
+
+        val resultDf = stateReadDf
+        println("reader df is here: ")
+        resultDf.show(false)
+      }
+    }
+  }
+
+  test("tws test") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        val stateReaderDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .load()
+        println("reader df is here: ")
+        stateReaderDf.show(false)
+      }
+    }
   }
 }

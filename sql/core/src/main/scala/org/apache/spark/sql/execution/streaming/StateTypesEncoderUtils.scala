@@ -26,6 +26,11 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types.{BinaryType, LongType, StructType}
 
 object TransformWithStateKeyValueRowSchema {
+  /**
+   * The following are the key/value row schema used in StateStore layer.
+   * Key/value rows will be serialized into Binary format in `StateTypesEncoder`.
+   * The "real" key/value row schema will be written into state schema metadata.
+   */
   val KEY_ROW_SCHEMA: StructType = new StructType().add("key", BinaryType)
   val COMPOSITE_KEY_ROW_SCHEMA: StructType = new StructType()
     .add("key", BinaryType)
@@ -35,6 +40,37 @@ object TransformWithStateKeyValueRowSchema {
   val VALUE_ROW_SCHEMA_WITH_TTL: StructType = new StructType()
     .add("value", BinaryType)
     .add("ttlExpirationMs", LongType)
+
+  /** Helper functions for passing the key/value schema to write to state schema metadata. */
+
+  /**
+   * Return key schema with key column name.
+   */
+  def getKeySchema(schema: StructType): StructType = {
+    new StructType().add("key", schema)
+  }
+
+  /**
+   * Return value schema with additional TTL column if TTL is enabled.
+   */
+  def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
+    val valSchema = if (hasTTL) {
+      new StructType(schema.fields).add("ttlExpirationMs", LongType)
+    } else schema
+    new StructType()
+      .add("value", valSchema)
+  }
+
+  /**
+   * Given grouping key and user key schema, return the schema of the composite key.
+   */
+  def getCompositeKeySchema(
+      groupingKeySchema: StructType,
+      userKeySchema: StructType): StructType = {
+    new StructType()
+      .add("key", new StructType(groupingKeySchema.fields))
+      .add("userKey", new StructType(userKeySchema.fields))
+  }
 }
 
 /**
@@ -70,7 +106,7 @@ class StateTypesEncoder[GK, V](
 
   /** Variables reused for value conversions between spark sql and object */
   private val valExpressionEnc = encoderFor(valEncoder)
-  private val objToRowSerializer = valExpressionEnc.createSerializer()
+  val objToRowSerializer = valExpressionEnc.createSerializer()
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
   private val reusedValRow = new UnsafeRow(valEncoder.schema.fields.length)
 
