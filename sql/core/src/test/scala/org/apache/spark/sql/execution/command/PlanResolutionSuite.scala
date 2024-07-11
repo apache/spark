@@ -1333,19 +1333,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql3)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "j",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
-            context = ExpectedContext(fragment = sql3, start = 0, stop = 55))
+              "objectName" -> "`j`",
+              "proposal" -> "`i`, `s`, `point`"))
 
           val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
@@ -1417,19 +1409,11 @@ class PlanResolutionSuite extends AnalysisTest {
             exception = intercept[AnalysisException] {
               parseAndResolve(sql)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_1331",
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            sqlState = "42703",
             parameters = Map(
-              "fieldName" -> "I",
-              "table" -> "spark_catalog.default.v1Table",
-              "schema" ->
-                """root
-                  | |-- i: integer (nullable = true)
-                  | |-- s: string (nullable = true)
-                  | |-- point: struct (nullable = true)
-                  | |    |-- x: integer (nullable = true)
-                  | |    |-- y: integer (nullable = true)
-                  |""".stripMargin),
-            context = ExpectedContext(fragment = sql, start = 0, stop = 55))
+              "objectName" -> "`I`",
+              "proposal" -> "`i`, `s`, `point`"))
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(

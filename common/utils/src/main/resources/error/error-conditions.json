@@ -5572,16 +5572,6 @@
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1053" : {
-    "message" : [
-      "ALTER COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1054" : {
-    "message" : [
-      "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1057" : {
     "message" : [
       "SHOW COLUMNS with conflicting databases: '<dbA>' != '<dbB>'."
@@ -6461,12 +6451,6 @@
   "_LEGACY_ERROR_TEMP_1330" : {
     "message" : [
       "Class <className> doesn't implement interface UserDefinedAggregateFunction."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1331" : {
-    "message" : [
-      "Missing field <fieldName> in table <table> with schema:",
-      "<schema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1332" : {
