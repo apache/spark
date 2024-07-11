@@ -20,6 +20,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -90,6 +91,39 @@ case class TransformWithStateExec(
     } else {
       false
     }
+  }
+
+  /**
+   * We initialize this processor handle in the driver to run the init function
+   * and fetch the schemas of the state variables initialized in this processor.
+   * @return a new instance of the driver processor handle
+   */
+  private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode)
+    driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
+    statefulProcessor.setHandle(driverProcessorHandle)
+    statefulProcessor.init(outputMode, timeMode)
+    driverProcessorHandle
+  }
+
+  /**
+   * Fetching the columnFamilySchemas from the StatefulProcessorHandle
+   * after init is called.
+   */
+  private def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
+    val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
+    closeProcessorHandle()
+    columnFamilySchemas
+  }
+
+  /**
+   * This method is used for the driver-side stateful processor after we
+   * have collected all the necessary schemas.
+   * This instance of the stateful processor won't be used again.
+   */
+  private def closeProcessorHandle(): Unit = {
+    statefulProcessor.close()
+    statefulProcessor.setHandle(null)
   }
 
   /**
@@ -340,11 +374,46 @@ case class TransformWithStateExec(
     )
   }
 
-  override def validateAndMaybeEvolveStateSchema(hadoopConf: Configuration): Unit = {
-    // TODO: transformWithState is special because we don't have the schema of the state directly
-    // within the passed args. We need to gather this after running the init function
-    // within the stateful processor on the driver. This also requires a schema format change
-    // when recording this information persistently.
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): Array[String] = {
+    assert(stateSchemaVersion >= 3)
+    val newColumnFamilySchemas = getColFamilySchemas()
+    val schemaFile = new StateSchemaV3File(
+      hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
+    // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
+    // and validate it with the new schema
+
+    // Write the new schema to the schema file
+    val schemaPath = schemaFile.addWithUUID(batchId, newColumnFamilySchemas.values.toList)
+    Array(schemaPath.toString)
+  }
+
+  private def validateSchemas(
+      oldSchemas: List[ColumnFamilySchema],
+      newSchemas: Map[String, ColumnFamilySchema]): Unit = {
+    oldSchemas.foreach { case oldSchema: ColumnFamilySchemaV1 =>
+      newSchemas.get(oldSchema.columnFamilyName).foreach {
+        case newSchema: ColumnFamilySchemaV1 =>
+          StateSchemaCompatibilityChecker.check(
+            (oldSchema.keySchema, oldSchema.valueSchema),
+            (newSchema.keySchema, newSchema.valueSchema),
+            ignoreValueSchema = false
+          )
+      }
+    }
+  }
+
+  private def stateSchemaDirPath(storeName: String): Path = {
+    assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
+    def stateInfo = getStateInfo
+    val stateCheckpointPath =
+      new Path(getStateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+
+    val storeNamePath = new Path(stateCheckpointPath, storeName)
+    new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
