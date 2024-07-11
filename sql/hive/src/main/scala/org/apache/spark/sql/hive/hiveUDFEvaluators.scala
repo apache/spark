@@ -128,10 +128,8 @@ class HiveGenericUDFEvaluator(
 
   override def returnType: DataType = inspectorToDataType(returnInspector)
 
-  def setArg(index: Int, arg: Any): Unit = setFuncArg(index, () => arg)
-
-  def setFuncArg(index: Int, arg: () => Any): Unit =
-    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
+  def setArg(index: Int, arg: Any): Unit =
+    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => arg)
 
   def setException(index: Int, exp: Throwable): Unit = {
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => throw exp)

@@ -136,7 +136,13 @@ private[hive] case class HiveGenericUDF(
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.foreach {
-      case (child, idx) => evaluator.setFuncArg(idx, () => child.eval(input))
+      case (child, idx) =>
+        try {
+          evaluator.setArg(idx, child.eval(input))
+        } catch {
+          case t: Throwable =>
+            evaluator.setException(idx, t)
+        }
     }
     evaluator.evaluate()
   }
