@@ -92,12 +92,6 @@ class IncrementalExecution(
   private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
 
   /**
-   * This value dictates which schema format version the state schema should be written in
-   * for all operators other than TransformWithState.
-   */
-  private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
-
-  /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
    * with the desired literal
