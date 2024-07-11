@@ -3743,7 +3743,7 @@
       },
       "LABELS_MISMATCH" : {
         "message" : [
-          "Begin label <beginLabel> does not match end label <endLabel>."
+          "Begin label <beginLabel> does not match the end label <endLabel>."
         ]
       }
     },

@@ -4614,7 +4614,7 @@
         "usedBy": ["Spark"]
     },
     "42K0L": {
-        "description": "Invalid usage of labels",
+        "description": "Invalid usage of labels.",
         "origin": "Spark",
         "standard": "N",
         "usedBy": ["Spark"]
