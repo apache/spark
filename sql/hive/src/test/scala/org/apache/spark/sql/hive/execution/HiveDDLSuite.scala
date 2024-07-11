@@ -1359,7 +1359,7 @@ class HiveDDLSuite
             sql("DROP DATABASE default")
           },
           errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-          parameters = Map("database" -> "`default`")
+          parameters = Map("database" -> "`spark_catalog`.`default`")
         )
 
         // SQLConf.CASE_SENSITIVE does not affect the result
@@ -1373,7 +1373,7 @@ class HiveDDLSuite
             case _ => "_LEGACY_ERROR_TEMP_3065"
           },
           parameters = caseSensitive match {
-            case "false" => Map("database" -> "`default`")
+            case "false" => Map("database" -> "`spark_catalog`.`default`")
             case _ => Map(
               "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
               "msg" -> "MetaException(message:Can not drop default database)")

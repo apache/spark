@@ -210,7 +210,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       case _ if namespaceExists(namespace) =>
         util.Collections.emptyMap[String, String]
       case _ =>
-        throw new NoSuchNamespaceException(namespace)
+        throw new NoSuchNamespaceException(name() +: namespace)
     }
   }
 
@@ -256,7 +256,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     if (namespace.isEmpty || namespaceExists(namespace)) {
       super.listTables(namespace)
     } else {
-      throw new NoSuchNamespaceException(namespace)
+      throw new NoSuchNamespaceException(name() +: namespace)
     }
   }
 }
