@@ -465,7 +465,7 @@ Project [ascii(c7#x) AS ascii(c7)#x, ascii(c8#x) AS ascii(c8)#x, ascii(v#x) AS a
 -- !query
 select base64(c7), base64(c8), base64(v), ascii(s) from char_tbl4
 -- !query analysis
-Project [base64(cast(c7#x as binary), false) AS base64(c7)#x, base64(cast(c8#x as binary), false) AS base64(c8)#x, base64(cast(v#x as binary), false) AS base64(v)#x, ascii(s#x) AS ascii(s)#x]
+Project [base64(cast(c7#x as binary)) AS base64(c7)#x, base64(cast(c8#x as binary)) AS base64(c8)#x, base64(cast(v#x as binary)) AS base64(v)#x, ascii(s#x) AS ascii(s)#x]
 +- SubqueryAlias spark_catalog.default.char_tbl4
    +- Project [static_invoke(CharVarcharCodegenUtils.readSidePadding(c7#x, 7)) AS c7#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c8#x, 8)) AS c8#x, v#x, s#x]
       +- Relation spark_catalog.default.char_tbl4[c7#x,c8#x,v#x,s#x] parquet

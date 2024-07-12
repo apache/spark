@@ -2683,7 +2683,7 @@ case class Chr(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class Base64(child: Expression, chunkBase64: Boolean)
-  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
 
@@ -2696,6 +2696,8 @@ case class Base64(child: Expression, chunkBase64: Boolean)
     "encode",
     Seq(child, Literal(chunkBase64, BooleanType)),
     Seq(BinaryType, BooleanType))
+
+  override def toString: String = s"$prettyName($child)"
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
