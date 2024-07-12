@@ -1944,68 +1944,34 @@ class SparkConnectPlanner(
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
-      case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+      case "from_json"
+          if Seq(2, 3).contains(fun.getArgumentsCount) &&
+            isJsonSchema(fun.getArguments(1)) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
+        val schema = CharVarcharUtils
+          .failIfHasCharVarchar(DataType.fromJson(extractString(children(1), "schema")))
+        var options = Map.empty[String, String]
+        if (children.length == 3) {
+          options = extractMapData(children(2), "Options")
         }
+        Some(JsonToStructs(schema = schema, options = options, child = children.head))
 
-        if (schema != null) {
-          var options = Map.empty[String, String]
-          if (children.length == 3) {
-            options = extractMapData(children(2), "Options")
-          }
-          Some(
-            JsonToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema),
-              options = options,
-              child = children.head))
-        } else {
-          None
-        }
-
-      case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+      case "from_xml"
+          if Seq(2, 3).contains(fun.getArgumentsCount)
+            && isJsonSchema(fun.getArguments(1)) =>
         // XmlToStructs constructor doesn't accept JSON-formatted schema.
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        var schema: DataType = null
-        children(1) match {
-          case Literal(s, StringType) if s != null =>
-            try {
-              schema = DataType.fromJson(s.toString)
-            } catch {
-              case _: Exception =>
-            }
-          case _ =>
+        val dataType = DataType.fromJson(extractString(children(1), "schema"))
+        val schema = dataType match {
+          case t: StructType => CharVarcharUtils.failIfHasCharVarchar(t).asInstanceOf[StructType]
+          case _ => throw DataTypeErrors.failedParsingStructTypeError(dataType.sql)
         }
-
-        if (schema != null) {
-          schema match {
-            case t: StructType => t
-            case _ => throw DataTypeErrors.failedParsingStructTypeError(schema.sql)
-          }
-
-          var options = Map.empty[String, String]
-          if (children.length == 3) {
-            options = extractMapData(children(2), "Options")
-          }
-          Some(
-            XmlToStructs(
-              schema = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType],
-              options = options,
-              child = children.head))
-        } else {
-          None
+        var options = Map.empty[String, String]
+        if (children.length == 3) {
+          options = extractMapData(children(2), "Options")
         }
+        Some(XmlToStructs(schema = schema, options = options, child = children.head))
 
       // Avro-specific functions
       case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
@@ -2187,6 +2153,19 @@ class SparkConnectPlanner(
     case UnresolvedFunction(Seq("map"), args, _, _, _, _) =>
       extractMapData(CreateMap(args), field)
     case other => throw InvalidPlanInput(s"$field should be created by map, but got $other")
+  }
+
+  // Check whether this proto expression is a literal string representing a JSON-formatted schema
+  private def isJsonSchema(exp: proto.Expression): Boolean = {
+    exp.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.LITERAL =>
+        exp.getLiteral.getLiteralTypeCase match {
+          case proto.Expression.Literal.LiteralTypeCase.STRING =>
+            Try { DataType.fromJson(exp.getLiteral.getString) }.isSuccess
+          case _ => false
+        }
+      case _ => false
+    }
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
