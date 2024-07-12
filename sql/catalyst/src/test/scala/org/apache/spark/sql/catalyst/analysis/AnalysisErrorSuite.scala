@@ -92,13 +92,10 @@ case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
 case class SupportsNonDeterministicExpressionTestOperator(
     actions: Seq[Expression],
-    tolerateNonDeterministicExpression: Boolean)
-    extends SupportsNonDeterministicExpression {
-  override def allowNonDeterministicExpression: Boolean = tolerateNonDeterministicExpression
+    allowNonDeterministicExpression: Boolean)
+  extends LeafNode with SupportsNonDeterministicExpression {
+  
   override def output: Seq[Attribute] = Seq()
-  override def children: Seq[LogicalPlan] = Seq()
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
 }
 
 class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
