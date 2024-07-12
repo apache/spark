@@ -16133,7 +16133,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     |["Alice","Bob"]|
     +---------------+
 
-    Example 6: Converting to JSON with a specified options
+    Example 6: Converting to JSON with specified options
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT (DATE('2022-02-22'), 1) AS date")
