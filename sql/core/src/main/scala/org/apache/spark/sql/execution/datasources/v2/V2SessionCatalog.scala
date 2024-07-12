@@ -242,7 +242,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.createTable(tableDesc, ignoreIfExists = false)
     } catch {
       case _: TableAlreadyExistsException =>
-        throw QueryCompilationErrors.tableAlreadyExistsError(ident)
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          CatalogManager.SESSION_CATALOG_NAME +: ident.asMultipartIdentifier)
     }
 
     null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
@@ -336,7 +337,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     if (tableExists(newIdent)) {
-      throw QueryCompilationErrors.tableAlreadyExistsError(newIdent)
+      throw QueryCompilationErrors.tableAlreadyExistsError(
+        CatalogManager.SESSION_CATALOG_NAME +: newIdent.asTableIdentifier.nameParts)
     }
 
     catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)

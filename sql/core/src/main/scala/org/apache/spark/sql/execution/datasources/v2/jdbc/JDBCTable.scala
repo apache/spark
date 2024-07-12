@@ -32,7 +32,11 @@ import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
+case class JDBCTable(
+    catalogName: String,
+    ident: Identifier,
+    schema: StructType,
+    jdbcOptions: JDBCOptions)
   extends Table
   with SupportsRead
   with SupportsWrite
@@ -64,11 +68,12 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       properties: util.Map[String, String]): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(
+        catalogName = catalogName,
         errorClass = "FAILED_JDBC.CREATE_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
-          "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "indexName" -> toSQLId(Seq(catalogName, indexName)),
+          "tableName" -> toSQLId(Seq(catalogName, name()))),
         dialect = JdbcDialects.get(jdbcOptions.url),
         description = s"Failed to create index $indexName in ${name()}") {
         JdbcUtils.createIndex(
@@ -86,11 +91,12 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
   override def dropIndex(indexName: String): Unit = {
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.classifyException(
+        catalogName = catalogName,
         errorClass = "FAILED_JDBC.DROP_INDEX",
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "tableName" -> toSQLId(name())),
         dialect = JdbcDialects.get(jdbcOptions.url),
         description = s"Failed to drop index $indexName in ${name()}") {
         JdbcUtils.dropIndex(conn, indexName, ident, jdbcOptions)

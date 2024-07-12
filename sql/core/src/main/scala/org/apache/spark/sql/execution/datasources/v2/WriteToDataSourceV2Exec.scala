@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Tab
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
@@ -80,7 +81,8 @@ case class CreateTableAsSelectExec(
       if (ifNotExists) {
         return Nil
       }
-      throw QueryCompilationErrors.tableAlreadyExistsError(ident)
+      throw QueryCompilationErrors.tableAlreadyExistsError(
+        catalog.name() +: ident.asTableIdentifier.nameParts)
     }
     val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
@@ -114,7 +116,8 @@ case class AtomicCreateTableAsSelectExec(
       if (ifNotExists) {
         return Nil
       }
-      throw QueryCompilationErrors.tableAlreadyExistsError(ident)
+      throw QueryCompilationErrors.tableAlreadyExistsError(
+        catalog.name() +: ident.asTableIdentifier.nameParts)
     }
     val stagedTable = catalog.stageCreate(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),

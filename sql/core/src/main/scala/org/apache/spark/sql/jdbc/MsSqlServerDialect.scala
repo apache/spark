@@ -204,6 +204,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   }
 
   override def classifyException(
+      catalogName: String,
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
@@ -216,9 +217,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(catalogName, e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(catalogName, e, errorClass, messageParameters, description)
     }
   }
 

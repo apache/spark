@@ -257,6 +257,7 @@ private case class PostgresDialect()
   private final val pgAlreadyExistsRegex = """(?:.*)relation "(.*)" already exists""".r
 
   override def classifyException(
+      catalogName: String,
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
@@ -279,7 +280,7 @@ private case class PostgresDialect()
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters, description)
+                super.classifyException(catalogName, e, errorClass, messageParameters, description)
               }
             }
           case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
@@ -291,10 +292,12 @@ private case class PostgresDialect()
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(catalogName, e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ =>
+        super.classifyException(catalogName, e, errorClass, messageParameters, description)
     }
   }
 

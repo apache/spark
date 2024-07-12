@@ -136,7 +136,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val exp = intercept[TableAlreadyExistsException] {
           sql("ALTER TABLE h2.test.src_table RENAME TO test.dst_table")
         }
-        checkErrorTableAlreadyExists(exp, "`dst_table`")
+        checkErrorTableAlreadyExists(exp, "`h2`.`dst_table`")
       }
     }
   }
@@ -170,14 +170,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val e = intercept[TableAlreadyExistsException] {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       }
-      checkErrorTableAlreadyExists(e, "`test`.`new_table`")
+      checkErrorTableAlreadyExists(e, "`h2`.`test`.`new_table`")
     }
     val exp = intercept[NoSuchNamespaceException] {
       sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
     }
     checkError(exp,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`bad_test`"))
+      parameters = Map("schemaName" -> "`h2`.`bad_test`"))
   }
 
   test("ALTER TABLE ... add column") {

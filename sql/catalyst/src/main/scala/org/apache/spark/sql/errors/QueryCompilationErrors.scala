@@ -1418,8 +1418,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchNamespaceException(namespace)
   }
 
-  def tableAlreadyExistsError(ident: Identifier): Throwable = {
-    new TableAlreadyExistsException(ident.asMultipartIdentifier)
+  def tableAlreadyExistsError(nameParts: Seq[String]): Throwable = {
+    new TableAlreadyExistsException(nameParts)
   }
 
   def requiresSinglePartNamespaceError(namespace: Seq[String]): Throwable = {
