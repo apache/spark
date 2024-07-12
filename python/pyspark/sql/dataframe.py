@@ -3984,10 +3984,9 @@ class DataFrame:
         ids : str, Column, tuple, list, optional
             Column(s) to use as identifiers. Can be a single column or column name,
             or a list or tuple for multiple columns.
-        values : str, Column, tuple, list, optional
+        values : str, Column, tuple, list
             Column(s) to unpivot. Can be a single column or column name, or a list or tuple
-            for multiple columns. If not specified or empty, use all columns that
-            are not set as `ids`.
+            for multiple columns. 
         variableColumnName : str
             Name of the variable column.
         valueColumnName : str
