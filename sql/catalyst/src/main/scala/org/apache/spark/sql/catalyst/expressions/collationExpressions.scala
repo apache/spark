@@ -92,6 +92,10 @@ case class Collate(child: Expression, collationName: String)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, (in) => in)
+
+  override def sql: String = s"$prettyName(${child.sql}, $collationName)"
+
+  override def toString: String = s"$prettyName($child, $collationName)"
 }
 
 // scalastyle:off line.contains.tab
