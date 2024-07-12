@@ -23,7 +23,6 @@ from pyspark.errors.exceptions.base import (
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.merge import MergeIntoWriter
 
 check_dependencies(__name__)
 
@@ -74,6 +73,7 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
@@ -2188,9 +2188,11 @@ class DataFrame(ParentDataFrame):
         return DataFrameWriterV2(self._plan, self._session, table, cb)
 
     def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "mergeInto"},
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return MergeIntoWriter(
+            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
         )
 
     def offset(self, n: int) -> ParentDataFrame:

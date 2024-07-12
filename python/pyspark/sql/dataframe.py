@@ -6018,6 +6018,10 @@ class DataFrame:
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
         ...     .merge())
+
+        Notes
+        -----
+        This method does not support streaming queries.
         """
         ...
 

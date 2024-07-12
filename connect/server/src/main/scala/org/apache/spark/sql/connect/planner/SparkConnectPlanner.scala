@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -1541,6 +1541,8 @@ class SparkConnectPlanner(
         transformCallFunction(exp.getCallFunction)
       case proto.Expression.ExprTypeCase.NAMED_ARGUMENT_EXPRESSION =>
         transformNamedArgumentExpression(exp.getNamedArgumentExpression)
+      case proto.Expression.ExprTypeCase.MERGE_ACTION =>
+        transformMergeAction(exp.getMergeAction)
       case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case _ =>
@@ -2635,6 +2637,36 @@ class SparkConnectPlanner(
     taeWithInput.toAggregateExpression()
   }
 
+  private def transformMergeAction(action: proto.MergeAction): MergeAction = {
+    val condition = if (action.hasCondition) {
+      Some(transformExpression(action.getCondition))
+    } else {
+      None
+    }
+    val assignments = action.getAssignmentsList.asScala.map { assignment =>
+      val key = transformExpression(assignment.getKey)
+      val value = transformExpression(assignment.getValue)
+      Assignment(key, value)
+    }.toSeq
+    action.getActionType match {
+      case proto.MergeAction.ActionType.ACTION_TYPE_DELETE =>
+        assert(assignments.isEmpty, "Delete action should not have assignment.")
+        DeleteAction(condition)
+      case proto.MergeAction.ActionType.ACTION_TYPE_INSERT =>
+        InsertAction(condition, assignments)
+      case proto.MergeAction.ActionType.ACTION_TYPE_INSERT_STAR =>
+        assert(assignments.isEmpty, "InsertStar action should not have assignment.")
+        InsertStarAction(condition)
+      case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE =>
+        UpdateAction(condition, assignments)
+      case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR =>
+        assert(assignments.isEmpty, "UpdateStar action should not have assignment.")
+        UpdateStarAction(condition)
+      case _ =>
+        throw InvalidPlanInput(s"Unsupported merge action type ${action.getActionType}.")
+    }
+  }
+
   def process(
       command: proto.Command,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
@@ -2678,6 +2710,8 @@ class SparkConnectPlanner(
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
+      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
+        handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
@@ -3642,6 +3676,30 @@ class SparkConnectPlanner(
     val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
     logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
     sessionHolder.removeCachedDataFrame(dfId)
+    executeHolder.eventsManager.postFinished()
+  }
+
+  private def handleMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand): Unit = {
+    def transformActions(actions: java.util.List[proto.Expression]): Seq[MergeAction] =
+      actions.asScala.map(transformExpression).map(_.asInstanceOf[MergeAction]).toSeq
+
+    val matchedActions = transformActions(cmd.getMatchActionsList)
+    val notMatchedActions = transformActions(cmd.getNotMatchedActionsList)
+    val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
+
+    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
+    var mergeInto = sourceDs
+      .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
+      .withNewMatchedActions(matchedActions: _*)
+      .withNewNotMatchedActions(notMatchedActions: _*)
+      .withNewNotMatchedBySourceActions(notMatchedBySourceActions: _*)
+
+    mergeInto = if (cmd.getWithSchemaEvolution) {
+      mergeInto.withSchemaEvolution()
+    } else {
+      mergeInto
+    }
+    mergeInto.merge()
     executeHolder.eventsManager.postFinished()
   }
 
