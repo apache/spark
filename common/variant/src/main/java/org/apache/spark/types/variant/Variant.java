@@ -143,6 +143,14 @@ public final class Variant {
       } else {
         int low = 0;
         int high = size - 1;
+
+        // Check max and min value firstly which may avoid binary search
+        int min = readUnsigned(value, idStart + idSize * low, idSize);
+        int max = readUnsigned(value, idStart + idSize * high, idSize);
+        if (getMetadataKey(metadata, min).compareTo(key) < 0 || getMetadataKey(metadata, max).compareTo(key) > 0) {
+          return null;
+        }
+
         while (low <= high) {
           // Use unsigned right shift to compute the middle of `low` and `high`. This is not only a
           // performance optimization, because it can properly handle the case where `low + high`
