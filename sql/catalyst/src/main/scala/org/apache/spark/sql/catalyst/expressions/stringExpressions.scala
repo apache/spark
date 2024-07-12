@@ -2682,10 +2682,11 @@ case class Chr(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Base64(child: Expression)
+case class Base64(child: Expression, chunkBase64: Boolean)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  lazy val chunkBase64: Boolean = SQLConf.get.chunkBase64StringEnabled
+  def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
+
   lazy val encoder: JBase64.Encoder = if (chunkBase64) {
     JBase64.getMimeEncoder
   } else {
@@ -2700,20 +2701,16 @@ case class Base64(child: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val encoderArg = ctx.addReferenceObj("encoder", encoder, classOf[JBase64.Encoder].getName)
     nullSafeCodeGen(ctx, ev, (child) => {
-      if (chunkBase64) {
-        s"""${ev.value} = UTF8String.fromBytes(
-             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
-        """
-      } else {
-        s"""${ev.value} = UTF8String.fromBytes(
-             ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
-        """
-      }
-    })
+      s"${ev.value} = UTF8String.fromBytes($encoderArg.encode($child));"})
   }
 
   override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
+}
+
+object Base64 {
+  def apply(expr: Expression): Base64 = new Base64(expr)
 }
 
 /**
