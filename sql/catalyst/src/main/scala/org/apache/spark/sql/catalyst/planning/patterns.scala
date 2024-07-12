@@ -67,7 +67,7 @@ trait OperationHelper extends AliasHelper with PredicateHelper {
           empty
         }
 
-      case Filter(condition, child) if !condition.exists(_.isInstanceOf[Unevaluable]) =>
+      case Filter(condition, child) if !condition.exists(_.isInstanceOf[PythonUDF]) =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child, alwaysInline)
         // When collecting projects and filters, we effectively push down filters through
         // projects. We need to meet the following conditions to do so:
@@ -115,8 +115,8 @@ object PhysicalOperation extends OperationHelper {
     val (fields, filters, child, _) = collectProjectsAndFilters(plan, alwaysInline)
     // If more than 2 filters are collected, they must all be deterministic.
     if (filters.length > 1) assert(filters.forall(_.deterministic))
-    // Unevaluable expressions should not be pushed
-    assert(filters.forall(!_.exists(_.isInstanceOf[Unevaluable])))
+    // PythonUDFs should not be pushed
+    assert(filters.forall(!_.exists(_.isInstanceOf[PythonUDF])))
     Some((
       fields.getOrElse(child.output),
       filters.flatMap(splitConjunctivePredicates),
