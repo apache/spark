@@ -1551,7 +1551,7 @@ object SQLConf {
     .version("4.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
-    .checkValues(BinaryOutputStyle.values.map(_.toString()))
+    .checkValues(BinaryOutputStyle.values.map(_.toString))
     .createOptional
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
