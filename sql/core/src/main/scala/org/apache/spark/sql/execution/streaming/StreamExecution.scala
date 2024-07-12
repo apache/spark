@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
+import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
@@ -89,6 +90,8 @@ abstract class StreamExecution(
    */
   protected val awaitProgressLock = new ReentrantLock(true)
   protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
+
+  protected val loggingThreadContext = new CloseableThreadContext.Instance()
 
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
@@ -287,6 +290,8 @@ abstract class StreamExecution(
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
       sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
+      loggingThreadContext.put(StreamExecution.QUERY_ID_KEY, id.toString)
+      loggingThreadContext.put(StreamExecution.RUN_ID_KEY, runId.toString)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -404,6 +409,8 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
+
+        loggingThreadContext.close()
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
@@ -682,6 +689,7 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val RUN_ID_KEY = "sql.streaming.runId"
   val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
   val IO_EXCEPTION_NAMES = Seq(
     classOf[InterruptedException].getName,
