@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
@@ -43,8 +43,7 @@ class ValueStateImplWithTTL[S](
     batchTimestampMs: Long)
   extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ValueState[S] {
 
-  private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
+  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
@@ -52,8 +51,9 @@ class ValueStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+    store.createColFamilyIfAbsent(stateName,
+      keyExprEnc.schema, valueRowSchemaWithTTL(valEncoder.schema),
+      NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -87,10 +87,10 @@ class ValueStateImplWithTTL[S](
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+    val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    store.put(serializedGroupingKey,
       encodedValue, stateName)
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
+    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey.getBytes)
   }
 
   /** Function to remove state for given key */
@@ -100,7 +100,7 @@ class ValueStateImplWithTTL[S](
   }
 
   def clearIfExpired(groupingKey: Array[Byte]): Long = {
-    val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val retRow = store.get(encodedGroupingKey, stateName)
 
     var result = 0L
@@ -158,7 +158,7 @@ class ValueStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.serializeGroupingKey())
+    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey().getBytes)
   }
 }
 

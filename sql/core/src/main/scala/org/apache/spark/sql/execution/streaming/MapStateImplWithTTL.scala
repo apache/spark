@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
@@ -48,9 +47,8 @@ class MapStateImplWithTTL[K, V](
     batchTimestampMs: Long) extends CompositeKeyTTLStateImpl(stateName, store, batchTimestampMs)
   with MapState[K, V] with Logging {
 
-  private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
-    keySerializer, userKeyEnc, valEncoder, COMPOSITE_KEY_ROW_SCHEMA, stateName, hasTtl = true)
+    keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
 
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
@@ -58,8 +56,9 @@ class MapStateImplWithTTL[K, V](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, COMPOSITE_KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
-      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1))
+    // TODO
+    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+      PrefixKeyScanStateEncoderSpec(keyExprEnc.schema, 1))
   }
 
   /** Whether state exists or not. */
@@ -95,15 +94,15 @@ class MapStateImplWithTTL[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     StateStoreErrors.requireNonNullStateValue(value, stateName)
 
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val serializedUserKey = stateTypesEncoder.serializeUserKey(key)
 
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(
-      serializedGroupingKey, serializedUserKey)
+      serializedGroupingKey.getBytes, serializedUserKey)
     store.put(encodedCompositeKey, encodedValue, stateName)
 
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey, serializedUserKey)
+    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey.getBytes, serializedUserKey)
   }
 
   /** Get the map associated with grouping key */
@@ -226,7 +225,7 @@ class MapStateImplWithTTL[K, V](
    */
   private[sql] def getKeyValuesInTTLState(): Iterator[(K, Long)] = {
     val ttlIterator = ttlIndexIterator()
-    val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    val implicitGroupingKey = stateTypesEncoder.encodeGroupingKey()
     var nextValue: Option[(K, Long)] = None
 
     new Iterator[(K, Long)] {
@@ -234,7 +233,7 @@ class MapStateImplWithTTL[K, V](
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val groupingKey = nextTtlValue.groupingKey
-          if (groupingKey sameElements implicitGroupingKey) {
+          if (groupingKey sameElements implicitGroupingKey.getBytes) {
             val userKey = stateTypesEncoder.decodeUserKeyFromTTLRow(nextTtlValue)
             nextValue = Some(userKey, nextTtlValue.expirationMs)
           }

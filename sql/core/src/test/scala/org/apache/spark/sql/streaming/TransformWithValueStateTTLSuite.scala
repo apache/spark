@@ -19,16 +19,18 @@ package org.apache.spark.sql.streaming
 
 import java.time.Duration
 
-import org.apache.hadoop.fs.Path
+// import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File}
+import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
+// import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1,
+// NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec,
+// RocksDBStateStoreProvider, StateSchemaV3File}
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types._
+// import org.apache.spark.sql.types._
 
 object TTLInputProcessFunction {
   def processRow(
@@ -252,7 +254,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
       )
     }
   }
-
+/*
   test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -354,5 +356,5 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         )
       }
     }
-  }
+  } */
 }

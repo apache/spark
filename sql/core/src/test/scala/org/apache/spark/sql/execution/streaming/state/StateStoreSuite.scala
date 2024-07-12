@@ -42,7 +42,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
@@ -1631,25 +1630,25 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
     implicit val formats: DefaultFormats.type = DefaultFormats
-    val encoderSpec = NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
-    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(KEY_ROW_SCHEMA, jsonMap)
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
   }
 
   test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
     implicit val formats: DefaultFormats.type = DefaultFormats
-    val encoderSpec = PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1)
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
-    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(COMPOSITE_KEY_ROW_SCHEMA, jsonMap)
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
   }
 
   test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
     implicit val formats: DefaultFormats.type = DefaultFormats
-    val encoderSpec = RangeKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, Seq(1))
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(1))
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
-    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(COMPOSITE_KEY_ROW_SCHEMA, jsonMap)
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchemaWithRangeScan, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
   }
 

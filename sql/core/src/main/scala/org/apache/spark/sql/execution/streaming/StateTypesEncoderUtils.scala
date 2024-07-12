@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
-import org.apache.spark.sql.types.{BinaryType, LongType, StructType}
+import org.apache.spark.sql.types._
 
 object TransformWithStateKeyValueRowSchema {
   /**
@@ -31,9 +30,8 @@ object TransformWithStateKeyValueRowSchema {
    * Key/value rows will be serialized into Binary format in `StateTypesEncoder`.
    * The "real" key/value row schema will be written into state schema metadata.
    */
-  val VALUE_ROW_SCHEMA_WITH_TTL: StructType = new StructType()
-    .add("value", BinaryType)
-    .add("ttlExpirationMs", LongType)
+  def valueRowSchemaWithTTL(valueRowSchema: StructType): StructType =
+    valueRowSchema.add("ttlExpirationMs", LongType)
 
   /** Helper functions for passing the key/value schema to write to state schema metadata. */
   // Return value schema with additional TTL column if TTL is enabled.
@@ -107,8 +105,10 @@ class StateTypesEncoder[V](
    */
   def encodeValue(value: V, expirationMs: Long): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
-    val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
-    valueTTLProjection(InternalRow(bytes, expirationMs))
+    val newValArr: Array[Any] =
+      objRow.toSeq(valEncoder.schema).toArray :+ expirationMs
+
+    valueTTLProjection.apply(new GenericInternalRow(newValArr))
   }
 
   def decodeValue(row: UnsafeRow): V = {
@@ -138,7 +138,7 @@ class StateTypesEncoder[V](
 }
 
 object StateTypesEncoder {
-  def apply[GK, V](
+  def apply[V](
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[V],
       stateName: String,
