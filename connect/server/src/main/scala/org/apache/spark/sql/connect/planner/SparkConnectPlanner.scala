@@ -51,7 +51,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Mu
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -67,6 +67,7 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, Spark
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1455,7 +1456,7 @@ class SparkConnectPlanner(
     }
 
     val projection = rel.getExpressionsList.asScala.toSeq
-      .map(transformExpression)
+      .map(transformExpression(_, Some(baseRel)))
       .map(toNamedExpression)
 
     logical.Project(projectList = projection, child = baseRel)
@@ -1472,21 +1473,40 @@ class SparkConnectPlanner(
    *   Catalyst expression
    */
   @DeveloperApi
-  def transformExpression(exp: proto.Expression): Expression = if (exp.hasCommon) {
+  def transformExpression(exp: proto.Expression): Expression = transformExpression(exp, None)
+
+  /**
+   * Transforms an input protobuf expression into the Catalyst expression. This is usually not
+   * called directly. Typically the planner will traverse the expressions automatically, only
+   * plugins are expected to manually perform expression transformations.
+   *
+   * @param exp
+   *   the input expression
+   * @param baseRelationOpt
+   *   inputs of the base relation that contains this expression
+   * @return
+   *   Catalyst expression
+   */
+  @DeveloperApi
+  def transformExpression(
+      exp: proto.Expression,
+      baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
     try {
       val origin = exp.getCommon.getOrigin
       PySparkCurrentOrigin.set(
         origin.getPythonOrigin.getFragment,
         origin.getPythonOrigin.getCallSite)
-      withOrigin { doTransformExpression(exp) }
+      withOrigin { doTransformExpression(exp, baseRelationOpt) }
     } finally {
       PySparkCurrentOrigin.clear()
     }
   } else {
-    doTransformExpression(exp)
+    doTransformExpression(exp, baseRelationOpt)
   }
 
-  private def doTransformExpression(exp: proto.Expression): Expression = {
+  private def doTransformExpression(
+      exp: proto.Expression,
+      baseRelationOpt: Option[LogicalPlan]): Expression = {
     exp.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.LITERAL => transformLiteral(exp.getLiteral)
       case proto.Expression.ExprTypeCase.UNRESOLVED_ATTRIBUTE =>
@@ -1523,6 +1543,8 @@ class SparkConnectPlanner(
         transformNamedArgumentExpression(exp.getNamedArgumentExpression)
       case proto.Expression.ExprTypeCase.MERGE_ACTION =>
         transformMergeAction(exp.getMergeAction)
+      case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
+        transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -2584,8 +2606,35 @@ class SparkConnectPlanner(
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
         transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
-      case _ => transformExpression(expr)
+      case _ => transformExpression(expr, Some(plan))
     }
+  }
+
+  private def transformTypedAggregateExpression(
+      expr: proto.TypedAggregateExpression,
+      baseRelationOpt: Option[LogicalPlan]): AggregateExpression = {
+    val udf = expr.getScalarScalaUdf
+    assert(udf.getAggregate)
+
+    val udfPacket = unpackScalaUDF[UdfPacket](udf)
+    assert(udfPacket.inputEncoders.size == 1, "UDAF should have exactly one input encoder")
+
+    val aggregator = udfPacket.function.asInstanceOf[Aggregator[Any, Any, Any]]
+    val tae =
+      TypedAggregateExpression(aggregator)(aggregator.bufferEncoder, aggregator.outputEncoder)
+    val taeWithInput = baseRelationOpt match {
+      case Some(baseRelation) =>
+        val inputEncoder = TypedScalaUdf.encoderFor(
+          udfPacket.inputEncoders.head,
+          "input",
+          Some(baseRelation.output))
+        TypedAggUtils
+          .withInputType(tae, inputEncoder, baseRelation.output)
+          .asInstanceOf[TypedAggregateExpression]
+      case _ =>
+        tae
+    }
+    taeWithInput.toAggregateExpression()
   }
 
   private def transformMergeAction(action: proto.MergeAction): MergeAction = {
