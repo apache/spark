@@ -35,7 +35,6 @@ class MergeIntoWriter:
     """
 
     def __init__(self, df: "DataFrame", table: str, condition: Column):
-        self._df = df
         self._spark = df.sparkSession
 
         from pyspark.sql.classic.column import _to_java_column
