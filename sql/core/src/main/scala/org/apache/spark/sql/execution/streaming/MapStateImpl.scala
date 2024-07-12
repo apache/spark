@@ -36,9 +36,8 @@ class MapStateImpl[K, V](
     .add("key", BinaryType)
     .add("userKey", BinaryType)
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-  private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
-    keySerializer, userKeyEnc, valEncoder, schemaForCompositeKeyRow, stateName)
+    keyExprEnc, userKeyEnc, valEncoder, stateName)
 
   store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
     PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))

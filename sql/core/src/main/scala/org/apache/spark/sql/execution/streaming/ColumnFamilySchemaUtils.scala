@@ -51,9 +51,9 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       hasTtl: Boolean): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
-      getKeySchema(keyEncoder.schema),
+      keyEncoder.schema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+      NoPrefixKeyStateEncoderSpec(keyEncoder.schema))
   }
 
   def getListStateSchema[T](
@@ -63,9 +63,9 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       hasTtl: Boolean): ColumnFamilySchemaV1 = {
     new ColumnFamilySchemaV1(
       stateName,
-      getKeySchema(keyEncoder.schema),
+      keyEncoder.schema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+      NoPrefixKeyStateEncoderSpec(keyEncoder.schema))
   }
 
   def getMapStateSchema[K, V](
@@ -79,7 +79,7 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       stateName,
       compositeKeySchema,
       getValueSchemaWithTTL(valEncoder.schema, hasTtl),
-      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
+      PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
       Some(userKeyEnc.schema))
   }
 }
