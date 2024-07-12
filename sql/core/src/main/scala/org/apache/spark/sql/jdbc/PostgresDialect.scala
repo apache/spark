@@ -278,7 +278,8 @@ private case class PostgresDialect()
             } else {
               val tblRegexp = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
               if (tblRegexp.nonEmpty) {
-                throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
+                throw QueryCompilationErrors.tableAlreadyExistsError(
+                  Seq(catalogName, tblRegexp.get.group(1)))
               } else {
                 super.classifyException(catalogName, e, errorClass, messageParameters, description)
               }

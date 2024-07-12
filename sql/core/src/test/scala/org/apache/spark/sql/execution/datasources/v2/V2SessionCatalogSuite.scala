@@ -87,8 +87,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
-  private val testIdentNewQuoted = (testIdentNew.namespace :+ testIdentNew.name)
-    .map(part => quoteIdentifier(part)).mkString(".")
 
   test("listTables") {
     val catalog = newCatalog()
@@ -164,7 +162,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
     val table = catalog.loadTable(testIdent)
 
-    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    val parsed = (catalog.name +: CatalystSqlParser.parseMultipartIdentifier(table.name))
       .map(part => quoteIdentifier(part)).mkString(".")
 
     val exc = intercept[TableAlreadyExistsException] {
@@ -842,6 +840,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val exc = intercept[TableAlreadyExistsException] {
       catalog.renameTable(testIdent, testIdentNew)
     }
+
+    val testIdentNewQuoted = (catalog.name +: testIdentNew.namespace :+ testIdentNew.name)
+      .map(part => quoteIdentifier(part)).mkString(".")
 
     checkErrorTableAlreadyExists(exc, testIdentNewQuoted)
   }

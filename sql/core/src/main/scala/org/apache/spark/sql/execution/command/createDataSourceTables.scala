@@ -25,6 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
@@ -57,7 +58,8 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw QueryCompilationErrors.tableAlreadyExistsError(table.identifier.unquotedString)
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          Seq(CatalogManager.SESSION_CATALOG_NAME, table.identifier.unquotedString))
       }
     }
 
@@ -162,7 +164,8 @@ case class CreateDataSourceTableAsSelectCommand(
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          Seq(CatalogManager.SESSION_CATALOG_NAME, tableName))
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.

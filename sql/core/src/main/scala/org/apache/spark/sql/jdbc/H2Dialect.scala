@@ -217,7 +217,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
               messageParameters = Map("relationName" -> quoteNameParts(Seq(catalogName, name))),
               cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
-          case 42102 => // TODO
+          case 42102 =>
             val relationName = messageParameters.getOrElse("tableName", "")
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
@@ -230,7 +230,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
               messageParameters = Map("schemaName" -> quoteNameParts(Seq(catalogName, name))))
           // INDEX_ALREADY_EXISTS_1
-          case 42111 if errorClass == "FAILED_JDBC.CREATE_INDEX" => // TODO
+          case 42111 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(

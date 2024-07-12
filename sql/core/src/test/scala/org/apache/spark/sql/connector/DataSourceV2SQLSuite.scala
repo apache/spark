@@ -216,7 +216,7 @@ class DataSourceV2SQLSuiteV1Filter
           "(id bigint, data string, id2 bigint) USING bar")
       },
       errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      parameters = Map("relationName" -> "`table_name`"))
+      parameters = Map("relationName" -> "`testcat`.`table_name`"))
 
     // table should not have changed
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -698,7 +698,7 @@ class DataSourceV2SQLSuiteV1Filter
           "SELECT id, data, id as id2 FROM source2")
       },
       errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      parameters = Map("relationName" -> "`table_name`"))
+      parameters = Map("relationName" -> "`testcat`.`table_name`"))
 
     // table should not have changed
     val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))

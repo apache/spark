@@ -82,7 +82,7 @@ case class CreateTableAsSelectExec(
         return Nil
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(
-        catalog.name() +: ident.asTableIdentifier.nameParts)
+        catalog.name() +: ident.asMultipartIdentifier)
     }
     val table = Option(catalog.createTable(
       ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
