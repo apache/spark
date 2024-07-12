@@ -1770,6 +1770,39 @@ abstract class JsonSuite
     }
   }
 
+  test("Write timestamps correctly in ISO8601 format by default") {
+    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
+    withTempDir { dir =>
+      // lets set LA timezone as for old dates LA had seconds offset
+      withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+        // With dateFormat option.
+        val timestampsWithoutFormatPath = s"${dir.getCanonicalPath}/timestampsWithoutFormat.json"
+        val timestampsWithoutFormat = spark.read
+          .schema(customSchema)
+          .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
+          .json(datesRecords.union(oldDatesRecord))
+
+        timestampsWithoutFormat.write
+          .format("json")
+          .save(timestampsWithoutFormatPath)
+
+        // This will load back the timestamps as string.
+        val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+        val stringTimestampsWithFormat = spark.read
+          .schema(stringSchema)
+          .json(timestampsWithoutFormatPath)
+        val expectedStringDatesWithoutFormat = Seq(
+          Row("1800-01-01T10:07:02.000-07:52:58"),
+          Row("1885-01-01T10:30:00.000-08:00"),
+          Row("2014-10-27T18:30:00.000-07:00"),
+          Row("2015-08-26T18:00:00.000-07:00"),
+          Row("2016-01-28T20:00:00.000-08:00"))
+
+        checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithoutFormat)
+      }
+    }
+  }
+
   test("Write timestamps correctly with timestampFormat option") {
     val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
     withTempDir { dir =>
@@ -3968,6 +4001,10 @@ class JsonV2Suite extends JsonSuite {
 }
 
 class JsonLegacyTimeParserSuite extends JsonSuite {
+
+  override def excluded: Seq[String] =
+    Seq("Write timestamps correctly in ISO8601 format by default")
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf

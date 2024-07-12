@@ -1875,7 +1875,7 @@ Spark allows users to specify a custom Kubernetes schedulers.
   ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
 ```bash
 ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano

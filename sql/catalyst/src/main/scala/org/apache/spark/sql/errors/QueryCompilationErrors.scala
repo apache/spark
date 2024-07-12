@@ -1072,10 +1072,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("database" -> database))
   }
 
-  def cannotDropDefaultDatabaseError(database: String): Throwable = {
+  def cannotDropDefaultDatabaseError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-      messageParameters = Map("database" -> toSQLId(database)))
+      messageParameters = Map("database" -> toSQLId(nameParts)))
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
@@ -2671,16 +2671,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "tablePath" -> tablePath,
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
-  }
-
-  def unsetNonExistentPropertiesError(
-      properties: Seq[String], table: TableIdentifier): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
-      messageParameters = Map(
-        "properties" -> properties.map(toSQLId).mkString(", "),
-        "table" -> toSQLId(table.nameParts))
-    )
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(

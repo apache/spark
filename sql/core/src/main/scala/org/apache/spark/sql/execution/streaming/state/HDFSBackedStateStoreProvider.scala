@@ -978,4 +978,47 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     result
   }
+
+  override def getStateStoreChangeDataReader(startVersion: Long, endVersion: Long):
+    StateStoreChangeDataReader = {
+    new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
+      CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
+      keySchema, valueSchema)
+  }
+}
+
+/** [[StateStoreChangeDataReader]] implementation for [[HDFSBackedStateStoreProvider]] */
+class HDFSBackedStateStoreChangeDataReader(
+    fm: CheckpointFileManager,
+    stateLocation: Path,
+    startVersion: Long,
+    endVersion: Long,
+    compressionCodec: CompressionCodec,
+    keySchema: StructType,
+    valueSchema: StructType)
+  extends StateStoreChangeDataReader(
+    fm, stateLocation, startVersion, endVersion, compressionCodec) {
+
+  override protected var changelogSuffix: String = "delta"
+
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    val reader = currentChangelogReader()
+    if (reader == null) {
+      return null
+    }
+    val (recordType, keyArray, valueArray) = reader.next()
+    val keyRow = new UnsafeRow(keySchema.fields.length)
+    keyRow.pointTo(keyArray, keyArray.length)
+    if (valueArray == null) {
+      (recordType, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = new UnsafeRow(valueSchema.fields.length)
+      // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+      // This is a workaround for the following:
+      // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+      // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+      valueRow.pointTo(valueArray, (valueArray.length / 8) * 8)
+      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
+    }
+  }
 }
