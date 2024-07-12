@@ -1182,6 +1182,7 @@ class Expression(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
     CALL_FUNCTION_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
+    MERGE_ACTION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1222,6 +1223,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def named_argument_expression(self) -> global___NamedArgumentExpression: ...
     @property
+    def merge_action(self) -> global___MergeAction: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1248,6 +1251,7 @@ class Expression(google.protobuf.message.Message):
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
+        merge_action: global___MergeAction | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1273,6 +1277,8 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
+            "merge_action",
+            b"merge_action",
             "named_argument_expression",
             b"named_argument_expression",
             "sort_order",
@@ -1318,6 +1324,8 @@ class Expression(google.protobuf.message.Message):
             b"lambda_function",
             "literal",
             b"literal",
+            "merge_action",
+            b"merge_action",
             "named_argument_expression",
             b"named_argument_expression",
             "sort_order",
@@ -1361,6 +1369,7 @@ class Expression(google.protobuf.message.Message):
             "common_inline_user_defined_function",
             "call_function",
             "named_argument_expression",
+            "merge_action",
             "extension",
         ]
         | None
@@ -1662,3 +1671,103 @@ class NamedArgumentExpression(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NamedArgumentExpression = NamedArgumentExpression
+
+class MergeAction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _ActionType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _ActionTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            MergeAction._ActionType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        ACTION_TYPE_INVALID: MergeAction._ActionType.ValueType  # 0
+        ACTION_TYPE_DELETE: MergeAction._ActionType.ValueType  # 1
+        ACTION_TYPE_INSERT: MergeAction._ActionType.ValueType  # 2
+        ACTION_TYPE_INSERT_STAR: MergeAction._ActionType.ValueType  # 3
+        ACTION_TYPE_UPDATE: MergeAction._ActionType.ValueType  # 4
+        ACTION_TYPE_UPDATE_STAR: MergeAction._ActionType.ValueType  # 5
+
+    class ActionType(_ActionType, metaclass=_ActionTypeEnumTypeWrapper): ...
+    ACTION_TYPE_INVALID: MergeAction.ActionType.ValueType  # 0
+    ACTION_TYPE_DELETE: MergeAction.ActionType.ValueType  # 1
+    ACTION_TYPE_INSERT: MergeAction.ActionType.ValueType  # 2
+    ACTION_TYPE_INSERT_STAR: MergeAction.ActionType.ValueType  # 3
+    ACTION_TYPE_UPDATE: MergeAction.ActionType.ValueType  # 4
+    ACTION_TYPE_UPDATE_STAR: MergeAction.ActionType.ValueType  # 5
+
+    class Assignment(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def key(self) -> global___Expression:
+            """(Required) The key of the assignment."""
+        @property
+        def value(self) -> global___Expression:
+            """(Required) The value of the assignment."""
+        def __init__(
+            self,
+            *,
+            key: global___Expression | None = ...,
+            value: global___Expression | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    ACTION_TYPE_FIELD_NUMBER: builtins.int
+    CONDITION_FIELD_NUMBER: builtins.int
+    ASSIGNMENTS_FIELD_NUMBER: builtins.int
+    action_type: global___MergeAction.ActionType.ValueType
+    """(Required) The action type of the merge action."""
+    @property
+    def condition(self) -> global___Expression:
+        """(Optional) The condition expression of the merge action."""
+    @property
+    def assignments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___MergeAction.Assignment
+    ]:
+        """(Optional) The assignments of the merge action. Required for ActionTypes INSERT and UPDATE."""
+    def __init__(
+        self,
+        *,
+        action_type: global___MergeAction.ActionType.ValueType = ...,
+        condition: global___Expression | None = ...,
+        assignments: collections.abc.Iterable[global___MergeAction.Assignment] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_condition", b"_condition", "condition", b"condition"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_condition",
+            b"_condition",
+            "action_type",
+            b"action_type",
+            "assignments",
+            b"assignments",
+            "condition",
+            b"condition",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_condition", b"_condition"]
+    ) -> typing_extensions.Literal["condition"] | None: ...
+
+global___MergeAction = MergeAction
