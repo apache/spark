@@ -188,11 +188,10 @@ class StateStoreChangelogWriterV1(
 
 /**
  * Write changes to the key value state store instance to a changelog file.
- * There are 2 types of data records, put and delete.
- * A put record is written as: | record type | key length
- *    | key content | value length | value content | col family name length | col family name | -1 |
+ * There are 3 types of data records, put, merge and delete.
+ * A put record or merge record is written as: | record type | key length
+ *    | key content | value length | value content | -1 |
  * A delete record is written as: | record type | key length | key content | -1
- *    | col family name length | col family name | -1 |
  * Write an EOF_RECORD to signal the end of file.
  * The overall changelog format is:  version | put record | delete record
  *                                   | ... | put record | eof record |
@@ -335,7 +334,7 @@ class StateStoreChangelogReaderV1(
  * Read an iterator of change record from the changelog file.
  * A record is represented by tuple(recordType: RecordType.Value,
  * key: Array[Byte], value: Array[Byte])
- * A put record is returned as a tuple(recordType, key, value)
+ * A put or merge record is returned as a tuple(recordType, key, value)
  * A delete record is return as a tuple(recordType, key, null)
  */
 class StateStoreChangelogReaderV2(
