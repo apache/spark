@@ -2701,9 +2701,17 @@ case class Base64(child: Expression, chunkBase64: Boolean)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val encoderArg = ctx.addReferenceObj("encoder", encoder, classOf[JBase64.Encoder].getName)
     nullSafeCodeGen(ctx, ev, (child) => {
-      s"${ev.value} = UTF8String.fromBytes($encoderArg.encode($child));"})
+      if (chunkBase64) {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
+        """
+      } else {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
+        """
+      }
+    })
   }
 
   override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
