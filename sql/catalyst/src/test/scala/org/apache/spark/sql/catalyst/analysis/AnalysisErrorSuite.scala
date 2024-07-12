@@ -1377,12 +1377,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     val nonDeterministicExpressions = Seq(new Rand())
     val tolerantPlan =
       SupportsNonDeterministicExpressionTestOperator(
-        nonDeterministicExpressions, tolerateNonDeterministicExpression = true)
+        nonDeterministicExpressions, allowNonDeterministicExpression = true)
     assertAnalysisSuccess(tolerantPlan)
 
     val intolerantPlan =
       SupportsNonDeterministicExpressionTestOperator(
-        nonDeterministicExpressions, tolerateNonDeterministicExpression = false)
+        nonDeterministicExpressions, allowNonDeterministicExpression = false)
     assertAnalysisError(
       intolerantPlan,
       "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
