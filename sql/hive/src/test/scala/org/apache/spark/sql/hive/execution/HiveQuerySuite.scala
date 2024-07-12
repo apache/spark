@@ -715,7 +715,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
-  private def isExplanation(result: DataFrame): Boolean = {
+  def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select("plan").collect().map { case Row(plan: String) => plan }
     explanation.head.startsWith("== Physical Plan ==")
   }
@@ -1303,7 +1303,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
     assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
-        case i: InsertIntoHiveTable => i.query.collect { case _: Project => () }.size
+        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
       }.sum
     }
   }
@@ -1322,7 +1322,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
         analyzedPlan.collect {
-          case i: InsertIntoHiveTable => i.query.collect { case _: Project => () }.size
+          case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
         }.sum
       }
     }
