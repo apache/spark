@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -1635,13 +1637,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("path" -> path))
   }
 
-  def dataSourceOutputModeUnsupportedError(
-      className: String, outputMode: OutputMode): Throwable = {
+  def fileSinkOutputModeUnsupportedError(
+      className: String, outputMode: OutputMode): AnalysisException = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1131",
-      messageParameters = Map(
-        "className" -> className,
-        "outputMode" -> outputMode.toString))
+      errorClass = "INVALID_STREAMING_OUTPUT_MODE.NOT_SUPPORTED_IN_FILE_SINK",
+      messageParameters = Map("outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT)))
   }
 
   def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
