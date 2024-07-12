@@ -568,8 +568,8 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
             case st if utf8BinaryResultChecked != null && utf8BinaryLcaseResultChecked != null &&
               hasStringType(st) =>
               // scalastyle:off caselocale
-              assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase)) ===
-                utf8BinaryLcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase)))
+              assert(utf8BinaryResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1) ===
+                utf8BinaryLcaseResultChecked.getRows(1, 0).map(_.map(_.toLowerCase))(1))
               // scalastyle:on caselocale
             case _ =>
               assert(utf8BinaryResultChecked.getRows(1, 0)(1) ===
