@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.{array, count, transform}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.functions.{array, col, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -123,5 +123,17 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
       context = ExpectedContext(
         "transform", s".*${this.getClass.getSimpleName}.*"))
+  }
+
+  test("SPARK-48666: Python UDF execution against partitioned column") {
+    assume(shouldTestPythonUDFs)
+    withTable("t") {
+      spark.range(1).selectExpr("id AS t", "(id + 1) AS p").write.partitionBy("p").saveAsTable("t")
+      val table = spark.table("t")
+      val newTable = table.withColumn("new_column", pythonTestUDF(table("p")))
+      val df = newTable.as("t1").join(
+        newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
+      checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
+    }
   }
 }
