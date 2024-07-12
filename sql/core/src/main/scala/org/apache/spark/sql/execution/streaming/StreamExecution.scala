@@ -91,7 +91,7 @@ abstract class StreamExecution(
   protected val awaitProgressLock = new ReentrantLock(true)
   protected val awaitProgressLockCondition = awaitProgressLock.newCondition()
 
-  protected val loggingThreadContext = new CloseableThreadContext.Instance()
+  protected var loggingThreadContext: CloseableThreadContext.Instance = _
 
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
@@ -290,8 +290,11 @@ abstract class StreamExecution(
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
       sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
-      loggingThreadContext.put(StreamExecution.QUERY_ID_KEY, id.toString)
-      loggingThreadContext.put(StreamExecution.RUN_ID_KEY, runId.toString)
+      loggingThreadContext = CloseableThreadContext.putAll(
+        Map(
+          StreamExecution.QUERY_ID_KEY -> id.toString,
+          StreamExecution.RUN_ID_KEY -> runId.toString
+        ).asJava)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
