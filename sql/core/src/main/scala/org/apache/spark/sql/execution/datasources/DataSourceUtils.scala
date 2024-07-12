@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -289,23 +289,6 @@ object DataSourceUtils extends PredicateHelper {
       case sources.Not(child) =>
         containsFiltersWithCollation(child)
       case _: sources.CollatedFilter => true
-      case _ => false
-    }
-  }
-
-  /**
-   * Determines whether a filter should be pushed down to the data source or not.
-   *
-   * @param expression The filter expression to be evaluated.
-   * @return A boolean indicating whether the filter should be pushed down or not.
-   */
-  def shouldPushFilter(expression: Expression): Boolean = {
-    expression.deterministic && !hasUnevaluableExpression(expression)
-  }
-
-  private def hasUnevaluableExpression(expression: Expression): Boolean = {
-    expression.exists {
-      case _: Unevaluable => true
       case _ => false
     }
   }

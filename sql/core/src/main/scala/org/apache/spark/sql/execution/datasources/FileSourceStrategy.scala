@@ -160,10 +160,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      val filtersToPush = filters.filter(f => DataSourceUtils.shouldPushFilter(f))
-
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filtersToPush, l.output)
+        filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
         l.resolve(
