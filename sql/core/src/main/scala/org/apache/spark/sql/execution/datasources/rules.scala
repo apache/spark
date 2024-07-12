@@ -237,7 +237,11 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
 
-        validateMapTypes(tableDesc.schema)
+        // Forbid creation of HIVE tables with
+        // MapType which key type contains MapType or VariantType
+        if (DDLUtils.isHiveTable(tableDesc)) {
+          validateMapTypes(tableDesc.schema)
+        }
 
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
@@ -294,11 +298,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
   }
 
   private def validateMapTypes(schema: StructType) = {
-    schema.foreach(st => st.dataType match {
-      case mt: MapType =>
-        if (mt.keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
+    schema.foreach(st => {
+      if (st.dataType.isInstanceOf[MapType]) {
+        val mt = st.dataType.asInstanceOf[MapType]
+
+        if (mt.keyType.existsRecursively(
+          dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
           throw QueryCompilationErrors.mapKeyTypeNotSupported(mt.keyType)
         }
+      }
     })
   }
 
