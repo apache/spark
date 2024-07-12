@@ -813,6 +813,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case (key, None) => sparkSession.conf.unset(key)
       }
       sparkSession.streams.removeListener(listener)
+      StateStore.stop()
     }
   }
 
