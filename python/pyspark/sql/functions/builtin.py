@@ -15799,7 +15799,7 @@ def from_json(
     |[1, 2, 3]|
     +---------+
 
-    Example 6: Parsing JSON with a specified options
+    Example 6: Parsing JSON with specified options
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, '''{a:123}'''), (2, '''{"a":456}''')], ("key", "value"))
