@@ -18,10 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.{ByteBuffer, CharBuffer}
-import java.nio.charset.{CharacterCodingException, Charset, CodingErrorAction, IllegalCharsetNameException, UnsupportedCharsetException}
+import java.nio.charset.CharacterCodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
-import java.util.{Base64 => JBase64}
-import java.util.{HashMap, Locale, Map => JMap}
+import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharsetProvider, CollationFactory, CollationSupport, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeAnyCollation, StringTypeBinaryLcase}
@@ -2922,32 +2921,13 @@ object StringDecode {
       legacyCharsets: Boolean,
       legacyErrorAction: Boolean): UTF8String = {
     val fromCharset = charset.toString
-    if (legacyCharsets || Encode.VALID_CHARSETS.contains(fromCharset.toUpperCase(Locale.ROOT))) {
-      val decoder = try {
-        val codingErrorAction = if (legacyErrorAction) {
-          CodingErrorAction.REPLACE
-        } else {
-          CodingErrorAction.REPORT
-        }
-        Charset.forName(fromCharset)
-          .newDecoder()
-          .onMalformedInput(codingErrorAction)
-          .onUnmappableCharacter(codingErrorAction)
-      } catch {
-        case _: IllegalCharsetNameException |
-             _: UnsupportedCharsetException |
-             _: IllegalArgumentException =>
-          throw QueryExecutionErrors.invalidCharsetError("decode", fromCharset)
-      }
-      try {
-        val cb = decoder.decode(ByteBuffer.wrap(input))
-        UTF8String.fromString(cb.toString)
-      } catch {
-        case _: CharacterCodingException =>
-          throw QueryExecutionErrors.malformedCharacterCoding("decode", fromCharset)
-      }
-    } else {
-      throw QueryExecutionErrors.invalidCharsetError("decode", fromCharset)
+    val decoder = CharsetProvider.newDecoder(fromCharset, legacyCharsets, legacyErrorAction)
+    try {
+      val cb = decoder.decode(ByteBuffer.wrap(input))
+      UTF8String.fromString(cb.toString)
+    } catch {
+      case _: CharacterCodingException =>
+        throw QueryExecutionErrors.malformedCharacterCoding("decode", fromCharset)
     }
   }
 }
@@ -3004,9 +2984,6 @@ case class Encode(
 object Encode {
   def apply(value: Expression, charset: Expression): Encode = new Encode(value, charset)
 
-  private[expressions] final lazy val VALID_CHARSETS =
-    Set("US-ASCII", "ISO-8859-1", "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-16", "UTF-32")
-
   def encode(
       input: UTF8String,
       charset: UTF8String,
@@ -3016,32 +2993,13 @@ object Encode {
     if (input.numBytes == 0 || "UTF-8".equalsIgnoreCase(toCharset)) {
       return input.getBytes
     }
-    if (legacyCharsets || VALID_CHARSETS.contains(toCharset.toUpperCase(Locale.ROOT))) {
-      val encoder = try {
-        val codingErrorAction = if (legacyErrorAction) {
-          CodingErrorAction.REPLACE
-        } else {
-          CodingErrorAction.REPORT
-        }
-        Charset.forName(toCharset)
-          .newEncoder()
-          .onMalformedInput(codingErrorAction)
-          .onUnmappableCharacter(codingErrorAction)
-      } catch {
-        case _: IllegalCharsetNameException |
-             _: UnsupportedCharsetException |
-             _: IllegalArgumentException =>
-          throw QueryExecutionErrors.invalidCharsetError("encode", toCharset)
-      }
-      try {
-        val bb = encoder.encode(CharBuffer.wrap(input.toString))
-        JavaUtils.bufferToArray(bb)
-      } catch {
-        case _: CharacterCodingException =>
-          throw QueryExecutionErrors.malformedCharacterCoding("encode", toCharset)
-      }
-    } else {
-      throw QueryExecutionErrors.invalidCharsetError("encode", toCharset)
+    val encoder = CharsetProvider.newEncoder(toCharset, legacyCharsets, legacyErrorAction)
+    try {
+      val bb = encoder.encode(CharBuffer.wrap(input.toString))
+      JavaUtils.bufferToArray(bb)
+    } catch {
+      case _: CharacterCodingException =>
+        throw QueryExecutionErrors.malformedCharacterCoding("encode", toCharset)
     }
   }
 }

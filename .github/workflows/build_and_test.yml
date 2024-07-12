@@ -449,10 +449,7 @@ jobs:
           pyspark-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
@@ -558,10 +555,7 @@ jobs:
         restore-keys: |
           sparkr-coursier-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -612,7 +606,7 @@ jobs:
     - name: Breaking change detection against branch-3.5
       uses: bufbuild/buf-breaking-action@v1
       with:
-        input: connector/connect/common/src/main
+        input: connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.5,subdir=connector/connect/common/src/main'
     - name: Install Python 3.9
       uses: actions/setup-python@v5
@@ -685,10 +679,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
@@ -831,10 +822,7 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Free up disk space
-      run: |
-        if [ -f ./dev/free_disk_space_container ]; then
-          ./dev/free_disk_space_container
-        fi
+      run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:

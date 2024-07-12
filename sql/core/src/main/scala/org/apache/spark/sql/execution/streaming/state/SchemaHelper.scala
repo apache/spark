@@ -20,6 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.StringReader
 
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
 import org.apache.spark.sql.types.StructType
@@ -28,6 +33,57 @@ import org.apache.spark.util.Utils
 /**
  * Helper classes for reading/writing state schema.
  */
+sealed trait ColumnFamilySchema extends Serializable {
+  def jsonValue: JValue
+
+  def json: String
+
+  def columnFamilyName: String
+}
+
+case class ColumnFamilySchemaV1(
+    columnFamilyName: String,
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    userKeyEncoder: Option[StructType] = None) extends ColumnFamilySchema {
+  def jsonValue: JValue = {
+    ("columnFamilyName" -> JString(columnFamilyName)) ~
+      ("keySchema" -> JString(keySchema.json)) ~
+      ("valueSchema" -> JString(valueSchema.json)) ~
+      ("keyStateEncoderSpec" -> keyStateEncoderSpec.jsonValue) ~
+      ("userKeyEncoder" -> userKeyEncoder.map(s => JString(s.json)).getOrElse(JNothing))
+  }
+
+  def json: String = {
+    compact(render(jsonValue))
+  }
+}
+
+object ColumnFamilySchemaV1 {
+
+  /**
+   * Create a ColumnFamilySchemaV1 object from the Json string
+   * This function is to read the StateSchemaV3 file
+   */
+  def fromJson(json: String): ColumnFamilySchema = {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val colFamilyMap = JsonMethods.parse(json).extract[Map[String, Any]]
+    assert(colFamilyMap.isInstanceOf[Map[_, _]],
+      s"Expected Map but got ${colFamilyMap.getClass}")
+    val keySchema = StructType.fromString(colFamilyMap("keySchema").asInstanceOf[String])
+    val valueSchema = StructType.fromString(colFamilyMap("valueSchema").asInstanceOf[String])
+    ColumnFamilySchemaV1(
+      colFamilyMap("columnFamilyName").asInstanceOf[String],
+      keySchema,
+      valueSchema,
+      KeyStateEncoderSpec.fromJson(keySchema, colFamilyMap("keyStateEncoderSpec")
+        .asInstanceOf[Map[String, Any]]),
+      colFamilyMap.get("userKeyEncoder").map(_.asInstanceOf[String]).map(StructType.fromString)
+    )
+  }
+}
+
 object SchemaHelper {
 
   sealed trait SchemaReader {
