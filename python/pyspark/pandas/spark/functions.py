@@ -175,7 +175,7 @@ def null_index(col: Column) -> Column:
 
 
 def make_interval(unit: str, e: Union[Column, int, float]) -> Column:
-    m = {
+    unit_mapping = {
         "YEAR": "years",
         "MONTH": "months",
         "WEEK": "weeks",
@@ -184,4 +184,4 @@ def make_interval(unit: str, e: Union[Column, int, float]) -> Column:
         "MINUTE": "mins",
         "SECOND": "secs",
     }
-    return F.make_interval(**{m[unit]: F.lit(e)})
+    return F.make_interval(**{unit_mapping[unit]: F.lit(e)})
