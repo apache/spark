@@ -1349,6 +1349,15 @@ class PlanResolutionSuite extends AnalysisTest {
             sqlState = "0A000",
             parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
               "operation" -> "ALTER COLUMN with qualified column"))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              parseAndResolve(s"ALTER TABLE $tblName ALTER COLUMN i SET NOT NULL")
+            },
+            errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+            sqlState = "0A000",
+            parameters = Map("tableName" -> "`spark_catalog`.`default`.`v1Table`",
+              "operation" -> "ALTER COLUMN ... SET NOT NULL"))
         } else {
           parsed1 match {
             case AlterColumn(
