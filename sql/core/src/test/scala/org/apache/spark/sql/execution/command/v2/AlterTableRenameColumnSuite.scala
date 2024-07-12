@@ -153,16 +153,11 @@ class AlterTableRenameColumnSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "does_not_exist",
-          "table" -> t,
-          "schema" ->
-            """root
-              | |-- id: integer (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(fragment = sqlText, start = 0, stop = 64)
-      )
+          "objectName" -> "`does_not_exist`",
+          "proposal" -> "`id`"))
     }
   }
 
@@ -175,16 +170,11 @@ class AlterTableRenameColumnSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1331",
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
         parameters = Map(
-          "fieldName" -> "point.does_not_exist",
-          "table" -> t,
-          "schema" ->
-            """root
-              | |-- id: integer (nullable = true)
-              |""".stripMargin),
-        context = ExpectedContext(fragment = sqlText, start = 0, stop = 70)
-      )
+          "objectName" -> "`point`.`does_not_exist`",
+          "proposal" -> "`id`"))
     }
   }
 }
