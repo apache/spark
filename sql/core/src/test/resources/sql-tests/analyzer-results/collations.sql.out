@@ -159,9 +159,9 @@ DropTable false, false
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Except false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -169,9 +169,9 @@ Except false
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Except All true
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -180,9 +180,9 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+   :- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    :  +- LocalRelation [col1#x]
-   +- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+   +- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
       +- LocalRelation [col1#x]
 
 
@@ -190,9 +190,9 @@ Distinct
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Union false, false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -200,9 +200,9 @@ Union false, false
 select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query analysis
 Intersect false
-:- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
+:- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
 :  +- LocalRelation [col1#x]
-+- Project [collate(col1#x, utf8_lcase) AS collate(col1)#x]
++- Project [collate(col1#x, utf8_lcase) AS collate(col1, utf8_lcase)#x]
    +- LocalRelation [col1#x]
 
 
@@ -254,138 +254,138 @@ DropTable false, false
 -- !query
 select array_contains(ARRAY('aaa' collate utf8_lcase),'AAA' collate utf8_lcase)
 -- !query analysis
-Project [array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
+Project [array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase)) AS array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_position(ARRAY('aaa' collate utf8_lcase, 'bbb' collate utf8_lcase),'BBB' collate utf8_lcase)
 -- !query analysis
-Project [array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
+Project [array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase)) AS array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase))#xL]
 +- OneRowRelation
 
 
 -- !query
 select nullif('aaa' COLLATE utf8_lcase, 'AAA' COLLATE utf8_lcase)
 -- !query analysis
-Project [nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)) AS nullif(collate(aaa), collate(AAA))#x]
+Project [nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)) AS nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select least('aaa' COLLATE utf8_lcase, 'AAA' collate utf8_lcase, 'a' collate utf8_lcase)
 -- !query analysis
-Project [least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase)) AS least(collate(aaa), collate(AAA), collate(a))#x]
+Project [least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase)) AS least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase))#x]
 +- OneRowRelation
 
 
 -- !query
 select arrays_overlap(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS arrays_overlap(array(collate(aaa)), array(collate(AAA)))#x]
+Project [arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_distinct(array('aaa' collate utf8_lcase, 'AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))) AS array_distinct(array(collate(aaa), collate(AAA)))#x]
+Project [array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))) AS array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_union(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_union(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_intersect(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_intersect(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_except(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query analysis
-Project [array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))) AS array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase)))#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode < 'A'
 -- !query analysis
-Project [(collate(a, unicode) < cast(A as string collate UNICODE)) AS (collate(a) < A)#x]
+Project [(collate(a, unicode) < cast(A as string collate UNICODE)) AS (collate(a, unicode) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query analysis
-Project [(collate(a, unicode_ci) = cast(A as string collate UNICODE_CI)) AS (collate(a) = A)#x]
+Project [(collate(a, unicode_ci) = cast(A as string collate UNICODE_CI)) AS (collate(a, unicode_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query analysis
-Project [(collate(a, unicode_ai) = cast(å as string collate UNICODE_AI)) AS (collate(a) = å)#x]
+Project [(collate(a, unicode_ai) = cast(å as string collate UNICODE_AI)) AS (collate(a, unicode_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, unicode_ci_ai) = cast(Å as string collate UNICODE_CI_AI)) AS (collate(a) = Å)#x]
+Project [(collate(a, unicode_ci_ai) = cast(Å as string collate UNICODE_CI_AI)) AS (collate(a, unicode_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en < 'A'
 -- !query analysis
-Project [(collate(a, en) < cast(A as string collate en)) AS (collate(a) < A)#x]
+Project [(collate(a, en) < cast(A as string collate en)) AS (collate(a, en) < A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query analysis
-Project [(collate(a, en_ci) = cast(A as string collate en_CI)) AS (collate(a) = A)#x]
+Project [(collate(a, en_ci) = cast(A as string collate en_CI)) AS (collate(a, en_ci) = A)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query analysis
-Project [(collate(a, en_ai) = cast(å as string collate en_AI)) AS (collate(a) = å)#x]
+Project [(collate(a, en_ai) = cast(å as string collate en_AI)) AS (collate(a, en_ai) = å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query analysis
-Project [(collate(a, en_ci_ai) = cast(Å as string collate en_CI_AI)) AS (collate(a) = Å)#x]
+Project [(collate(a, en_ci_ai) = cast(Å as string collate en_CI_AI)) AS (collate(a, en_ci_ai) = Å)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, sv) < cast(Köpfe as string collate sv)) AS (collate(Kypper) < Köpfe)#x]
+Project [(collate(Kypper, sv) < cast(Köpfe as string collate sv)) AS (collate(Kypper, sv) < Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query analysis
-Project [(collate(Kypper, de) > cast(Köpfe as string collate de)) AS (collate(Kypper) > Köpfe)#x]
+Project [(collate(Kypper, de) > cast(Köpfe as string collate de)) AS (collate(Kypper, de) > Köpfe)#x]
 +- OneRowRelation
 
 
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query analysis
-Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I) = ı)#x]
+Project [(collate(I, tr_ci) = cast(ı as string collate tr_CI)) AS (collate(I, tr_ci) = ı)#x]
 +- OneRowRelation

@@ -147,7 +147,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     // Find new files
     val newFiles = findNewFiles(validTime.milliseconds)
-    logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
+    logInfo(log"New files at time ${MDC(LogKeys.BATCH_TIMESTAMP, validTime)}:\n" +
+      log"${MDC(LogKeys.FILE_NAME, newFiles.mkString("\n"))}")
     batchTimeToSelectedFiles.synchronized {
       batchTimeToSelectedFiles += ((validTime, newFiles))
     }

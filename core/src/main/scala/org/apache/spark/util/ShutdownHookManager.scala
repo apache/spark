@@ -110,7 +110,7 @@ private[spark] object ShutdownHookManager extends Logging {
       }
     }
     if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
+      logInfo(log"path = ${MDC(LogKeys.FILE_NAME, file)}, already present as root for deletion.")
     }
     retval
   }

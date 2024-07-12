@@ -143,6 +143,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -718,6 +729,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been
             // already validated inside checkMetric function
