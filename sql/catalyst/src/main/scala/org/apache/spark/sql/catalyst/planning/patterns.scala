@@ -144,6 +144,10 @@ object ScanOperation extends OperationHelper {
     // Filters if one or more of them are nondeterministic. This means we can only push down the
     // bottom-most Filter, or more following deterministic Filters if the bottom-most Filter is
     // also deterministic.
+
+    // PythonUDFs should not be pushed
+    assert(filters.forall(!_.exists(_.isInstanceOf[PythonUDF])))
+
     if (filters.isEmpty) {
       Some((fields.getOrElse(child.output), Nil, Nil, child))
     } else if (filters.head.deterministic) {
