@@ -20,6 +20,8 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle.ErrorHandler
+import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
@@ -92,6 +94,11 @@ class SingleStatementExec(
   var collectResult = false
 
   /**
+   * Data returned after execution.
+   */
+  var data: Option[Array[Row]] = None
+
+  /**
    * Get the SQL query text corresponding to this statement.
    * @return
    *   SQL query text.
@@ -102,6 +109,18 @@ class SingleStatementExec(
   }
 
   override def reset(): Unit = isExecuted = false
+
+  def execute(session: SparkSession): Unit = {
+    try {
+      isExecuted = true
+      val result = Some(Dataset.ofRows(session, parsedPlan).collect())
+      if (collectResult) data = result
+    } catch {
+      case e: Exception =>
+        // TODO: check handlers for error conditions
+        raisedError = true
+    }
+  }
 }
 
 /**
@@ -165,7 +184,10 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], handlers: Seq[ErrorHandler])
+class CompoundBodyExec(
+      statements: Seq[CompoundStatementExec],
+      handlers: Seq[ErrorHandler],
+      session: SparkSession)
   extends CompoundNestedStatementIteratorExec(statements) {
 
   override protected lazy val treeIterator: Iterator[CompoundStatementExec] =
@@ -188,6 +210,10 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], handlers: Seq[Err
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(statement: SingleStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            statement.execute(session)
+            if (statement.raisedError) {
+
+            }
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
@@ -202,4 +228,18 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], handlers: Seq[Err
       }
     }
 
+}
+
+class ErrorHandlerExec(
+    conditions: Seq[String],
+    body: CompoundBodyExec,
+    handlerType: HandlerType) extends CompoundStatementExec {
+
+  def execute(): Unit = {
+    val iterator = body.getTreeIterator
+
+    while (iterator.hasNext) iterator.next()
+  }
+
+  override def reset(): Unit = body.reset()
 }
