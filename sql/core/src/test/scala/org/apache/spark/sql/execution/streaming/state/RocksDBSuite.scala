@@ -590,6 +590,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1)
+    assert(changelogWriter.version === 1)
 
     val ex = intercept[UnsupportedOperationException] {
       changelogWriter.merge("a", "1")
@@ -638,12 +639,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1)
+    assert(changelogWriter.version === 1)
 
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString))
 
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1)
+    assert(changelogReader.version === 1)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
@@ -665,6 +668,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    assert(changelogWriter.version === 2)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
     }
@@ -678,6 +682,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1, true)
+    assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes, i.toString.getBytes)

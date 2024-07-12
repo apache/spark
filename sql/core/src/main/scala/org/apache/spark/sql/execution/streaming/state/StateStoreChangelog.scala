@@ -98,6 +98,8 @@ abstract class StateStoreChangelogWriter(
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
   var size = 0
 
+  def version: Short
+
   def put(key: Array[Byte], value: Array[Byte]): Unit
 
   def delete(key: Array[Byte]): Unit
@@ -140,6 +142,9 @@ class StateStoreChangelogWriterV1(
     file: Path,
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+
+  // Note that v1 does not record this value in the changelog file
+  override def version: Short = 1
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
@@ -189,13 +194,19 @@ class StateStoreChangelogWriterV1(
  * A delete record is written as: | record type | key length | key content | -1
  *    | col family name length | col family name | -1 |
  * Write an EOF_RECORD to signal the end of file.
- * The overall changelog format is: | put record | delete record | ... | put record | eof record |
+ * The overall changelog format is:  version | put record | delete record
+ *                                   | ... | put record | eof record |
  */
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+
+  override def version: Short = 2
+
+  // append the version field to the changelog file starting from version 2
+  compressedStream.writeShort(version)
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -270,6 +281,8 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
+  def version: Short
+
   override protected def close(): Unit = { if (input != null) input.close() }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte])
@@ -287,6 +300,9 @@ class StateStoreChangelogReaderV1(
     fileToRead: Path,
     compressionCodec: CompressionCodec)
   extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+
+  // Note that v1 does not record this value in the changelog file
+  override def version: Short = 1
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -334,6 +350,12 @@ class StateStoreChangelogReaderV2(
     ByteStreams.readFully(input, blockBuffer, 0, blockSize)
     blockBuffer
   }
+
+  override def version: Short = 2
+
+  // ensure that the version read is v2
+  val changelogVersion = input.readShort()
+  assert(changelogVersion == version, s"Changelog version mismatch: $changelogVersion != $version")
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
