@@ -315,11 +315,7 @@ private[hive] trait HiveStrategies {
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
         val normalizedFilters = DataSourceStrategy.normalizeExprs(
-          filters.filter { f =>
-            f.deterministic &&
-              !SubqueryExpression.hasSubquery(f) &&
-              !f.exists(_.isInstanceOf[PythonUDF])
-          }, relation.output)
+          filters.filter(_.deterministic), relation.output)
 
         val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(relation.partitionCols,
           normalizedFilters)

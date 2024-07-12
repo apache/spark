@@ -161,11 +161,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val filterSet = ExpressionSet(filters)
 
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter { f =>
-          f.deterministic &&
-            !SubqueryExpression.hasSubquery(f) &&
-            !f.exists(_.isInstanceOf[PythonUDF])
-        }, l.output)
+        filters.filter(_.deterministic), l.output)
 
       val partitionColumns =
         l.resolve(

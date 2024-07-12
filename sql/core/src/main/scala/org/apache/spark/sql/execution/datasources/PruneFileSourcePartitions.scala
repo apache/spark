@@ -66,6 +66,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         filters.filter { f =>
           f.deterministic &&
             !SubqueryExpression.hasSubquery(f) &&
+            // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
             !f.exists(_.isInstanceOf[PythonUDF])
         },
         logicalRelation.output)

@@ -74,6 +74,7 @@ abstract class FileScanBuilder(
     val (partitionFilters, dataFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
     this.partitionFilters = partitionFilters.filter { f =>
+      // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
       !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
     }
     this.dataFilters = dataFilters
