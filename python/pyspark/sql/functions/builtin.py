@@ -15793,6 +15793,20 @@ def from_json(
     +---------+
     |[1, 2, 3]|
     +---------+
+
+    Example 6: Parsing JSON with specified options
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{a:123}'''), (2, '''{"a":456}''')], ("key", "value"))
+    >>> parsed1 = sf.from_json(df.value, "a INT")
+    >>> parsed2 = sf.from_json(df.value, "a INT", {"allowUnquotedFieldNames": "true"})
+    >>> df.select("value", parsed1, parsed2).show()
+    +---------+----------------+----------------+
+    |    value|from_json(value)|from_json(value)|
+    +---------+----------------+----------------+
+    |  {a:123}|          {NULL}|           {123}|
+    |{"a":456}|           {456}|           {456}|
+    +---------+----------------+----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16113,6 +16127,19 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     +---------------+
     |["Alice","Bob"]|
     +---------------+
+
+    Example 6: Converting to JSON with specified options
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT (DATE('2022-02-22'), 1) AS date")
+    >>> json1 = sf.to_json(df.date)
+    >>> json2 = sf.to_json(df.date, {"dateFormat": "yyyy/MM/dd"})
+    >>> df.select("date", json1, json2).show(truncate=False)
+    +---------------+------------------------------+------------------------------+
+    |date           |to_json(date)                 |to_json(date)                 |
+    +---------------+------------------------------+------------------------------+
+    |{2022-02-22, 1}|{"col1":"2022-02-22","col2":1}|{"col1":"2022/02/22","col2":1}|
+    +---------------+------------------------------+------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16150,12 +16177,15 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
-    [Row(json='STRUCT<a: BIGINT>')]
-    >>> schema = schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
-    >>> df.select(schema.alias("json")).collect()
-    [Row(json='STRUCT<a: BIGINT>')]
+    >>> import pyspark.sql.functions as sf
+    >>> parsed1 = sf.schema_of_json(sf.lit('{"a": 0}'))
+    >>> parsed2 = sf.schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
+    >>> spark.range(1).select(parsed1, parsed2).show()
+    +------------------------+----------------------+
+    |schema_of_json({"a": 0})|schema_of_json({a: 1})|
+    +------------------------+----------------------+
+    |       STRUCT<a: BIGINT>|     STRUCT<a: BIGINT>|
+    +------------------------+----------------------+
     """
     from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
 
