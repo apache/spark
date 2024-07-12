@@ -2683,42 +2683,37 @@ case class Chr(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class Base64(child: Expression, chunkBase64: Boolean)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
 
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
-
-  lazy val encoder: JBase64.Encoder = if (chunkBase64) {
-    JBase64.getMimeEncoder
-  } else {
-    JBase64.getMimeEncoder(-1, Array())
-  }
 
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(encoder.encode(bytes.asInstanceOf[Array[Byte]]))
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[Base64],
+    dataType,
+    "encode",
+    Seq(child, Literal(chunkBase64, BooleanType)),
+    Seq(BinaryType, BooleanType))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      if (chunkBase64) {
-        s"""${ev.value} = UTF8String.fromBytes(
-             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
-        """
-      } else {
-        s"""${ev.value} = UTF8String.fromBytes(
-             ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
-        """
-      }
-    })
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 object Base64 {
   def apply(expr: Expression): Base64 = new Base64(expr)
+
+  private lazy val nonChunkEncoder = JBase64.getMimeEncoder(-1, Array())
+
+  def encode(input: Array[Byte], chunkBase64: Boolean): UTF8String = {
+    val encoder = if (chunkBase64) {
+      JBase64.getMimeEncoder
+    } else {
+      nonChunkEncoder
+    }
+    UTF8String.fromBytes(encoder.encode(input))
+  }
 }
 
 /**
