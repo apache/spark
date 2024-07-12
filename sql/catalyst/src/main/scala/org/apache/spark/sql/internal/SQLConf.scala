@@ -1522,12 +1522,12 @@ object SQLConf {
      * Output as UTF-8 string.
      * [83, 112, 97, 114, 107] -> "Spark"
      */
-    UTF8,
+    UTF8: Value = Value("UTF-8")
     /**
      * Output as comma separated byte array string.
      * [83, 112, 97, 114, 107] -> [83, 112, 97, 114, 107]
      */
-    BASIC,
+    val BASIC,
     /**
      * Output as base64 encoded string.
      * [83, 112, 97, 114, 107] -> U3Bhcmsg
@@ -1546,7 +1546,7 @@ object SQLConf {
   }
 
   val BINARY_OUTPUT_STYLE = buildConf("spark.sql.binaryOutputStyle")
-    .doc("The output style used display binary data. Valid values are 'UTF8', " +
+    .doc("The output style used display binary data. Valid values are 'UTF-8', " +
       "'BASIC', 'BASE64', 'HEX', and 'HEX_DISCRETE'.")
     .version("4.0.0")
     .stringConf
