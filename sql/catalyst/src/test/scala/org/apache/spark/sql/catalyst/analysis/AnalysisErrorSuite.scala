@@ -94,7 +94,6 @@ case class SupportsNonDeterministicExpressionTestOperator(
     actions: Seq[Expression],
     allowNonDeterministicExpression: Boolean)
   extends LeafNode with SupportsNonDeterministicExpression {
-  
   override def output: Seq[Attribute] = Seq()
 }
 
