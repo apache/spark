@@ -320,7 +320,7 @@ case class DataSource(
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
         })
         if (outputMode != OutputMode.Append) {
-          throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
+          throw QueryCompilationErrors.fileSinkOutputModeUnsupportedError(className, outputMode)
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
