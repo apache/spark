@@ -170,7 +170,7 @@ struct<>
 -- !query
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query schema
-struct<collate(col1):string collate UTF8_LCASE>
+struct<collate(col1, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 zzz
 
@@ -178,7 +178,7 @@ zzz
 -- !query
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query schema
-struct<collate(col1):string collate UTF8_LCASE>
+struct<collate(col1, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 aaa
 bbb
@@ -189,7 +189,7 @@ zzz
 -- !query
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query schema
-struct<collate(col1):string collate UTF8_LCASE>
+struct<collate(col1, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 aaa
 bbb
@@ -199,7 +199,7 @@ zzz
 -- !query
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query schema
-struct<collate(col1):string collate UTF8_LCASE>
+struct<collate(col1, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 AAA
 BBB
@@ -214,7 +214,7 @@ zzz
 -- !query
 select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_lcase from values ('aaa'), ('bbb')
 -- !query schema
-struct<collate(col1):string collate UTF8_LCASE>
+struct<collate(col1, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 aaa
 bbb
@@ -272,7 +272,7 @@ struct<>
 -- !query
 select array_contains(ARRAY('aaa' collate utf8_lcase),'AAA' collate utf8_lcase)
 -- !query schema
-struct<array_contains(array(collate(aaa)), collate(AAA)):boolean>
+struct<array_contains(array(collate(aaa, utf8_lcase)), collate(AAA, utf8_lcase)):boolean>
 -- !query output
 true
 
@@ -280,7 +280,7 @@ true
 -- !query
 select array_position(ARRAY('aaa' collate utf8_lcase, 'bbb' collate utf8_lcase),'BBB' collate utf8_lcase)
 -- !query schema
-struct<array_position(array(collate(aaa), collate(bbb)), collate(BBB)):bigint>
+struct<array_position(array(collate(aaa, utf8_lcase), collate(bbb, utf8_lcase)), collate(BBB, utf8_lcase)):bigint>
 -- !query output
 2
 
@@ -288,7 +288,7 @@ struct<array_position(array(collate(aaa), collate(bbb)), collate(BBB)):bigint>
 -- !query
 select nullif('aaa' COLLATE utf8_lcase, 'AAA' COLLATE utf8_lcase)
 -- !query schema
-struct<nullif(collate(aaa), collate(AAA)):string collate UTF8_LCASE>
+struct<nullif(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
 NULL
 
@@ -296,7 +296,7 @@ NULL
 -- !query
 select least('aaa' COLLATE utf8_lcase, 'AAA' collate utf8_lcase, 'a' collate utf8_lcase)
 -- !query schema
-struct<least(collate(aaa), collate(AAA), collate(a)):string collate UTF8_LCASE>
+struct<least(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase), collate(a, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
 a
 
@@ -304,7 +304,7 @@ a
 -- !query
 select arrays_overlap(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query schema
-struct<arrays_overlap(array(collate(aaa)), array(collate(AAA))):boolean>
+struct<arrays_overlap(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))):boolean>
 -- !query output
 true
 
@@ -312,7 +312,7 @@ true
 -- !query
 select array_distinct(array('aaa' collate utf8_lcase, 'AAA' collate utf8_lcase))
 -- !query schema
-struct<array_distinct(array(collate(aaa), collate(AAA))):array<string collate UTF8_LCASE>>
+struct<array_distinct(array(collate(aaa, utf8_lcase), collate(AAA, utf8_lcase))):array<string collate UTF8_LCASE>>
 -- !query output
 ["aaa"]
 
@@ -320,7 +320,7 @@ struct<array_distinct(array(collate(aaa), collate(AAA))):array<string collate UT
 -- !query
 select array_union(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query schema
-struct<array_union(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_LCASE>>
+struct<array_union(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))):array<string collate UTF8_LCASE>>
 -- !query output
 ["aaa"]
 
@@ -328,7 +328,7 @@ struct<array_union(array(collate(aaa)), array(collate(AAA))):array<string collat
 -- !query
 select array_intersect(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query schema
-struct<array_intersect(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_LCASE>>
+struct<array_intersect(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))):array<string collate UTF8_LCASE>>
 -- !query output
 ["aaa"]
 
@@ -336,7 +336,7 @@ struct<array_intersect(array(collate(aaa)), array(collate(AAA))):array<string co
 -- !query
 select array_except(array('aaa' collate utf8_lcase), array('AAA' collate utf8_lcase))
 -- !query schema
-struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_LCASE>>
+struct<array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lcase))):array<string collate UTF8_LCASE>>
 -- !query output
 []
 
@@ -344,7 +344,7 @@ struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string colla
 -- !query
 select 'a' collate unicode < 'A'
 -- !query schema
-struct<(collate(a) < A):boolean>
+struct<(collate(a, unicode) < A):boolean>
 -- !query output
 true
 
@@ -352,7 +352,7 @@ true
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query schema
-struct<(collate(a) = A):boolean>
+struct<(collate(a, unicode_ci) = A):boolean>
 -- !query output
 true
 
@@ -360,7 +360,7 @@ true
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query schema
-struct<(collate(a) = å):boolean>
+struct<(collate(a, unicode_ai) = å):boolean>
 -- !query output
 true
 
@@ -368,7 +368,7 @@ true
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a) = Å):boolean>
+struct<(collate(a, unicode_ci_ai) = Å):boolean>
 -- !query output
 true
 
@@ -376,7 +376,7 @@ true
 -- !query
 select 'a' collate en < 'A'
 -- !query schema
-struct<(collate(a) < A):boolean>
+struct<(collate(a, en) < A):boolean>
 -- !query output
 true
 
@@ -384,7 +384,7 @@ true
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query schema
-struct<(collate(a) = A):boolean>
+struct<(collate(a, en_ci) = A):boolean>
 -- !query output
 true
 
@@ -392,7 +392,7 @@ true
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query schema
-struct<(collate(a) = å):boolean>
+struct<(collate(a, en_ai) = å):boolean>
 -- !query output
 true
 
@@ -400,7 +400,7 @@ true
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a) = Å):boolean>
+struct<(collate(a, en_ci_ai) = Å):boolean>
 -- !query output
 true
 
@@ -408,7 +408,7 @@ true
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query schema
-struct<(collate(Kypper) < Köpfe):boolean>
+struct<(collate(Kypper, sv) < Köpfe):boolean>
 -- !query output
 true
 
@@ -416,7 +416,7 @@ true
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query schema
-struct<(collate(Kypper) > Köpfe):boolean>
+struct<(collate(Kypper, de) > Köpfe):boolean>
 -- !query output
 true
 
@@ -424,6 +424,6 @@ true
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query schema
-struct<(collate(I) = ı):boolean>
+struct<(collate(I, tr_ci) = ı):boolean>
 -- !query output
 true
