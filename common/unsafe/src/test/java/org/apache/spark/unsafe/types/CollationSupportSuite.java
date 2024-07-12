@@ -1792,7 +1792,7 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE_CI", "IXİ", "ix\u0307", "IXİ");
     assertStringTrimRight("UNICODE_CI", "xi\u0307", "\u0307IX", "xi\u0307");
 
-    // Conditional case mapping - UTF8_BINARY.
+    // Greek sigmas - UTF8_BINARY.
     assertStringTrim("UTF8_BINARY", "ςxς", "σ", "ςxς");
     assertStringTrim("UTF8_BINARY", "ςxς", "ς", "x");
     assertStringTrim("UTF8_BINARY", "ςxς", "Σ", "ςxς");
@@ -1820,7 +1820,7 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "σ", "ΣxΣ");
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "ς", "ΣxΣ");
     assertStringTrimRight("UTF8_BINARY", "ΣxΣ", "Σ", "Σx");
-    // Conditional case mapping - UTF8_LCASE.
+    // Greek sigmas - UTF8_LCASE.
     assertStringTrim("UTF8_LCASE", "ςxς", "σ", "x");
     assertStringTrim("UTF8_LCASE", "ςxς", "ς", "x");
     assertStringTrim("UTF8_LCASE", "ςxς", "Σ", "x");
@@ -1848,7 +1848,7 @@ public class CollationSupportSuite {
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "σ", "Σx");
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "ς", "Σx");
     assertStringTrimRight("UTF8_LCASE", "ΣxΣ", "Σ", "Σx");
-    // Conditional case mapping - UNICODE.
+    // Greek sigmas - UNICODE.
     assertStringTrim("UNICODE", "ςxς", "σ", "ςxς");
     assertStringTrim("UNICODE", "ςxς", "ς", "x");
     assertStringTrim("UNICODE", "ςxς", "Σ", "ςxς");
@@ -1876,7 +1876,7 @@ public class CollationSupportSuite {
     assertStringTrimRight("UNICODE", "ΣxΣ", "σ", "ΣxΣ");
     assertStringTrimRight("UNICODE", "ΣxΣ", "ς", "ΣxΣ");
     assertStringTrimRight("UNICODE", "ΣxΣ", "Σ", "Σx");
-    // Conditional case mapping - UNICODE_CI.
+    // Greek sigmas - UNICODE_CI.
     assertStringTrim("UNICODE_CI", "ςxς", "σ", "x");
     assertStringTrim("UNICODE_CI", "ςxς", "ς", "x");
     assertStringTrim("UNICODE_CI", "ςxς", "Σ", "x");
