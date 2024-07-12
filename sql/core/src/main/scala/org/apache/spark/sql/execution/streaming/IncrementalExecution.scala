@@ -86,6 +86,12 @@ class IncrementalExecution(
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
   /**
+   * This value dictates which schema format version the state schema should be written in
+   * for all operators other than TransformWithState.
+   */
+  private val STATE_SCHEMA_DEFAULT_VERSION: Int = 2
+
+  /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
    * with the desired literal
@@ -187,23 +193,30 @@ class IncrementalExecution(
     }
   }
 
-  object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
-    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        val metadata = stateStoreWriter.operatorStateMetadata()
-        val metadataWriter = new OperatorStateMetadataWriter(new Path(
-          checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
-        metadataWriter.write(metadata)
-        stateStoreWriter
-    }
-  }
-
   // Planning rule used to record the state schema for the first run and validate state schema
   // changes across query runs.
-  object StateSchemaValidationRule extends SparkPlanPartialRule {
+  object StateSchemaAndOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      // In the case of TransformWithStateExec, we want to collect this StateSchema
+      // filepath, and write this path out in the OperatorStateMetadata file
       case statefulOp: StatefulOperator if isFirstBatch =>
-        statefulOp.validateAndMaybeEvolveStateSchema(hadoopConf)
+        val stateSchemaVersion = statefulOp match {
+          case _: TransformWithStateExec => sparkSession.sessionState.conf.
+            getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
+          case _ => STATE_SCHEMA_DEFAULT_VERSION
+        }
+        val stateSchemaPaths = statefulOp.
+          validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
+        // write out the state schema paths to the metadata file
+        statefulOp match {
+          case stateStoreWriter: StateStoreWriter =>
+            val metadata = stateStoreWriter.operatorStateMetadata()
+            // TODO: [SPARK-48849] Populate metadata with stateSchemaPaths if metadata version is v2
+            val metadataWriter = new OperatorStateMetadataWriter(new Path(
+              checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
+            metadataWriter.write(metadata)
+          case _ =>
+        }
         statefulOp
     }
   }
@@ -478,10 +491,9 @@ class IncrementalExecution(
         checkOperatorValidWithMetadata(planWithStateOpId)
       }
 
-      // The two rules below don't change the plan but can cause the side effect that
+      // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaValidationRule.rule
-      planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule
+      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
       simulateWatermarkPropagation(planWithStateOpId)
       planWithStateOpId transform WatermarkPropagationRule.rule

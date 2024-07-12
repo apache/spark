@@ -98,13 +98,13 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>connect/server</module>
+    <module>connect/common</module>
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/server</module>
-    <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->

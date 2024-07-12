@@ -650,8 +650,9 @@ private[spark] object MavenUtils extends Logging {
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
         logWarning(
-          s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
-            s"in Ivy URI query `$uriQuery`.")
+          log"Invalid parameters `${MDC(LogKeys.INVALID_PARAMS,
+            invalidParams.sorted.mkString(","))}` " +
+            log"found in Ivy URI query `${MDC(LogKeys.URI, uriQuery)}`.")
       }
 
       (transitive, exclusionList, repos)
