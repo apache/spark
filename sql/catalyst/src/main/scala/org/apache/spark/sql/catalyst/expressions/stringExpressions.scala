@@ -1050,15 +1050,35 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
 object StringTranslate {
 
-  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Int)
+  /**
+   * Build a translation dictionary from UTF8Strings. First, this method converts the input strings
+   * to valid Java Strings. However, we avoid any behavior changes for the UTF8_BINARY collation,
+   * but ensure that all other collations use `UTF8String.toValidString` to achieve this step.
+   */
+  def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Integer)
     : JMap[String, String] = {
-    val matching = if (CollationFactory.fetchCollation(collationId).supportsLowercaseEquality) {
-      matchingString.toString().toLowerCase()
+    val isCollationAware = collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+    val matching: String = if (isCollationAware) {
+      matchingString.toString
     } else {
-      matchingString.toString()
+      matchingString.toValidString
     }
+    val replace: String = if (isCollationAware) {
+      replaceString.toString
+    } else {
+      replaceString.toValidString
+    }
+    buildDict(matching, replace)
+  }
 
-    val replace = replaceString.toString()
+  /**
+   * Build a translation dictionary from Strings. This method assumes that the input strings are
+   * already valid. The result dictionary maps each character in `matching` to the corresponding
+   * character in `replace`. If `replace` is shorter than `matching`, the extra characters in
+   * `matching` will be mapped to null terminator, which causes characters to get deleted during
+   * translation. If `replace` is longer than `matching`, the extra characters will be ignored.
+   */
+  private def buildDict(matching: String, replace: String): JMap[String, String] = {
     val dict = new HashMap[String, String]()
     var i = 0
     var j = 0
