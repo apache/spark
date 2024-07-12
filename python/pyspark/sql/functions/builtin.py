@@ -16509,8 +16509,6 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
 
-# TODO(SPARK-46654) Re-enable the `Example 2` test after fixing the display
-#  difference between Regular Spark and Spark Connect on `df.show`.
 @_try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
