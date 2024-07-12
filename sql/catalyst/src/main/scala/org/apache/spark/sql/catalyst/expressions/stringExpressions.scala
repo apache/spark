@@ -2853,7 +2853,7 @@ object Decode {
   arguments = """
     Arguments:
       * bin - a binary expression to decode
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32', 'GB2312', 'GBK', 'GB18030', 'BIG5' to decode `bin` into a STRING. It is case insensitive.
   """,
   examples = """
     Examples:
@@ -2941,7 +2941,7 @@ object StringDecode {
   arguments = """
     Arguments:
       * str - a string expression
-      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to encode `str` into a BINARY. It is case insensitive.
+      * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32', 'GB2312', 'GBK', 'GB18030', 'BIG5' to encode `str` into a BINARY. It is case insensitive.
   """,
   examples = """
     Examples:
