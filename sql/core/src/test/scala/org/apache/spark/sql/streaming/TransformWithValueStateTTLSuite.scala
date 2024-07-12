@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
@@ -322,7 +322,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           Execute { q =>
             println("last progress:" + q.lastProgress)
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val colFamilySeq = TWSTestUtils.deserialize(fm.open(schemaFilePath))
+            val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
+            val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)

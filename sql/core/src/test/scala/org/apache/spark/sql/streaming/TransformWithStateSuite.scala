@@ -937,7 +937,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           CheckNewAnswer(("a", "1"), ("b", "1")),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val colFamilySeq = TWSTestUtils.deserialize(fm.open(schemaFilePath))
+            val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
+            val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))
 
             assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
               q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
@@ -955,26 +956,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         )
       }
     }
-  }
-}
-
-object TWSTestUtils {
-  import java.io.InputStream
-  import java.nio.charset.StandardCharsets.UTF_8
-  import scala.io.{Source => IOSource}
-  import org.apache.spark.sql.execution.streaming.MetadataVersionUtil.validateVersion
-
-  def deserialize(in: InputStream): List[ColumnFamilySchema] = {
-    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
-
-    if (!lines.hasNext) {
-      throw new IllegalStateException("Incomplete log file in the offset commit log")
-    }
-
-    val version = lines.next().trim
-    validateVersion(version, StateSchemaV3File.VERSION)
-
-    lines.map(ColumnFamilySchemaV1.fromJson).toList
   }
 }
 
