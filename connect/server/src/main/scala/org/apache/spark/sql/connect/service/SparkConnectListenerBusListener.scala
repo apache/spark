@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._
 
@@ -131,10 +131,10 @@ private[sql] class SparkConnectListenerBusListener(
           .build())
     } catch {
       case NonFatal(e) =>
-        logError(
-          s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
-            s"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
-            s"because of exception: $e")
+        logError(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
+          log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
+          log"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
+          log"because of exception: ${MDC(LogKeys.EXCEPTION, e)}")
         // This likely means that the client is not responsive even with retry, we should
         // remove this listener and cleanup resources.
         serverSideListenerHolder.cleanUp()

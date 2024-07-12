@@ -15,17 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.hive.execution.command
 
-class MySQLDatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:9.0.0")
-  override val env = Map(
-    "MYSQL_ROOT_PASSWORD" -> "rootpass"
-  )
-  override val usesIpc = false
-  override val jdbcPort: Int = 3306
+import org.apache.spark.sql.execution.command.v1
 
-  override def getJdbcUrl(ip: String, port: Int): String =
-    s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-      s"&useSSL=false&disableMariaDbDriver"
-}
+/**
+ * The class contains tests for the `ALTER TABLE ... RENAME COLUMN` command to check
+ * V1 Hive external table catalog.
+ */
+class AlterTableRenameColumnSuite extends v1.AlterTableRenameColumnSuiteBase with CommandSuiteBase

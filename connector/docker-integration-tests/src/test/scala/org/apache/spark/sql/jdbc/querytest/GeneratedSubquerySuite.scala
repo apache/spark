@@ -445,20 +445,5 @@ object GeneratedSubquerySuite {
   // Limit number of generated queries per test so that tests will not take too long.
   private val NUM_QUERIES_PER_TEST = 1000
 
-  // scalastyle:off line.size.limit
-  private val KNOWN_QUERIES_WITH_DIFFERENT_RESULTS = Seq(
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table INNER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table LEFT OUTER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(null_table.a) AS aggFunctionAlias FROM null_table RIGHT OUTER JOIN join_table ON null_table.a = join_table.a WHERE null_table.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(innerSubqueryAlias.a) AS aggFunctionAlias FROM (SELECT null_table.a, null_table.b FROM null_table INTERSECT SELECT join_table.a, join_table.b FROM join_table) AS innerSubqueryAlias WHERE innerSubqueryAlias.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;",
-    // SPARK-46743
-    "SELECT outer_table.a, outer_table.b, (SELECT COUNT(innerSubqueryAlias.a) AS aggFunctionAlias FROM (SELECT null_table.a, null_table.b FROM null_table EXCEPT SELECT join_table.a, join_table.b FROM join_table) AS innerSubqueryAlias WHERE innerSubqueryAlias.a = outer_table.a) AS subqueryAlias FROM outer_table ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST, subqueryAlias DESC NULLS FIRST;"
-  )
-  // scalastyle:on line.size.limit
+  private val KNOWN_QUERIES_WITH_DIFFERENT_RESULTS = Seq()
 }

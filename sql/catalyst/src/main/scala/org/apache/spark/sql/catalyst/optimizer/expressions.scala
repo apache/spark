@@ -89,6 +89,12 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e
       }
 
+    // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug)
+      if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+        mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+      s
+
     // Replace ScalarSubquery with null if its maxRows is 0
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
