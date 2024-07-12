@@ -19,9 +19,12 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorHandler, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -73,13 +76,36 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           .map(varName => DropVariable(varName, ifExists = true))
           .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
+
+        val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
+        val handlers = ListBuffer[ErrorHandlerExec]()
+        body.handlers.foreach(handler => {
+          val handlerBodyExec = transformTreeIntoExecutable(handler.body).
+            asInstanceOf[CompoundBodyExec]
+          val handlerExec =
+            new ErrorHandlerExec(handler.conditions, handlerBodyExec, handler.handlerType)
+
+          handler.conditions.foreach(condition => {
+            val conditionValue = body.conditions.getOrElse(condition, condition)
+            conditionHandlerMap.put(conditionValue, handlerExec)
+          })
+
+          handlers += handlerExec
+        })
+
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables, session)
+          body.collection.
+            map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+          handlers.toSeq, conditionHandlerMap, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           isInternal = false)
+      case handler: ErrorHandler =>
+        val handlerBodyExec = transformTreeIntoExecutable(handler.body).
+          asInstanceOf[CompoundBodyExec]
+        new ErrorHandlerExec(handler.conditions, handlerBodyExec, handler.handlerType)
     }
 
   def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {

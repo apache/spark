@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
-
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
@@ -47,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, Inte
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
@@ -57,6 +54,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.random.RandomSampler
+
+import scala.collection.mutable
 
 /**
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
@@ -135,15 +134,24 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       label: Option[String]): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     val handlers = ListBuffer[ErrorHandler]()
+    val conditions = mutable.HashMap[String, String]()
+    val sqlstates = mutable.Set[String]()
+
     ctx.compoundStatements.forEach(compoundStatement => {
       val stmt = visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
 
       stmt match {
         case handler: ErrorHandler => handlers += handler
+        case condition: ErrorCondition =>
+          assert(!conditions.contains(condition.conditionName))   // Check for duplicate names.
+          assert(!sqlstates.contains(condition.value))            // Check for duplicate sqlstates.
+          conditions += condition.conditionName -> condition.value
+          sqlstates += condition.value
         case s => buff += s
       }
     })
-    CompoundBody(buff.toSeq, label, handlers.toSeq)
+
+    CompoundBody(buff.toSeq, label, handlers.toSeq, conditions)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {

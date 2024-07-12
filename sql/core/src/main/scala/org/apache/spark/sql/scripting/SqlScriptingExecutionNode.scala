@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.shuffle.ErrorHandler
-import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.parser.HandlerType
+import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
@@ -97,6 +99,11 @@ class SingleStatementExec(
    * Data returned after execution.
    */
   var data: Option[Array[Row]] = None
+
+  /**
+   * Error state of the statement.
+   */
+  var errorState: Option[String] = None
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -186,9 +193,14 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  */
 class CompoundBodyExec(
       statements: Seq[CompoundStatementExec],
-      handlers: Seq[ErrorHandler],
+      handlers: Seq[ErrorHandlerExec],
+      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec],
       session: SparkSession)
   extends CompoundNestedStatementIteratorExec(statements) {
+
+  private def getHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+  }
 
   override protected lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -212,7 +224,14 @@ class CompoundBodyExec(
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)
             if (statement.raisedError) {
+              val handler = getHandler(statement.errorState.get).get
+              handler.execute()
+              handler.reset()
 
+              if (handler.getHandlerType == HandlerType.EXIT) {
+                // TODO: premature exit from the compound ...
+                curr = None
+              }
             }
             statement
           case Some(body: NonLeafStatementExec) =>
@@ -234,6 +253,8 @@ class ErrorHandlerExec(
     conditions: Seq[String],
     body: CompoundBodyExec,
     handlerType: HandlerType) extends CompoundStatementExec {
+
+  def getHandlerType: HandlerType = handlerType
 
   def execute(): Unit = {
     val iterator = body.getTreeIterator

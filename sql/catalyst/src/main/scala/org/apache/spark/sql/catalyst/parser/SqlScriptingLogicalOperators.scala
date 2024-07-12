@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
 
+import scala.collection.mutable
+
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.
  * These operators will be used by the SQL Scripting interpreter to generate execution nodes.
@@ -59,7 +61,8 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
-    handlers: Seq[ErrorHandler]) extends CompoundPlanStatement
+    handlers: Seq[ErrorHandler],
+    conditions: mutable.HashMap[String, String]) extends CompoundPlanStatement
 
 /**
  * Logical operator for an error condition.
