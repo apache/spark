@@ -78,7 +78,9 @@ private[r] object FPGrowthWrapper extends MLReadable[FPGrowthWrapper] {
         "class" -> instance.getClass.getName
       ))
 
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      sparkSession.createDataFrame(
+        Seq(Tuple1(rMetadataJson))
+      ).repartition(1).write.text(rMetadataPath)
 
       instance.fpGrowthModel.save(modelPath)
     }

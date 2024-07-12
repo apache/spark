@@ -142,7 +142,9 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
       val rMetadata = "class" -> instance.getClass.getName
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      sparkSession.createDataFrame(
+        Seq(Tuple1(rMetadataJson))
+      ).repartition(1).write.text(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }
