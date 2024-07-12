@@ -3015,7 +3015,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
       errorClass = "INDEX_NOT_FOUND",
-      parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
+      parameters = Map("indexName" -> "`h2`.`people_index`", "tableName" -> "`h2`.`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
