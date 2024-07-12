@@ -382,4 +382,62 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
         .create()
     }
   }
+
+  test("SPARK-47986: get or create after session changed") {
+    val remote = s"sc://localhost:$serverPort"
+
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
+    val session1 = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    assert(session1 eq SparkSession.getActiveSession.get)
+    assert(session1 eq SparkSession.getDefaultSession.get)
+    assert(session1.range(3).collect().length == 3)
+
+    session1.client.hijackServerSideSessionIdForTesting("-testing")
+
+    val e = intercept[SparkException] {
+      session1.range(3).analyze
+    }
+
+    assert(e.getMessage.contains("[INVALID_HANDLE.SESSION_CHANGED]"))
+    assert(!session1.client.isSessionValid)
+    assert(SparkSession.getActiveSession.isEmpty)
+    assert(SparkSession.getDefaultSession.isEmpty)
+
+    val session2 = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    assert(session1 ne session2)
+    assert(session2.client.isSessionValid)
+    assert(session2 eq SparkSession.getActiveSession.get)
+    assert(session2 eq SparkSession.getDefaultSession.get)
+    assert(session2.range(3).collect().length == 3)
+  }
+
+  test("SPARK-48810: session.stop should not throw when the session is invalid") {
+    val remote = s"sc://localhost:$serverPort"
+
+    SparkSession.clearDefaultSession()
+    SparkSession.clearActiveSession()
+
+    val session = SparkSession
+      .builder()
+      .remote(remote)
+      .getOrCreate()
+
+    session.range(3).collect()
+
+    session.hijackServerSideSessionIdForTesting("-testing")
+
+    // no error is thrown here.
+    session.stop()
+  }
+
 }

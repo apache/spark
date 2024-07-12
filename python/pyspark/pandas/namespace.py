@@ -1800,7 +1800,7 @@ def date_range(
 
     Changed the `freq` (frequency) to ``'M'`` (month end frequency).
 
-    >>> ps.date_range(start='1/1/2018', periods=5, freq='M')  # doctest: +SKIP
+    >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
                   dtype='datetime64[ns]', freq=None)
@@ -2812,7 +2812,7 @@ def notna(obj):
     --------
     Show which entries in a DataFrame are not NA.
 
-    >>> df = ps.DataFrame({'age': [5, 6, np.NaN],
+    >>> df = ps.DataFrame({'age': [5, 6, np.nan],
     ...                    'born': [pd.NaT, pd.Timestamp('1939-05-27'),
     ...                             pd.Timestamp('1940-04-25')],
     ...                    'name': ['Alfred', 'Batman', ''],
@@ -2831,7 +2831,7 @@ def notna(obj):
 
     Show which entries in a Series are not NA.
 
-    >>> ser = ps.Series([5, 6, np.NaN])
+    >>> ser = ps.Series([5, 6, np.nan])
     >>> ser
     0    5.0
     1    6.0
@@ -3731,8 +3731,15 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
+    from pandas.util.version import Version
 
     os.chdir(os.environ["SPARK_HOME"])
+
+    if Version(np.__version__) >= Version("2"):
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        # `legacy="1.25"` only available in `nump>=2`
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
 
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas

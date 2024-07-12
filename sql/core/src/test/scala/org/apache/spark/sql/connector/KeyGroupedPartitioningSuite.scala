@@ -298,6 +298,12 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         Row("bbb", 20, 250.0), Row("bbb", 20, 350.0), Row("ccc", 30, 400.50)))
   }
 
+  private def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
+    collect(plan) {
+      case s: ShuffleExchangeExec => s
+    }
+  }
+
   private def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
     // here we skip collecting shuffle operators that are not associated with SMJ
     collect(plan) {
@@ -345,6 +351,23 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Column.create("item_id", LongType),
     Column.create("price", FloatType),
     Column.create("time", TimestampType))
+
+  test("SPARK-48655: group by on partition keys should not introduce additional shuffle") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(s"SELECT MAX(price) AS res FROM testcat.ns.$items GROUP BY id")
+    val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.isEmpty,
+      "should contain shuffle when not grouping by partition values")
+
+    checkAnswer(df.sort("res"), Seq(Row(10.0), Row(15.5), Row(41.0)))
+  }
 
   test("partitioned join: join with two partition keys and matching & sorted partitions") {
     val items_partitions = Array(bucket(8, "id"), days("arrive_time"))

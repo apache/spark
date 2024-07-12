@@ -61,10 +61,8 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
-    val connectJar = findJar(
-      "connector/connect/server",
-      "spark-connect-assembly",
-      "spark-connect").getCanonicalPath
+    val connectJar =
+      findJar("connect/server", "spark-connect-assembly", "spark-connect").getCanonicalPath
 
     val command = Seq.newBuilder[String]
     command += "bin/spark-submit"

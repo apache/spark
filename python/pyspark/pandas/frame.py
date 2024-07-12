@@ -5304,7 +5304,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5392,7 +5392,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5474,7 +5474,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -10064,7 +10064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 

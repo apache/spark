@@ -344,10 +344,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
-    Batch("UpdateNullability", Once,
+    Batch("ScalaUDF Null Handling", fixedPoint,
+      // `HandleNullInputsForUDF` may wrap the `ScalaUDF` with `If` expression to return null for
+      // null inputs, so the result can be null even if `ScalaUDF#nullable` is false. We need to
+      // run `UpdateAttributeNullability` to update nullability of the UDF output attribute in
+      // downstream operators. After updating attribute nullability, `ScalaUDF`s in downstream
+      // operators may need null handling as well, so we should run these two rules repeatedly.
+      HandleNullInputsForUDF,
       UpdateAttributeNullability),
     Batch("UDF", Once,
-      HandleNullInputsForUDF,
       ResolveEncodersInUDF),
     Batch("Subquery", Once,
       UpdateOuterReferences),
@@ -1790,6 +1795,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
+
+      case u: UnresolvedWithCTERelations =>
+        UnresolvedWithCTERelations(this.apply(u.unresolvedPlan), u.cteRelations)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")

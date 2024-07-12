@@ -206,6 +206,122 @@ struct<scalarsubquery(a):bigint>
 
 
 -- !query
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    INNER JOIN r
+      ON r.c = null_view.a
+      AND r.c IS NOT NULL
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l
+-- !query schema
+struct<scalarsubquery(a):bigint>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
+SELECT
+(
+  SELECT
+    COUNT(null_view.a) AS result
+  FROM
+    null_view
+  INNER JOIN r
+    ON r.c = null_view.a
+    AND r.c IS NOT NULL
+  WHERE
+    null_view.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l
+-- !query schema
+struct<scalarsubquery(a):bigint>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
+SELECT
+  (
+    SELECT
+      COUNT(f.a) AS result
+    FROM
+    (
+        SELECT a, b FROM null_view
+        INTERSECT
+        SELECT c, d FROM r WHERE c IS NOT NULL
+    ) AS f
+    WHERE
+      f.a = l.a
+  )
+FROM
+  l
+-- !query schema
+struct<scalarsubquery(a):bigint>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
+SELECT
+(
+  SELECT
+    COUNT(f.a) AS result
+  FROM
+  (
+      SELECT a, b FROM null_view
+      INTERSECT
+      SELECT c, d FROM r WHERE c IS NOT NULL
+  ) AS f
+  WHERE
+    f.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l
+-- !query schema
+struct<scalarsubquery(a):bigint>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true
 -- !query schema
 struct<key:string,value:string>
