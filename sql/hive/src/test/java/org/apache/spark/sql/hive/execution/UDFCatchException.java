@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *  http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,28 +24,28 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 
 public class UDFCatchException extends GenericUDF {
 
-    @Override
-    public ObjectInspector initialize(ObjectInspector[] args) throws UDFArgumentException {
-        if (args.length != 1) {
-            throw new UDFArgumentException("Exactly one argument is expected.");
-        }
-        return PrimitiveObjectInspectorFactory.javaStringObjectInspector;
+  @Override
+  public ObjectInspector initialize(ObjectInspector[] args) throws UDFArgumentException {
+    if (args.length != 1) {
+      throw new UDFArgumentException("Exactly one argument is expected.");
     }
+    return PrimitiveObjectInspectorFactory.javaStringObjectInspector;
+  }
 
-    @Override
-    public Object evaluate(GenericUDF.DeferredObject[] args) {
-        if (args == null) {
-            return null;
-        }
-        try {
-            return args[0].get();
-        } catch (Exception e) {
-            return null;
-        }
+  @Override
+  public Object evaluate(GenericUDF.DeferredObject[] args) {
+    if (args == null) {
+      return null;
     }
+    try {
+      return args[0].get();
+    } catch (Exception e) {
+      return null;
+    }
+  }
 
-    @Override
-    public String getDisplayString(String[] children) {
-        return null;
-    }
+  @Override
+  public String getDisplayString(String[] children) {
+    return null;
+  }
 }
