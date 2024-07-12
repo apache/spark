@@ -2232,7 +2232,8 @@ class TypesTestsMixin:
         tests = [
             ("a:int, b:string", True),
             (
-                "a struct<>, b map<int, binary>, c array<array<map<struct<a: int, b: int>, binary>>>",
+                "a struct<>, b map<int, binary>, "
+                + "c array<array<map<struct<a: int, b: int>, binary>>>",
                 True,
             ),
             ("struct<>", True),
