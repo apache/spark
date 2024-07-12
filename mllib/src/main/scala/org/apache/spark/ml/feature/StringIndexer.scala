@@ -28,6 +28,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -136,7 +137,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
   }
 
   protected def extractInputDataType(schema: StructType, inputColName: String): Option[DataType] = {
-    val inputSplits = inputColName.split("\\.")
+    val inputSplits = UnresolvedAttribute.parseAttributeName(inputColName)
     var dtype: Option[DataType] = Some(schema)
     var i = 0
     while (i < inputSplits.length && dtype.isDefined) {
