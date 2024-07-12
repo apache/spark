@@ -397,7 +397,10 @@ object SparkBuild extends PomBuild {
   enable(PySparkAssembly.settings)(assembly)
 
   /* Enable unidoc only for the root spark project */
-  enable(Unidoc.settings)(spark)
+  enable(SparkUnidoc.settings)(spark)
+
+  /* Enable unidoc only for the root spark connect client project */
+  enable(SparkConnectClientUnidoc.settings)(connectClient)
 
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
@@ -1326,7 +1329,7 @@ object Volcano {
   )
 }
 
-object Unidoc {
+trait SharedUnidocSettings {
 
   import BuildCommons._
   import sbtunidoc.BaseUnidocPlugin
@@ -1337,7 +1340,7 @@ object Unidoc {
   import sbtunidoc.JavaUnidocPlugin.autoImport._
   import sbtunidoc.ScalaUnidocPlugin.autoImport._
 
-  private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+  protected def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
@@ -1362,7 +1365,6 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org.apache.spark.errors")))
@@ -1381,18 +1383,11 @@ object Unidoc {
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
-  lazy val settings = BaseUnidocPlugin.projectSettings ++
+  lazy val baseSettings = BaseUnidocPlugin.projectSettings ++
                       ScalaUnidocPlugin.projectSettings ++
                       JavaUnidocPlugin.projectSettings ++
                       Seq (
     publish := {},
-
-    (ScalaUnidoc / unidoc / unidocProjectFilter) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
-    (JavaUnidoc / unidoc / unidocProjectFilter) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
 
     (ScalaUnidoc / unidoc / unidocAllClasspaths) := {
       ignoreClasspaths((ScalaUnidoc / unidoc / unidocAllClasspaths).value)
@@ -1445,6 +1440,54 @@ object Unidoc {
         Seq()
       }
     )
+  )
+}
+
+object SparkUnidoc extends SharedUnidocSettings {
+
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
+
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super.ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+  }
+
+  lazy val settings = baseSettings ++ Seq(
+    (ScalaUnidoc / unidoc / unidocProjectFilter) :=
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+    (JavaUnidoc / unidoc / unidocProjectFilter) :=
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient, protobuf),
+  )
+}
+
+object SparkConnectClientUnidoc extends SharedUnidocSettings {
+
+  import BuildCommons._
+  import sbtunidoc.BaseUnidocPlugin
+  import sbtunidoc.JavaUnidocPlugin
+  import sbtunidoc.ScalaUnidocPlugin
+  import sbtunidoc.BaseUnidocPlugin.autoImport._
+  import sbtunidoc.GenJavadocPlugin.autoImport._
+  import sbtunidoc.JavaUnidocPlugin.autoImport._
+  import sbtunidoc.ScalaUnidocPlugin.autoImport._
+
+  override def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
+    super.ignoreUndocumentedPackages(packages)
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/application")))
+  }
+
+  lazy val settings = baseSettings ++ Seq(
+    (ScalaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
+    (JavaUnidoc / unidoc / unidocProjectFilter) := inProjects(connectClient, connectCommon),
   )
 }
 
