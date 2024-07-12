@@ -33,8 +33,7 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -63,9 +62,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private lazy val planCache: Option[Cache[proto.Relation, LogicalPlan]] = {
     if (SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE) <= 0) {
       logWarning(
-        s"Session plan cache is disabled due to non-positive cache size." +
-          s" Current value of '${Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
-          s" ${SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE)}.")
+        log"Session plan cache is disabled due to non-positive cache size." +
+          log" Current value of " +
+          log"'${MDC(LogKeys.CONFIG, Connect.CONNECT_SESSION_PLAN_CACHE_SIZE.key)}' is ${MDC(
+              LogKeys.CACHE_SIZE,
+              SparkEnv.get.conf.get(Connect.CONNECT_SESSION_PLAN_CACHE_SIZE))}")
       None
     } else {
       Some(
@@ -248,15 +249,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def updateAccessTime(): Unit = {
     lastAccessTimeMs = System.currentTimeMillis()
     logInfo(
-      log"Session ${MDC(SESSION_KEY, key)} accessed, " +
-        log"time ${MDC(LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
+      log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} accessed," +
+        log"time ${MDC(LogKeys.LAST_ACCESS_TIME, lastAccessTimeMs)} ms.")
   }
 
   private[connect] def setCustomInactiveTimeoutMs(newInactiveTimeoutMs: Option[Long]): Unit = {
     customInactiveTimeoutMs = newInactiveTimeoutMs
     logInfo(
-      log"Session ${MDC(SESSION_KEY, key)} " +
-        log"inactive timeout set to ${MDC(TIMEOUT, customInactiveTimeoutMs)} ms.")
+      log"Session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)} inactive timeout set to " +
+        log"${MDC(LogKeys.TIMEOUT, customInactiveTimeoutMs)} ms")
   }
 
   /**
@@ -282,8 +285,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
       throw new IllegalStateException(s"Session $key is already closed.")
     }
     logInfo(
-      log"Closing session with userId: ${MDC(USER_ID, userId)} and " +
-        log"sessionId: ${MDC(SESSION_ID, sessionId)}")
+      log"Closing session with userId: ${MDC(LogKeys.USER_ID, userId)} and " +
+        log"sessionId: ${MDC(LogKeys.SESSION_ID, sessionId)}")
     closedTimeMs = Some(System.currentTimeMillis())
 
     if (Utils.isTesting && eventManager.status == SessionStatus.Pending) {

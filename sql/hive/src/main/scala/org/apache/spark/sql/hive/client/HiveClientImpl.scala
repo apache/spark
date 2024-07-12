@@ -46,7 +46,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -906,11 +906,11 @@ private[hive] class HiveClientImpl(
     } catch {
       case e: Exception =>
         logError(
-          s"""
+          log"""
             |======================
             |HIVE FAILURE OUTPUT
             |======================
-            |${outputBuffer.toString}
+            |${MDC(LogKeys.OUTPUT_BUFFER, outputBuffer.toString)}
             |======================
             |END HIVE FAILURE OUTPUT
             |======================

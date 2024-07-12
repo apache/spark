@@ -15,12 +15,12 @@
       "unresolvedFunction": {
         "functionName": "trim",
         "arguments": [{
-          "unresolvedAttribute": {
-            "unparsedIdentifier": "g"
-          }
-        }, {
           "literal": {
             "string": "---"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "g"
           }
         }]
       }
