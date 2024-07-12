@@ -2710,7 +2710,7 @@ case class Base64(child: Expression, chunkBase64: Boolean)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
-  override def replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[Base64],
     dataType,
     "encode",
@@ -2937,7 +2937,7 @@ case class StringDecode(
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
 
-  override def replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[StringDecode],
     SQLConf.get.defaultStringType,
     "decode",
@@ -3001,7 +3001,7 @@ case class Encode(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[Encode],
     BinaryType,
     "encode",
