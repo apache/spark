@@ -324,9 +324,9 @@ connect = Module(
     name="connect",
     dependencies=[hive, avro, protobuf],
     source_file_regexes=[
+        "connect",
         "connector/connect",
     ],
-    build_profile_flags=["-Pconnect"],
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",

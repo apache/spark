@@ -2150,6 +2150,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
+  val STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION =
+    buildConf("spark.sql.streaming.transformWithState.stateSchemaVersion")
+      .doc("The version of the state schema used by the transformWithState operator")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(3)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()

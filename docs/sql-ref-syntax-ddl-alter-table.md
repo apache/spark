@@ -233,6 +233,32 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
     Partition to be dropped. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+#### CLUSTER BY
+
+`ALTER TABLE CLUSTER BY` command can also be used for changing or removing the clustering columns for existing tables.
+
+##### Syntax
+
+```sql
+-- Changing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY ( col_name [ , ... ] )
+
+-- Removing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY NONE
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column.
      
 ### SET AND UNSET
 
@@ -595,6 +621,51 @@ SHOW PARTITIONS StudentInfo;
 |   age=18|
 |   age=20|
 +---------+
+
+-- CLUSTER BY
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
++------------------------+---------+-------+
+
+ALTER TABLE Teacher CLUSTER BY (gender, country);
+
+-- After changing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
++------------------------+---------+-------+
+
+ALTER TABLE Teacher CLUSTER BY NONE;
+
+-- After removing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
++------------------------+---------+-------+
 
 -- Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;
