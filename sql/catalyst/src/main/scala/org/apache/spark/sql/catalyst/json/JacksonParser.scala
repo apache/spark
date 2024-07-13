@@ -574,7 +574,7 @@ class JacksonParser(
       applyExistenceDefaultValuesToRow(schema, row, bitmask)
       Some(convertRow(row, schema))
     } else {
-      throw PartialResultException(convertRow(row, schema), badRecordException.get)
+      throw PartialResultException(row, badRecordException.get)
     }
   }
 
