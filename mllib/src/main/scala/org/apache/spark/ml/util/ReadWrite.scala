@@ -411,8 +411,7 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue] = None): Unit = {
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = getMetadataToSave(instance, sc, extraMetadata, paramMap)
-    val spark = SparkSession.getActiveSession.get
-    spark.createDataFrame(Seq(Tuple1(metadataJson))).repartition(1).write.text(metadataPath)
+    sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
   }
 
   /**
@@ -586,8 +585,7 @@ private[ml] object DefaultParamsReader {
    */
   def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val spark = SparkSession.getActiveSession.get
-    val metadataStr = spark.read.text(metadataPath).first().getString(0)
+    val metadataStr = sc.textFile(metadataPath, 1).first()
     parseMetadata(metadataStr, expectedClassName)
   }
 
