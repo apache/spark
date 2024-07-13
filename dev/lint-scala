@@ -29,16 +29,16 @@ ERRORS=$(./build/mvn \
     -Dscalafmt.skip=false \
     -Dscalafmt.validateOnly=true \
     -Dscalafmt.changedOnly=false \
-    -pl connector/connect/common \
-    -pl connector/connect/server \
+    -pl connect/common \
+    -pl connect/server \
     -pl connector/connect/client/jvm \
     2>&1 | grep -e "Unformatted files found" \
 )
 
 if test ! -z "$ERRORS"; then
-  echo -e "The scalafmt check failed on connector/connect at following occurrences:\n\n$ERRORS\n"
+  echo -e "The scalafmt check failed on connect or connector/connect at following occurrences:\n\n$ERRORS\n"
   echo "Before submitting your change, please make sure to format your code using the following command:"
-  echo "./build/mvn scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connector/connect/common -pl connector/connect/server -pl connector/connect/client/jvm"
+  echo "./build/mvn scalafmt:format -Dscalafmt.skip=false -Dscalafmt.validateOnly=false -Dscalafmt.changedOnly=false -pl connect/common -pl connect/server -pl connector/connect/client/jvm"
   exit 1
 else
   echo -e "Scalafmt checks passed."

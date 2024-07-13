@@ -22,6 +22,7 @@ import scala.math.abs
 
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.StatCounter
@@ -286,9 +287,9 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   }
 
   test("defaultPartitioner when defaultParallelism is set") {
-    assert(!sc.conf.contains("spark.default.parallelism"))
+    assert(!sc.conf.contains(DEFAULT_PARALLELISM.key))
     try {
-      sc.conf.set("spark.default.parallelism", "4")
+      sc.conf.set(DEFAULT_PARALLELISM.key, "4")
 
       val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
       val rdd2 = sc.parallelize(Seq((1, 2), (2, 3), (2, 4), (3, 4)))
@@ -317,7 +318,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       assert(partitioner6.numPartitions == sc.defaultParallelism)
       assert(partitioner7.numPartitions == sc.defaultParallelism)
     } finally {
-      sc.conf.remove("spark.default.parallelism")
+      sc.conf.remove(DEFAULT_PARALLELISM.key)
     }
   }
 }
