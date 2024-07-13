@@ -132,9 +132,7 @@ private[r] object FMRegressorWrapper
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
-      sparkSession.createDataFrame(
-        Seq(Tuple1(rMetadataJson))
-      ).repartition(1).write.text(rMetadataPath)
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }
@@ -147,8 +145,7 @@ private[r] object FMRegressorWrapper
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sparkSession.read.text(rMetadataPath)
-        .first().getString(0)
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
       val features = (rMetadata \ "features").extract[Array[String]]
 
