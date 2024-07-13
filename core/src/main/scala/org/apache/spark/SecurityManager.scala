@@ -26,7 +26,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -89,17 +89,18 @@ private[spark] class SecurityManager(
   private val sslRpcEnabled = sparkConf.getBoolean(
     "spark.ssl.rpc.enabled", false)
 
-  logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
-    "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users with view permissions: " +
-    (if (viewAcls.nonEmpty) viewAcls.mkString(", ") else "EMPTY") +
-    "; groups with view permissions: " +
-    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY") +
-    "; users with modify permissions: " +
-    (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
-    "; groups with modify permissions: " +
-    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY") +
-    "; RPC SSL " + (if (sslRpcEnabled) "enabled" else "disabled"))
+  logInfo(log"SecurityManager: authentication ${MDC(LogKeys.AUTH_ENABLED,
+    if (authOn) "enabled" else "disabled")}" +
+    log"; ui acls ${MDC(LogKeys.UI_ACLS, if (aclsOn) "enabled" else "disabled")}" +
+    log"; users with view permissions: ${MDC(LogKeys.VIEW_ACLS,
+      if (viewAcls.nonEmpty) viewAcls.mkString(", ")
+    else "EMPTY")} groups with view permissions: ${MDC(LogKeys.VIEW_ACLS_GROUPS,
+      if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY")}" +
+    log"; users with modify permissions: ${MDC(LogKeys.MODIFY_ACLS,
+      if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY")}" +
+    log"; groups with modify permissions: ${MDC(LogKeys.MODIFY_ACLS_GROUPS,
+      if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY")}" +
+    log"; RPC SSL ${MDC(LogKeys.RPC_SSL_ENABLED, if (sslRpcEnabled) "enabled" else "disabled")}")
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
@@ -121,7 +122,7 @@ private[spark] class SecurityManager(
    */
   def setViewAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     viewAcls = adminAcls ++ defaultUsers ++ allowedUsers
-    logInfo("Changing view acls to: " + viewAcls.mkString(","))
+    logInfo(log"Changing view acls to: ${MDC(LogKeys.VIEW_ACLS, viewAcls.mkString(","))}")
   }
 
   def setViewAcls(defaultUser: String, allowedUsers: Seq[String]): Unit = {
@@ -134,7 +135,7 @@ private[spark] class SecurityManager(
    */
   def setViewAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     viewAclsGroups = adminAclsGroups ++ allowedUserGroups
-    logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
+    logInfo(log"Changing view acls groups to: ${MDC(LogKeys.VIEW_ACLS, viewAcls.mkString(","))}")
   }
 
   /**
@@ -162,7 +163,7 @@ private[spark] class SecurityManager(
    */
   def setModifyAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     modifyAcls = adminAcls ++ defaultUsers ++ allowedUsers
-    logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
+    logInfo(log"Changing modify acls to: ${MDC(LogKeys.MODIFY_ACLS, modifyAcls.mkString(","))}")
   }
 
   /**
@@ -171,7 +172,8 @@ private[spark] class SecurityManager(
    */
   def setModifyAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     modifyAclsGroups = adminAclsGroups ++ allowedUserGroups
-    logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
+    logInfo(log"Changing modify acls groups to: ${MDC(LogKeys.MODIFY_ACLS,
+      modifyAcls.mkString(","))}")
   }
 
   /**
@@ -199,7 +201,7 @@ private[spark] class SecurityManager(
    */
   def setAdminAcls(adminUsers: Seq[String]): Unit = {
     adminAcls = adminUsers.toSet
-    logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+    logInfo(log"Changing admin acls to: ${MDC(LogKeys.ADMIN_ACLS, adminAcls.mkString(","))}")
   }
 
   /**
@@ -208,12 +210,12 @@ private[spark] class SecurityManager(
    */
   def setAdminAclsGroups(adminUserGroups: Seq[String]): Unit = {
     adminAclsGroups = adminUserGroups.toSet
-    logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
+    logInfo(log"Changing admin acls groups to: ${MDC(LogKeys.ADMIN_ACLS, adminAcls.mkString(","))}")
   }
 
   def setAcls(aclSetting: Boolean): Unit = {
     aclsOn = aclSetting
-    logInfo("Changing acls enabled to: " + aclsOn)
+    logInfo(log"Changing acls enabled to: ${MDC(LogKeys.AUTH_ENABLED, aclsOn)}")
   }
 
   def getIOEncryptionKey(): Option[Array[Byte]] = ioEncryptionKey

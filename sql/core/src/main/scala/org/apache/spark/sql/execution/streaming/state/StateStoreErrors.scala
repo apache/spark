@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown from State API V2
@@ -37,6 +37,16 @@ object StateStoreErrors {
       msg = s"Failed to find time values for timeMode=$timeMode",
       category = "TWS"
     )
+  }
+
+  def keyRowFormatValidationFailure(errorMsg: String):
+    StateStoreKeyRowFormatValidationFailure = {
+    new StateStoreKeyRowFormatValidationFailure(errorMsg)
+  }
+
+  def valueRowFormatValidationFailure(errorMsg: String):
+    StateStoreValueRowFormatValidationFailure = {
+    new StateStoreValueRowFormatValidationFailure(errorMsg)
   }
 
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
@@ -139,6 +149,30 @@ object StateStoreErrors {
       newValueSchema: String): StateStoreValueSchemaNotCompatible = {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
+
+  def stateStoreColumnFamilyMismatch(
+      columnFamilyName: String,
+      oldColumnFamilySchema: String,
+      newColumnFamilySchema: String): StateStoreColumnFamilyMismatch = {
+    new StateStoreColumnFamilyMismatch(
+      columnFamilyName, oldColumnFamilySchema, newColumnFamilySchema)
+  }
+
+  def stateStoreSnapshotFileNotFound(fileToRead: String, clazz: String):
+    StateStoreSnapshotFileNotFound = {
+    new StateStoreSnapshotFileNotFound(fileToRead, clazz)
+  }
+
+  def stateStoreSnapshotPartitionNotFound(
+      snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String):
+    StateStoreSnapshotPartitionNotFound = {
+    new StateStoreSnapshotPartitionNotFound(snapshotPartitionId, operatorId, checkpointLocation)
+  }
+
+  def stateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String):
+    StateStoreProviderDoesNotSupportFineGrainedReplay = {
+    new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -167,6 +201,17 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
+
+class StateStoreColumnFamilyMismatch(
+    columnFamilyName: String,
+    oldColumnFamilySchema: String,
+    newColumnFamilySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
+    messageParameters = Map(
+      "columnFamilyName" -> columnFamilyName,
+      "oldColumnFamilySchema" -> oldColumnFamilySchema,
+      "newColumnFamilySchema" -> newColumnFamilySchema))
 
 class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
     operationType: String,
@@ -245,3 +290,33 @@ class StateStoreValueSchemaNotCompatible(
       "storedValueSchema" -> storedValueSchema,
       "newValueSchema" -> newValueSchema))
 
+class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
+    messageParameters = Map(
+      "fileToRead" -> fileToRead,
+      "clazz" -> clazz))
+
+class StateStoreSnapshotPartitionNotFound(
+  snapshotPartitionId: Long, operatorId: Int, checkpointLocation: String)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND",
+    messageParameters = Map(
+      "snapshotPartitionId" -> snapshotPartitionId.toString,
+      "operatorId" -> operatorId.toString,
+      "checkpointLocation" -> checkpointLocation))
+
+class StateStoreKeyRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_KEY_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreValueRowFormatValidationFailure(errorMsg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_VALUE_ROW_FORMAT_VALIDATION_FAILURE",
+    messageParameters = Map("errorMsg" -> errorMsg))
+
+class StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_PROVIDER_DOES_NOT_SUPPORT_FINE_GRAINED_STATE_REPLAY",
+    messageParameters = Map("inputClass" -> inputClass))

@@ -366,7 +366,8 @@ private[spark] abstract class YarnSchedulerBackend(
             am.ask[Boolean](r).andThen {
               case Success(b) => context.reply(b)
               case Failure(NonFatal(e)) =>
-                logError(s"Sending $r to AM was unsuccessful", e)
+                logError(
+                  log"Sending ${MDC(LogKeys.REQUEST_EXECUTORS, r)} to AM was unsuccessful", e)
                 context.sendFailure(e)
             }(ThreadUtils.sameThread)
           case None =>
@@ -380,7 +381,7 @@ private[spark] abstract class YarnSchedulerBackend(
             am.ask[Boolean](k).andThen {
               case Success(b) => context.reply(b)
               case Failure(NonFatal(e)) =>
-                logError(s"Sending $k to AM was unsuccessful", e)
+                logError(log"Sending ${MDC(LogKeys.KILL_EXECUTORS, k)} to AM was unsuccessful", e)
                 context.sendFailure(e)
             }(ThreadUtils.sameThread)
           case None =>

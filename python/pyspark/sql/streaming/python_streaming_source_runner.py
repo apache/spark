@@ -21,7 +21,6 @@ import json
 from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.serializers import (
     read_int,
@@ -37,7 +36,7 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -131,7 +130,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         if not isinstance(data_source, DataSource):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "a Python data source instance of type 'DataSource'",
                     "actual": f"'{type(data_source).__name__}'",
@@ -143,7 +142,7 @@ def main(infile: IO, outfile: IO) -> None:
         schema = _parse_datatype_json_string(schema_json)
         if not isinstance(schema, StructType):
             raise PySparkAssertionError(
-                error_class="PYTHON_DATA_SOURCE_TYPE_MISMATCH",
+                error_class="DATA_SOURCE_TYPE_MISMATCH",
                 message_parameters={
                     "expected": "an output schema of type 'StructType'",
                     "actual": f"'{type(schema).__name__}'",

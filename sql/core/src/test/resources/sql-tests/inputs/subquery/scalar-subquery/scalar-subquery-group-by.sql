@@ -11,12 +11,14 @@ select * from x where (select count(*) from y where y1 = x1 group by y1) = 1;
 select * from x where (select count(*) from y where y1 = x1 group by x1) = 1;
 select * from x where (select count(*) from y where y1 > x1 group by x1) = 1;
 
+-- Group-by column equal to constant - legal
+select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x;
+-- Group-by column equal to expression with constants and outer refs - legal
+select *, (select count(*) from y where x1 = y1 and y2 = x1 + 1 group by y2) from x;
+
 -- Illegal queries
 select * from x where (select count(*) from y where y1 > x1 group by y1) = 1;
 select *, (select count(*) from y where y1 + y2 = x1 group by y1) from x;
-
--- Equality with literal - disallowed currently but can actually be allowed
-select *, (select count(*) from y where x1 = y1 and y2 = 1 group by y2) from x;
 
 -- Certain other operators like OUTER JOIN or UNION between the correlating filter and the group-by also can cause the scalar subquery to return multiple values and hence make the query illegal.
 select *, (select count(*) from (select * from y where y1 = x1 union all select * from y) sub group by y1) from x;

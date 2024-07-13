@@ -902,6 +902,9 @@ object functions {
   /**
    * Aggregate function: returns the value associated with the maximum value of ord.
    *
+   * @note The function is non-deterministic so the output order can be different for
+   * those associated the same values of `e`.
+   *
    * @group agg_funcs
    * @since 3.3.0
    */
@@ -951,6 +954,9 @@ object functions {
 
   /**
    * Aggregate function: returns the value associated with the minimum value of ord.
+   *
+   * @note The function is non-deterministic so the output order can be different for
+   * those associated the same values of `e`.
    *
    * @group agg_funcs
    * @since 3.3.0
@@ -4233,6 +4239,19 @@ object functions {
    */
   def substring(str: Column, pos: Int, len: Int): Column =
     Column.fn("substring", str, lit(pos), lit(len))
+
+  /**
+   * Substring starts at `pos` and is of length `len` when str is String type or
+   * returns the slice of byte array that starts at `pos` in byte and is of length `len`
+   * when str is Binary type
+   *
+   * @note The position is not zero based, but 1 based index.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def substring(str: Column, pos: Column, len: Column): Column =
+    Column.fn("substring", str, pos, len)
 
   /**
    * Returns the substring from string str before count occurrences of the delimiter delim.

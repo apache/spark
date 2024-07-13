@@ -21,7 +21,7 @@ package org.apache.spark.streaming.scheduler
 import scala.util.Random
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.resource.ResourceProfile
@@ -75,8 +75,10 @@ private[streaming] class ExecutorAllocationManager(
 
   def start(): Unit = {
     timer.start()
-    logInfo(s"ExecutorAllocationManager started with " +
-      s"ratios = [$scalingUpRatio, $scalingDownRatio] and interval = $scalingIntervalSecs sec")
+    logInfo(log"ExecutorAllocationManager started with ratios = " +
+      log"[${MDC(LogKeys.SCALING_UP_RATIO, scalingUpRatio)}, " +
+      log"${MDC(LogKeys.SCALING_DOWN_RATIO, scalingDownRatio)}] and interval = " +
+      log"${MDC(LogKeys.INTERVAL, scalingIntervalSecs)} sec")
   }
 
   def stop(): Unit = {
@@ -89,11 +91,14 @@ private[streaming] class ExecutorAllocationManager(
    * batch statistics.
    */
   private def manageAllocation(): Unit = synchronized {
-    logInfo(s"Managing executor allocation with ratios = [$scalingUpRatio, $scalingDownRatio]")
+    logInfo(log"Managing executor allocation with ratios = [" +
+      log"${MDC(LogKeys.SCALING_UP_RATIO, scalingUpRatio)}, " +
+      log"${MDC(LogKeys.SCALING_DOWN_RATIO, scalingDownRatio)}]")
     if (batchProcTimeCount > 0) {
       val averageBatchProcTime = batchProcTimeSum / batchProcTimeCount
       val ratio = averageBatchProcTime.toDouble / batchDurationMs
-      logInfo(s"Average: $averageBatchProcTime, ratio = $ratio" )
+      logInfo(log"Average: ${MDC(LogKeys.AVG_BATCH_PROC_TIME, averageBatchProcTime)}, " +
+        log"ratio = ${MDC(LogKeys.RATIO, ratio)}")
       if (ratio >= scalingUpRatio) {
         logDebug("Requesting executors")
         val numNewExecutors = math.max(math.round(ratio).toInt, 1)
@@ -119,7 +124,8 @@ private[streaming] class ExecutorAllocationManager(
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> targetTotalExecutors),
       Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 0),
       Map.empty)
-    logInfo(s"Requested total $targetTotalExecutors executors")
+    logInfo(log"Requested total ${MDC(LogKeys.NUM_EXECUTORS,
+      targetTotalExecutors)} executors")
   }
 
   /** Kill an executor that is not running any receiver, if possible */
@@ -129,7 +135,9 @@ private[streaming] class ExecutorAllocationManager(
 
     if (allExecIds.nonEmpty && allExecIds.size > minNumExecutors) {
       val execIdsWithReceivers = receiverTracker.allocatedExecutors().values.flatten.toSeq
-      logInfo(s"Executors with receivers (${execIdsWithReceivers.size}): ${execIdsWithReceivers}")
+      logInfo(log"Executors with receivers (${MDC(LogKeys.NUM_EXECUTORS,
+        execIdsWithReceivers.size)}): " +
+        log"${MDC(LogKeys.EXECUTOR_IDS, execIdsWithReceivers)}")
 
       val removableExecIds = allExecIds.diff(execIdsWithReceivers)
       logDebug(s"Removable executors (${removableExecIds.size}): ${removableExecIds}")
@@ -142,7 +150,7 @@ private[streaming] class ExecutorAllocationManager(
         } else {
           client.killExecutor(execIdToRemove)
         }
-        logInfo(s"Requested to kill executor $execIdToRemove")
+        logInfo(log"Requested to kill executor ${MDC(LogKeys.EXECUTOR_ID, execIdToRemove)}")
       } else {
         logInfo(s"No non-receiver executors to kill")
       }

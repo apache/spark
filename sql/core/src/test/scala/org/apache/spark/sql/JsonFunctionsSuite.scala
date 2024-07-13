@@ -406,6 +406,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
+  test("to_json ISO default - old dates") {
+    withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+
+      val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("1800-01-01 00:00:00.0")))).toDF("a")
+
+      checkAnswer(
+        df.select(to_json($"a")),
+        Row("""{"_1":"1800-01-01T00:00:00.000-07:52:58"}""") :: Nil)
+    }
+  }
+
   test("to_json with option (dateFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Date.valueOf("2015-08-26")))).toDF("a")
     val options = Map("dateFormat" -> "dd/MM/yyyy")
@@ -1145,6 +1156,38 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
       checkAnswer(
         df.select(from_json($"c0", ArrayType(st))),
+        Row(null)
+      )
+    }
+  }
+
+  test("SPARK-48863: parse object as an array with partial results enabled") {
+    val schema = StructType(StructField("a", StringType) :: StructField("c", IntegerType) :: Nil)
+
+    // Value can be parsed correctly and should return the same result with or without the flag.
+    Seq(false, true).foreach { enabled =>
+      withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> s"${enabled}") {
+        checkAnswer(
+          Seq("""{"a": "b", "c": 1}""").toDF("c0")
+            .select(from_json($"c0", ArrayType(schema))),
+          Row(Seq(Row("b", 1)))
+        )
+      }
+    }
+
+    // Value does not match the schema.
+    val df = Seq("""{"a": "b", "c": "1"}""").toDF("c0")
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(schema))),
+        Row(Seq(Row("b", null)))
+      )
+    }
+
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      checkAnswer(
+        df.select(from_json($"c0", ArrayType(schema))),
         Row(null)
       )
     }
