@@ -866,6 +866,7 @@ public class CollationAwareUTF8String {
    *
    * @param srcString the input string to be trimmed from both ends of the string
    * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trimming
    * @return the trimmed string (for ICU collations)
    */
   public static UTF8String trim(
@@ -910,7 +911,9 @@ public class CollationAwareUTF8String {
           trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
         int nextCodePoint = getLowercaseCodePoint(srcIter.next());
         if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_COMBINING_DOT) searchIndex += 2;
+          || nextCodePoint == CODE_POINT_COMBINING_DOT) {
+          searchIndex += 2;
+        }
         else {
           if (trimChars.contains(codePoint)) ++searchIndex;
           break;
@@ -918,7 +921,9 @@ public class CollationAwareUTF8String {
       } else if (trimChars.contains(codePoint)) {
         ++searchIndex;
       }
-      else break;
+      else {
+        break;
+      }
     }
 
     // Return the substring from that position to the end of the string.
@@ -935,6 +940,7 @@ public class CollationAwareUTF8String {
    *
    * @param srcString the input string to be trimmed from the left end of the string
    * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trimming
    * @return the trimmed string (for ICU collations)
    */
   public static UTF8String trimLeft(
@@ -946,12 +952,12 @@ public class CollationAwareUTF8String {
     if (srcString.numBytes() == 0) return srcString;
 
     // Create an array of Strings for all characters of `trimString`.
-    int trimCharIndex = 0;
-    String[] trimChars = new String[trimString.numChars()];
+    Map<Integer, String> trimChars = new HashMap<>();
     Iterator<Integer> trimIter = trimString.codePointIterator(
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
-      trimChars[trimCharIndex++] = String.valueOf((char) trimIter.next().intValue());
+      int codePoint = trimIter.next();
+      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -961,7 +967,7 @@ public class CollationAwareUTF8String {
     int charIndex = 0, longestMatchLen;
     while (charIndex < src.length()) {
       longestMatchLen = 0;
-      for (String trim : trimChars) {
+      for (String trim : trimChars.values()) {
         StringSearch stringSearch = new StringSearch(trim, target, (RuleBasedCollator) collator);
         stringSearch.setIndex(charIndex);
         int matchIndex = stringSearch.next();
@@ -1015,7 +1021,9 @@ public class CollationAwareUTF8String {
           trimChars.contains(CODE_POINT_COMBINED_LOWERCASE_I_DOT)) {
         int nextCodePoint = getLowercaseCodePoint(srcIter.next());
         if ((trimChars.contains(codePoint) && trimChars.contains(nextCodePoint))
-          || nextCodePoint == CODE_POINT_LOWERCASE_I) searchIndex -= 2;
+          || nextCodePoint == CODE_POINT_LOWERCASE_I) {
+          searchIndex -= 2;
+        }
         else {
           if (trimChars.contains(codePoint)) --searchIndex;
           break;
@@ -1023,7 +1031,9 @@ public class CollationAwareUTF8String {
       } else if (trimChars.contains(codePoint)) {
         --searchIndex;
       }
-      else break;
+      else {
+        break;
+      }
     }
 
     // Return the substring from the start of the string to the calculated position.
@@ -1040,6 +1050,7 @@ public class CollationAwareUTF8String {
    *
    * @param srcString the input string to be trimmed from the right end of the string
    * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trimming
    * @return the trimmed string (for ICU collations)
    */
   public static UTF8String trimRight(
@@ -1051,12 +1062,12 @@ public class CollationAwareUTF8String {
     if (srcString.numBytes() == 0) return srcString;
 
     // Create an array of Strings for all characters of `trimString`.
-    int trimCharIndex = 0;
-    String[] trimChars = new String[trimString.numChars()];
+    Map<Integer, String> trimChars = new HashMap<>();
     Iterator<Integer> trimIter = trimString.codePointIterator(
       CodePointIteratorType.CODE_POINT_ITERATOR_MAKE_VALID);
     while (trimIter.hasNext()) {
-      trimChars[trimCharIndex++] = String.valueOf((char) trimIter.next().intValue());
+      int codePoint = trimIter.next();
+      trimChars.putIfAbsent(codePoint, String.valueOf((char) codePoint));
     }
 
     // Iterate over srcString from the left and find the first character that is not in trimChars.
@@ -1066,12 +1077,14 @@ public class CollationAwareUTF8String {
     int charIndex = src.length(), longestMatchLen;
     while (charIndex >= 0) {
       longestMatchLen = 0;
-      for (String trim : trimChars) {
+      for (String trim : trimChars.values()) {
         StringSearch stringSearch = new StringSearch(trim, target, (RuleBasedCollator) collator);
         // Note: stringSearch.previous() is NOT consistent with stringSearch.next()!
         //  Example: StringSearch("İ", "i\\u0307İi\\u0307İi\\u0307İ", "UNICODE_CI")
         //    stringSearch.next() gives: [0, 2, 3, 5, 6, 8].
         //    stringSearch.previous() gives: [8, 6, 3, 0].
+        // Since 1 character can map to at most 3 characters in Unicode, we can begin the search
+        // from character position: `charIndex` - 3, and use `next()` to find the longest match.
         stringSearch.setIndex(Math.max(charIndex - 3, 0));
         int matchIndex = stringSearch.next();
         int matchLen = stringSearch.getMatchLength();
