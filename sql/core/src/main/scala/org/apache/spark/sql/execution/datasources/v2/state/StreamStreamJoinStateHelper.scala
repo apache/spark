@@ -68,11 +68,11 @@ object StreamStreamJoinStateHelper {
     val newHadoopConf = session.sessionState.newHadoopConf()
 
     val manager = new StateSchemaCompatibilityChecker(providerIdForKeyToNumValues, newHadoopConf)
-    val (keySchema, _) = manager.readSchemaFile()
+    val keySchema = manager.readSchemaFile().head.keySchema
 
     val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
       newHadoopConf)
-    val (_, valueSchema) = manager2.readSchemaFile()
+    val valueSchema = manager2.readSchemaFile().head.valueSchema
 
     val maybeMatchedColumn = valueSchema.last
 

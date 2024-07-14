@@ -390,21 +390,6 @@ case class TransformWithStateExec(
     Array(schemaPath.toString)
   }
 
-  private def validateSchemas(
-      oldSchemas: List[ColumnFamilySchema],
-      newSchemas: Map[String, ColumnFamilySchema]): Unit = {
-    oldSchemas.foreach { case oldSchema: ColumnFamilySchemaV1 =>
-      newSchemas.get(oldSchema.columnFamilyName).foreach {
-        case newSchema: ColumnFamilySchemaV1 =>
-          StateSchemaCompatibilityChecker.check(
-            (oldSchema.keySchema, oldSchema.valueSchema),
-            (newSchema.keySchema, newSchema.valueSchema),
-            ignoreValueSchema = false
-          )
-      }
-    }
-  }
-
   private def stateSchemaDirPath(storeName: String): Path = {
     assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
     def stateInfo = getStateInfo

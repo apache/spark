@@ -87,7 +87,7 @@ object ColumnFamilySchemaV1 {
 object SchemaHelper {
 
   sealed trait SchemaReader {
-    def read(inputStream: FSDataInputStream): (StructType, StructType)
+    def read(inputStream: FSDataInputStream): Array[StateSchema]
   }
 
   object SchemaReader {
@@ -102,15 +102,17 @@ object SchemaHelper {
   }
 
   class SchemaV1Reader extends SchemaReader {
-    def read(inputStream: FSDataInputStream): (StructType, StructType) = {
+    def read(inputStream: FSDataInputStream): Array[StateSchema] = {
       val keySchemaStr = inputStream.readUTF()
       val valueSchemaStr = inputStream.readUTF()
-      (StructType.fromString(keySchemaStr), StructType.fromString(valueSchemaStr))
+      Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        StructType.fromString(keySchemaStr),
+        StructType.fromString(valueSchemaStr)))
     }
   }
 
   class SchemaV2Reader extends SchemaReader {
-    def read(inputStream: FSDataInputStream): (StructType, StructType) = {
+    def read(inputStream: FSDataInputStream): Array[StateSchema] = {
       val buf = new StringBuilder
       val numKeyChunks = inputStream.readInt()
       (0 until numKeyChunks).foreach(_ => buf.append(inputStream.readUTF()))
@@ -120,7 +122,9 @@ object SchemaHelper {
       val numValueChunks = inputStream.readInt()
       (0 until numValueChunks).foreach(_ => buf.append(inputStream.readUTF()))
       val valueSchemaStr = buf.toString()
-      (StructType.fromString(keySchemaStr), StructType.fromString(valueSchemaStr))
+      Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        StructType.fromString(keySchemaStr),
+        StructType.fromString(valueSchemaStr)))
     }
   }
 

@@ -30,6 +30,13 @@ import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
+case class StateSchema(
+    colFamilyName: String,
+    keySchema: StructType,
+    valueSchema: StructType,
+    keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None
+)
+
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration) extends Logging {
@@ -42,7 +49,7 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  def readSchemaFile(): (StructType, StructType) = {
+  def readSchemaFile(): Array[StateSchema] = {
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
@@ -62,11 +69,11 @@ class StateSchemaCompatibilityChecker(
    * exists
    * @return - Option of (keySchema, valueSchema) if the schema file exists, None otherwise
    */
-  private def getExistingKeyAndValueSchema(): Option[(StructType, StructType)] = {
+  private def getExistingKeyAndValueSchema(): Array[StateSchema] = {
     if (fm.exists(schemaFileLocation)) {
-      Some(readSchemaFile())
+      readSchemaFile()
     } else {
-      None
+      Array.empty
     }
   }
 
@@ -102,7 +109,7 @@ class StateSchemaCompatibilityChecker(
     } else {
       // validate if the new schema is compatible with the existing schema
       StateSchemaCompatibilityChecker.
-        check(existingSchema.get, (newKeySchema, newValueSchema), ignoreValueSchema)
+        check(existingSchema.head, (newKeySchema, newValueSchema), ignoreValueSchema)
     }
   }
 
@@ -120,10 +127,11 @@ object StateSchemaCompatibilityChecker extends Logging {
    * @param ignoreValueSchema - whether to ignore value schema or not
    */
   def check(
-      oldSchema: (StructType, StructType),
+      oldSchema: StateSchema,
       newSchema: (StructType, StructType),
       ignoreValueSchema: Boolean) : Unit = {
-    val (storedKeySchema, storedValueSchema) = oldSchema
+    val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
+      oldSchema.valueSchema)
     val (keySchema, valueSchema) = newSchema
 
     if (storedKeySchema.equals(keySchema) &&
