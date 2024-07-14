@@ -25,7 +25,6 @@ from typing import (
     Generic,
     List,
     Optional,
-    Union,
 )
 
 import numpy as np
