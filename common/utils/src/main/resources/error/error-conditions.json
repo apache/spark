@@ -2584,7 +2584,7 @@
       },
       "CHARSET" : {
         "message" : [
-          "expects one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', but got <charset>."
+          "expects one of the <charsets>, but got <charset>."
         ]
       },
       "DATETIME_UNIT" : {
@@ -3776,6 +3776,12 @@
   "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
+    "message" : [
+      "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
     ],
     "sqlState" : "42802"
   },

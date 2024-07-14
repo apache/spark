@@ -711,7 +711,7 @@ private[spark] object Config extends Logging {
         "executor status.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA =
     ConfigBuilder("spark.kubernetes.executor.missingPodDetectDelta")

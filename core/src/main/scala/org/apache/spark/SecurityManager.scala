@@ -122,7 +122,7 @@ private[spark] class SecurityManager(
    */
   def setViewAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     viewAcls = adminAcls ++ defaultUsers ++ allowedUsers
-    logInfo("Changing view acls to: " + viewAcls.mkString(","))
+    logInfo(log"Changing view acls to: ${MDC(LogKeys.VIEW_ACLS, viewAcls.mkString(","))}")
   }
 
   def setViewAcls(defaultUser: String, allowedUsers: Seq[String]): Unit = {
@@ -135,7 +135,7 @@ private[spark] class SecurityManager(
    */
   def setViewAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     viewAclsGroups = adminAclsGroups ++ allowedUserGroups
-    logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
+    logInfo(log"Changing view acls groups to: ${MDC(LogKeys.VIEW_ACLS, viewAcls.mkString(","))}")
   }
 
   /**
@@ -163,7 +163,7 @@ private[spark] class SecurityManager(
    */
   def setModifyAcls(defaultUsers: Set[String], allowedUsers: Seq[String]): Unit = {
     modifyAcls = adminAcls ++ defaultUsers ++ allowedUsers
-    logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
+    logInfo(log"Changing modify acls to: ${MDC(LogKeys.MODIFY_ACLS, modifyAcls.mkString(","))}")
   }
 
   /**
@@ -172,7 +172,8 @@ private[spark] class SecurityManager(
    */
   def setModifyAclsGroups(allowedUserGroups: Seq[String]): Unit = {
     modifyAclsGroups = adminAclsGroups ++ allowedUserGroups
-    logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
+    logInfo(log"Changing modify acls groups to: ${MDC(LogKeys.MODIFY_ACLS,
+      modifyAcls.mkString(","))}")
   }
 
   /**
@@ -200,7 +201,7 @@ private[spark] class SecurityManager(
    */
   def setAdminAcls(adminUsers: Seq[String]): Unit = {
     adminAcls = adminUsers.toSet
-    logInfo("Changing admin acls to: " + adminAcls.mkString(","))
+    logInfo(log"Changing admin acls to: ${MDC(LogKeys.ADMIN_ACLS, adminAcls.mkString(","))}")
   }
 
   /**
@@ -209,7 +210,7 @@ private[spark] class SecurityManager(
    */
   def setAdminAclsGroups(adminUserGroups: Seq[String]): Unit = {
     adminAclsGroups = adminUserGroups.toSet
-    logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
+    logInfo(log"Changing admin acls groups to: ${MDC(LogKeys.ADMIN_ACLS, adminAcls.mkString(","))}")
   }
 
   def setAcls(aclSetting: Boolean): Unit = {

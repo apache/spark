@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{EOFException, File}
-import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time._
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -35,11 +35,12 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
+import org.apache.spark._
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
+import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -260,15 +261,18 @@ abstract class CSVSuite
   }
 
   test("bad encoding name") {
-    val exception = intercept[UnsupportedCharsetException] {
-      spark
-        .read
-        .format("csv")
-        .option("charset", "1-9588-osi")
-        .load(testFile(carsFile8859))
-    }
-
-    assert(exception.getMessage.contains("1-9588-osi"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.format("csv").option("charset", "1-9588-osi")
+          .load(testFile(carsFile8859))
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> "1-9588-osi",
+        "functionName" -> toSQLId("CSVOptions"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("test different encoding") {
@@ -620,31 +624,39 @@ abstract class CSVSuite
 
     Seq("iso-8859-1", "utf-8", "utf-16", "utf-32", "windows-1250").foreach { encoding =>
       withTempPath { path =>
-        val csvDir = new File(path, "csv")
-        Seq(content).toDF().write
-          .option("encoding", encoding)
-          .csv(csvDir.getCanonicalPath)
+        withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+          val csvDir = new File(path, "csv")
+          Seq(content).toDF().write
+            .option("encoding", encoding)
+            .csv(csvDir.getCanonicalPath)
 
-        csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
-          val readback = Files.readAllBytes(csvFile.toPath)
-          val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
-          assert(readback === expected)
-        })
+          csvDir.listFiles().filter(_.getName.endsWith("csv")).foreach({ csvFile =>
+            val readback = Files.readAllBytes(csvFile.toPath)
+            val expected = (content + Properties.lineSeparator).getBytes(Charset.forName(encoding))
+            assert(readback === expected)
+          })
+        }
       }
     }
   }
 
   test("SPARK-19018: error handling for unsupported charsets") {
-    val exception = intercept[SparkException] {
-      withTempPath { path =>
-        val csvDir = new File(path, "csv").getCanonicalPath
-        Seq("a,A,c,A,b,B").toDF().write
-          .option("encoding", "1-9588-osi")
-          .csv(csvDir)
-      }
-    }
-
-    assert(exception.getCause.getMessage.contains("1-9588-osi"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        withTempPath { path =>
+          val csvDir = new File(path, "csv").getCanonicalPath
+          Seq("a,A,c,A,b,B").toDF().write
+            .option("encoding", "1-9588-osi")
+            .csv(csvDir)
+        }
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
+      parameters = Map(
+        "charset" -> "1-9588-osi",
+        "functionName" -> toSQLId("CSVOptions"),
+        "parameter" -> toSQLId("charset"),
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", "))
+    )
   }
 
   test("commented lines in CSV data") {
@@ -2303,18 +2315,20 @@ abstract class CSVSuite
     val df = spark.range(3).toDF()
     Seq("UTF-8", "ISO-8859-1", "CP1251", "US-ASCII", "UTF-16BE", "UTF-32LE").foreach { encoding =>
       Seq(true, false).foreach { header =>
-        withTempPath { path =>
-          df.write
-            .option("encoding", encoding)
-            .option("header", header)
-            .csv(path.getCanonicalPath)
-          val readback = spark.read
-            .option("multiLine", true)
-            .option("encoding", encoding)
-            .option("inferSchema", true)
-            .option("header", header)
-            .csv(path.getCanonicalPath)
-          checkAnswer(readback, df)
+        withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+          withTempPath { path =>
+            df.write
+              .option("encoding", encoding)
+              .option("header", header)
+              .csv(path.getCanonicalPath)
+            val readback = spark.read
+              .option("multiLine", true)
+              .option("encoding", encoding)
+              .option("inferSchema", true)
+              .option("header", header)
+              .csv(path.getCanonicalPath)
+            checkAnswer(readback, df)
+          }
         }
       }
     }
@@ -2350,48 +2364,54 @@ abstract class CSVSuite
 
           val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3))
             .toDF("_c0", "_c1")
-          Seq(false, true).foreach { multiLine =>
-            val reader = spark
-              .read
-              .option("lineSep", lineSep)
-              .option("multiLine", multiLine)
-              .option("encoding", encoding)
-            val df = if (inferSchema) {
-              reader.option("inferSchema", true).csv(path.getAbsolutePath)
-            } else {
-              reader.schema(schema).csv(path.getAbsolutePath)
+          withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+            Seq(false, true).foreach { multiLine =>
+              val reader = spark
+                .read
+                .option("lineSep", lineSep)
+                .option("multiLine", multiLine)
+                .option("encoding", encoding)
+              val df = if (inferSchema) {
+                reader.option("inferSchema", true).csv(path.getAbsolutePath)
+              } else {
+                reader.schema(schema).csv(path.getAbsolutePath)
+              }
+              checkAnswer(df, expected)
             }
-            checkAnswer(df, expected)
           }
         }
       }
 
       // Write
       withTempPath { path =>
-        Seq("a", "b", "c").toDF("value").coalesce(1)
-          .write
-          .option("lineSep", lineSep)
-          .option("encoding", encoding)
-          .csv(path.getAbsolutePath)
-        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
-        val readBack = new String(Files.readAllBytes(partFile.toPath), encoding)
-        assert(
-          readBack === s"a${lineSep}b${lineSep}c${lineSep}")
+        withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+          Seq("a", "b", "c").toDF("value").coalesce(1)
+            .write
+            .option("lineSep", lineSep)
+            .option("encoding", encoding)
+            .csv(path.getAbsolutePath)
+          val partFile =
+            TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+          val readBack = new String(Files.readAllBytes(partFile.toPath), encoding)
+          assert(readBack === s"a${lineSep}b${lineSep}c${lineSep}")
+        }
       }
 
       // Roundtrip
       withTempPath { path =>
         val df = Seq("a", "b", "c").toDF()
-        df.write
-          .option("lineSep", lineSep)
-          .option("encoding", encoding)
-          .csv(path.getAbsolutePath)
-        val readBack = spark
-          .read
-          .option("lineSep", lineSep)
-          .option("encoding", encoding)
-          .csv(path.getAbsolutePath)
-        checkAnswer(df, readBack)
+        withSQLConf(SQLConf.LEGACY_JAVA_CHARSETS.key -> "true") {
+          df.write
+            .option("lineSep", lineSep)
+            .option("encoding", encoding)
+            .csv(path.getAbsolutePath)
+          val readBack = spark
+            .read
+            .option("lineSep", lineSep)
+            .option("encoding", encoding)
+            .csv(path.getAbsolutePath)
+          checkAnswer(df, readBack)
+        }
       }
     }
   }

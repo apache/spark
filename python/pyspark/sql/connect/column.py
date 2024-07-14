@@ -100,7 +100,7 @@ def _to_expr(v: Any) -> Expression:
     return v._expr if isinstance(v, Column) else LiteralExpression._from_value(v)
 
 
-@with_origin_to_class
+@with_origin_to_class(["to_plan"])
 class Column(ParentColumn):
     def __new__(
         cls,

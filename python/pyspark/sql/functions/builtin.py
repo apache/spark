@@ -1271,6 +1271,11 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    Notes
+    -----
+    The function is non-deterministic so the output order can be different for those
+    associated the same values of `col`.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
@@ -1351,6 +1356,11 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    Notes
+    -----
+    The function is non-deterministic so the output order can be different for those
+    associated the same values of `col`.
 
     Parameters
     ----------
@@ -5385,6 +5395,24 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (3,)], ["value"])
+    >>> df.select(sf.count_distinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
+
+    >>> df.select(sf.countDistinct(df.value)).show()
+    +---------------------+
+    |count(DISTINCT value)|
+    +---------------------+
+    |                    2|
+    +---------------------+
     """
     return count_distinct(col, *cols)
 
@@ -13415,39 +13443,39 @@ def array(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
     ...     ("name", "occupation"))
-    >>> df.select(sf.array('name', 'occupation').alias("arr")).show()
-    +---------------+
-    |            arr|
-    +---------------+
-    |[Alice, doctor]|
-    |[Bob, engineer]|
-    +---------------+
+    >>> df.select(sf.array('name', 'occupation')).show()
+    +-----------------------+
+    |array(name, occupation)|
+    +-----------------------+
+    |        [Alice, doctor]|
+    |        [Bob, engineer]|
+    +-----------------------+
 
     Example 2: Usage of array function with Column objects.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
     ...     ("name", "occupation"))
-    >>> df.select(sf.array(df.name, df.occupation).alias("arr")).show()
-    +---------------+
-    |            arr|
-    +---------------+
-    |[Alice, doctor]|
-    |[Bob, engineer]|
-    +---------------+
+    >>> df.select(sf.array(df.name, df.occupation)).show()
+    +-----------------------+
+    |array(name, occupation)|
+    +-----------------------+
+    |        [Alice, doctor]|
+    |        [Bob, engineer]|
+    +-----------------------+
 
     Example 3: Single argument as list of column names.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", "doctor"), ("Bob", "engineer")],
     ...     ("name", "occupation"))
-    >>> df.select(sf.array(['name', 'occupation']).alias("arr")).show()
-    +---------------+
-    |            arr|
-    +---------------+
-    |[Alice, doctor]|
-    |[Bob, engineer]|
-    +---------------+
+    >>> df.select(sf.array(['name', 'occupation'])).show()
+    +-----------------------+
+    |array(name, occupation)|
+    +-----------------------+
+    |        [Alice, doctor]|
+    |        [Bob, engineer]|
+    +-----------------------+
 
     Example 4: Usage of array function with columns of different types.
 
@@ -13455,26 +13483,26 @@ def array(
     >>> df = spark.createDataFrame(
     ...     [("Alice", 2, 22.2), ("Bob", 5, 36.1)],
     ...     ("name", "age", "weight"))
-    >>> df.select(sf.array(['age', 'weight']).alias("arr")).show()
-    +-----------+
-    |        arr|
-    +-----------+
-    |[2.0, 22.2]|
-    |[5.0, 36.1]|
-    +-----------+
+    >>> df.select(sf.array(['age', 'weight'])).show()
+    +------------------+
+    |array(age, weight)|
+    +------------------+
+    |       [2.0, 22.2]|
+    |       [5.0, 36.1]|
+    +------------------+
 
     Example 5: array function with a column containing null values.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", None), ("Bob", "engineer")],
     ...     ("name", "occupation"))
-    >>> df.select(sf.array('name', 'occupation').alias("arr")).show()
-    +---------------+
-    |            arr|
-    +---------------+
-    |  [Alice, NULL]|
-    |[Bob, engineer]|
-    +---------------+
+    >>> df.select(sf.array('name', 'occupation')).show()
+    +-----------------------+
+    |array(name, occupation)|
+    +-----------------------+
+    |          [Alice, NULL]|
+    |        [Bob, engineer]|
+    +-----------------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -13512,13 +13540,13 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
-    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
-    +----------+
-    |contains_a|
-    +----------+
-    |      true|
-    |     false|
-    +----------+
+    >>> df.select(sf.array_contains(df.data, "a")).show()
+    +-----------------------+
+    |array_contains(data, a)|
+    +-----------------------+
+    |                   true|
+    |                  false|
+    +-----------------------+
 
     Example 2: Usage of array_contains function with a column.
 
@@ -13526,38 +13554,37 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     >>> df = spark.createDataFrame([(["a", "b", "c"], "c"),
     ...                            (["c", "d", "e"], "d"),
     ...                            (["e", "a", "c"], "b")], ["data", "item"])
-    >>> df.select(sf.array_contains(df.data, sf.col("item"))
-    ...   .alias("data_contains_item")).show()
-    +------------------+
-    |data_contains_item|
-    +------------------+
-    |              true|
-    |              true|
-    |             false|
-    +------------------+
+    >>> df.select(sf.array_contains(df.data, sf.col("item"))).show()
+    +--------------------------+
+    |array_contains(data, item)|
+    +--------------------------+
+    |                      true|
+    |                      true|
+    |                     false|
+    +--------------------------+
 
     Example 3: Attempt to use array_contains function with a null array.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None,), (["a", "b", "c"],)], ['data'])
-    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
-    +----------+
-    |contains_a|
-    +----------+
-    |      NULL|
-    |      true|
-    +----------+
+    >>> df.select(sf.array_contains(df.data, "a")).show()
+    +-----------------------+
+    |array_contains(data, a)|
+    +-----------------------+
+    |                   NULL|
+    |                   true|
+    +-----------------------+
 
     Example 4: Usage of array_contains with an array column containing null values.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
-    >>> df.select(sf.array_contains(df.data, "a").alias("contains_a")).show()
-    +----------+
-    |contains_a|
-    +----------+
-    |      true|
-    +----------+
+    >>> df.select(sf.array_contains(df.data, "a")).show()
+    +-----------------------+
+    |array_contains(data, a)|
+    +-----------------------+
+    |                   true|
+    +-----------------------+
     """
     return _invoke_function_over_columns("array_contains", col, lit(value))
 
@@ -13592,49 +13619,49 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b"], ["b", "c"]), (["a"], ["b", "c"])], ['x', 'y'])
-    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
-    +-------+
-    |overlap|
-    +-------+
-    |   true|
-    |  false|
-    +-------+
+    >>> df.select(sf.arrays_overlap(df.x, df.y)).show()
+    +--------------------+
+    |arrays_overlap(x, y)|
+    +--------------------+
+    |                true|
+    |               false|
+    +--------------------+
 
     Example 2: Usage of arrays_overlap function with arrays containing null elements.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", None], ["b", None]), (["a"], ["b", "c"])], ['x', 'y'])
-    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
-    +-------+
-    |overlap|
-    +-------+
-    |   NULL|
-    |  false|
-    +-------+
+    >>> df.select(sf.arrays_overlap(df.x, df.y)).show()
+    +--------------------+
+    |arrays_overlap(x, y)|
+    +--------------------+
+    |                NULL|
+    |               false|
+    +--------------------+
 
     Example 3: Usage of arrays_overlap function with arrays that are null.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(None, ["b", "c"]), (["a"], None)], ['x', 'y'])
-    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
-    +-------+
-    |overlap|
-    +-------+
-    |   NULL|
-    |   NULL|
-    +-------+
+    >>> df.select(sf.arrays_overlap(df.x, df.y)).show()
+    +--------------------+
+    |arrays_overlap(x, y)|
+    +--------------------+
+    |                NULL|
+    |                NULL|
+    +--------------------+
 
     Example 4: Usage of arrays_overlap on arrays with identical elements.
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(["a", "b"], ["a", "b"]), (["a"], ["a"])], ['x', 'y'])
-    >>> df.select(sf.arrays_overlap(df.x, df.y).alias("overlap")).show()
-    +-------+
-    |overlap|
-    +-------+
-    |   true|
-    |   true|
-    +-------+
+    >>> df.select(sf.arrays_overlap(df.x, df.y)).show()
+    +--------------------+
+    |arrays_overlap(x, y)|
+    +--------------------+
+    |                true|
+    |                true|
+    +--------------------+
     """
     return _invoke_function_over_columns("arrays_overlap", a1, a2)
 
@@ -14641,23 +14668,19 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     Example 4: Inserting a NULL value
 
     >>> from pyspark.sql import functions as sf
-    >>> from pyspark.sql.types import StringType
     >>> df = spark.createDataFrame([(['a', 'b', 'c'],)], ['data'])
-    >>> df.select(sf.array_insert(df.data, 2, sf.lit(None).cast(StringType()))
-    ...   .alias("result")).show()
-    +---------------+
-    |         result|
-    +---------------+
-    |[a, NULL, b, c]|
-    +---------------+
+    >>> df.select(sf.array_insert(df.data, 2, sf.lit(None))).show()
+    +---------------------------+
+    |array_insert(data, 2, NULL)|
+    +---------------------------+
+    |            [a, NULL, b, c]|
+    +---------------------------+
 
     Example 5: Inserting a value into a NULL array
 
     >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField
-    >>> schema = StructType([
-    ...   StructField("data", ArrayType(IntegerType()), True)
-    ... ])
+    >>> schema = StructType([StructField("data", ArrayType(IntegerType()), True)])
     >>> df = spark.createDataFrame([(None,)], schema=schema)
     >>> df.select(sf.array_insert(df.data, 1, 5)).show()
     +------------------------+
@@ -15770,6 +15793,20 @@ def from_json(
     +---------+
     |[1, 2, 3]|
     +---------+
+
+    Example 6: Parsing JSON with specified options
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{a:123}'''), (2, '''{"a":456}''')], ("key", "value"))
+    >>> parsed1 = sf.from_json(df.value, "a INT")
+    >>> parsed2 = sf.from_json(df.value, "a INT", {"allowUnquotedFieldNames": "true"})
+    >>> df.select("value", parsed1, parsed2).show()
+    +---------+----------------+----------------+
+    |    value|from_json(value)|from_json(value)|
+    +---------+----------------+----------------+
+    |  {a:123}|          {NULL}|           {123}|
+    |{"a":456}|           {456}|           {456}|
+    +---------+----------------+----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16090,6 +16127,19 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     +---------------+
     |["Alice","Bob"]|
     +---------------+
+
+    Example 6: Converting to JSON with specified options
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql("SELECT (DATE('2022-02-22'), 1) AS date")
+    >>> json1 = sf.to_json(df.date)
+    >>> json2 = sf.to_json(df.date, {"dateFormat": "yyyy/MM/dd"})
+    >>> df.select("date", json1, json2).show(truncate=False)
+    +---------------+------------------------------+------------------------------+
+    |date           |to_json(date)                 |to_json(date)                 |
+    +---------------+------------------------------+------------------------------+
+    |{2022-02-22, 1}|{"col1":"2022-02-22","col2":1}|{"col1":"2022/02/22","col2":1}|
+    +---------------+------------------------------+------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -16127,12 +16177,15 @@ def schema_of_json(json: Union[Column, str], options: Optional[Dict[str, str]] =
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(schema_of_json(lit('{"a": 0}')).alias("json")).collect()
-    [Row(json='STRUCT<a: BIGINT>')]
-    >>> schema = schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
-    >>> df.select(schema.alias("json")).collect()
-    [Row(json='STRUCT<a: BIGINT>')]
+    >>> import pyspark.sql.functions as sf
+    >>> parsed1 = sf.schema_of_json(sf.lit('{"a": 0}'))
+    >>> parsed2 = sf.schema_of_json('{a: 1}', {'allowUnquotedFieldNames':'true'})
+    >>> spark.range(1).select(parsed1, parsed2).show()
+    +------------------------+----------------------+
+    |schema_of_json({"a": 0})|schema_of_json({a: 1})|
+    +------------------------+----------------------+
+    |       STRUCT<a: BIGINT>|     STRUCT<a: BIGINT>|
+    +------------------------+----------------------+
     """
     from pyspark.sql.classic.column import _create_column_from_literal, _to_java_column
 
@@ -16491,8 +16544,6 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
 
-# TODO(SPARK-46654) Re-enable the `Example 2` test after fixing the display
-#  difference between Regular Spark and Spark Connect on `df.show`.
 @_try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
@@ -20219,8 +20270,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def aes_encrypt(
     input: "ColumnOrName",
@@ -20313,7 +20362,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode, df.padding),
     ...     df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(aes_encrypt(input, key, mode, padding, , ), key, mode, padding, ) AS STRING)|
     +---------------------------------------------------------------------------------------------+
@@ -20329,7 +20378,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode),
     ...     df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(aes_encrypt(input, key, mode, DEFAULT, , ), key, mode, DEFAULT, ) AS STRING)|
     +---------------------------------------------------------------------------------------------+
@@ -20345,7 +20394,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(sf.base64(sf.aes_encrypt(df.input, df.key))), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(base64(aes_encrypt(input, key, GCM, DEFAULT, , ))), key, GCM, DEFAULT, ) AS STRING)|
     +-------------------------------------------------------------------------------------------------------------+
@@ -20359,8 +20408,6 @@ def aes_encrypt(
     return _invoke_function_over_columns("aes_encrypt", input, key, _mode, _padding, _iv, _aad)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def aes_decrypt(
     input: "ColumnOrName",
@@ -20414,7 +20461,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +---------------------------------------------------------------------+
@@ -20431,7 +20478,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
     +------------------------------------------------------------------+
@@ -20448,7 +20495,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
     +------------------------------------------------------------------+
@@ -20465,7 +20512,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unhex(df.input), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +--------------------------------------------------------------+
     |CAST(aes_decrypt(unhex(input), key, GCM, DEFAULT, ) AS STRING)|
     +--------------------------------------------------------------+
@@ -20478,8 +20525,6 @@ def aes_decrypt(
     return _invoke_function_over_columns("aes_decrypt", input, key, _mode, _padding, _aad)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def try_aes_decrypt(
     input: "ColumnOrName",
@@ -20535,7 +20580,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +-------------------------------------------------------------------------+
@@ -20553,7 +20598,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +-------------------------------------------------------------------------+
@@ -20570,7 +20615,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
     +----------------------------------------------------------------------+
@@ -20587,7 +20632,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
     +----------------------------------------------------------------------+
@@ -20604,7 +20649,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unhex(df.input), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unhex(input), key, GCM, DEFAULT, ) AS STRING)|
     +------------------------------------------------------------------+

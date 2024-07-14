@@ -30,6 +30,8 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -1625,6 +1627,30 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
       keyRow, keySchema, valueRow, keySchema, storeConf)
+  }
+
+  test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
   }
 
   /** Return a new provider with a random id */

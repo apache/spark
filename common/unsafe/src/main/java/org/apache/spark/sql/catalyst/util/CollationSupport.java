@@ -215,7 +215,7 @@ public final class CollationSupport {
         return useICU ? execBinaryICU(v) : execBinary(v);
       } else if (collation.supportsLowercaseEquality) {
         return execLowercase(v);
-      }  else {
+      } else {
         return execICU(v, collationId);
       }
     }
@@ -227,7 +227,7 @@ public final class CollationSupport {
         return String.format(expr + "%s(%s)", funcName, v);
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", v);
-      }  else {
+      } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
@@ -264,7 +264,7 @@ public final class CollationSupport {
         return String.format(expr + "%s(%s)", funcName, v);
       } else if (collation.supportsLowercaseEquality) {
         return String.format(expr + "Lowercase(%s)", v);
-      }  else {
+      } else {
         return String.format(expr + "ICU(%s, %d)", v, collationId);
       }
     }
@@ -525,26 +525,11 @@ public final class CollationSupport {
       return source.translate(dict);
     }
     public static UTF8String execLowercase(final UTF8String source, Map<String, String> dict) {
-      String srcStr = source.toString();
-      StringBuilder sb = new StringBuilder();
-      int charCount = 0;
-      for (int k = 0; k < srcStr.length(); k += charCount) {
-        int codePoint = srcStr.codePointAt(k);
-        charCount = Character.charCount(codePoint);
-        String subStr = srcStr.substring(k, k + charCount);
-        String translated = dict.get(subStr.toLowerCase());
-        if (null == translated) {
-          sb.append(subStr);
-        } else if (!"\0".equals(translated)) {
-          sb.append(translated);
-        }
-      }
-      return UTF8String.fromString(sb.toString());
+      return CollationAwareUTF8String.lowercaseTranslate(source, dict);
     }
     public static UTF8String execICU(final UTF8String source, Map<String, String> dict,
         final int collationId) {
-      return source.translate(CollationAwareUTF8String.getCollationAwareDict(
-        source, dict, collationId));
+      return CollationAwareUTF8String.translate(source, dict, collationId);
     }
   }
 
