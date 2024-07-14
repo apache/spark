@@ -98,27 +98,8 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-  def validateAndMaybeEvolveStateSchema(
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean): Unit = {
-    val existingSchema = getExistingKeyAndValueSchema()
-    if (existingSchema.isEmpty) {
-      // write the schema file if it doesn't exist
-      createSchemaFile(newKeySchema, newValueSchema)
-    } else {
-      // validate if the new schema is compatible with the existing schema
-      StateSchemaCompatibilityChecker.
-        check(existingSchema.head, (newKeySchema, newValueSchema), ignoreValueSchema)
-    }
-  }
-
-  private def schemaFile(storeCpLocation: Path): Path =
-    new Path(new Path(storeCpLocation, "_metadata"), "schema")
-}
-
-object StateSchemaCompatibilityChecker extends Logging {
-  val VERSION = 2
+  private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
+    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
   /**
    * Function to check if new state store schema is compatible with the existing schema.
@@ -126,7 +107,7 @@ object StateSchemaCompatibilityChecker extends Logging {
    * @param newSchema - new state schema
    * @param ignoreValueSchema - whether to ignore value schema or not
    */
-  def check(
+  private def check(
       oldSchema: StateSchema,
       newSchema: (StructType, StructType),
       ignoreValueSchema: Boolean) : Unit = {
@@ -148,8 +129,26 @@ object StateSchemaCompatibilityChecker extends Logging {
     }
   }
 
-  private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
-    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
+  def validateAndMaybeEvolveStateSchema(
+      newKeySchema: StructType,
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean): Unit = {
+    val existingSchema = getExistingKeyAndValueSchema()
+    if (existingSchema.isEmpty) {
+      // write the schema file if it doesn't exist
+      createSchemaFile(newKeySchema, newValueSchema)
+    } else {
+      // validate if the new schema is compatible with the existing schema
+      check(existingSchema.head, (newKeySchema, newValueSchema), ignoreValueSchema)
+    }
+  }
+
+  private def schemaFile(storeCpLocation: Path): Path =
+    new Path(new Path(storeCpLocation, "_metadata"), "schema")
+}
+
+object StateSchemaCompatibilityChecker {
+  val VERSION = 2
 
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
