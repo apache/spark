@@ -290,13 +290,13 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           "mapState",
           new StructType()
             .add("key", new StructType().add("value", StringType))
-            .add("userKey", new StructType().add("value", StringType)),
+            .add("userKey", new StructType().add("value", IntegerType, false)),
           new StructType().add("value",
             new StructType()
-              .add("value", IntegerType, false)
+              .add("value", StringType)
               .add("ttlExpirationMs", LongType)),
           PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
-          Option(new StructType().add("value", StringType))
+          Option(new StructType().add("value", IntegerType, false))
         )
 
         val ttlKey = "k1"
