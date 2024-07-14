@@ -103,12 +103,12 @@ ShowViewsCommand showdb, view_*, [namespace#x, viewName#x, isTemporary#x]
 -- !query
 SHOW VIEWS IN wrongdb LIKE 'view_*'
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
   "errorClass" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
-    "schemaName" : "`wrongdb`"
+    "schemaName" : "`spark_catalog`.`wrongdb`"
   }
 }
 

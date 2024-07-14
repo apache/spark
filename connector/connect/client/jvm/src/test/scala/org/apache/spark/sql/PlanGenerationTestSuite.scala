@@ -71,7 +71,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connector/connect/server` module
+ * `connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -88,7 +88,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -3321,11 +3321,11 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connector/connect/common/src/main/protobuf/spark/connect
+  //  1. cd connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connector/" +
-    "connect/common/src/test/resources/protobuf-tests/common.desc"
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connect/" +
+    "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there
   //  are no other negative impacts. For the problem description, please refer to SPARK-45029

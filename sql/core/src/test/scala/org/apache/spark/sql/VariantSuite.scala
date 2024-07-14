@@ -219,9 +219,13 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     // Partitioning by Variant column is not allowed.
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
-      intercept[AnalysisException] {
-        query.write.partitionBy("v").parquet(tempDir)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          query.write.partitionBy("v").parquet(tempDir)
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
 
     // Same as above, using saveAsTable
@@ -231,9 +235,13 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     }
 
     withTable("t") {
-      intercept[AnalysisException] {
-        query.write.partitionBy("v").saveAsTable("t")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          query.write.partitionBy("v").saveAsTable("t")
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
 
     // Same as above, using SQL CTAS
@@ -243,9 +251,13 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     }
 
     withTable("t") {
-      intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"VARIANT\"")
+      )
     }
   }
 
@@ -263,17 +275,24 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     // Binary value of a literal "false"
     val v = "X'8'"
     val cases = Seq(
-        s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
-        s"named_struct('value', $v, 'dictionary', $m)",
-        s"named_struct('val', $v, 'metadata', $m)",
-        s"named_struct('value', 8, 'metadata', $m)",
-        s"named_struct('value', cast(null as binary), 'metadata', $m)",
-        s"named_struct('value', $v, 'metadata', cast(null as binary))"
+      (s"named_struct('value', $v)",
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
+      (s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
+        "INVALID_VARIANT_FROM_PARQUET.WRONG_NUM_FIELDS", Map.empty[String, String]),
+      (s"named_struct('value', $v, 'dictionary', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "metadata")),
+      (s"named_struct('val', $v, 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.MISSING_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', 8, 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', cast(null as binary), 'metadata', $m)",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "value")),
+      (s"named_struct('value', $v, 'metadata', cast(null as binary))",
+        "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD", Map("field" -> "metadata"))
     )
-    cases.foreach { structDef =>
+    cases.foreach { case (structDef, errorClass, parameters) =>
       Seq(false, true).foreach { vectorizedReader =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key ->
-                vectorizedReader.toString) {
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
           withTempDir { dir =>
             val file = new File(dir, "dir").getCanonicalPath
             val df = spark.sql(s"select $structDef as v from range(10)")
@@ -281,7 +300,11 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
             val schema = StructType(Seq(StructField("v", VariantType)))
             val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
             val e = intercept[org.apache.spark.SparkException](result.collect())
-            assert(e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
+            checkError(
+              exception = e.getCause.asInstanceOf[AnalysisException],
+              errorClass = errorClass,
+              parameters = parameters
+            )
           }
         }
       }
@@ -306,8 +329,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         val df = spark.sql(s"select $structDef as v from range(10)")
         df.write.parquet(file)
         val schema = StructType(Seq(StructField("v", VariantType)))
-        val result = spark.read.schema(schema).parquet(file)
-            .selectExpr("to_json(v)")
+        val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
         checkAnswer(result, Seq.fill(10)(Row("false")))
       }
     }
@@ -396,32 +418,64 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("group/order/join variant are disabled") {
-    var ex = intercept[AnalysisException] {
-      spark.sql("select parse_json('') group by 1")
-    }
-    assert(ex.getErrorClass == "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select parse_json('') group by 1")
+      },
+      errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+      parameters = Map("sqlExpr" -> "\"parse_json()\"", "dataType" -> "\"VARIANT\""),
+      context = ExpectedContext(fragment = "parse_json('')", start = 7, stop = 20)
+    )
 
-    ex = intercept[AnalysisException] {
-      spark.sql("select parse_json('') order by 1")
-    }
-    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select parse_json('') order by 1")
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"parse_json() ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "order by 1", start = 22, stop = 31)
+    )
 
-    ex = intercept[AnalysisException] {
-      spark.sql("select parse_json('') sort by 1")
-    }
-    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select parse_json('') sort by 1")
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"parse_json() ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "sort by 1", start = 22, stop = 30)
+    )
 
-    ex = intercept[AnalysisException] {
-      spark.sql("with t as (select 1 as a, parse_json('') as v) " +
-        "select rank() over (partition by a order by v) from t")
-    }
-    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("with t as (select 1 as a, parse_json('') as v) " +
+          "select rank() over (partition by a order by v) from t")
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"v ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "v", start = 91, stop = 91)
+    )
 
-    ex = intercept[AnalysisException] {
-      spark.sql("with t as (select parse_json('') as v) " +
-        "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
-    }
-    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("with t as (select parse_json('') as v) " +
+          "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
+      },
+      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`=`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"(v = v)\""),
+      context = ExpectedContext(fragment = "t1.v = t2.v", start = 80, stop = 90)
+    )
   }
 
   test("variant_explode") {

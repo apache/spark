@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 
@@ -143,8 +143,9 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    */
   @inline private def logSpillage(size: Long): Unit = {
     val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
-      .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
-        _spillCount, if (_spillCount > 1) "s" else ""))
+    logInfo(log"Thread ${MDC(LogKeys.THREAD_ID, threadId)} " +
+      log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
+        org.apache.spark.util.Utils.bytesToString(size))} to disk " +
+      log"(${MDC(LogKeys.SPILL_TIMES, _spillCount)} times so far)")
   }
 }

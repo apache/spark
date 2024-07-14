@@ -233,24 +233,58 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
     Partition to be dropped. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
-     
-### SET AND UNSET
 
-#### SET TABLE PROPERTIES
+#### CLUSTER BY
 
-`ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
-this overrides the old value with the new one.
-
-`ALTER TABLE UNSET` is used to drop the table property. 
+`ALTER TABLE CLUSTER BY` command can also be used for changing or removing the clustering columns for existing tables.
 
 ##### Syntax
 
 ```sql
--- Set Table Properties 
-ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+-- Changing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY ( col_name [ , ... ] )
 
--- Unset Table Properties
-ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
+-- Removing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY NONE
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column.
+     
+### SET AND UNSET
+
+#### SET PROPERTIES
+
+`ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
+this overrides the old value with the new one.
+
+##### Syntax
+
+```sql
+-- Set Properties
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+```
+
+#### UNSET PROPERTIES
+
+`ALTER TABLE UNSET` command is used to drop the table property.
+
+**Note:** If the specified property key does not exist, whether specify `IF EXISTS` or not, the command will ignore it and finally succeed.
+
+##### Syntax
+
+```sql
+-- Unset Properties
+ALTER TABLE table_identifier UNSET TBLPROPERTIES ( key1, key2, ... )
 ```
 
 #### SET SERDE
@@ -587,6 +621,51 @@ SHOW PARTITIONS StudentInfo;
 |   age=18|
 |   age=20|
 +---------+
+
+-- CLUSTER BY
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
++------------------------+---------+-------+
+
+ALTER TABLE Teacher CLUSTER BY (gender, country);
+
+-- After changing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
++------------------------+---------+-------+
+
+ALTER TABLE Teacher CLUSTER BY NONE;
+
+-- After removing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
++------------------------+---------+-------+
 
 -- Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;

@@ -692,40 +692,45 @@ object StreamExecution {
       s"((.|\\r\\n|\\r|\\n)*)(${IO_EXCEPTION_NAMES.mkString("|")})").r
 
   @scala.annotation.tailrec
-  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
-    // InterruptedIOException - thrown when an I/O operation is interrupted
-    // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
-    case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
-      true
-    // The cause of the following exceptions may be one of the above exceptions:
-    //
-    // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
-    //                        BiFunction.apply
-    // ExecutionException - thrown by codes running in a thread pool and these codes throw an
-    //                      exception
-    // UncheckedExecutionException - thrown by codes that cannot throw a checked
-    //                               ExecutionException, such as BiFunction.apply
-    case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
-        if e2.getCause != null =>
-      isInterruptionException(e2.getCause, sc)
-    case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
-    case se: SparkException =>
+  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = {
+    def isCancelledJobGroup(errorMsg: String): Boolean = {
       val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
       if (jobGroup == null) return false
-      val errorMsg = se.getMessage
-      if (errorMsg.contains("cancelled") && errorMsg.contains(jobGroup) && se.getCause == null) {
+      errorMsg.contains("cancelled") && errorMsg.contains(jobGroup)
+    }
+
+    e match {
+      // InterruptedIOException - thrown when an I/O operation is interrupted
+      // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+      case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
         true
-      } else if (se.getCause != null) {
-        isInterruptionException(se.getCause, sc)
-      } else {
+      // The cause of the following exceptions may be one of the above exceptions:
+      //
+      // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+      //                        BiFunction.apply
+      // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+      //                      exception
+      // UncheckedExecutionException - thrown by codes that cannot throw a checked
+      //                               ExecutionException, such as BiFunction.apply
+      case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
+        isInterruptionException(e2.getCause, sc)
+      case fe: ForeachBatchUserFuncException => isInterruptionException(fe.getCause, sc)
+      case se: SparkException =>
+        if (se.getCause == null) {
+          isCancelledJobGroup(se.getMessage)
+        } else {
+          isInterruptionException(se.getCause, sc)
+        }
+      // py4j.Py4JException - with pinned thread mode on, the exception can be interrupted by Py4J
+      //                      access, for example, in `DataFrameWriter.foreachBatch`. See also
+      //                      SPARK-39218.
+      case e: py4j.Py4JException =>
+        PROXY_ERROR.findFirstIn(e.getMessage).isDefined || (e.getMessage
+          .contains("org.apache.spark.SparkException") && isCancelledJobGroup(e.getMessage))
+      case _ =>
         false
-      }
-    // py4j.Py4JException - with pinned thread mode on, the exception can be interrupted by Py4J
-    //                      access, for example, in `DataFrameWriter.foreachBatch`. See also
-    //                      SPARK-39218.
-    case e: py4j.Py4JException => PROXY_ERROR.findFirstIn(e.getMessage).isDefined
-    case _ =>
-      false
+    }
   }
 
   /** Whether the path contains special chars that will be escaped when converting to a `URI`. */

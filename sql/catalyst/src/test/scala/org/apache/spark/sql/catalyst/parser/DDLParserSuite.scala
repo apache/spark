@@ -21,7 +21,6 @@ import java.util.Locale
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -234,23 +233,6 @@ class DDLParserSuite extends AnalysisTest {
         testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
       }
     }
-  }
-
- test("alter table cluster by") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name CLUSTER BY (`a.b`, c.d, none)"),
-      AlterTableClusterBy(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
-        Some(ClusterBySpec(Seq(
-          FieldReference(Seq("a.b")),
-          FieldReference(Seq("c", "d")),
-          FieldReference(Seq("none")))))))
-
-    comparePlans(
-      parsePlan("ALTER TABLE table_name CLUSTER BY NONE"),
-      AlterTableClusterBy(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... CLUSTER BY"),
-        None))
   }
 
   test("create/replace table - with comment") {
@@ -1093,25 +1075,6 @@ class DDLParserSuite extends AnalysisTest {
         ifExists = true))
   }
 
-  // ALTER TABLE table_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
-  test("alter table: alter table properties") {
-    val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-
-    comparePlans(
-      parsePlan(sql2_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = false))
-    comparePlans(
-      parsePlan(sql3_table),
-      UnsetTableProperties(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", true),
-        Seq("comment", "test"),
-        ifExists = true))
-  }
-
   test("alter table: add column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
@@ -1241,15 +1204,6 @@ class DDLParserSuite extends AnalysisTest {
       )))
   }
 
-  test("alter table: rename column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name RENAME COLUMN a.b.c TO d"),
-      RenameColumn(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME COLUMN"),
-        UnresolvedFieldName(Seq("a", "b", "c")),
-        "d"))
-  }
-
   test("alter table: update column type using ALTER") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c TYPE bigint"),
@@ -1357,48 +1311,6 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None))
-  }
-
-  test("alter table: drop column") {
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = false))
-
-    comparePlans(
-      parsePlan("ALTER TABLE table_name DROP COLUMN IF EXISTS a.b.c"),
-      DropColumns(
-        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-        Seq(UnresolvedFieldName(Seq("a", "b", "c"))),
-        ifExists = true))
-  }
-
-  test("alter table: drop multiple columns") {
-    val sql = "ALTER TABLE table_name DROP COLUMN x, y, a.b.c"
-    Seq(sql, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = false))
-    }
-
-    val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
-    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
-      comparePlans(
-        parsePlan(drop),
-        DropColumns(
-          UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP COLUMNS"),
-          Seq(UnresolvedFieldName(Seq("x")),
-            UnresolvedFieldName(Seq("y")),
-            UnresolvedFieldName(Seq("a", "b", "c"))),
-          ifExists = true))
-    }
   }
 
   test("alter table: hive style change column") {

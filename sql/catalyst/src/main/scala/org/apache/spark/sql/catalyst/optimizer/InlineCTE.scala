@@ -140,8 +140,7 @@ case class InlineCTE(
       cteMap: mutable.Map[Long, CTEReferenceInfo]): LogicalPlan = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        val notInlined = mutable.ArrayBuffer.empty[CTERelationDef]
-        cteDefs.foreach { cteDef =>
+        val notInlined = cteDefs.flatMap {cteDef =>
           val refInfo = cteMap(cteDef.id)
           if (refInfo.refCount > 0) {
             val newDef = refInfo.cteDef.copy(child = inlineCTE(refInfo.cteDef.child, cteMap))
@@ -149,9 +148,15 @@ case class InlineCTE(
             cteMap(cteDef.id) = cteMap(cteDef.id).copy(
               cteDef = newDef, shouldInline = inlineDecision
             )
-            if (!inlineDecision) notInlined += newDef
+            if (!inlineDecision) {
+              Seq(newDef)
+            } else {
+              Nil
+            }
           } else if (keepDanglingRelations) {
-            notInlined += refInfo.cteDef
+            Seq(refInfo.cteDef)
+          } else {
+            Nil
           }
         }
         val inlined = inlineCTE(child, cteMap)
@@ -159,7 +164,7 @@ case class InlineCTE(
           inlined
         } else {
           // Retain the not-inlined CTE relations in place.
-          WithCTE(inlined, notInlined.toSeq)
+          WithCTE(inlined, notInlined)
         }
 
       case ref: CTERelationRef =>
