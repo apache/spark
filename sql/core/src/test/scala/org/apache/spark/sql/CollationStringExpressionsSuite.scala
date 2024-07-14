@@ -874,11 +874,6 @@ class CollationStringExpressionsSuite
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
   }
 
-  test("xxxx") {
-    checkEvaluation(
-      StringTrim(Literal.create(null, StringType), Literal.create(null, StringType)), null)
-  }
-
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
     def evalStringTrim(src: Any, trim: Any, result: String): Unit = {
       Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
