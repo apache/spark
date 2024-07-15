@@ -875,6 +875,37 @@ class CollationStringExpressionsSuite
   }
 
   test("StringTrim* functions - unit tests for both paths (codegen and eval)") {
+    def evalStringTrim(src: Any, trim: Any, result: String): Unit = {
+      Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach { collation =>
+        val dt: DataType = StringType(collation)
+        checkEvaluation(StringTrim(Literal.create(src, dt), Literal.create(trim, dt)), result)
+        checkEvaluation(StringTrimLeft(Literal.create(src, dt), Literal.create(trim, dt)), result)
+        checkEvaluation(StringTrimRight(Literal.create(src, dt), Literal.create(trim, dt)), result)
+      }
+    }
+    // General edge cases and basic tests.
+    evalStringTrim(null, null, null)
+    evalStringTrim(null, "", null)
+    evalStringTrim(null, "a", null)
+    evalStringTrim("", null, null)
+    evalStringTrim("a", null, null)
+    evalStringTrim("", "", "")
+    evalStringTrim("", " ", "")
+    evalStringTrim("", "a", "")
+    evalStringTrim("", "aaa", "")
+    evalStringTrim(" ", "", " ")
+    evalStringTrim("a", "", "a")
+    evalStringTrim("aaa", "", "aaa")
+    evalStringTrim(" ", " ", "")
+    evalStringTrim(" ", "   ", "")
+    evalStringTrim("   ", " ", "")
+    evalStringTrim("   ", "   ", "")
+    evalStringTrim("a", "aaa", "")
+    evalStringTrim("aaa", "a", "")
+    evalStringTrim("aaa", "aaa", "")
+    evalStringTrim("abc", "cba", "")
+    evalStringTrim("cba", "abc", "")
+
     // Without trimString param.
     checkEvaluation(
       StringTrim(Literal.create( "  asd  ", StringType("UTF8_BINARY"))), "asd")
@@ -1017,20 +1048,6 @@ class CollationStringExpressionsSuite
       sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UTF8_BINARY'), COLLATE('x', 'UTF8_LCASE'))")
     }
     assert(collationMismatch.getErrorClass === "COLLATION_MISMATCH.EXPLICIT")
-  }
-
-  test("StringTrim* functions - unsupported collation types") {
-    List("TRIM", "LTRIM", "RTRIM").foreach(func => {
-      val collationMismatch = intercept[AnalysisException] {
-        sql("SELECT " + func + "(COLLATE('x', 'UNICODE_CI'), COLLATE('xxaaaxx', 'UNICODE_CI'))")
-      }
-      assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
-    })
-
-    val collationMismatch = intercept[AnalysisException] {
-      sql("SELECT BTRIM(COLLATE('xxaaaxx', 'UNICODE_CI'), COLLATE('x', 'UNICODE_CI'))")
-    }
-    assert(collationMismatch.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
   }
 
   // TODO: Add more tests for other string expressions
