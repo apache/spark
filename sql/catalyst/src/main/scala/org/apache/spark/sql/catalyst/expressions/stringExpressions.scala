@@ -2932,7 +2932,7 @@ case class StringDecode(
   def this(bin: Expression, charset: Expression) =
     this(bin, charset, SQLConf.get.legacyJavaCharsets, SQLConf.get.legacyCodingErrorAction)
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, StringTypeAnyCollation)
   override def prettyName: String = "decode"
   override def toString: String = s"$prettyName($bin, $charset)"
