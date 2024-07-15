@@ -643,7 +643,7 @@ object SQLConf {
 
   // Lazily get the number of cores to make sure SparkContext created first.
   private lazy val defaultShufflePartition: Option[Int] = SparkContext.getActive.flatMap { sc =>
-    if (sc.master.startsWith("local")) Some(SparkContext.numDriverCores(sc.master)) else None
+    if (sc.isLocal) Some(SparkContext.numDriverCores(sc.master)) else None
   }
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
