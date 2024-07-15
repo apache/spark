@@ -209,7 +209,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       errorClass = "LABELS_MISMATCH",
-      parameters = Map("beginLabel" -> "lbl_begin", "end_label" -> "lbl_end"))
+      parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
   }
 
   test("compound: endLabel") {
@@ -228,7 +228,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parseScript(sqlScriptText)
       },
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
-      parameters = Map("end_label" -> "lbl_end"))
+      parameters = Map("endLabel" -> "lbl"))
   }
 
   test("compound: beginLabel + endLabel with different casing") {

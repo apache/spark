@@ -27,14 +27,14 @@ private[sql] object SqlScriptingErrors extends QueryErrorsBase {
 
   def labelsMismatch(beginLabel: String, endLabel: String): Throwable = {
     new SparkException(
-      errorClass = "SQL_SCRIPTING_LABEL_ERROR.LABELS_MISMATCH",
+      errorClass = "LABELS_MISMATCH",
       cause = null,
       messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
   }
 
   def endLabelWithoutBeginLabel(endLabel: String): Throwable = {
     new SparkException(
-      errorClass = "SQL_SCRIPTING_LABEL_ERROR.END_LABEL_WITHOUT_BEGIN_LABEL",
+      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
       messageParameters = Map("endLabel" -> endLabel))
   }
