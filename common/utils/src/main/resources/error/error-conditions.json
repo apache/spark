@@ -7253,7 +7253,7 @@
       "Primitive types are not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2232" : {
+  "COLUMN_VALUE_IS_NULL" : {
     "message" : [
       "Value at index <index> is null."
     ]
