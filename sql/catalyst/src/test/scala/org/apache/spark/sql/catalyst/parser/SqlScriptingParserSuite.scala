@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.exceptions.SqlScriptingException
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
@@ -204,11 +203,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
-    val e = intercept[SqlScriptingException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "SQL_SCRIPTING_LABEL_ERROR.LABELS_MISMATCH")
-    assert(e.getMessage.contains("Begin label lbl_begin does not match the end label lbl_end."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "LABELS_MISMATCH",
+      parameters = Map("beginLabel" -> "lbl_begin", "end_label" -> "lbl_end"))
   }
 
   test("compound: endLabel") {
@@ -221,11 +222,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-    val e = intercept[SqlScriptingException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "SQL_SCRIPTING_LABEL_ERROR.END_LABEL_WITHOUT_BEGIN_LABEL")
-    assert(e.getMessage.contains("End label lbl can not exist without begin label."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
+      parameters = Map("end_label" -> "lbl_end"))
   }
 
   test("compound: beginLabel + endLabel with different casing") {

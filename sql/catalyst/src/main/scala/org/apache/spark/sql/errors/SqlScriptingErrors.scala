@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.SparkException
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -26,14 +26,16 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
 private[sql] object SqlScriptingErrors extends QueryErrorsBase {
 
   def labelsMismatch(beginLabel: String, endLabel: String): Throwable = {
-    new SqlScriptingException(
+    new SparkException(
       errorClass = "SQL_SCRIPTING_LABEL_ERROR.LABELS_MISMATCH",
+      cause = null,
       messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
   }
 
   def endLabelWithoutBeginLabel(endLabel: String): Throwable = {
-    new SqlScriptingException(
+    new SparkException(
       errorClass = "SQL_SCRIPTING_LABEL_ERROR.END_LABEL_WITHOUT_BEGIN_LABEL",
+      cause = null,
       messageParameters = Map("endLabel" -> endLabel))
   }
 

@@ -1118,6 +1118,12 @@
     ],
     "sqlState" : "42704"
   },
+  "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+    "message" : [
+      "End label <endLabel> can not exist without begin label."
+    ],
+    "sqlState" : "42K0L"
+  },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
       "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use.",
@@ -3027,6 +3033,12 @@
     ],
     "sqlState" : "54006"
   },
+  "LABELS_MISMATCH" : {
+    "message" : [
+      "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -3730,24 +3742,6 @@
       "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ],
     "sqlState" : "42K0I"
-  },
-  "SQL_SCRIPTING_LABEL_ERROR" : {
-    "message" : [
-      "Invalid usage of labels."
-    ],
-    "subClass" : {
-      "END_LABEL_WITHOUT_BEGIN_LABEL" : {
-        "message" : [
-          "End label <endLabel> can not exist without begin label."
-        ]
-      },
-      "LABELS_MISMATCH" : {
-        "message" : [
-          "Begin label <beginLabel> does not match the end label <endLabel>."
-        ]
-      }
-    },
-    "sqlState" : "42K0L"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
