@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.StructType
 
 class MapStateImpl[K, V](
     store: StateStore,
@@ -31,11 +32,12 @@ class MapStateImpl[K, V](
     valEncoder: Encoder[V]) extends MapState[K, V] with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
-  private val schemaForCompositeKeyRow: StructType =
-    new StructType()
-    .add("key", BinaryType)
-    .add("userKey", BinaryType)
-  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  private val schemaForCompositeKeyRow: StructType = {
+    realCompositeType(keyExprEnc.schema, userKeyEnc.schema)
+  }
+  println("I am inside MapStateImpl, realComposite Key schema: " +
+    schemaForCompositeKeyRow)
+  private val schemaForValueRow: StructType = valEncoder.schema
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName)
 

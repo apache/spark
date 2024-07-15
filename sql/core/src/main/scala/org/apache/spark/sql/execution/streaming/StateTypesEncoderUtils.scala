@@ -52,6 +52,38 @@ object TransformWithStateKeyValueRowSchema {
       .add("key", new StructType(groupingKeySchema.fields))
       .add("userKey", new StructType(userKeySchema.fields))
   }
+
+  // keyEncoder.schema will attach a default "value" as field name if
+  // the object is a primitive type encoder
+  private def isPrimitiveType(schema: StructType): Boolean = {
+    schema.length == 1 && schema.fields.head.name == "value"
+  }
+
+  private def getPrimitiveType(schema: StructType): DataType = {
+    assert(isPrimitiveType(schema))
+    schema.fields.head.dataType
+  }
+
+  def realCompositeType(
+      keySchema: StructType,
+      userKeySchema: StructType): StructType = {
+    var compositeSchema = new StructType()
+    if (isPrimitiveType(keySchema)) {
+      compositeSchema =
+        compositeSchema.add("key", getPrimitiveType(keySchema))
+    } else {
+      compositeSchema = compositeSchema.add("key", keySchema)
+    }
+
+    if (isPrimitiveType(userKeySchema)) {
+      compositeSchema =
+        compositeSchema.add("userKey", getPrimitiveType(userKeySchema))
+    } else {
+      compositeSchema = compositeSchema.add("userKey", userKeySchema)
+    }
+
+    compositeSchema
+  }
 }
 
 /**
@@ -176,7 +208,7 @@ class CompositeKeyStateEncoder[K, V](
       compositeSchema = compositeSchema.add("key", keyEncoder.schema)
     }
 
-    if (isPrimitiveType(keyEncoder.schema)) {
+    if (isPrimitiveType(userKeyEnc.schema)) {
       compositeSchema =
         compositeSchema.add("userKey", getPrimitiveType(userKeyEnc.schema))
     } else {
@@ -211,7 +243,16 @@ class CompositeKeyStateEncoder[K, V](
       else userKey
     println("I am inside encode Composite key, composite key schema: " +
       schemaForCompositeKeyRow)
-    compositeKeyProjection(InternalRow(realGroupingKey, realUserKey))
+
+
+    val compositeKey = compositeKeyProjection(InternalRow(realGroupingKey, realUserKey))
+    println("I am putting unsafe row into rocksDB: " + decodeCompositeKey(compositeKey))
+    println("inside encode composite key, num of composite field: " + compositeKey.numFields())
+
+    val decode = compositeKey.getString(0)
+    println("inside encode composite key, first field: " + decode)
+
+    compositeKey
   }
 
   def decodeUserKeyFromTTLRow(row: CompositeKeyTTLRow): K = {
@@ -247,8 +288,10 @@ class CompositeKeyStateEncoder[K, V](
 
     val userKeyObj = if (isPrimitiveType(userKeyEnc.schema)) {
       row.get(ordinal, getPrimitiveType(userKeyEnc.schema))
+    } else {
+      userKeyRowToObjDeserializer.apply(row.getStruct(ordinal, 1))
     }
     println("deserialized user key obj here: " + userKeyObj)
-    userKeyRowToObjDeserializer.apply(InternalRow(userKeyObj))
+    userKeyObj.asInstanceOf[K]
   }
 }
