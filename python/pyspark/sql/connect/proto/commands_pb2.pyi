@@ -103,6 +103,7 @@ class Command(google.protobuf.message.Message):
     CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
     CHECKPOINT_COMMAND_FIELD_NUMBER: builtins.int
     REMOVE_CACHED_REMOTE_RELATION_COMMAND_FIELD_NUMBER: builtins.int
+    MERGE_INTO_TABLE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -143,6 +144,8 @@ class Command(google.protobuf.message.Message):
         self,
     ) -> global___RemoveCachedRemoteRelationCommand: ...
     @property
+    def merge_into_table_command(self) -> global___MergeIntoTableCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -170,6 +173,7 @@ class Command(google.protobuf.message.Message):
         checkpoint_command: global___CheckpointCommand | None = ...,
         remove_cached_remote_relation_command: global___RemoveCachedRemoteRelationCommand
         | None = ...,
+        merge_into_table_command: global___MergeIntoTableCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -187,6 +191,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "merge_into_table_command",
+            b"merge_into_table_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -226,6 +232,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "merge_into_table_command",
+            b"merge_into_table_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -269,6 +277,7 @@ class Command(google.protobuf.message.Message):
             "create_resource_profile_command",
             "checkpoint_command",
             "remove_cached_remote_relation_command",
+            "merge_into_table_command",
             "extension",
         ]
         | None
@@ -2197,3 +2206,92 @@ class CheckpointCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CheckpointCommand = CheckpointCommand
+
+class MergeIntoTableCommand(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TARGET_TABLE_NAME_FIELD_NUMBER: builtins.int
+    SOURCE_TABLE_PLAN_FIELD_NUMBER: builtins.int
+    MERGE_CONDITION_FIELD_NUMBER: builtins.int
+    MATCH_ACTIONS_FIELD_NUMBER: builtins.int
+    NOT_MATCHED_ACTIONS_FIELD_NUMBER: builtins.int
+    NOT_MATCHED_BY_SOURCE_ACTIONS_FIELD_NUMBER: builtins.int
+    WITH_SCHEMA_EVOLUTION_FIELD_NUMBER: builtins.int
+    target_table_name: builtins.str
+    """(Required) The name of the target table."""
+    @property
+    def source_table_plan(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Required) The relation of the source table."""
+    @property
+    def merge_condition(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) The condition to match the source and target."""
+    @property
+    def match_actions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) The actions to be taken when the condition is matched."""
+    @property
+    def not_matched_actions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) The actions to be taken when the condition is not matched."""
+    @property
+    def not_matched_by_source_actions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) The actions to be taken when the condition is not matched by source."""
+    with_schema_evolution: builtins.bool
+    """(Required) Whether to enable schema evolution."""
+    def __init__(
+        self,
+        *,
+        target_table_name: builtins.str = ...,
+        source_table_plan: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        merge_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        match_actions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        not_matched_actions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        not_matched_by_source_actions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        with_schema_evolution: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "merge_condition", b"merge_condition", "source_table_plan", b"source_table_plan"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "match_actions",
+            b"match_actions",
+            "merge_condition",
+            b"merge_condition",
+            "not_matched_actions",
+            b"not_matched_actions",
+            "not_matched_by_source_actions",
+            b"not_matched_by_source_actions",
+            "source_table_plan",
+            b"source_table_plan",
+            "target_table_name",
+            b"target_table_name",
+            "with_schema_evolution",
+            b"with_schema_evolution",
+        ],
+    ) -> None: ...
+
+global___MergeIntoTableCommand = MergeIntoTableCommand
