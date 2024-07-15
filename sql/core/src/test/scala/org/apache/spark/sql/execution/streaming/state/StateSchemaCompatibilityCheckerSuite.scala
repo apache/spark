@@ -304,17 +304,21 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
       -> formatValidationForValue.toString)
 
+    val oldStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      oldKeySchema, oldValueSchema))
     val result = Try(
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-        oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+        oldStateSchema, spark.sessionState, extraOptions = extraOptions)
     ).toEither.fold(Some(_), _ => None)
 
     val ex = if (result.isDefined) {
       result.get.asInstanceOf[SparkUnsupportedOperationException]
     } else {
       intercept[SparkUnsupportedOperationException] {
+        val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+          newKeySchema, newValueSchema))
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-          newKeySchema, newValueSchema, spark.sessionState, extraOptions)
+          newStateSchema, spark.sessionState, extraOptions = extraOptions)
       }
     }
 
@@ -347,10 +351,14 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
       -> formatValidationForValue.toString)
 
+    val oldStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      oldKeySchema, oldValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-      oldKeySchema, oldValueSchema, spark.sessionState, extraOptions)
+      oldStateSchema, spark.sessionState, extraOptions = extraOptions)
 
+    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      newKeySchema, newValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-      newKeySchema, newValueSchema, spark.sessionState, extraOptions)
+      newStateSchema, spark.sessionState, extraOptions = extraOptions)
   }
 }

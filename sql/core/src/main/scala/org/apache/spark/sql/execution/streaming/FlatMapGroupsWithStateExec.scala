@@ -193,8 +193,10 @@ trait FlatMapGroupsWithStateExecBase
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): Array[String] = {
+    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      groupingAttributes.toStructType, stateManager.stateSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      groupingAttributes.toStructType, stateManager.stateSchema, session.sessionState)
+      newStateSchema, session.sessionState)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

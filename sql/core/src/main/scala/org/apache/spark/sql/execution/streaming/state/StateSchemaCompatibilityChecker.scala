@@ -111,11 +111,11 @@ class StateSchemaCompatibilityChecker(
    */
   private def check(
       oldSchema: StateSchema,
-      newSchema: (StructType, StructType),
+      newSchema: StateSchema,
       ignoreValueSchema: Boolean) : Unit = {
     val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
       oldSchema.valueSchema)
-    val (keySchema, valueSchema) = newSchema
+    val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
 
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
@@ -132,16 +132,15 @@ class StateSchemaCompatibilityChecker(
   }
 
   def validateAndMaybeEvolveStateSchema(
-      newKeySchema: StructType,
-      newValueSchema: StructType,
+      newStateSchema: Array[StateSchema],
       ignoreValueSchema: Boolean): Unit = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
       // write the schema file if it doesn't exist
-      createSchemaFile(newKeySchema, newValueSchema)
+      createSchemaFile(newStateSchema.head.keySchema, newStateSchema.head.valueSchema)
     } else {
       // validate if the new schema is compatible with the existing schema
-      check(existingSchema.head, (newKeySchema, newValueSchema), ignoreValueSchema)
+      check(existingSchema.head, newStateSchema.head, ignoreValueSchema)
     }
   }
 
@@ -169,8 +168,7 @@ object StateSchemaCompatibilityChecker {
    *
    * @param stateInfo - StatefulOperatorStateInfo containing the state store information
    * @param hadoopConf - Hadoop configuration
-   * @param newKeySchema - New key schema
-   * @param newValueSchema - New value schema
+   * @param stateSchema - Array of input state schema
    * @param sessionState - session state used to retrieve session config
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
@@ -178,9 +176,9 @@ object StateSchemaCompatibilityChecker {
   def validateAndMaybeEvolveStateSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
+      newStateSchema: Array[StateSchema],
       sessionState: SessionState,
+      stateSchemaVersion: Int = 2,
       extraOptions: Map[String, String] = Map.empty,
       storeName: String = StateStoreId.DEFAULT_STORE_NAME): Array[String] = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
@@ -192,18 +190,20 @@ object StateSchemaCompatibilityChecker {
     // We need to disallow using binary inequality column in the key schema, before we
     // could support this in majority of state store providers (or high-level of state
     // store.)
-    disallowBinaryInequalityColumn(newKeySchema)
+    newStateSchema.foreach { schema =>
+      disallowBinaryInequalityColumn(schema.keySchema)
+    }
 
     val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf, stateSchemaVersion)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
     // compatibility checker for value schema as well.
     val result = Try(
-      checker.validateAndMaybeEvolveStateSchema(newKeySchema, newValueSchema,
+      checker.validateAndMaybeEvolveStateSchema(newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue)
     ).toEither.fold(Some(_), _ => None)
 
