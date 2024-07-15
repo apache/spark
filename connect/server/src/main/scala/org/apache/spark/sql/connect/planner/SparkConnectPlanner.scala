@@ -3074,7 +3074,7 @@ class SparkConnectPlanner(
 
     if (writeOperation.getClusteringColumnsCount > 0) {
       val names = writeOperation.getClusteringColumnsList.asScala
-      w.clusterBy(names.toSeq: _*)
+      w.clusterBy(names.head, names.tail.toSeq: _*)
     }
 
     if (writeOperation.hasSource) {
@@ -3140,6 +3140,11 @@ class SparkConnectPlanner(
       w.partitionedBy(names.head, names.tail: _*)
     }
 
+    if (writeOperation.getClusteringColumnsCount > 0) {
+      val names = writeOperation.getClusteringColumnsList.asScala
+      w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
     writeOperation.getMode match {
       case proto.WriteOperationV2.Mode.MODE_CREATE =>
         if (writeOperation.hasProvider) {
@@ -3191,10 +3196,6 @@ class SparkConnectPlanner(
 
     if (writeOp.getPartitioningColumnNamesCount > 0) {
       writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
-    }
-
-    if (writeOp.getClusteringColumnNamesCount > 0) {
-      writer.clusterBy(writeOp.getClusteringColumnNamesList.asScala.toList: _*)
     }
 
     writeOp.getTriggerCase match {

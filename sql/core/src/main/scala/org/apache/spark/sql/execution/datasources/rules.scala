@@ -331,7 +331,12 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       }
     }
 
-    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
+    val normalizedProperties = table.properties ++ table.clusterBySpec.map { spec =>
+      ClusterBySpec.toProperty(schema, spec, conf.resolver)
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec,
+      properties = normalizedProperties)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
