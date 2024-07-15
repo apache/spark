@@ -155,6 +155,35 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(jobB.get() === 100)
   }
 
+  test("job group with custom reason") {
+    sc = new SparkContext("local[2]", "test")
+
+    // Add a listener to release the semaphore once any tasks are launched.
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        sem.release()
+      }
+    })
+
+    // jobA is the one to be cancelled.
+    val jobA = Future {
+      sc.setJobGroup("jobA", "this is a job to be cancelled")
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
+    }
+
+    // Block until both tasks of job A have started and cancel job A.
+    sem.acquire(2)
+
+    val reason = "cancelled: test for custom reason string"
+    sc.clearJobGroup()
+    sc.cancelJobGroup("jobA", reason)
+
+    val e = intercept[SparkException] { ThreadUtils.awaitResult(jobA, Duration.Inf) }.getCause
+    assert(e.getMessage contains "cancel")
+    assert(e.getMessage contains reason)
+  }
+
   test("if cancel job group and future jobs, skip running jobs in the same job group") {
     sc = new SparkContext("local[2]", "test")
 
@@ -202,6 +231,39 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // job in a different job group should run
     sc.setJobGroup("another-job-group", "")
     assert(sc.parallelize(1 to 100).count() == 100)
+  }
+
+  test("cancel job group and future jobs with custom reason") {
+    sc = new SparkContext("local[2]", "test")
+
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        sem.release()
+      }
+    })
+
+    // run a job, cancel the job group and its future jobs
+    val jobGroupName = "job-group"
+    val job = Future {
+      sc.setJobGroup(jobGroupName, "")
+      sc.parallelize(1 to 1000).map { i => Thread.sleep (100); i}.count()
+    }
+    // block until job starts
+    sem.acquire(1)
+    // cancel the job group and future jobs
+    val reason = "cancelled: test for custom reason string"
+    sc.cancelJobGroupAndFutureJobs(jobGroupName, reason)
+    ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
+      checkError(
+        exception = e,
+        errorClass = "SPARK_JOB_CANCELLED",
+        sqlState = "XXKDA",
+        parameters = scala.collection.immutable.Map(
+          "jobId" -> "0",
+          "reason" -> reason)
+      )
+    }
   }
 
   test("only keeps limited number of cancelled job groups") {
@@ -325,11 +387,15 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       val acquired1 = sem.tryAcquire(4, 1, TimeUnit.MINUTES)
       assert(acquired1 == true)
 
-      sc.cancelJobsWithTag("two")
+      // Test custom cancellation reason for job tags
+      val reason = "job tag cancelled: custom reason test"
+      sc.cancelJobsWithTag("two", reason)
       val eB = intercept[SparkException] {
         ThreadUtils.awaitResult(jobB, 1.minute)
       }.getCause
       assert(eB.getMessage contains "cancel")
+      assert(eB.getMessage contains reason)
+
       val eC = intercept[SparkException] {
         ThreadUtils.awaitResult(jobC, 1.minute)
       }.getCause
