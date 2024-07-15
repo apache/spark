@@ -1128,6 +1128,12 @@
     ],
     "sqlState" : "42704"
   },
+  "END_LABEL_WITHOUT_BEGIN_LABEL" : {
+    "message" : [
+      "End label <endLabel> can not exist without begin label."
+    ],
+    "sqlState" : "42K0L"
+  },
   "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT" : {
     "message" : [
       "Error reading avro data -- encountered an unknown fingerprint: <fingerprint>, not sure what schema to use.",
@@ -3036,6 +3042,12 @@
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
     ],
     "sqlState" : "54006"
+  },
+  "LABELS_MISMATCH" : {
+    "message" : [
+      "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
   },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
