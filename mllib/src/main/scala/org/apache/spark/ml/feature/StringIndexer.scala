@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.ArrayList
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -27,7 +29,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -42,8 +44,6 @@ import org.apache.spark.util.collection.OpenHashMap
  */
 private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
   with HasOutputCol with HasInputCols with HasOutputCols {
-
-  @transient private[ml] var transformDataset: Dataset[_] = _
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -124,6 +124,8 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     require(outputColNames.distinct.length == outputColNames.length,
       s"Output columns should not be duplicate.")
 
+    val sparkSession = SparkSession.getActiveSession.get
+    val transformDataset = sparkSession.createDataFrame(new ArrayList[Row](), schema = schema)
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
         try {
@@ -246,9 +248,7 @@ class StringIndexer @Since("1.4.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
-    transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
-    transformDataset = null
 
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
@@ -425,9 +425,7 @@ class StringIndexerModel (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
-    transformDataset = null
 
     val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
