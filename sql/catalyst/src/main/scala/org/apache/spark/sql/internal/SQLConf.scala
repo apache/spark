@@ -641,6 +641,11 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.leafNodeDefaultParallelism must be positive.")
     .createOptional
 
+  // Lazily get the number of cores to make sure SparkContext created first.
+  private lazy val defaultShufflePartition: Option[Int] = SparkContext.getActive.flatMap { sc =>
+    if (sc.master.startsWith("local")) Some(SparkContext.numDriverCores(sc.master)) else None
+  }
+
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
@@ -648,7 +653,7 @@ object SQLConf {
     .version("1.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
-    .createWithDefault(200)
+    .createWithDefaultFunction(() => defaultShufflePartition.getOrElse(200))
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
