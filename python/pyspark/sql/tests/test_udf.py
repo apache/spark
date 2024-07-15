@@ -35,10 +35,13 @@ from pyspark.sql.types import (
     DoubleType,
     LongType,
     ArrayType,
+    MapType,
     StructType,
     StructField,
     TimestampNTZType,
     DayTimeIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
@@ -324,11 +327,74 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import col
 
         my_filter = udf(lambda a: a < 2, BooleanType())
         sel = df.select(col("key"), col("value")).filter((my_filter(col("key"))) & (df.value < "2"))
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+
+        u = udf(lambda u: str(u), StringType())
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            message_parameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+        )
+
+        u = udf(lambda u: str(u), StringType())
+
+        with self.assertRaises(AnalysisException) as ae:
+            df.select(u(col("struct_of_v"))).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+            message_parameters={
+                "sqlExpr": '"<lambda>(struct_of_v)"',
+                "dataType": "STRUCT<v: VARIANT NOT NULL>",
+            },
+        )
+
+    def test_udf_with_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            message_parameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
+        )
+
+    def test_udf_with_complex_variant_output(self):
+        # The variant value returned corresponds to a JSON string of {"a": "b"}.
+        u = udf(
+            lambda: {"v", VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))},
+            MapType(StringType(), VariantType()),
+        )
+
+        with self.assertRaises(AnalysisException) as ae:
+            self.spark.range(0, 10).select(u()).collect()
+
+        self.check_error(
+            exception=ae.exception,
+            error_class="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+            message_parameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
+        )
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])

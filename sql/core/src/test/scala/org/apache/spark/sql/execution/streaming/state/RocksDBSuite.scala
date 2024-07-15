@@ -291,25 +291,26 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(3))
       db.load(3)
-      for (i <- 1 to 10001) {
-        db.put(i.toString, i.toString)
-      }
-      db.commit()
-      db.doMaintenance()
-      // Snapshot should be created this time because the size of the change log > 1000
-      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4))
-      for (version <- 4 to 7) {
+
+      for (version <- 3 to 7) {
         db.load(version)
         db.commit()
         db.doMaintenance()
       }
-      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7))
-      for (version <- 8 to 20) {
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
+      for (version <- 8 to 17) {
         db.load(version)
         db.commit()
       }
       db.doMaintenance()
-      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 4, 7, 19))
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      db.load(18)
+      db.commit()
+      db.doMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 19))
     }
   }
 

@@ -3825,6 +3825,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "class" -> unsupported.getClass.toString))
   }
 
+  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
+  }
+
   def funcBuildError(funcName: String, cause: Exception): Throwable = {
     cause.getCause match {
       case st: SparkThrowable with Throwable => st

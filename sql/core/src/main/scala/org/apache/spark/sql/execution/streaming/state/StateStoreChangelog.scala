@@ -96,7 +96,6 @@ abstract class StateStoreChangelogWriter(
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
-  var size = 0
 
   def version: Short
 
@@ -152,7 +151,6 @@ class StateStoreChangelogWriterV1(
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
-    size += 1
   }
 
   override def delete(key: Array[Byte]): Unit = {
@@ -161,7 +159,6 @@ class StateStoreChangelogWriterV1(
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
-    size += 1
   }
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -218,7 +215,6 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(key)
     // -1 in the value field means record deletion.
     compressedStream.writeInt(-1)
-    size += 1
   }
 
   override def merge(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -235,7 +231,6 @@ class StateStoreChangelogWriterV2(
     compressedStream.write(key)
     compressedStream.writeInt(value.size)
     compressedStream.write(value)
-    size += 1
   }
 
   def commit(): Unit = {
