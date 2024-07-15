@@ -226,6 +226,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       }
 
       // Create JSON metadata.
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("algo" -> model.algo.toString) ~ ("numNodes" -> model.numNodes)))
@@ -234,7 +235,6 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
       val dataRDD = sc.parallelize(nodes).map(NodeData.apply(0, _))
-      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
