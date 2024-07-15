@@ -87,13 +87,15 @@ object ColumnFamilySchemaV1 {
 object SchemaHelper {
 
   sealed trait SchemaReader {
+    def version: Int
+
     def read(inputStream: FSDataInputStream): Array[StateSchema]
   }
 
   object SchemaReader {
     def createSchemaReader(versionStr: String): SchemaReader = {
       val version = MetadataVersionUtil.validateVersion(versionStr,
-        StateSchemaCompatibilityChecker.VERSION)
+        2)
       version match {
         case 1 => new SchemaV1Reader
         case 2 => new SchemaV2Reader
@@ -102,7 +104,9 @@ object SchemaHelper {
   }
 
   class SchemaV1Reader extends SchemaReader {
-    def read(inputStream: FSDataInputStream): Array[StateSchema] = {
+    override def version: Int = 1
+
+    override def read(inputStream: FSDataInputStream): Array[StateSchema] = {
       val keySchemaStr = inputStream.readUTF()
       val valueSchemaStr = inputStream.readUTF()
       Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
@@ -112,7 +116,9 @@ object SchemaHelper {
   }
 
   class SchemaV2Reader extends SchemaReader {
-    def read(inputStream: FSDataInputStream): Array[StateSchema] = {
+    override def version: Int = 2
+
+    override def read(inputStream: FSDataInputStream): Array[StateSchema] = {
       val buf = new StringBuilder
       val numKeyChunks = inputStream.readInt()
       (0 until numKeyChunks).foreach(_ => buf.append(inputStream.readUTF()))
@@ -129,7 +135,7 @@ object SchemaHelper {
   }
 
   trait SchemaWriter {
-    val version: Int
+    def version: Int
 
     final def write(
         keySchema: StructType,
@@ -159,7 +165,7 @@ object SchemaHelper {
   }
 
   class SchemaV1Writer extends SchemaWriter {
-    val version: Int = 1
+    override def version: Int = 1
 
     def writeSchema(
         keySchema: StructType,
@@ -171,7 +177,7 @@ object SchemaHelper {
   }
 
   class SchemaV2Writer extends SchemaWriter {
-    val version: Int = 2
+    override def version: Int = 2
 
     // 2^16 - 1 bytes
     final val MAX_UTF_CHUNK_SIZE = 65535

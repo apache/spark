@@ -39,13 +39,15 @@ case class StateSchema(
 
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
-    hadoopConf: Configuration) extends Logging {
+    hadoopConf: Configuration,
+    stateSchemaVersion: Int = 2,
+    schemaFilePath: Option[Path] = None) extends Logging {
 
   private val storeCpLocation = providerId.storeId.storeCheckpointLocation()
   private val fm = CheckpointFileManager.create(storeCpLocation, hadoopConf)
   private val schemaFileLocation = schemaFile(storeCpLocation)
   private val schemaWriter =
-    SchemaWriter.createSchemaWriter(StateSchemaCompatibilityChecker.VERSION)
+    SchemaWriter.createSchemaWriter(stateSchemaVersion)
 
   fm.mkdirs(schemaFileLocation.getParent)
 
