@@ -29,6 +29,7 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
+    ParseException,
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
@@ -2215,6 +2216,44 @@ class TypesTestsMixin:
             DataType.fromDDL("a int, v variant"),
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
+
+    # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
+    # `fromDDL`'s behavior.
+    def test_spark48834_from_ddl_matches_udf_schema_string(self):
+        from pyspark.sql.functions import udf
+
+        def schema_from_udf(ddl):
+            schema = (
+                self.spark.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+            )
+            assert len(schema) == 1
+            return schema[0].dataType
+
+        tests = [
+            ("a:int, b:string", True),
+            (
+                "a struct<>, b map<int, binary>, "
+                + "c array<array<map<struct<a: int, b: int>, binary>>>",
+                True,
+            ),
+            ("struct<>", True),
+            ("struct<a: string, b: array<long>>", True),
+            ("", True),
+            ("<a: int, b: variant>", False),
+            ("randomstring", False),
+            ("struct", False),
+        ]
+        for test, is_valid_input in tests:
+            if is_valid_input:
+                self.assertEqual(DataType.fromDDL(test), schema_from_udf(test))
+            else:
+                with self.assertRaises(ParseException) as from_ddl_pe:
+                    DataType.fromDDL(test)
+                with self.assertRaises(ParseException) as udf_pe:
+                    schema_from_udf(test)
+                self.assertEqual(
+                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                )
 
     def test_collated_string(self):
         dfs = [

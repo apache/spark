@@ -90,6 +90,13 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
+case class SupportsNonDeterministicExpressionTestOperator(
+    actions: Seq[Expression],
+    allowNonDeterministicExpression: Boolean)
+  extends LeafNode with SupportsNonDeterministicExpression {
+  override def output: Seq[Attribute] = Seq()
+}
+
 class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
 
@@ -1364,4 +1371,20 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map(
       "expr" -> "\"_w0\"",
       "exprType" -> "\"MAP<STRING, STRING>\""))
+
+  test("SPARK-48871: SupportsNonDeterministicExpression allows non-deterministic expressions") {
+    val nonDeterministicExpressions = Seq(new Rand())
+    val tolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = true)
+    assertAnalysisSuccess(tolerantPlan)
+
+    val intolerantPlan =
+      SupportsNonDeterministicExpressionTestOperator(
+        nonDeterministicExpressions, allowNonDeterministicExpression = false)
+    assertAnalysisError(
+      intolerantPlan,
+      "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
+    )
+  }
 }

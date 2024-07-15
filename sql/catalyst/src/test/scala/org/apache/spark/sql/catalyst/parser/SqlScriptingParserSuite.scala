@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
@@ -29,7 +29,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText(sqlScriptText) == "SELECT 1;")
+    assert(sparkStatement.getText == "SELECT 1;")
   }
 
   test("single select without ;") {
@@ -38,7 +38,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.length == 1)
     assert(tree.collection.head.isInstanceOf[SingleStatement])
     val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText(sqlScriptText) == "SELECT 1")
+    assert(sparkStatement.getText == "SELECT 1")
   }
 
   test("multi select without ; - should fail") {
@@ -62,7 +62,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SingleStatement]
-        val statementText = sparkStatement.getText(sqlScriptText)
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
@@ -124,7 +124,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       .zip(tree.collection)
       .foreach { case (expected, statement) =>
         val sparkStatement = statement.asInstanceOf[SingleStatement]
-        val statementText = sparkStatement.getText(sqlScriptText)
+        val statementText = sparkStatement.getText
         assert(statementText == expected)
       }
   }
@@ -148,17 +148,115 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     val body1 = tree.collection.head.asInstanceOf[CompoundBody]
     assert(body1.collection.length == 1)
-    assert(body1.collection.head.asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(body1.collection.head.asInstanceOf[SingleStatement].getText
       == "SELECT 1")
 
     val body2 = tree.collection(1).asInstanceOf[CompoundBody]
     assert(body2.collection.length == 1)
     assert(body2.collection.head.isInstanceOf[CompoundBody])
     val nestedBody = body2.collection.head.asInstanceOf[CompoundBody]
-    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(nestedBody.collection.head.asInstanceOf[SingleStatement].getText
       == "SELECT 2")
-    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText(sqlScriptText)
+    assert(nestedBody.collection(1).asInstanceOf[SingleStatement].getText
       == "SELECT 3")
+  }
+
+  test("compound: beginLabel") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: beginLabel + endLabel") {
+    val sqlScriptText =
+      """
+        |lbl: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: beginLabel + endLabel with different values") {
+    val sqlScriptText =
+      """
+        |lbl_begin: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl_end""".stripMargin
+    val e = intercept[SparkException] {
+      parseScript(sqlScriptText)
+    }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessage.contains("Both labels should be same."))
+  }
+
+  test("compound: endLabel") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val e = intercept[SparkException] {
+      parseScript(sqlScriptText)
+    }
+    assert(e.getErrorClass === "INTERNAL_ERROR")
+    assert(e.getMessage.contains("End label can't exist without begin label."))
+  }
+
+  test("compound: beginLabel + endLabel with different casing") {
+    val sqlScriptText =
+      """
+        |LBL: BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END lbl""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.contains("lbl"))
+  }
+
+  test("compound: no labels provided") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  SELECT 2;
+        |  INSERT INTO A VALUES (a, b, 3);
+        |  SELECT a, b, c FROM T;
+        |  SELECT * FROM T;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 5)
+    assert(tree.collection.forall(_.isInstanceOf[SingleStatement]))
+    assert(tree.label.nonEmpty)
   }
 
   // Helper methods

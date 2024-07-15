@@ -56,6 +56,10 @@ trait AlterTableSetTblPropertiesSuiteBase extends command.AlterTableSetTblProper
       assert(actualTblProps == expectedTblProps)
     }
   }
+
+  override def getTblPropertyValue(tableIdent: TableIdentifier, key: String): String = {
+    getTableProperties(tableIdent).getOrElse(key, null)
+  }
 }
 
 class AlterTableSetTblPropertiesSuite

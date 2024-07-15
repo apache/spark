@@ -60,6 +60,12 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
+    if (isFileFormat && ident.last.isEmpty) {
+      unresolved.failAnalysis(
+        errorClass = "INVALID_EMPTY_LOCATION",
+        messageParameters = Map("location" -> ident.last))
+    }
+
     dataSource
   }
 

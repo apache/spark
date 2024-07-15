@@ -150,6 +150,14 @@ object StateStoreErrors {
     new StateStoreValueSchemaNotCompatible(storedValueSchema, newValueSchema)
   }
 
+  def stateStoreColumnFamilyMismatch(
+      columnFamilyName: String,
+      oldColumnFamilySchema: String,
+      newColumnFamilySchema: String): StateStoreColumnFamilyMismatch = {
+    new StateStoreColumnFamilyMismatch(
+      columnFamilyName, oldColumnFamilySchema, newColumnFamilySchema)
+  }
+
   def stateStoreSnapshotFileNotFound(fileToRead: String, clazz: String):
     StateStoreSnapshotFileNotFound = {
     new StateStoreSnapshotFileNotFound(fileToRead, clazz)
@@ -193,6 +201,17 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
+
+class StateStoreColumnFamilyMismatch(
+    columnFamilyName: String,
+    oldColumnFamilySchema: String,
+    newColumnFamilySchema: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE",
+    messageParameters = Map(
+      "columnFamilyName" -> columnFamilyName,
+      "oldColumnFamilySchema" -> oldColumnFamilySchema,
+      "newColumnFamilySchema" -> newColumnFamilySchema))
 
 class StatefulProcessorCannotPerformOperationWithInvalidTimeMode(
     operationType: String,
