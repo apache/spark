@@ -2633,10 +2633,24 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
    * for more information.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason optional reason for cancellation
+   */
+  def cancelJobGroup(groupId: String, reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, Option(reason))
+  }
+
+  /**
+   * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
+   * for more information.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId)
+    dagScheduler.cancelJobGroup(groupId, None)
   }
 
   /**
@@ -2644,23 +2658,51 @@ class SparkContext(config: SparkConf) extends Logging {
    * Note: the maximum number of job groups that can be tracked is set by
    * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
    * is to be added, the oldest job group tracked will be discarded.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason optional reason for cancellation
+   */
+  def cancelJobGroupAndFutureJobs(groupId: String, reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelJobGroup(groupId, Option(reason), cancelFutureJobs = true)
+  }
+
+  /**
+   * Cancel active jobs for the specified group, as well as the future jobs in this job group.
+   * Note: the maximum number of job groups that can be tracked is set by
+   * 'spark.scheduler.numCancelledJobGroupsToTrack'. Once the limit is reached and a new job group
+   * is to be added, the oldest job group tracked will be discarded.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true)
+    dagScheduler.cancelJobGroup(groupId, None, cancelFutureJobs = true)
   }
 
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason optional reason for cancellation
+   * @since 3.5.0
+   */
+  def cancelJobsWithTag(tag: String, reason: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    assertNotStopped()
+    dagScheduler.cancelJobsWithTag(tag, Option(reason))
+  }
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
    * @since 3.5.0
    */
   def cancelJobsWithTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
     assertNotStopped()
-    dagScheduler.cancelJobsWithTag(tag)
+    dagScheduler.cancelJobsWithTag(tag, None)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
