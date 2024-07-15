@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
@@ -116,6 +117,49 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override protected def withNewChildInternal(newChild: SparkPlan): ProjectExec =
     copy(child = newChild)
+}
+
+case class TransposeExec(child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    // scalastyle:off println
+    val collectedRows = child.executeCollect()
+    val numCols = if (collectedRows.nonEmpty) collectedRows.head.numFields else 0
+    val numRows = collectedRows.length
+
+    val originalMatrix = Array.ofDim[String](numRows + 1, numCols)
+    for (j <- 0 until numCols) {
+      originalMatrix(0)(j) = child.output(j).name
+    }
+    for (i <- 0 until numRows) {
+      val row = collectedRows(i)
+      for (j <- 0 until numCols) {
+        originalMatrix(i + 1)(j) = row.get(j, child.output(j).dataType).toString
+      }
+    }
+
+    val matrixNumRows = originalMatrix.length
+    val matrixNumCols = if (numRows > 0) originalMatrix(0).length else 0
+    val transposedMatrix = Array.ofDim[Any](matrixNumCols, matrixNumRows)
+    for (i <- 0 until matrixNumRows) {
+      for (j <- 0 until matrixNumCols) {
+        println(s"Transposing element at row $i, col $j: ${originalMatrix(i)(j)}")
+        transposedMatrix(j)(i) = originalMatrix(i)(j)
+        println(s"transposedMatrix row $j, col $i: ${transposedMatrix(j)(i)}")
+      }
+    }
+
+    val data = transposedMatrix.tail.map { row =>
+      val utf8Row = row.map(value => UTF8String.fromString(value.toString))
+      InternalRow.fromSeq(utf8Row.toIndexedSeq)
+    }
+    sparkContext.parallelize(data.toSeq, 1)
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): TransposeExec = {
+    copy(child = newChild)
+  }
 }
 
 trait GeneratePredicateHelper extends PredicateHelper {
