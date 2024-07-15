@@ -473,7 +473,7 @@ case class DataSource(
     // will be adjusted within InsertIntoHadoopFsRelation.
     InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath,
-      staticPartitions = Map.empty,
+      statementStaticPartitions = Map.empty,
       ifPartitionNotExists = false,
       partitionColumns = partitionColumns.map(UnresolvedAttribute.quoted),
       bucketSpec = bucketSpec,
