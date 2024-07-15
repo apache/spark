@@ -124,7 +124,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     )
   }
 
-  test("SPARK-42307 - Trying to get the value from a null column should result in error") {
+  test("SPARK-42307: get a value from a null column should result in error") {
     val position = 0
     val rowWithNullValue = Row.fromSeq(Seq(null))
 

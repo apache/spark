@@ -586,6 +586,12 @@
     ],
     "sqlState" : "42703"
   },
+  "COLUMN_VALUE_IS_NULL" : {
+    "message" : [
+      "Value at index <index> is null."
+    ],
+    "sqlState" : "22000"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
@@ -7251,11 +7257,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "COLUMN_VALUE_IS_NULL" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
