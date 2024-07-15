@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.collection.mutable
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
