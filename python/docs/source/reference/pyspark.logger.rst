@@ -40,6 +40,7 @@ Methods
     :toctree: api/
 
     PySparkLogger.getLogger
+    PySparkLogger.addHandler
     PySparkLogger.info
-    PySparkLogger.warn
+    PySparkLogger.warning
     PySparkLogger.error

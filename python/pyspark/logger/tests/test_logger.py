@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import logging
 import unittest
 import json
 from io import StringIO
@@ -24,18 +24,21 @@ from pyspark.logger.logger import PySparkLogger
 
 class LoggerTestsMixin:
     def setUp(self):
-        self.logger = PySparkLogger.getLogger("TestLogger", stream=StringIO())
+        self.logger = PySparkLogger.getLogger("TestLogger")
+        self.logger.setLevel(logging.INFO)
+        self.handler = logging.StreamHandler(StringIO())
+        self.logger.addHandler(self.handler)
 
     def test_log_structure(self):
         self.logger.info("Test logging structure")
-        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
+        log_json = json.loads(self.handler.stream.getvalue().strip())
         keys = ["ts", "level", "logger", "msg", "context"]
         for key in keys:
             self.assertTrue(key in log_json)
 
     def test_log_info(self):
         self.logger.info("This is an info log", user="test_user_info", action="test_action_info")
-        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
+        log_json = json.loads(self.handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an info log")
         self.assertEqual(
@@ -44,7 +47,7 @@ class LoggerTestsMixin:
 
     def test_log_warn(self):
         self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
-        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
+        log_json = json.loads(self.handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an warn log")
         self.assertEqual(
@@ -55,7 +58,7 @@ class LoggerTestsMixin:
         self.logger.error(
             "This is an error log", user="test_user_error", action="test_action_error"
         )
-        log_json = json.loads(self.logger._handler.stream.getvalue().strip())
+        log_json = json.loads(self.handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an error log")
         self.assertEqual(

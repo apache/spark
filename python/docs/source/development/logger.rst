@@ -29,7 +29,7 @@ The :ref:`pyspark.logger</reference/pyspark.logger.rst>` module facilitates stru
 This module includes a :class:`PySparkLogger` class that provides several methods for logging messages at different levels in a structured JSON format:
 
 - :meth:`PySparkLogger.info`
-- :meth:`PySparkLogger.warn`
+- :meth:`PySparkLogger.warning`
 - :meth:`PySparkLogger.error`
 
 The logger can be easily configured to write logs to either the console or a specified file.
@@ -75,7 +75,7 @@ You can create a logger instance by calling the :meth:`PySparkLogger.getLogger`.
 
 Logging Messages
 ----------------
-The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warn`, and :meth:`PySparkLogger.error`.
+The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warning`, and :meth:`PySparkLogger.error`.
 
 - **PySparkLogger.info**: Use this method to log informational messages.
   
@@ -85,13 +85,13 @@ The logger provides three main methods for log messages: :meth:`PySparkLogger.in
       action = "login"
       logger.info(f"User {user} performed {action}", user=user, action=action)
 
-- **PySparkLogger.warn**: Use this method to log warning messages.
+- **PySparkLogger.warning**: Use this method to log warning messages.
   
   .. code-block:: python
 
       user = "test_user"
       action = "access"
-      logger.warn("User {user} attempted an unauthorized {action}", user=user, action=action)
+      logger.warning("User {user} attempted an unauthorized {action}", user=user, action=action)
 
 - **PySparkLogger.error**: Use this method to log error messages.
   
@@ -114,7 +114,7 @@ Logging to Console
     user = "test_user"
     action = "test_action"
 
-    logger.info(f"User {user} takes an {action}", user=user, action=action)
+    logger.warning(f"User {user} takes an {action}", user=user, action=action)
 
 This logs an information in the following JSON format:
 
@@ -122,7 +122,7 @@ This logs an information in the following JSON format:
 
     {
       "ts": "2024-06-28 19:44:19,030",
-      "level": "INFO",
+      "level": "WARNING",
       "logger": "ConsoleLogger",
       "msg": "User test_user takes an test_action",
       "context": {
@@ -134,18 +134,23 @@ This logs an information in the following JSON format:
 Logging to a File
 -----------------
 
-To log messages to a file, you can specify a filename when getting the logger:
+To log messages to a file, use the :meth:`PySparkLogger.addHandler` for adding `FileHandler` from the standard Python logging module to your logger.
+
+This approach aligns with the standard Python logging practices.
 
 .. code-block:: python
 
     from pyspark.logger import PySparkLogger
+    import logging
 
     # Create a logger that logs to a file
-    file_logger = PySparkLogger.getLogger("FileLogger", filename="application.log")
+    file_logger = PySparkLogger.getLogger("FileLogger")
+    handler = logging.FileHandler("application.log")
+    file_logger.addHandler(handler)
 
     user = "test_user"
     action = "test_action"
 
-    file_logger.info(f"User {user} takes an {action}", user=user, action=action)
+    file_logger.warning(f"User {user} takes an {action}", user=user, action=action)
 
 The log messages will be saved in `application.log` in the same JSON format.
