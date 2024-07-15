@@ -60,9 +60,9 @@ case class SingleStatement(parsedPlan: LogicalPlan)
  */
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
-    label: Option[String],
-    handlers: Seq[ErrorHandler],
-    conditions: mutable.HashMap[String, String]) extends CompoundPlanStatement
+    label: Option[String] = None,
+    handlers: Seq[ErrorHandler] = Seq.empty,
+    conditions: mutable.HashMap[String, String] = mutable.HashMap()) extends CompoundPlanStatement
 
 /**
  * Logical operator for an error condition.

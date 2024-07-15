@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorHandler, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorCondition, ErrorHandler, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
@@ -106,6 +106,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         val handlerBodyExec = transformTreeIntoExecutable(handler.body).
           asInstanceOf[CompoundBodyExec]
         new ErrorHandlerExec(handler.conditions, handlerBodyExec, handler.handlerType)
+      case condition: ErrorCondition =>
+        throw new UnsupportedOperationException(
+          s"Error condition $condition is not supported in the execution plan.")
     }
 
   def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {

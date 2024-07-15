@@ -121,7 +121,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, Seq())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
     }
   }
 
@@ -222,7 +222,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
     val body = Option(ctx.compoundBody()).map(visit).getOrElse {
       val logicalPlan = visit(ctx.statement()).asInstanceOf[LogicalPlan]
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, Seq())
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)))
     }.asInstanceOf[CompoundBody]
 
     val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)

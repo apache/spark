@@ -193,9 +193,9 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  */
 class CompoundBodyExec(
       statements: Seq[CompoundStatementExec],
-      handlers: Seq[ErrorHandlerExec],
-      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec],
-      session: SparkSession)
+      handlers: Seq[ErrorHandlerExec] = Seq.empty,
+      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
+      session: SparkSession = null)
   extends CompoundNestedStatementIteratorExec(statements) {
 
   private def getHandler(condition: String): Option[ErrorHandlerExec] = {
