@@ -573,8 +573,7 @@ class RocksDB(
     if (enableChangelogCheckpointing) {
       assert(changelogWriter.isDefined)
       val newVersion = loadedVersion + 1
-      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot ||
-        changelogWriter.get.size > 10000
+      newVersion - lastSnapshotVersion >= conf.minDeltasForSnapshot
     } else true
   }
 
