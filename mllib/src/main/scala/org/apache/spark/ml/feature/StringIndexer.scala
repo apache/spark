@@ -43,7 +43,7 @@ import org.apache.spark.util.collection.OpenHashMap
 private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
   with HasOutputCol with HasInputCols with HasOutputCols {
 
-  @transient private[ml] var _transformDataset: Dataset[_] = _
+  @transient private[ml] var transformDataset: Dataset[_] = _
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -127,7 +127,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
         try {
-          val dtype = _transformDataset.col(inputColName).expr.dataType
+          val dtype = transformDataset.col(inputColName).expr.dataType
           Some(
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
@@ -246,9 +246,9 @@ class StringIndexer @Since("1.4.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
-    _transformDataset = dataset
+    transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
-    _transformDataset = null
+    transformDataset = null
 
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
@@ -425,9 +425,9 @@ class StringIndexerModel (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    _transformDataset = dataset
+    transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
-    _transformDataset = null
+    transformDataset = null
 
     val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)

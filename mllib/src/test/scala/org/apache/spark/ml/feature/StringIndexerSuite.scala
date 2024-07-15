@@ -102,7 +102,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
   test("StringIndexer.transformSchema)") {
     val idxToStr = new StringIndexer().setInputCol("input").setOutputCol("output")
     val inSchema = StructType(Seq(StructField("input", StringType)))
-    idxToStr._transformDataset = spark.createDataFrame(List(Row("a")).asJava, schema = inSchema)
+    idxToStr.transformDataset = spark.createDataFrame(List(Row("a")).asJava, schema = inSchema)
     val outSchema = idxToStr.transformSchema(inSchema)
     assert(outSchema("output").dataType === DoubleType)
   }
@@ -112,7 +112,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       setOutputCols(Array("output", "output2"))
     val inSchema = StructType(Seq(StructField("input", StringType),
       StructField("input2", StringType)))
-    idxToStr._transformDataset = spark.createDataFrame(
+    idxToStr.transformDataset = spark.createDataFrame(
       List(Row("a", "b")).asJava,
       schema = inSchema
     )
@@ -131,7 +131,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       "input1 struct<a struct<f1 string, f2 string>>, " +
       "input2 struct<b1 string, b2 string>, input3 string"
     )
-    idxToStr._transformDataset = spark.createDataFrame(
+    idxToStr.transformDataset = spark.createDataFrame(
       List(Row(Row(Row("a", "b")), Row("c", "d"), "e")).asJava,
       schema = inSchema
     )
