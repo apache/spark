@@ -2707,7 +2707,7 @@ case class Base64(child: Expression, chunkBase64: Boolean)
 
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
 
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override val dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   override lazy val replacement: Expression = StaticInvoke(
