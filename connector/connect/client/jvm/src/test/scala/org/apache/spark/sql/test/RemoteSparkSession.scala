@@ -46,9 +46,7 @@ import org.apache.spark.util.ArrayImplicits._
 object SparkConnectServerUtils {
 
   // The equivalent command to start the connect server via command line:
-  // bin/spark-shell \
-  // --jars `ls connector/connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
-  // --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+  // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
   // Server port
   val port: Int =
