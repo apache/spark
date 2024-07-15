@@ -209,6 +209,11 @@ class RocksDBFileManager(
       useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version)
 
+    // Note that ideally we should get the version for the reader from the
+    // changelog itself. However, since we don't record this for v1, we need to
+    // rely on external arguments to make this call today. Within the reader, we verify
+    // for the correctness of the decided/expected version. We might revisit this pattern
+    // as we add more changelog versions in the future.
     val changelogVersion = getChangelogVersion(useColumnFamilies)
     val changelogReader = changelogVersion match {
       case 1 =>

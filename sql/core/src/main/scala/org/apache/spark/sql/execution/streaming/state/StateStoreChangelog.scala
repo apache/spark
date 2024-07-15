@@ -93,6 +93,10 @@ abstract class StateStoreChangelogWriter(
     new DataOutputStream(compressed)
   }
 
+  protected def writeVersion(): Unit = {
+    compressedStream.writeUTF(s"v${version}")
+  }
+
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
@@ -202,7 +206,7 @@ class StateStoreChangelogWriterV2(
   override def version: Short = 2
 
   // append the version field to the changelog file starting from version 2
-  compressedStream.writeShort(version)
+  writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -348,8 +352,9 @@ class StateStoreChangelogReaderV2(
   override def version: Short = 2
 
   // ensure that the version read is v2
-  val changelogVersion = input.readShort()
-  assert(changelogVersion == version, s"Changelog version mismatch: $changelogVersion != $version")
+  val changelogVersionStr = input.readUTF()
+  assert(changelogVersionStr == "v2",
+    s"Changelog version mismatch: $changelogVersionStr != v2")
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
