@@ -27,8 +27,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -43,6 +42,8 @@ import org.apache.spark.util.collection.OpenHashMap
  */
 private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
   with HasOutputCol with HasInputCols with HasOutputCols {
+
+  @transient private[ml] var _transformDataset: Dataset[_] = _
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -125,33 +126,21 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
 
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
-        extractInputDataType(schema, inputColName) match {
-          case Some(dtype) => Some(
+        try {
+          val dtype = _transformDataset.col(inputColName).expr.dataType
+          Some(
             validateAndTransformField(schema, inputColName, dtype, outputColName)
           )
-          case None if skipNonExistsCol => None
-          case _ => throw new SparkException(s"Input column $inputColName does not exist.")
+        } catch {
+          case _: AnalysisException =>
+            if (skipNonExistsCol) {
+              None
+            } else {
+              throw new SparkException(s"Input column $inputColName does not exist.")
+            }
         }
     }
     StructType(schema.fields ++ outputFields)
-  }
-
-  protected def extractInputDataType(schema: StructType, inputColName: String): Option[DataType] = {
-    val inputSplits = UnresolvedAttribute.parseAttributeName(inputColName)
-    var dtype: Option[DataType] = Some(schema)
-    var i = 0
-    while (i < inputSplits.length && dtype.isDefined) {
-      val s = inputSplits(i)
-      dtype = if (dtype.get.isInstanceOf[StructType]) {
-        val struct = dtype.get.asInstanceOf[StructType]
-        if (struct.fieldNames.contains(s)) {
-          Some(struct(s).dataType)
-        } else None
-      } else None
-      i += 1
-    }
-
-    dtype
   }
 }
 
@@ -257,7 +246,9 @@ class StringIndexer @Since("1.4.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
+    _transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
+    _transformDataset = null
 
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
@@ -434,7 +425,9 @@ class StringIndexerModel (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    _transformDataset = dataset
     transformSchema(dataset.schema, logging = true)
+    _transformDataset = null
 
     val (inputColNames, outputColNames) = getInOutCols()
     val outputColumns = new Array[Column](outputColNames.length)
@@ -452,11 +445,8 @@ class StringIndexerModel (
       val labelToIndex = labelsToIndexArray(i)
       val labels = labelsArray(i)
 
-      if (extractInputDataType(dataset.schema, inputColName).isEmpty) {
-        logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
-          log"during transformation. Skip StringIndexerModel for this column.")
-        outputColNames(i) = null
-      } else {
+      try {
+        dataset.col(inputColName)
         val filteredLabels = getHandleInvalid match {
           case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
           case _ => labels
@@ -470,9 +460,13 @@ class StringIndexerModel (
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
+      } catch {
+        case _: AnalysisException =>
+          logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
+            log"during transformation. Skip StringIndexerModel for this column.")
+          outputColNames(i) = null
       }
     }
-
     val filteredOutputColNames = outputColNames.filter(_ != null)
     val filteredOutputColumns = outputColumns.filter(_ != null)
 
