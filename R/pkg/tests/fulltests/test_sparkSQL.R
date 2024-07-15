@@ -2298,70 +2298,80 @@ test_that("group by, agg functions", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-  expect_equal(30, collect(max(gd))[2, 2])
-  expect_equal(1, collect(count(gd))[1, 2])
+  # Those tests below are dependent on the number of partitions in the shuffle.
+  conf <- callJMethod(sparkSession, "conf")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  callJMethod(conf, "set", "spark.sql.shuffle.partitions", "200")
+  tryCatch({
+    expect_equal(30, collect(max(gd))[2, 2])
+    expect_equal(1, collect(count(gd))[1, 2])
 
-  mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
-                  "{\"name\":\"ID1\", \"value\": \"10\"}",
-                  "{\"name\":\"ID1\", \"value\": \"22\"}",
-                  "{\"name\":\"ID2\", \"value\": \"-3\"}")
-  jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(mockLines2, jsonPath2)
-  gd2 <- groupBy(read.json(jsonPath2), "name")
-  df6 <- agg(gd2, value = "sum")
-  df6_local <- collect(df6)
-  expect_equal(42, df6_local[df6_local$name == "ID1", ][1, 2])
-  expect_equal(-3, df6_local[df6_local$name == "ID2", ][1, 2])
+    mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
+                    "{\"name\":\"ID1\", \"value\": \"10\"}",
+                    "{\"name\":\"ID1\", \"value\": \"22\"}",
+                    "{\"name\":\"ID2\", \"value\": \"-3\"}")
+    jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+    writeLines(mockLines2, jsonPath2)
+    gd2 <- groupBy(read.json(jsonPath2), "name")
+    df6 <- agg(gd2, value = "sum")
+    df6_local <- collect(df6)
+    expect_equal(42, df6_local[df6_local$name == "ID1", ][1, 2])
+    expect_equal(-3, df6_local[df6_local$name == "ID2", ][1, 2])
 
-  df7 <- agg(gd2, value = "stddev")
-  df7_local <- collect(df7)
-  expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
+    df7 <- agg(gd2, value = "stddev")
+    df7_local <- collect(df7)
+    expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
+    expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
-  mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
-                  "{\"name\":\"Andy\", \"age\":30}",
-                  "{\"name\":\"Justin\", \"age\":19}",
-                  "{\"name\":\"Justin\", \"age\":1}")
-  jsonPath3 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(mockLines3, jsonPath3)
-  df8 <- read.json(jsonPath3)
-  gd3 <- groupBy(df8, "name")
-  gd3_local <- collect(sum(gd3))
-  expect_equal(60, gd3_local[gd3_local$name == "Andy", ][1, 2])
-  expect_equal(20, gd3_local[gd3_local$name == "Justin", ][1, 2])
+    mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
+                    "{\"name\":\"Andy\", \"age\":30}",
+                    "{\"name\":\"Justin\", \"age\":19}",
+                    "{\"name\":\"Justin\", \"age\":1}")
+    jsonPath3 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+    writeLines(mockLines3, jsonPath3)
+    df8 <- read.json(jsonPath3)
+    gd3 <- groupBy(df8, "name")
+    gd3_local <- collect(sum(gd3))
+    expect_equal(60, gd3_local[gd3_local$name == "Andy", ][1, 2])
+    expect_equal(20, gd3_local[gd3_local$name == "Justin", ][1, 2])
 
-  expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
-  gd3_local <- collect(agg(gd3, var(df8$age)))
-  expect_equal(162, gd3_local[gd3_local$name == "Justin", ][1, 2])
+    expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
+    gd3_local <- collect(agg(gd3, var(df8$age)))
+    expect_equal(162, gd3_local[gd3_local$name == "Justin", ][1, 2])
 
-  # Test stats::sd, stats::var are working
-  expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
-  expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
+    # Test stats::sd, stats::var are working
+    expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
+    expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
 
-  # Test collect_list and collect_set
-  gd3_collections_local <- collect(
-    agg(gd3, collect_set(df8$age), collect_list(df8$age))
-  )
+    # Test collect_list and collect_set
+    gd3_collections_local <- collect(
+      agg(gd3, collect_set(df8$age), collect_list(df8$age))
+    )
 
-  expect_equal(
-    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 2]),
-    c(30)
-  )
+    expect_equal(
+      unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 2]),
+      c(30)
+    )
 
-  expect_equal(
-    unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 3]),
-    c(30, 30)
-  )
+    expect_equal(
+      unlist(gd3_collections_local[gd3_collections_local$name == "Andy", 3]),
+      c(30, 30)
+    )
 
-  expect_equal(
-    sort(unlist(
-      gd3_collections_local[gd3_collections_local$name == "Justin", 3]
-    )),
-    c(1, 19)
-  )
+    expect_equal(
+      sort(unlist(
+        gd3_collections_local[gd3_collections_local$name == "Justin", 3]
+      )),
+      c(1, 19)
+    )
 
-  unlink(jsonPath2)
-  unlink(jsonPath3)
+    unlink(jsonPath2)
+    unlink(jsonPath3)
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
 })
 
 test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
@@ -2369,15 +2379,25 @@ test_that("SPARK-36976: Add max_by/min_by API to SparkR", {
     list(list("Java", 2012, 20000), list("dotNET", 2012, 5000),
          list("dotNET", 2013, 48000), list("Java", 2013, 30000))
   )
-  gd <- groupBy(df, df$"_1")
+  # Those tests below are dependent on the number of partitions in the shuffle.
+  conf <- callJMethod(sparkSession, "conf")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  callJMethod(conf, "set", "spark.sql.shuffle.partitions", "200")
+  tryCatch({
+    gd <- groupBy(df, df$"_1")
 
-  actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
-  expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
-  expect_equal(collect(actual1), collect(expect1))
+    actual1 <- agg(gd, "_2" = max_by(df$"_2", df$"_3"))
+    expect1 <- createDataFrame(list(list("dotNET", 2013), list("Java", 2013)))
+    expect_equal(collect(actual1), collect(expect1))
 
-  actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
-  expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
-  expect_equal(collect(actual2), collect(expect2))
+    actual2 <- agg(gd, "_2" = min_by(df$"_2", df$"_3"))
+    expect2 <- createDataFrame(list(list("dotNET", 2012), list("Java", 2012)))
+    expect_equal(collect(actual2), collect(expect2))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
 })
 
 test_that("pivot GroupedData column", {
@@ -2386,23 +2406,34 @@ test_that("pivot GroupedData column", {
     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
   ))
-  sum1 <- collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
-  sum2 <- collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
-  sum3 <- collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
-  sum4 <- collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
 
-  correct_answer <- data.frame(
-    year = c(2013, 2014, 2015, 2016),
-    Python = c(10000, 15000, 20000, 22000),
-    R = c(10000, 11000, 12000, 21000)
-  )
-  expect_equal(sum1, correct_answer)
-  expect_equal(sum2, correct_answer)
-  expect_equal(sum3, correct_answer)
-  expect_equal(sum4, correct_answer[, c("year", "R")])
+  # Those tests below are dependent on the number of partitions in the shuffle.
+  conf <- callJMethod(sparkSession, "conf")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  callJMethod(conf, "set", "spark.sql.shuffle.partitions", "200")
+  tryCatch({
+    sum1 <- collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
+    sum2 <- collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
+    sum3 <- collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
+    sum4 <- collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
 
-  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", c("R", "R")), "earnings")))
-  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
+    correct_answer <- data.frame(
+      year = c(2013, 2014, 2015, 2016),
+      Python = c(10000, 15000, 20000, 22000),
+      R = c(10000, 11000, 12000, 21000)
+    )
+    expect_equal(sum1, correct_answer)
+    expect_equal(sum2, correct_answer)
+    expect_equal(sum3, correct_answer)
+    expect_equal(sum4, correct_answer[, c("year", "R")])
+
+    expect_error(collect(sum(pivot(groupBy(df, "year"), "course", c("R", "R")), "earnings")))
+    expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
 })
 
 test_that("test multi-dimensional aggregations with cube and rollup", {

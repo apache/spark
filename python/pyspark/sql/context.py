@@ -205,7 +205,7 @@ class SQLContext:
 
         Examples
         --------
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions")  # doctest: +SKIP
         '200'
         >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
         '10'
