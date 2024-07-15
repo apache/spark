@@ -330,7 +330,7 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
        NULL
       > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (3, 3), (4, 4) AS tab(y, x);
        0.0
-      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (4, 4) AS tab(y, x);
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, null), (null, 3), (4, 4) AS tab(y, x);
        0.0
   """,
   group = "agg_funcs",
