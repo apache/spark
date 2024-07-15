@@ -64,7 +64,7 @@ class QueryExecution(
 
   val id: Long = QueryExecution.nextExecutionId
 
-  def shuffleCleanupMode: ShuffleCleanupMode = {
+  val shuffleCleanupMode: ShuffleCleanupMode = {
     val conf = sparkSession.sessionState.conf
     val shuffleCleanupMode =
       if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
