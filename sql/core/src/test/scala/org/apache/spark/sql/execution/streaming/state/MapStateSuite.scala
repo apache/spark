@@ -85,12 +85,12 @@ class MapStateSuite extends StateVariableSuiteBase {
       // put initial value
       testState1.updateValue(1L, 1.0)
       assert(testState1.getValue(1L) === 1.0)
-     //  assert(!testState2.containsKey(1L))
+      assert(!testState2.containsKey(1L))
       // update existing values, append new key-value pairs
       testState1.updateValue(1L, 2.0)
-      // testState2.updateValue(2L, 3)
+      testState2.updateValue(2L, 3)
       assert(testState1.getValue(1L) === 2.0)
-      // assert(testState2.getValue(2L) === 3)
+      assert(testState2.getValue(2L) === 3)
 
       assert(testState1.keys().toSeq === Seq(1L))
       assert(testState2.keys().toSeq === Seq(2L))
@@ -127,46 +127,46 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial values
-      // valueTestState.update("v1")
-      // listTestState.put(Seq("v1").toArray)
+      valueTestState.update("v1")
+      listTestState.put(Seq("v1").toArray)
       mapTestState1.updateValue("k1", 1)
-      // mapTestState2.updateValue("k2", 2)
-      // assert(valueTestState.get() === "v1")
-      // assert(listTestState.get().toSeq === Seq("v1"))
+      mapTestState2.updateValue("k2", 2)
+      assert(valueTestState.get() === "v1")
+      assert(listTestState.get().toSeq === Seq("v1"))
       assert(mapTestState1.getValue("k1") === 1)
-      // assert(mapTestState2.getValue("k2") === 2)
+      assert(mapTestState2.getValue("k2") === 2)
       // update existing values, append
-      // valueTestState.update("v2")
-      // listTestState.appendValue("v3")
+      valueTestState.update("v2")
+      listTestState.appendValue("v3")
       mapTestState1.updateValue("k1", 3)
-      // mapTestState2.updateValue("k2", 4)
+      mapTestState2.updateValue("k2", 4)
 
-      // assert(valueTestState.get() === "v2")
-      // assert(listTestState.get().toSeq === Seq("v1", "v3"))
+      assert(valueTestState.get() === "v2")
+      assert(listTestState.get().toSeq === Seq("v1", "v3"))
       assert(mapTestState1.getValue("k1") === 3)
-      // assert(mapTestState2.getValue("k2") === 4)
+      assert(mapTestState2.getValue("k2") === 4)
 
       // advanced append/get operations
-      // listTestState.appendList(Seq("v4").toArray)
+      listTestState.appendList(Seq("v4").toArray)
       mapTestState1.updateValue("k3", 5)
-      // mapTestState2.updateValue("k4", 6)
+      mapTestState2.updateValue("k4", 6)
 
-      // assert(valueTestState.get() === "v2")
-      // assert(listTestState.get().toSeq === Seq("v1", "v3", "v4"))
+      assert(valueTestState.get() === "v2")
+      assert(listTestState.get().toSeq === Seq("v1", "v3", "v4"))
       assert(mapTestState1.keys().toSeq === Seq("k1", "k3"))
-      // assert(mapTestState2.values().toSeq === Seq(4, 6))
+      assert(mapTestState2.values().toSeq === Seq(4, 6))
 
       // test remove
-      // valueTestState.clear()
-      // listTestState.clear()
+      valueTestState.clear()
+      listTestState.clear()
       mapTestState1.clear()
-      // mapTestState2.removeKey("k4")
+      mapTestState2.removeKey("k4")
 
-      // assert(!valueTestState.exists())
-      // assert(!listTestState.exists())
+      assert(!valueTestState.exists())
+      assert(!listTestState.exists())
       assert(!mapTestState1.exists())
-      // assert(mapTestState2.exists())
-      // assert(mapTestState2.iterator().toList === List(("k2", 4)))
+      assert(mapTestState2.exists())
+      assert(mapTestState2.iterator().toList === List(("k2", 4)))
     }
   }
 

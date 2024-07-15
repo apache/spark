@@ -261,6 +261,8 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    println("I am inside encodePrefixKey, prefix: " +
+      prefixKey.getStruct(0, 1).numFields())
     val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
     val (prefix, startingOffset) = encodeColumnFamilyPrefix(
       prefixKeyEncoded.length + 4

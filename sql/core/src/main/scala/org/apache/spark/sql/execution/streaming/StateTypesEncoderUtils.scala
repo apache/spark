@@ -187,6 +187,7 @@ class CompositeKeyStateEncoder[K, V](
     stateName: String,
     hasTtl: Boolean = false)
   extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
+  import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 
   // keyEncoder.schema will attach a default "value" as field name if
   // the object is a primitive type encoder
@@ -199,24 +200,8 @@ class CompositeKeyStateEncoder[K, V](
     schema.fields.head.dataType
   }
 
-  private val schemaForCompositeKeyRow = {
-    var compositeSchema = new StructType()
-    if (isPrimitiveType(keyEncoder.schema)) {
-      compositeSchema =
-        compositeSchema.add("key", getPrimitiveType(keyEncoder.schema))
-    } else {
-      compositeSchema = compositeSchema.add("key", keyEncoder.schema)
-    }
-
-    if (isPrimitiveType(userKeyEnc.schema)) {
-      compositeSchema =
-        compositeSchema.add("userKey", getPrimitiveType(userKeyEnc.schema))
-    } else {
-      compositeSchema = compositeSchema.add("userKey", userKeyEnc.schema)
-    }
-
-    compositeSchema
-  }
+  private val schemaForCompositeKeyRow =
+    getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
   private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
   private val reusedKeyRow = new UnsafeRow(userKeyEnc.schema.fields.length)
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)
@@ -224,6 +209,23 @@ class CompositeKeyStateEncoder[K, V](
   private val userKeyRowToObjDeserializer =
     userKeyExpressionEnc.resolveAndBind().createDeserializer()
   private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
+
+  override def encodeGroupingKey(): UnsafeRow = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get
+
+    val realGroupingKey =
+      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
+      else groupingKey
+    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
+
+    val keyProj = UnsafeProjection.create(new StructType().add("key", keyEncoder.schema))
+
+    keyProj.apply(InternalRow(keyRow))
+  }
 
   /**
    * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
@@ -235,6 +237,7 @@ class CompositeKeyStateEncoder[K, V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
     val groupingKey = keyOption.get
+
     val realGroupingKey =
       if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
       else groupingKey
@@ -244,8 +247,14 @@ class CompositeKeyStateEncoder[K, V](
     println("I am inside encode Composite key, composite key schema: " +
       schemaForCompositeKeyRow)
 
+    // Create the nested InternalRows for the inner structs (value)
+    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
+    val userKeyRow = new GenericInternalRow(Array[Any](realUserKey))
 
-    val compositeKey = compositeKeyProjection(InternalRow(realGroupingKey, realUserKey))
+    // Create the final InternalRow combining the nested keyRow and userKeyRow
+    val compositeRow = new GenericInternalRow(Array[Any](keyRow, userKeyRow))
+
+    val compositeKey = compositeKeyProjection(compositeRow)
     println("I am putting unsafe row into rocksDB: " + decodeCompositeKey(compositeKey))
     println("inside encode composite key, num of composite field: " + compositeKey.numFields())
 
@@ -282,16 +291,6 @@ class CompositeKeyStateEncoder[K, V](
    * Only user key is returned though grouping key also exist in the row.
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
-    val ordinal = if (isPrimitiveType(keyEncoder.schema)) {
-      1
-    } else keyEncoder.schema.length
-
-    val userKeyObj = if (isPrimitiveType(userKeyEnc.schema)) {
-      row.get(ordinal, getPrimitiveType(userKeyEnc.schema))
-    } else {
-      userKeyRowToObjDeserializer.apply(row.getStruct(ordinal, 1))
-    }
-    println("deserialized user key obj here: " + userKeyObj)
-    userKeyObj.asInstanceOf[K]
+    userKeyRowToObjDeserializer.apply(row.getStruct(1, 1))
   }
 }

@@ -33,7 +33,7 @@ class MapStateImpl[K, V](
 
   // Pack grouping key and user key together as a prefixed composite key
   private val schemaForCompositeKeyRow: StructType = {
-    realCompositeType(keyExprEnc.schema, userKeyEnc.schema)
+    getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
   }
   println("I am inside MapStateImpl, realComposite Key schema: " +
     schemaForCompositeKeyRow)
@@ -76,6 +76,7 @@ class MapStateImpl[K, V](
 
   /** Get the map associated with grouping key */
   override def iterator(): Iterator[(K, V)] = {
+    println("I am inside mapstateimpl.iterator")
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.prefixScan(encodedGroupingKey, stateName)
       .map {
