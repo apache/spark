@@ -83,7 +83,7 @@ def main():
                 print(
                     f"[error]\tPlease use the Structured Logging Framework for logging messages "
                     f'with variables. For example: log"...${{MDC(TASK_ID, taskId)}}..."'
-                    f"\nRefer to the guidelines in the file `internal/Logging.scala`.",
+                    f"\n\tRefer to the guidelines in the file `internal/Logging.scala`.",
                     file=sys.stderr,
                 )
 
