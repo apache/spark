@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{MapType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -236,13 +236,6 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
-
-        // Forbid creation of HIVE tables with
-        // MapType which key type contains MapType or VariantType
-        if (DDLUtils.isHiveTable(tableDesc)) {
-          validateMapTypes(tableDesc.schema)
-        }
-
         DDLUtils.checkTableColumns(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
@@ -277,8 +270,6 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         create
       } else {
-        validateMapTypes(schema)
-
         // Resolve and normalize partition columns as necessary
         val resolver = conf.resolver
         val normalizedPartitions = partitioning.map {
@@ -295,19 +286,6 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         create.withPartitioning(normalizedPartitions)
       }
-  }
-
-  private def validateMapTypes(schema: StructType) = {
-    schema.foreach(st => {
-      if (st.dataType.isInstanceOf[MapType]) {
-        val mt = st.dataType.asInstanceOf[MapType]
-
-        if (mt.keyType.existsRecursively(
-          dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
-          throw QueryCompilationErrors.mapKeyTypeNotSupported(mt.keyType)
-        }
-      }
-    })
   }
 
   private def fallBackV2ToV1(cls: Class[_]): Class[_] =
