@@ -25,7 +25,7 @@ import scala.annotation.tailrec
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.{StateSchemaNotCompatible, StateStore, StreamingAggregationStateManager}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreValueSchemaNotCompatible, StreamingAggregationStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -782,11 +782,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       testStream(aggregated, Update())(
         StartStream(checkpointLocation = tempDir.getAbsolutePath),
         AddData(inputData, 21),
-        ExpectFailure[SparkException] { e =>
+        ExpectFailure[StateStoreValueSchemaNotCompatible] { e =>
           val stateSchemaExc = findStateSchemaNotCompatible(e)
           assert(stateSchemaExc.isDefined)
           val msg = stateSchemaExc.get.getMessage
-          assert(msg.contains("Provided schema doesn't match to the schema for existing state"))
+          assert(msg.contains("does not match existing"))
           // other verifications are presented in StateStoreSuite
         }
       )
@@ -909,9 +909,10 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   @tailrec
-  private def findStateSchemaNotCompatible(exc: Throwable): Option[StateSchemaNotCompatible] = {
+  private def findStateSchemaNotCompatible(exc: Throwable):
+    Option[SparkUnsupportedOperationException] = {
     exc match {
-      case e1: StateSchemaNotCompatible => Some(e1)
+      case e1: SparkUnsupportedOperationException => Some(e1)
       case e1 if e1.getCause != null => findStateSchemaNotCompatible(e1.getCause)
       case _ => None
     }

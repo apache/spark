@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
@@ -31,6 +33,7 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -241,6 +244,26 @@ case class StreamingSymmetricHashJoinExec(
         newInputWatermark > eventTimeWatermarkForEviction.get
 
     watermarkUsedForStateCleanup && watermarkHasChanged
+  }
+
+  override def validateAndMaybeEvolveStateSchema(
+      hadoopConf: Configuration,
+      batchId: Long,
+      stateSchemaVersion: Int): Array[String] = {
+    var result: Map[String, (StructType, StructType)] = Map.empty
+    // get state schema for state stores on left side of the join
+    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(LeftSide,
+      left.output, leftKeys, stateFormatVersion)
+
+    // get state schema for state stores on right side of the join
+    result ++= SymmetricHashJoinStateManager.getSchemaForStateStores(RightSide,
+      right.output, rightKeys, stateFormatVersion)
+
+    // validate and maybe evolve schema for all state stores across both sides of the join
+    result.iterator.flatMap { case (stateStoreName, (keySchema, valueSchema)) =>
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+        keySchema, valueSchema, session.sessionState, storeName = stateStoreName)
+    }.toArray
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

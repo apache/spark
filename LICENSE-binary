@@ -218,7 +218,6 @@ com.google.crypto.tink:tink
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.jamesmurty.utils:java-xmlbuilder
-com.jolbox:bonecp
 com.ning:compress-lzf
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp

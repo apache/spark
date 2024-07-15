@@ -49,7 +49,7 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
-from functools import cached_property
+import functools
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
@@ -73,6 +73,7 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
@@ -101,6 +102,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+    from pyspark.sql.metrics import ExecutionInfo
 
 
 class DataFrame(ParentDataFrame):
@@ -137,6 +139,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
         """
@@ -206,8 +209,12 @@ class DataFrame(ParentDataFrame):
 
     @property
     def write(self) -> "DataFrameWriter":
-        return DataFrameWriter(self._plan, self._session)
+        def cb(qe: "ExecutionInfo") -> None:
+            self._execution_info = qe
 
+        return DataFrameWriter(self._plan, self._session, cb)
+
+    @functools.cache
     def isEmpty(self) -> bool:
         return len(self.select().take(1)) == 0
 
@@ -222,6 +229,11 @@ class DataFrame(ParentDataFrame):
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
+        if any(not isinstance(c, (str, Column)) for c in cols):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN_OR_STR",
+                message_parameters={"arg_name": "columns"},
+            )
         return DataFrame(
             plan.Project(self._plan, [F._to_col(c) for c in cols]),
             session=self._session,
@@ -256,7 +268,9 @@ class DataFrame(ParentDataFrame):
             return self.groupBy().agg(*exprs)
 
     def alias(self, alias: str) -> ParentDataFrame:
-        return DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
+        res = DataFrame(plan.SubqueryAlias(self._plan, alias), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def colRegex(self, colName: str) -> Column:
         from pyspark.sql.connect.column import Column as ConnectColumn
@@ -308,10 +322,12 @@ class DataFrame(ParentDataFrame):
                 error_class="VALUE_NOT_POSITIVE",
                 message_parameters={"arg_name": "numPartitions", "arg_value": str(numPartitions)},
             )
-        return DataFrame(
+        res = DataFrame(
             plan.Repartition(self._plan, num_partitions=numPartitions, shuffle=False),
             self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
@@ -334,12 +350,12 @@ class DataFrame(ParentDataFrame):
                     },
                 )
             if len(cols) == 0:
-                return DataFrame(
+                res = DataFrame(
                     plan.Repartition(self._plan, numPartitions, shuffle=True),
                     self._session,
                 )
             else:
-                return DataFrame(
+                res = DataFrame(
                     plan.RepartitionByExpression(
                         self._plan, numPartitions, [F._to_col(c) for c in cols]
                     ),
@@ -347,7 +363,7 @@ class DataFrame(ParentDataFrame):
                 )
         elif isinstance(numPartitions, (str, Column)):
             cols = (numPartitions,) + cols
-            return DataFrame(
+            res = DataFrame(
                 plan.RepartitionByExpression(self._plan, None, [F._to_col(c) for c in cols]),
                 self.sparkSession,
             )
@@ -359,6 +375,9 @@ class DataFrame(ParentDataFrame):
                     "arg_type": type(numPartitions).__name__,
                 },
             )
+
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
@@ -386,14 +405,14 @@ class DataFrame(ParentDataFrame):
                     message_parameters={"item": "cols"},
                 )
             else:
-                return DataFrame(
+                res = DataFrame(
                     plan.RepartitionByExpression(
                         self._plan, numPartitions, [F._sort_col(c) for c in cols]
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
-            return DataFrame(
+            res = DataFrame(
                 plan.RepartitionByExpression(
                     self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
                 ),
@@ -408,6 +427,9 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
+        res._cached_schema = self._cached_schema
+        return res
+
     def dropDuplicates(self, *subset: Union[str, List[str]]) -> ParentDataFrame:
         # Acceptable args should be str, ... or a single List[str]
         # So if subset length is 1, it can be either single str, or a list of str
@@ -416,19 +438,22 @@ class DataFrame(ParentDataFrame):
             assert all(isinstance(c, str) for c in subset)
 
         if not subset:
-            return DataFrame(
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
             )
         elif len(subset) == 1 and isinstance(subset[0], list):
-            return DataFrame(
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=subset[0]),
                 session=self._session,
             )
         else:
-            return DataFrame(
+            res = DataFrame(
                 plan.Deduplicate(child=self._plan, column_names=cast(List[str], subset)),
                 session=self._session,
             )
+
+        res._cached_schema = self._cached_schema
+        return res
 
     drop_duplicates = dropDuplicates
 
@@ -460,9 +485,11 @@ class DataFrame(ParentDataFrame):
             )
 
     def distinct(self) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     @overload
     def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
@@ -493,7 +520,9 @@ class DataFrame(ParentDataFrame):
             expr = F.expr(condition)
         else:
             expr = condition
-        return DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
+        res = DataFrame(plan.Filter(child=self._plan, filter=expr), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def first(self) -> Optional[Row]:
         return self.head()
@@ -703,7 +732,9 @@ class DataFrame(ParentDataFrame):
         )
 
     def limit(self, n: int) -> ParentDataFrame:
-        return DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
+        res = DataFrame(plan.Limit(child=self._plan, limit=n), session=self._session)
+        res._cached_schema = self._cached_schema
+        return res
 
     def tail(self, num: int) -> List[Row]:
         return DataFrame(plan.Tail(child=self._plan, limit=num), session=self._session).collect()
@@ -760,7 +791,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -768,6 +799,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     orderBy = sort
 
@@ -776,7 +809,7 @@ class DataFrame(ParentDataFrame):
         *cols: Union[int, str, Column, List[Union[int, str, Column]]],
         **kwargs: Any,
     ) -> ParentDataFrame:
-        return DataFrame(
+        res = DataFrame(
             plan.Sort(
                 self._plan,
                 columns=self._sort_cols(cols, kwargs),
@@ -784,6 +817,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def sample(
         self,
@@ -831,7 +866,7 @@ class DataFrame(ParentDataFrame):
 
         seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
 
-        return DataFrame(
+        res = DataFrame(
             plan.Sample(
                 child=self._plan,
                 lower_bound=0.0,
@@ -841,6 +876,8 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def withColumnRenamed(self, existing: str, new: str) -> ParentDataFrame:
         return self.withColumnsRenamed({existing: new})
@@ -1044,10 +1081,12 @@ class DataFrame(ParentDataFrame):
                         },
                     )
 
-        return DataFrame(
+        res = DataFrame(
             plan.Hint(self._plan, name, [F.lit(p) for p in list(parameters)]),
             session=self._session,
         )
+        res._cached_schema = self._cached_schema
+        return res
 
     def randomSplit(
         self,
@@ -1088,6 +1127,7 @@ class DataFrame(ParentDataFrame):
                 ),
                 session=self._session,
             )
+            samplePlan._cached_schema = self._cached_schema
             splits.append(samplePlan)
             j += 1
 
@@ -1112,9 +1152,9 @@ class DataFrame(ParentDataFrame):
             )
 
         if isinstance(observation, Observation):
-            return observation._on(self, *exprs)
+            res = observation._on(self, *exprs)
         elif isinstance(observation, str):
-            return DataFrame(
+            res = DataFrame(
                 plan.CollectMetrics(self._plan, observation, list(exprs)),
                 self._session,
             )
@@ -1127,8 +1167,18 @@ class DataFrame(ParentDataFrame):
                 },
             )
 
+        res._cached_schema = self._cached_schema
+        return res
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
+
+    def _merge_cached_schema(self, other: ParentDataFrame) -> Optional[StructType]:
+        # to avoid type coercion, only propagate the schema
+        # when the cached schemas are exactly the same
+        if self._cached_schema is not None and self._cached_schema == other._cached_schema:
+            return self.schema
+        return None
 
     def union(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
@@ -1136,18 +1186,20 @@ class DataFrame(ParentDataFrame):
 
     def unionAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "union", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def unionByName(
         self, other: ParentDataFrame, allowMissingColumns: bool = False
     ) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan,
                 other._plan,  # type: ignore[arg-type]
@@ -1157,42 +1209,52 @@ class DataFrame(ParentDataFrame):
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def subtract(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def exceptAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "except", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersect(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=False  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def intersectAll(self, other: ParentDataFrame) -> ParentDataFrame:
         self._check_same_session(other)
-        return DataFrame(
+        res = DataFrame(
             plan.SetOperation(
                 self._plan, other._plan, "intersect", is_all=True  # type: ignore[arg-type]
             ),
             session=self._session,
         )
+        res._cached_schema = self._merge_cached_schema(other)
+        return res
 
     def where(self, condition: Union[Column, str]) -> ParentDataFrame:
         if not isinstance(condition, (str, Column)):
@@ -1772,7 +1834,10 @@ class DataFrame(ParentDataFrame):
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
-        schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        # not all datatypes are supported in arrow based collect
+        # here always verify the schema by from_arrow_schema
+        schema2 = from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
+        schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1780,7 +1845,9 @@ class DataFrame(ParentDataFrame):
 
     def _to_table(self) -> Tuple["pa.Table", Optional[StructType]]:
         query = self._plan.to_proto(self._session.client)
-        table, schema = self._session.client.to_table(query, self._plan.observations)
+        table, schema, self._execution_info = self._session.client.to_table(
+            query, self._plan.observations
+        )
         assert table is not None
         return (table, schema)
 
@@ -1791,7 +1858,9 @@ class DataFrame(ParentDataFrame):
 
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        self._execution_info = ei
+        return pdf
 
     @property
     def schema(self) -> StructType:
@@ -1805,24 +1874,17 @@ class DataFrame(ParentDataFrame):
             self._cached_schema = self._session.client.schema(query)
         return copy.deepcopy(self._cached_schema)
 
+    @functools.cache
     def isLocal(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_local", plan=query).is_local
         assert result is not None
         return result
 
-    @cached_property
+    @functools.cached_property
     def isStreaming(self) -> bool:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
-        assert result is not None
-        return result
-
-    def _tree_string(self, level: Optional[int] = None) -> str:
-        query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(
-            method="tree_string", plan=query, level=level
-        ).tree_string
         assert result is not None
         return result
 
@@ -1832,6 +1894,7 @@ class DataFrame(ParentDataFrame):
         else:
             print(self.schema.treeString())
 
+    @functools.cache
     def inputFiles(self) -> List[str]:
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="input_files", plan=query).input_files
@@ -1922,25 +1985,29 @@ class DataFrame(ParentDataFrame):
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createOrReplaceTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=False, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=False
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def createOrReplaceGlobalTempView(self, name: str) -> None:
         command = plan.CreateView(
             child=self._plan, name=name, is_global=True, replace=True
         ).command(session=self._session.client)
-        self._session.client.execute_command(command, self._plan.observations)
+        _, _, ei = self._session.client.execute_command(command, self._plan.observations)
+        self._execution_info = ei
 
     def cache(self) -> ParentDataFrame:
         return self.persist()
@@ -2108,20 +2175,34 @@ class DataFrame(ParentDataFrame):
             other=other._plan.to_proto(other._session.client),
         )
 
+    @functools.cache
     def semanticHash(self) -> int:
         return self._session.client.semantic_hash(
             plan=self._plan.to_proto(self._session.client),
         )
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
-        return DataFrameWriterV2(self._plan, self._session, table)
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return DataFrameWriterV2(self._plan, self._session, table, cb)
+
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return MergeIntoWriter(
+            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
+        )
 
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, self._execution_info = self._session.client.execute_command(
+            cmd.command(self._session.client)
+        )
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
@@ -2129,7 +2210,9 @@ class DataFrame(ParentDataFrame):
 
     def localCheckpoint(self, eager: bool = True) -> "DataFrame":
         cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager)
-        _, properties = self._session.client.execute_command(cmd.command(self._session.client))
+        _, properties, self._execution_info = self._session.client.execute_command(
+            cmd.command(self._session.client)
+        )
         assert "checkpoint_command_result" in properties
         checkpointed = properties["checkpoint_command_result"]
         assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
@@ -2149,6 +2232,10 @@ class DataFrame(ParentDataFrame):
                 error_class="NOT_IMPLEMENTED",
                 message_parameters={"feature": "rdd"},
             )
+
+    @property
+    def executionInfo(self) -> Optional["ExecutionInfo"]:
+        return self._execution_info
 
 
 class DataFrameNaFunctions(ParentDataFrameNaFunctions):

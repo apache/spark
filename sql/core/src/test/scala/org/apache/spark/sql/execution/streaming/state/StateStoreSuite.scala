@@ -30,6 +30,8 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -41,6 +43,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
+import org.apache.spark.sql.execution.streaming.state.StateStoreValueRowFormatValidationFailure
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1606,12 +1609,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
     val valueRow = dataToValueRow(2)
-    val e = intercept[InvalidUnsafeRowException] {
+    val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
         keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
     }
-    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+    assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
     // When sqlConf.stateStoreFormatValidationEnabled is set to false and
     // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
@@ -1624,6 +1627,30 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // Shouldn't throw
     StateStoreProvider.validateStateRowFormat(
       keyRow, keySchema, valueRow, keySchema, storeConf)
+  }
+
+  test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
   }
 
   /** Return a new provider with a random id */

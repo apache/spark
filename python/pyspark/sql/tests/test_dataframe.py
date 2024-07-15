@@ -37,6 +37,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -529,7 +530,7 @@ class DataFrameTestsMixin:
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
 
     # Cartesian products require cross join syntax
     def test_require_cross(self):
@@ -741,6 +742,79 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "truncate", "arg_type": "str"},
         )
 
+    def test_df_merge_into(self):
+        try:
+            # InMemoryRowLevelOperationTableCatalog is a test catalog that is included in the
+            # catalyst-test package. If Spark complains that it can't find this class, make sure
+            # the catalyst-test JAR does exist in "SPARK_HOME/assembly/target/scala-x.xx/jars"
+            # directory. If not, build it with `build/sbt test:assembly` and copy it over.
+            self.spark.conf.set(
+                "spark.sql.catalog.testcat",
+                "org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog",
+            )
+            with self.table("testcat.ns1.target"):
+
+                def reset_target_table():
+                    self.spark.createDataFrame(
+                        [(1, "Alice"), (2, "Bob")], ["id", "name"]
+                    ).write.mode("overwrite").saveAsTable("testcat.ns1.target")
+
+                source = self.spark.createDataFrame(
+                    [(1, "Charlie"), (3, "David")], ["id", "name"]
+                )  # type: DataFrame
+
+                from pyspark.sql.functions import col
+
+                # Match -> update, NotMatch -> insert, NotMatchedBySource -> delete
+                reset_target_table()
+                # fmt: off
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(source.id == 1).update({"name": source.name}) \
+                    .whenNotMatched().insert({"id": source.id, "name": source.name}) \
+                    .whenNotMatchedBySource().delete() \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [Row(id=1, name="Charlie"), Row(id=3, name="David")],
+                )
+
+                # Match -> updateAll, NotMatch -> insertAll, NotMatchedBySource -> update
+                reset_target_table()
+                # fmt: off
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(source.id == 1).updateAll() \
+                    .whenNotMatched(source.id == 3).insertAll() \
+                    .whenNotMatchedBySource(col("target.id") == lit(2)) \
+                      .update({"name": lit("not_matched")}) \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [
+                        Row(id=1, name="Charlie"),
+                        Row(id=2, name="not_matched"),
+                        Row(id=3, name="David"),
+                    ],
+                )
+
+                # Match -> delete, NotMatchedBySource -> delete
+                reset_target_table()
+                # fmt: off
+                self.spark.createDataFrame([(1, "AliceJr")], ["id", "name"]) \
+                    .write.mode("append").saveAsTable("testcat.ns1.target")
+                source.mergeInto("testcat.ns1.target", source.id == col("target.id")) \
+                    .whenMatched(col("target.name") != lit("AliceJr")).delete() \
+                    .whenNotMatchedBySource().delete() \
+                    .merge()
+                # fmt: on
+                self.assertEqual(
+                    self.spark.table("testcat.ns1.target").orderBy("id").collect(),
+                    [Row(id=1, name="AliceJr")],
+                )
+        finally:
+            self.spark.conf.unset("spark.sql.catalog.testcat")
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
@@ -849,7 +923,15 @@ class DataFrameTestsMixin:
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    pass
+    def test_query_execution_unsupported_in_classic(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.range(1).executionInfo
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
+            message_parameters={"member": "queryExecution"},
+        )
 
 
 if __name__ == "__main__":

@@ -327,7 +327,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SPARK-22357 test binaryFiles minPartitions") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
       .set("spark.files.openCostInBytes", "0")
-      .set("spark.default.parallelism", "1"))
+      .set(DEFAULT_PARALLELISM.key, "1"))
 
     withTempDir { tempDir =>
       val tempDirPath = tempDir.getAbsolutePath

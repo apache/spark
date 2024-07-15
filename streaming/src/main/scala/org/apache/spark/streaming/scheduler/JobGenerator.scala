@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.TIMEOUT
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, StreamingConf, Time}
 import org.apache.spark.streaming.api.python.PythonDStream
@@ -198,7 +198,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val startTime = new Time(timer.getStartTime())
     graph.start(startTime - graph.batchDuration)
     timer.start(startTime.milliseconds)
-    logInfo("Started JobGenerator at " + startTime)
+    logInfo(log"Started JobGenerator at ${MDC(LogKeys.START_TIME, startTime)}")
   }
 
   /** Restarts the generator based on the information in checkpoint */
@@ -221,18 +221,19 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val checkpointTime = ssc.initialCheckpoint.checkpointTime
     val restartTime = new Time(timer.getRestartTime(graph.zeroTime.milliseconds))
     val downTimes = checkpointTime.until(restartTime, batchDuration)
-    logInfo("Batches during down time (" + downTimes.size + " batches): "
-      + downTimes.mkString(", "))
+    logInfo(log"Batches during down time (${MDC(LogKeys.NUM_BATCHES, downTimes.size)} batches): " +
+      log"${MDC(LogKeys.BATCH_TIMES, downTimes.mkString(","))}")
 
     // Batches that were unprocessed before failure
     val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
-    logInfo("Batches pending processing (" + pendingTimes.length + " batches): " +
-      pendingTimes.mkString(", "))
+    logInfo(log"Batches pending processing (" +
+      log"${MDC(LogKeys.COUNT, pendingTimes.length)} batches): " +
+      log"${MDC(LogKeys.PENDING_TIMES, pendingTimes.mkString(","))}")
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
       .distinct.sorted(Time.ordering)
-    logInfo("Batches to reschedule (" + timesToReschedule.length + " batches): " +
-      timesToReschedule.mkString(", "))
+    logInfo(log"Batches to reschedule (${MDC(LogKeys.COUNT, timesToReschedule.length)} " +
+      log"batches): ${MDC(LogKeys.BATCH_TIMES, timesToReschedule.mkString(","))}")
     timesToReschedule.foreach { time =>
       // Allocate the related blocks when recovering from failure, because some blocks that were
       // added but not allocated, are dangling in the queue after recovering, we have to allocate
@@ -243,7 +244,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
-    logInfo("Restarted JobGenerator at " + restartTime)
+    logInfo(log"Restarted JobGenerator at ${MDC(LogKeys.RESTART_TIME, restartTime)}")
   }
 
   /** Generate jobs and perform checkpointing for the given `time`.  */
@@ -299,7 +300,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Perform checkpoint for the given `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean): Unit = {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
-      logInfo("Checkpointing graph for time " + time)
+      logInfo(log"Checkpointing graph for time ${MDC(LogKeys.TIME, time)}")
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
     } else if (clearCheckpointDataLater) {

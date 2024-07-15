@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
@@ -1427,12 +1427,12 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {
-    val exception = intercept[NoSuchDatabaseException] {
+    val exception = intercept[AnalysisException] {
       sql("USE ns1")
     }
     checkError(exception,
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`ns1`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`ns1`"))
   }
 
   test("SPARK-31100: Use: v2 catalog that implements SupportsNamespaces is used " +
@@ -1736,6 +1736,16 @@ class DataSourceV2SQLSuiteV1Filter
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
       sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
+    }
+  }
+
+  test("SPARK-48709: varchar resolution mismatch for DataSourceV2 CTAS") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
+      withTable("testcat.ns.t1", "testcat.ns.t2") {
+        sql("CREATE TABLE testcat.ns.t1 (d1 string, d2 varchar(200)) USING parquet")
+        sql("CREATE TABLE testcat.ns.t2 USING foo as select * from testcat.ns.t1")
+      }
     }
   }
 
@@ -2578,7 +2588,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`spark_catalog`.`abc`"))
 
     // V2 non-session catalog is used.
     sql("CREATE NAMESPACE testcat.ns1")
@@ -2588,7 +2598,7 @@ class DataSourceV2SQLSuiteV1Filter
     checkError(
       exception = intercept[AnalysisException](sql("COMMENT ON NAMESPACE testcat.abc IS NULL")),
       errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`abc`"))
+      parameters = Map("schemaName" -> "`testcat`.`abc`"))
   }
 
   private def checkNamespaceComment(namespace: String, comment: String): Unit = {
@@ -3481,6 +3491,59 @@ class DataSourceV2SQLSuiteV1Filter
       assert(table.properties.get(TableCatalog.PROP_OWNER) === testOwner)
     } finally {
       CURRENT_USER.remove()
+    }
+  }
+
+  test("SPARK-48286: Add new column with default value which is not foldable") {
+    val foldableExpressions = Seq("1", "2 + 1")
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+        val exception = intercept[AnalysisException] {
+          // Rand function is not foldable
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
+        }
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
+        assert(exception.messageParameters("colName") == "`col2`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+        assert(exception.messageParameters("statement") == "ALTER TABLE")
+      }
+      foldableExpressions.foreach(expr => {
+        withTable("tab") {
+          spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT $expr")
+        }
+      })
+    }
+  }
+
+  test("SPARK-36680: Supports Dynamic Table Options for Spark SQL") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      var df = sql(s"SELECT * FROM $t1")
+      var collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.isEmpty)
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+
+      df = sql(s"SELECT * FROM $t1 WITH (`split-size` = 5)")
+      collected = df.queryExecution.optimizedPlan.collect {
+        case scan: DataSourceV2ScanRelation =>
+          assert(scan.relation.options.get("split-size") == "5")
+      }
+      assert (collected.size == 1)
+      checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+
+      val noValues = intercept[AnalysisException](
+        sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
+      assert(noValues.message.contains(
+        "Operation not allowed: Values must be specified for key(s): [split-size]"))
     }
   }
 

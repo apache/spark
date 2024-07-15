@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -121,6 +122,24 @@ class DataFrameAsOfJoinSuite extends QueryTest
       },
       errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
       parameters = Map.empty)
+  }
+
+  test("as-of join - unsupported direction") {
+    val (df1, df2) = prepareForAsOfJoin()
+    val direction = "unknown"
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.joinAsOf(df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = lit(-1), allowExactMatches = true,
+          direction = direction)
+      },
+      errorClass = "AS_OF_JOIN.UNSUPPORTED_DIRECTION",
+      sqlState = "42604",
+      parameters = Map(
+        "direction" -> direction,
+        "supported" -> AsOfJoinDirection.supported.mkString("'", "', '", "'")
+      )
+    )
   }
 
   test("as-of join - allowExactMatches = false") {

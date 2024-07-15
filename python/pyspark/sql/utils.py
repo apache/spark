@@ -20,6 +20,7 @@ import os
 from typing import (
     Any,
     Callable,
+    Dict,
     Optional,
     List,
     Sequence,
@@ -27,7 +28,6 @@ from typing import (
     cast,
     TypeVar,
     Union,
-    Type,
 )
 
 # For backward compatibility.
@@ -53,11 +53,11 @@ if TYPE_CHECKING:
         JavaClass,
         JavaGateway,
         JavaObject,
+        JVMView,
     )
     from pyspark import SparkContext
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -72,7 +72,7 @@ except ImportError:
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
-def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
+def to_java_array(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> "JavaArray":
     """
     Convert python list to java type array
 
@@ -89,6 +89,14 @@ def toJArray(gateway: "JavaGateway", jtype: "JavaClass", arr: Sequence[Any]) -> 
     for i in range(0, len(arr)):
         jarray[i] = arr[i]
     return jarray
+
+
+def to_scala_map(jvm: "JVMView", dic: Dict) -> "JavaObject":
+    """
+    Convert a dict into a Scala Map.
+    """
+    assert jvm is not None
+    return jvm.PythonUtils.toScalaMap(dic)
 
 
 def require_test_compiled() -> None:
@@ -415,17 +423,6 @@ def pyspark_column_op(
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
     return result.fillna(fillna) if fillna is not None else result
-
-
-def get_window_class() -> Type["Window"]:
-    from pyspark.sql.window import Window as PySparkWindow
-
-    if is_remote():
-        from pyspark.sql.connect.window import Window as ConnectWindow
-
-        return ConnectWindow
-    else:
-        return PySparkWindow
 
 
 def get_lit_sql_str(val: str) -> str:

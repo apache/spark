@@ -98,13 +98,13 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>connect/server</module>
+    <module>connect/common</module>
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/server</module>
-    <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
@@ -115,7 +115,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.7</maven.version>
+    <maven.version>3.9.8</maven.version>
     <exec-maven-plugin.version>3.2.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7</asm.version>
@@ -128,16 +128,16 @@
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.2</zookeeper.version>
-    <curator.version>5.6.0</curator.version>
+    <curator.version>5.7.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.7.0</kafka.version>
+    <kafka.version>3.7.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.13.1</parquet.version>
+    <parquet.version>1.14.1</parquet.version>
     <orc.version>2.0.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.21</jetty.version>
@@ -151,7 +151,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.25</codahale.metrics.version>
+    <codahale.metrics.version>4.2.26</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.3</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -180,8 +180,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.17.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.17.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
@@ -206,8 +206,8 @@
     <libthrift.version>0.16.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.17.0</selenium.version>
-    <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
+    <selenium.version>4.21.0</selenium.version>
+    <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.8.0</commons-cli.version>
@@ -216,7 +216,7 @@
     <datasketches.version>6.0.0</datasketches.version>
     <netty.version>4.1.110.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
-    <icu4j.version>72.1</icu4j.version>
+    <icu4j.version>75.1</icu4j.version>
     <junit-jupiter.version>5.9.3</junit-jupiter.version>
     <junit-platform.version>1.9.3</junit-platform.version>
     <sbt-jupiter-interface.version>0.11.1</sbt-jupiter-interface.version>
@@ -230,7 +230,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.0</kubernetes-client.version>
+    <kubernetes-client.version>6.13.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -288,7 +288,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.1.0-jre</connect.guava.version>
+    <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.62.2</io.grpc.version>
     <mima.version>1.1.3</mima.version>
@@ -323,10 +323,10 @@
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
-    <mysql.connector.version>8.4.0</mysql.connector.version>
+    <mysql.connector.version>9.0.0</mysql.connector.version>
     <postgresql.version>42.7.3</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.6.1.jre11</mssql.jdbc.version>
+    <mssql.jdbc.version>12.6.2.jre11</mssql.jdbc.version>
     <ojdbc11.version>23.4.0.24.05</ojdbc11.version>
   </properties>
   <repositories>
@@ -415,17 +415,17 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
+      <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -691,7 +691,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.11.4</version>
+        <version>9.2.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -830,7 +830,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.6</version>
+        <version>1.1.0</version>
       </dependency>
 
       <!-- Netty Begin -->
@@ -1120,7 +1120,7 @@
       <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-xml_${scala.binary.version}</artifactId>
-        <version>2.2.0</version>
+        <version>2.3.0</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -1156,25 +1156,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.18</version>
+        <version>3.2.19</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>scalacheck-1-18_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>mockito-5-12_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
-        <version>3.2.18.0</version>
+        <artifactId>selenium-4-21_${scala.binary.version}</artifactId>
+        <version>3.2.19.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1186,19 +1186,19 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.10.0</version>
+        <version>5.12.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.11</version>
+        <version>1.14.17</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.11</version>
+        <version>1.14.17</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1210,7 +1210,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.17.0</version>
+        <version>1.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1264,7 +1264,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java</artifactId>
-        <version>3.3.5</version>
+        <version>3.3.6</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1284,7 +1284,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java-transport-zerodep</artifactId>
-        <version>3.3.5</version>
+        <version>3.3.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2331,6 +2331,10 @@
           <exclusion>
             <groupId>co.cask.tephra</groupId>
             <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.jolbox</groupId>
+            <artifactId>bonecp</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

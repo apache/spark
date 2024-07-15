@@ -89,6 +89,12 @@ object ConstantFolding extends Rule[LogicalPlan] {
           e
       }
 
+    // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug)
+      if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+        mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+      s
+
     // Replace ScalarSubquery with null if its maxRows is 0
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
@@ -738,18 +744,19 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
     } else {
       pattern match {
         case startsWith(prefix) =>
-          Some(StartsWith(input, Literal(prefix)))
+          Some(StartsWith(input, Literal.create(prefix, input.dataType)))
         case endsWith(postfix) =>
-          Some(EndsWith(input, Literal(postfix)))
+          Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix)))))
+        case startsAndEndsWith(prefix, postfix) => Some(
+          And(GreaterThanOrEqual(Length(input), Literal.create(prefix.length + postfix.length)),
+          And(StartsWith(input, Literal.create(prefix, input.dataType)),
+            EndsWith(input, Literal.create(postfix, input.dataType)))))
         case contains(infix) =>
-          Some(Contains(input, Literal(infix)))
+          Some(Contains(input, Literal.create(infix, input.dataType)))
         case equalTo(str) =>
-          Some(EqualTo(input, Literal(str)))
+          Some(EqualTo(input, Literal.create(str, input.dataType)))
         case _ => None
       }
     }
@@ -785,7 +792,7 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(LIKE_FAMLIY), ruleId) {
-    case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
+    case l @ Like(input, Literal(pattern, _: StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
@@ -1085,17 +1092,6 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   // any precision or range.
   private def isWiderCast(from: DataType, to: NumericType): Boolean =
     from.isInstanceOf[NumericType] && Cast.canUpCast(from, to)
-}
-
-
-/**
- * Removes nodes that are not necessary.
- */
-object RemoveDispensableExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(UNARY_POSITIVE), ruleId) {
-    case UnaryPositive(child) => child
-  }
 }
 
 

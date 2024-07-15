@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -143,6 +143,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       errorClass, missingCol, orderedCandidates, a.origin)
   }
 
+  /**
+   * Checks whether the operator allows non-deterministic expressions.
+   */
+  private def operatorAllowsNonDeterministicExpressions(plan: LogicalPlan): Boolean = {
+    plan match {
+      case p: SupportsNonDeterministicExpression =>
+        p.allowNonDeterministicExpression
+      case _ => false
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
@@ -254,6 +265,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 hof.invalidFormat(checkRes)
             }
 
+          case hof: HigherOrderFunction
+              if hof.resolved && hof.functions
+                .exists(_.exists(_.isInstanceOf[PythonUDF])) =>
+            val u = hof.functions.flatMap(_.find(_.isInstanceOf[PythonUDF])).head
+            hof.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+              messageParameters = Map("funcName" -> toSQLExpr(u)))
+
           // If an attribute can't be resolved as a map key of string type, either the key should be
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
@@ -267,6 +286,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Early checks for column definitions, to produce better error messages
         ColumnDefinition.checkColumnDefinitions(operator)
 
+        var stagedError: Option[() => Unit] = None
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
             failUnresolvedAttribute(operator, a, "UNRESOLVED_COLUMN")
@@ -305,12 +325,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // `Grouping` and `GroupingID` are considered as of having lower priority than the other
+          // nodes which cause errors.
           case g: Grouping =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
           case g: GroupingID =>
-            g.failAnalysis(
-              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty)
+            if (stagedError.isEmpty) stagedError = Some(() => g.failAnalysis(
+              errorClass = "UNSUPPORTED_GROUPING_EXPRESSION", messageParameters = Map.empty))
 
           case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
               !e.isInstanceOf[WindowExpression] && e.resolved =>
@@ -369,6 +391,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case _ =>
         })
+        if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
@@ -706,6 +729,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
+            !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
             // non-deterministic expressions inside CollectMetrics have been
             // already validated inside checkMetric function
@@ -901,11 +925,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         val correlatedCols = AttributeSet(subqueryColumns)
         val invalidColsLegacy = groupByCols -- correlatedCols
         if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
-          logWarning("Using legacy behavior for " +
-            s"${SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE
-              .key}. Query would be rejected with non-legacy behavior but is allowed by " +
-            s"legacy behavior. Query may be invalid and return wrong results if the scalar " +
-            s"subquery's group-by outputs multiple rows.")
+          logWarning(log"Using legacy behavior for " +
+            log"${MDC(LogKeys.CONFIG, SQLConf
+            .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
+            log"Query would be rejected with non-legacy behavior but is allowed by " +
+            log"legacy behavior. Query may be invalid and return wrong results if the scalar " +
+            log"subquery's group-by outputs multiple rows.")
         }
         invalidColsLegacy
       }

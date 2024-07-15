@@ -619,15 +619,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("CREATE TABLE with table property") {
     withTable("h2.test.new_table") {
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
             " TBLPROPERTIES('ENGINE'='tableEngineName')")
         },
-        errorClass = "FAILED_JDBC.UNCLASSIFIED",
+        errorClass = "FAILED_JDBC.CREATE_TABLE",
         parameters = Map(
-          "url" -> "jdbc:",
-          "message" -> "Failed table creation: test.new_table"))
+          "url" -> "jdbc:.*",
+          "tableName" -> "`test`.`new_table`"))
     }
   }
 
@@ -639,14 +639,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
-    checkError(
+    checkErrorMatchPVals(
       exception = intercept[AnalysisException]{
         sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
       },
-      errorClass = "FAILED_JDBC.UNCLASSIFIED",
+      errorClass = "FAILED_JDBC.CREATE_TABLE",
       parameters = Map(
-        "url" -> "jdbc:",
-        "message" -> "Failed table creation: test.new_table"))
+        "url" -> "jdbc:.*",
+        "tableName" -> "`test`.`new_table`"))
   }
 
   test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {

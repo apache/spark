@@ -568,7 +568,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_print_schema(self):
         # SPARK-41216: Test print schema
-        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y")._tree_string()
+        tree_str = self.connect.sql("SELECT 1 AS X, 2 AS Y").schema.treeString()
         # root
         #  |-- X: integer (nullable = false)
         #  |-- Y: integer (nullable = false)
@@ -628,6 +628,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             sqlText, args={"minId": 7, "m": CF.create_map(CF.lit("a"), CF.lit(1))}
         )
         df2 = self.spark.sql(sqlText, args={"minId": 7, "m": SF.create_map(SF.lit("a"), SF.lit(1))})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+    def test_namedargs_with_global_limit(self):
+        sqlText = """SELECT * FROM VALUES (TIMESTAMP('2022-12-25 10:30:00'), 1) as tab(date, val)
+         where val = :val"""
+        df = self.connect.sql(sqlText, args={"val": 1})
+        df2 = self.spark.sql(sqlText, args={"val": 1})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_sql_with_pos_args(self):
