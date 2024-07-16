@@ -57,7 +57,7 @@ private[classification] object GLMClassificationModel {
       val metadata = compact(render(
         ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
         ("numFeatures" -> numFeatures) ~ ("numClasses" -> numClasses)))
-      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
