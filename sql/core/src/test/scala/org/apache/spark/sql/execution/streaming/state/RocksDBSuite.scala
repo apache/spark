@@ -1672,6 +1672,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         // do not upload version 1 snapshot created previously
         db.doMaintenance()
+        assert(snapshotVersionsPresent(remoteDir) == Seq.empty)
 
         db.commit() // create snapshot again
 
