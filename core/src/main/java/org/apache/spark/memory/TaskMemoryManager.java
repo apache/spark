@@ -123,6 +123,20 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Current off heap memory usage by this task.
+   */
+  private long currentOffHeapMemory = 0L;
+
+  private final Object offHeapMemoryLock = new Object();
+
+  /*
+   * Current on heap memory usage by this task.
+   */
+  private long currentOnHeapMemory = 0L;
+
+  private final Object onHeapMemoryLock = new Object();
+
+  /**
    * Peak off heap memory usage by this task.
    */
   private volatile long peakOffHeapMemory = 0L;
@@ -214,11 +228,15 @@ public class TaskMemoryManager {
       }
 
       if (mode == MemoryMode.OFF_HEAP) {
-        peakOffHeapMemory = Math.max(peakOffHeapMemory,
-          memoryManager.getOffHeapExecutionMemoryUsageForTask(taskAttemptId));
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory += got;
+          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+        }
       } else {
-        peakOnHeapMemory = Math.max(peakOnHeapMemory,
-          memoryManager.getOnHeapExecutionMemoryUsageForTask(taskAttemptId));
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory += got;
+          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
+        }
       }
       return got;
     }
@@ -287,6 +305,15 @@ public class TaskMemoryManager {
         consumer);
     }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
+    if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory -= size;
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory -= size;
+      }
+    }
   }
 
   /**

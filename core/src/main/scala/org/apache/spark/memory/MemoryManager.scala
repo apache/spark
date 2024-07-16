@@ -219,22 +219,6 @@ private[spark] abstract class MemoryManager(
       offHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId)
   }
 
-  /**
-   * Return the on-heap execution memory consumption, in bytes, for the given task.
-   */
-  private[memory] def getOnHeapExecutionMemoryUsageForTask(taskAttemptId: Long)
-  : Long = synchronized {
-    onHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId)
-  }
-
-  /**
-   * Return the off-heap execution memory consumption, in bytes, for the given task.
-   */
-  private[memory] def getOffHeapExecutionMemoryUsageForTask(taskAttemptId: Long)
-  : Long = synchronized {
-    offHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId)
-  }
-
   // -- Fields related to Tungsten managed memory -------------------------------------------------
 
   /**
