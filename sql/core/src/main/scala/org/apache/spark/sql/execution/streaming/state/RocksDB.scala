@@ -190,7 +190,10 @@ class RocksDB(
         if (lastSnapshotVersion > latestSnapshotVersion) {
           // discard any newer snapshots
           synchronized {
-            latestSnapshot = None
+            if (latestSnapshot.isDefined) {
+              oldSnapshots += latestSnapshot.get
+              latestSnapshot = None
+            }
           }
         }
 
