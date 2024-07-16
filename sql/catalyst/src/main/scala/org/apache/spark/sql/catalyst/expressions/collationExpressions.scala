@@ -120,7 +120,7 @@ case class Collate(child: Expression, collationName: String)
 case class Collation(child: Expression)
   extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, SQLConf.get.defaultStringType)
