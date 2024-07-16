@@ -287,12 +287,7 @@ class SparkContext(config: SparkConf) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(
-      conf,
-      isLocal,
-      listenerBus,
-      SparkContext.numDriverCores(master, conf),
-      this)
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master, conf))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -426,7 +421,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
     // We can remove this after Apache Hadoop 3.4.1 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -2326,6 +2321,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       _dagScheduler = null
     }
+    // In case there are still events being posted during the shutdown of plugins,
+    // invoke the shutdown of each plugin before the listenerBus is stopped.
+    Utils.tryLogNonFatalError {
+      _plugins.foreach(_.shutdown())
+    }
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
@@ -2336,9 +2336,6 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         env.metricsSystem.report()
       }
-    }
-    Utils.tryLogNonFatalError {
-      _plugins.foreach(_.shutdown())
     }
     Utils.tryLogNonFatalError {
       FallbackStorage.cleanUp(_conf, _hadoopConfiguration)
@@ -2843,7 +2840,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Post the environment update event once the task scheduler is ready */
-  private def postEnvironmentUpdate(): Unit = {
+  private[spark] def postEnvironmentUpdate(): Unit = {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = allAddedJars.keys.toSeq

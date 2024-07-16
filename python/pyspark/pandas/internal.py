@@ -41,8 +41,7 @@ from pyspark.sql.types import (  # noqa: F401
     StructType,
     StringType,
 )
-from pyspark.sql.utils import is_timestamp_ntz_preferred
-from pyspark.sql.utils import is_remote, get_dataframe_class
+from pyspark.sql.utils import is_timestamp_ntz_preferred, is_remote
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
@@ -620,8 +619,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-        SparkDataFrame = get_dataframe_class()
-        assert isinstance(spark_frame, SparkDataFrame)
+        assert isinstance(spark_frame, PySparkDataFrame)
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:

@@ -85,6 +85,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(booleans)
     testImplicit(booleans.toSeq)
     testImplicit(booleans.toSeq)(newBooleanSeqEncoder)
+    testImplicit(booleans.toSeq)(newSequenceEncoder)
     testImplicit(booleans.toImmutableArraySeq)
 
     val bytes = Array(76.toByte, 59.toByte, 121.toByte)
@@ -93,6 +94,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(bytes)
     testImplicit(bytes.toSeq)
     testImplicit(bytes.toSeq)(newByteSeqEncoder)
+    testImplicit(bytes.toSeq)(newSequenceEncoder)
     testImplicit(bytes.toImmutableArraySeq)
 
     val shorts = Array(21.toShort, (-213).toShort, 14876.toShort)
@@ -101,6 +103,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(shorts)
     testImplicit(shorts.toSeq)
     testImplicit(shorts.toSeq)(newShortSeqEncoder)
+    testImplicit(shorts.toSeq)(newSequenceEncoder)
     testImplicit(shorts.toImmutableArraySeq)
 
     val ints = Array(4, 6, 5)
@@ -109,6 +112,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(ints)
     testImplicit(ints.toSeq)
     testImplicit(ints.toSeq)(newIntSeqEncoder)
+    testImplicit(ints.toSeq)(newSequenceEncoder)
     testImplicit(ints.toImmutableArraySeq)
 
     val longs = Array(System.nanoTime(), System.currentTimeMillis())
@@ -117,6 +121,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(longs)
     testImplicit(longs.toSeq)
     testImplicit(longs.toSeq)(newLongSeqEncoder)
+    testImplicit(longs.toSeq)(newSequenceEncoder)
     testImplicit(longs.toImmutableArraySeq)
 
     val floats = Array(3f, 10.9f)
@@ -125,6 +130,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(floats)
     testImplicit(floats.toSeq)
     testImplicit(floats.toSeq)(newFloatSeqEncoder)
+    testImplicit(floats.toSeq)(newSequenceEncoder)
     testImplicit(floats.toImmutableArraySeq)
 
     val doubles = Array(23.78d, -329.6d)
@@ -133,6 +139,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(doubles)
     testImplicit(doubles.toSeq)
     testImplicit(doubles.toSeq)(newDoubleSeqEncoder)
+    testImplicit(doubles.toSeq)(newSequenceEncoder)
     testImplicit(doubles.toImmutableArraySeq)
 
     val strings = Array("foo", "baz", "bar")
@@ -140,6 +147,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(strings)
     testImplicit(strings.toSeq)
     testImplicit(strings.toSeq)(newStringSeqEncoder)
+    testImplicit(strings.toSeq)(newSequenceEncoder)
     testImplicit(strings.toImmutableArraySeq)
 
     val myTypes = Array(MyType(12L, Math.E, Math.PI), MyType(0, 0, 0))
@@ -147,6 +155,7 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(myTypes)
     testImplicit(myTypes.toSeq)
     testImplicit(myTypes.toSeq)(newProductSeqEncoder[MyType])
+    testImplicit(myTypes.toSeq)(newSequenceEncoder)
     testImplicit(myTypes.toImmutableArraySeq)
 
     // Others.

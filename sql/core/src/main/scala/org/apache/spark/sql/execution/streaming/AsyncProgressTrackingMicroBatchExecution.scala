@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.internal.LogKeys.PRETTY_ID_STRING
+import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
@@ -158,8 +158,8 @@ class AsyncProgressTrackingMicroBatchExecution(
         }
       })
       .exceptionally((th: Throwable) => {
-        logError(s"Encountered error while performing" +
-          s" async offset write for batch ${execCtx.batchId}", th)
+        logError(log"Encountered error while performing async offset write for batch " +
+          log"${MDC(BATCH_ID, execCtx.batchId)}", th)
         errorNotifier.markError(th)
         return
       })
@@ -190,8 +190,8 @@ class AsyncProgressTrackingMicroBatchExecution(
         commitLog
           .addAsync(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))
           .exceptionally((th: Throwable) => {
-            logError(s"Got exception during async write to commit log" +
-              s" for batch ${execCtx.batchId}", th)
+            logError(log"Got exception during async write to commit log for batch " +
+              log"${MDC(BATCH_ID, execCtx.batchId)}", th)
             errorNotifier.markError(th)
             return
           })

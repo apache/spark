@@ -19,12 +19,14 @@ package org.apache.spark
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.log10
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
@@ -72,7 +74,7 @@ object Partitioner {
       None
     }
 
-    val defaultNumPartitions = if (rdd.context.conf.contains("spark.default.parallelism")) {
+    val defaultNumPartitions = if (rdd.context.conf.contains(config.DEFAULT_PARALLELISM.key)) {
       rdd.context.defaultParallelism
     } else {
       rdds.map(_.partitions.length).max
@@ -149,7 +151,9 @@ private[spark] class KeyGroupedPartitioner(
     override val numPartitions: Int) extends Partitioner {
   override def getPartition(key: Any): Int = {
     val keys = key.asInstanceOf[Seq[Any]]
-    valueMap.getOrElseUpdate(keys, Utils.nonNegativeMod(keys.hashCode, numPartitions))
+    val normalizedKeys = ArraySeq.from(keys)
+    valueMap.getOrElseUpdate(normalizedKeys,
+      Utils.nonNegativeMod(normalizedKeys.hashCode, numPartitions))
   }
 }
 

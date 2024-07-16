@@ -1418,10 +1418,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       checkAnswer(df, expectedAnswer) // check correctness of output
 
-      spark.sessionState.conf.settings.synchronized {
-        val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         df = sql(query)
         bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
@@ -1429,10 +1426,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
         assert(shj.size === 1,
           "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }
-
       after()
     }
 
@@ -1474,10 +1468,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     checkAnswer(df, answer) // check correctness of output
 
-    spark.sessionState.conf.settings.synchronized {
-      val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
-
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       df = sql(leftSemiJoinQuery)
       bhj = df.queryExecution.sparkPlan.collect {
         case j: BroadcastHashJoinExec => j
@@ -1489,10 +1480,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       assert(shj.size === 1,
         "SortMergeJoinExec should be planned when BroadcastHashJoin is turned off")
-
-      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
-
   }
 
   test("Deals with wrong Hive's statistics (zero rowCount)") {
@@ -1615,7 +1603,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         Seq(tbl, ext_tbl).foreach { tblName =>
           sql(s"INSERT INTO $tblName VALUES (1, 'a', '2019-12-13')")
 
-          val expectedSize = 657
+          val expectedSize = 690
           // analyze table
           sql(s"ANALYZE TABLE $tblName COMPUTE STATISTICS NOSCAN")
           var tableStats = getTableStats(tblName)

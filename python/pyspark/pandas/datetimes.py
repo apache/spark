@@ -596,7 +596,7 @@ class DatetimeMethods:
 
         Examples
         --------
-        >>> series = ps.Series(pd.Series(pd.date_range('2012-1-1 12:45:31', periods=3, freq='M')))
+        >>> series = ps.Series(pd.Series(pd.date_range('2012-1-1 12:45:31', periods=3, freq='ME')))
         >>> series.dt.normalize()
         0   2012-01-31
         1   2012-02-29
@@ -839,7 +839,7 @@ class DatetimeMethods:
 
         Examples
         --------
-        >>> series = ps.Series(pd.date_range(start='2018-01', freq='M', periods=3))
+        >>> series = ps.Series(pd.date_range(start='2018-01', freq='ME', periods=3))
         >>> series
         0   2018-01-31
         1   2018-02-28

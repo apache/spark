@@ -536,7 +536,7 @@ class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
 }
 
 class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
-  private def db: String = spark.sharedState.globalTempViewManager.database
+  private def db: String = spark.sharedState.globalTempDB
   override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = {
     s"$db.$viewName"

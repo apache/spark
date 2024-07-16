@@ -149,7 +149,6 @@ from pyspark.pandas.typedef.typehints import (
     create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.sql.utils import get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -529,7 +528,6 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -537,7 +535,7 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = data
-        elif isinstance(data, SparkDataFrame):
+        elif isinstance(data, PySparkDataFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -5306,7 +5304,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5394,7 +5392,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5476,7 +5474,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -10066,7 +10064,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 
@@ -13730,8 +13728,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    SparkDataFrame = get_dataframe_class()
-    assert isinstance(sdf, SparkDataFrame)
+    assert isinstance(sdf, PySparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)

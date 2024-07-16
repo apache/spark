@@ -36,7 +36,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
@@ -998,11 +998,13 @@ private[spark] class DAGScheduler(
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
-        logInfo("Job %d finished: %s, took %f s".format
-          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+        logInfo(log"Job ${MDC(LogKeys.JOB_ID, waiter.jobId)} finished: " +
+          log"${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}, took " +
+          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e6)} ms")
       case scala.util.Failure(exception) =>
-        logInfo("Job %d failed: %s, took %f s".format
-          (waiter.jobId, callSite.shortForm, (System.nanoTime - start) / 1e9))
+        logInfo(log"Job ${MDC(LogKeys.JOB_ID, waiter.jobId)} failed: " +
+          log"${MDC(LogKeys.CALL_SITE_SHORT_FORM, callSite.shortForm)}, took " +
+          log"${MDC(LogKeys.TIME, (System.nanoTime - start) / 1e6)} ms")
         // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
         val callerStackTrace = Thread.currentThread().getStackTrace.tail
         exception.setStackTrace(exception.getStackTrace ++ callerStackTrace)
@@ -2019,7 +2021,7 @@ private[spark] class DAGScheduler(
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
           if (ignoreStageFailure) {
-            logInfo(log"Ignoring fetch failure from ${MDC(TASK_ID, task)} of " +
+            logInfo(log"Ignoring fetch failure from ${MDC(TASK_NAME, task)} of " +
               log"${MDC(STAGE, failedStage)} attempt " +
               log"${MDC(STAGE_ATTEMPT, task.stageAttemptId)} when count " +
               log"${MDC(MAX_ATTEMPTS, config.STAGE_MAX_CONSECUTIVE_ATTEMPTS.key)} " +
@@ -2243,7 +2245,7 @@ private[spark] class DAGScheduler(
         // Always fail the current stage and retry all the tasks when a barrier task fail.
         val failedStage = stageIdToStage(task.stageId)
         if (failedStage.latestInfo.attemptNumber() != task.stageAttemptId) {
-          logInfo(log"Ignoring task failure from ${MDC(TASK_ID, task)} as it's from " +
+          logInfo(log"Ignoring task failure from ${MDC(TASK_NAME, task)} as it's from " +
             log"${MDC(FAILED_STAGE, failedStage)} attempt ${MDC(STAGE_ATTEMPT, task.stageAttemptId)} " +
             log"and there is a more recent attempt for that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
@@ -2629,7 +2631,7 @@ private[spark] class DAGScheduler(
   }
 
   private def handleResubmittedFailure(task: Task[_], stage: Stage): Unit = {
-              logInfo(log"Resubmitted ${MDC(TASK_ID, task)}, so marking it as still running.")
+              logInfo(log"Resubmitted ${MDC(TASK_NAME, task)}, so marking it as still running.")
     stage match {
       case sms: ShuffleMapStage =>
         sms.pendingPartitions += task.partitionId

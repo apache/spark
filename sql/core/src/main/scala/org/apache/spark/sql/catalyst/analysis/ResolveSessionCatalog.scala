@@ -103,6 +103,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         builder.build())
       AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
 
+    case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
+        if isSessionCatalog(catalog) =>
+      val prop = Map(ClusterBySpec.toProperty(table.schema,
+        clusterBySpecOpt.getOrElse(ClusterBySpec(Nil)), conf.resolver))
+      AlterTableSetPropertiesCommand(table.catalogTable.identifier, prop, isView = false)
+
     case RenameColumn(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "RENAME COLUMN")
 

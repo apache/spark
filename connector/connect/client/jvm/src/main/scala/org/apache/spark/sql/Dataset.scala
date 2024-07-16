@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
-import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.expressions.ScalaUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
@@ -1387,7 +1388,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def reduce(func: (T, T) => T): T = {
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: agnosticEncoder :: Nil,
       outputEncoder = agnosticEncoder)
@@ -2705,7 +2706,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def filter(func: T => Boolean): Dataset[T] = {
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = PrimitiveBooleanEncoder)
@@ -2758,7 +2759,7 @@ class Dataset[T] private[sql] (
    */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     val outputEncoder = encoderFor[U]
-    val udf = ScalarUserDefinedFunction(
+    val udf = ScalaUserDefinedFunction(
       function = func,
       inputEncoders = agnosticEncoder :: Nil,
       outputEncoder = outputEncoder)
@@ -2830,7 +2831,7 @@ class Dataset[T] private[sql] (
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame = {
-    val generator = ScalarUserDefinedFunction(
+    val generator = ScalaUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       UnboundRowEncoder :: Nil,
       ScalaReflection.encoderFor[Seq[A]])
@@ -2862,7 +2863,7 @@ class Dataset[T] private[sql] (
   @deprecated("use flatMap() or select() with functions.explode() instead", "3.5.0")
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
       f: A => IterableOnce[B]): DataFrame = {
-    val generator = ScalarUserDefinedFunction(
+    val generator = ScalaUserDefinedFunction(
       UdfUtils.iterableOnceToSeq(f),
       Nil,
       ScalaReflection.encoderFor[Seq[B]])
@@ -3210,6 +3211,38 @@ class Dataset[T] private[sql] (
    */
   def writeTo(table: String): DataFrameWriterV2[T] = {
     new DataFrameWriterV2[T](table, this)
+  }
+
+  /**
+   * Merges a set of updates, insertions, and deletions based on a source table into a target
+   * table.
+   *
+   * Scala Examples:
+   * {{{
+   *   spark.table("source")
+   *     .mergeInto("target", $"source.id" === $"target.id")
+   *     .whenMatched($"salary" === 100)
+   *     .delete()
+   *     .whenNotMatched()
+   *     .insertAll()
+   *     .whenNotMatchedBySource($"salary" === 100)
+   *     .update(Map(
+   *       "salary" -> lit(200)
+   *     ))
+   *     .merge()
+   * }}}
+   *
+   * @group basic
+   * @since 4.0.0
+   */
+  def mergeInto(table: String, condition: Column): MergeIntoWriter[T] = {
+    if (isStreaming) {
+      throw new AnalysisException(
+        errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+        messageParameters = Map("methodName" -> toSQLId("mergeInto")))
+    }
+
+    new MergeIntoWriter[T](table, this, condition)
   }
 
   /**

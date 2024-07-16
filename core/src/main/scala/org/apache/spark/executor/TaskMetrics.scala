@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 import scala.jdk.CollectionConverters._
@@ -29,6 +29,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -150,6 +151,11 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v.asJava)
 
+  private val (readLock, writeLock) = {
+    val lock = new ReentrantReadWriteLock()
+    (lock.readLock(), lock.writeLock())
+  }
+
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
    * data, defined only in tasks with input.
@@ -264,12 +270,32 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def externalAccums = _externalAccums.asScala
+  private[spark] def externalAccums: Seq[AccumulatorV2[_, _]] = withReadLock {
+    _externalAccums.toArray.toImmutableArraySeq
+  }
 
-  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    _externalAccums.add(a)
+  private def withReadLock[B](fn: => B): B = {
+    readLock.lock()
+    try {
+      fn
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  private def withWriteLock[B](fn: => B): B = {
+    writeLock.lock()
+    try {
+      fn
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = withWriteLock {
+    _externalAccums += a
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
@@ -335,7 +361,7 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        tm._externalAccums.add(acc)
+        tm._externalAccums += acc
       }
     }
     tm

@@ -843,7 +843,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -867,7 +867,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -1076,7 +1076,7 @@ struct<>
 
 
 -- !query
-create table identifier('t2') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
 -- !query schema
 struct<>
 -- !query output
@@ -1113,6 +1113,59 @@ drop table t2
 struct<>
 -- !query output
 
+
+
+-- !query
+DECLARE agg = 'max'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE col = 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE tab = 'T'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER(agg)(IDENTIFIER(col)) FROM IDENTIFIER(tab)
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T')
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC')
+-- !query schema
+struct<max(c1):int>
+-- !query output
+2
 
 
 -- !query

@@ -505,8 +505,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringDecode(b, Literal.create(null, StringType)), null, create_row(null))
 
     // Test escaping of charset
-    GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")) :: Nil)
-    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")).replacement :: Nil)
+    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")).replacement :: Nil)
+  }
+
+  test("SPARK-47307: base64 encoding without chunking") {
+    val longString = "a" * 58
+    val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "false") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), encoded)
+    }
+    val chunkEncoded =
+      s"YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh\r\nYQ=="
+    withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "true") {
+      checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
+    }
   }
 
   test("initcap unit test") {

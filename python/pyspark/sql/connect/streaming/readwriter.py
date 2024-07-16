@@ -446,6 +446,11 @@ class DataStreamWriter:
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
+        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_NON_EMPTY_STR",
+                message_parameters={"arg_name": "queryName", "arg_value": str(queryName)},
+            )
         self._write_proto.query_name = queryName
         return self
 
@@ -596,7 +601,7 @@ class DataStreamWriter:
             self._write_proto.table_name = tableName
 
         cmd = self._write_stream.command(self._session.client)
-        (_, properties) = self._session.client.execute_command(cmd)
+        (_, properties, _) = self._session.client.execute_command(cmd)
 
         start_result = cast(
             pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
@@ -605,7 +610,9 @@ class DataStreamWriter:
             session=self._session,
             queryId=start_result.query_id.id,
             runId=start_result.query_id.run_id,
-            name=start_result.name,
+            # A Streaming Query cannot have empty string as name
+            # Spark throws error in that case, so this cast is safe
+            name=start_result.name if start_result.name != "" else None,
         )
 
         if start_result.HasField("query_started_event_json"):

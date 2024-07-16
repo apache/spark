@@ -29,9 +29,11 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
+    ParseException,
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
+    PySparkNotImplementedError,
 )
 from pyspark.sql.types import (
     DataType,
@@ -81,139 +83,6 @@ from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
-    def test_class_method_type_name(self):
-        for dataType, expected in [
-            (StringType, "string"),
-            (CharType, "char"),
-            (VarcharType, "varchar"),
-            (BinaryType, "binary"),
-            (BooleanType, "boolean"),
-            (DecimalType, "decimal"),
-            (FloatType, "float"),
-            (DoubleType, "double"),
-            (ByteType, "byte"),
-            (ShortType, "short"),
-            (IntegerType, "integer"),
-            (LongType, "long"),
-            (DateType, "date"),
-            (TimestampType, "timestamp"),
-            (TimestampNTZType, "timestamp_ntz"),
-            (NullType, "void"),
-            (VariantType, "variant"),
-            (YearMonthIntervalType, "yearmonthinterval"),
-            (DayTimeIntervalType, "daytimeinterval"),
-            (CalendarIntervalType, "interval"),
-        ]:
-            self.assertEqual(dataType.typeName(), expected)
-
-    def test_instance_method_type_name(self):
-        for dataType, expected in [
-            (StringType(), "string"),
-            (CharType(5), "char(5)"),
-            (VarcharType(10), "varchar(10)"),
-            (BinaryType(), "binary"),
-            (BooleanType(), "boolean"),
-            (DecimalType(), "decimal(10,0)"),
-            (DecimalType(10, 2), "decimal(10,2)"),
-            (FloatType(), "float"),
-            (DoubleType(), "double"),
-            (ByteType(), "byte"),
-            (ShortType(), "short"),
-            (IntegerType(), "integer"),
-            (LongType(), "long"),
-            (DateType(), "date"),
-            (TimestampType(), "timestamp"),
-            (TimestampNTZType(), "timestamp_ntz"),
-            (NullType(), "void"),
-            (VariantType(), "variant"),
-            (YearMonthIntervalType(), "interval year to month"),
-            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
-            (
-                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
-                "interval year to month",
-            ),
-            (DayTimeIntervalType(), "interval day to second"),
-            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
-            (
-                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
-                "interval hour to second",
-            ),
-            (CalendarIntervalType(), "interval"),
-        ]:
-            self.assertEqual(dataType.typeName(), expected)
-
-    def test_simple_string(self):
-        for dataType, expected in [
-            (StringType(), "string"),
-            (CharType(5), "char(5)"),
-            (VarcharType(10), "varchar(10)"),
-            (BinaryType(), "binary"),
-            (BooleanType(), "boolean"),
-            (DecimalType(), "decimal(10,0)"),
-            (DecimalType(10, 2), "decimal(10,2)"),
-            (FloatType(), "float"),
-            (DoubleType(), "double"),
-            (ByteType(), "tinyint"),
-            (ShortType(), "smallint"),
-            (IntegerType(), "int"),
-            (LongType(), "bigint"),
-            (DateType(), "date"),
-            (TimestampType(), "timestamp"),
-            (TimestampNTZType(), "timestamp_ntz"),
-            (NullType(), "void"),
-            (VariantType(), "variant"),
-            (YearMonthIntervalType(), "interval year to month"),
-            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
-            (
-                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
-                "interval year to month",
-            ),
-            (DayTimeIntervalType(), "interval day to second"),
-            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
-            (
-                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
-                "interval hour to second",
-            ),
-            (CalendarIntervalType(), "interval"),
-        ]:
-            self.assertEqual(dataType.simpleString(), expected)
-
-    def test_json_value(self):
-        for dataType, expected in [
-            (StringType(), "string"),
-            (CharType(5), "char(5)"),
-            (VarcharType(10), "varchar(10)"),
-            (BinaryType(), "binary"),
-            (BooleanType(), "boolean"),
-            (DecimalType(), "decimal(10,0)"),
-            (DecimalType(10, 2), "decimal(10,2)"),
-            (FloatType(), "float"),
-            (DoubleType(), "double"),
-            (ByteType(), "byte"),
-            (ShortType(), "short"),
-            (IntegerType(), "integer"),
-            (LongType(), "long"),
-            (DateType(), "date"),
-            (TimestampType(), "timestamp"),
-            (TimestampNTZType(), "timestamp_ntz"),
-            (NullType(), "void"),
-            (VariantType(), "variant"),
-            (YearMonthIntervalType(), "interval year to month"),
-            (YearMonthIntervalType(YearMonthIntervalType.YEAR), "interval year"),
-            (
-                YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH),
-                "interval year to month",
-            ),
-            (DayTimeIntervalType(), "interval day to second"),
-            (DayTimeIntervalType(DayTimeIntervalType.DAY), "interval day"),
-            (
-                DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND),
-                "interval hour to second",
-            ),
-            (CalendarIntervalType(), "interval"),
-        ]:
-            self.assertEqual(dataType.jsonValue(), expected)
-
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
         df2 = self.spark.createDataFrame(df.rdd.map(lambda x: x), df.schema)
@@ -624,14 +493,11 @@ class TypesTestsMixin:
         self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
-        try:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
+        with self.sql_conf({"spark.sql.legacy.allowNegativeScaleOfDecimal": True}):
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
             ret = df.select(F.col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
             self.assertEqual(actual, [0, 10])
-        finally:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -1976,7 +1842,7 @@ class TypesTestsMixin:
             NullType(),
             StringType(),
             StringType("UTF8_BINARY"),
-            StringType("UTF8_BINARY_LCASE"),
+            StringType("UTF8_LCASE"),
             StringType("UNICODE"),
             StringType("UNICODE_CI"),
             CharType(10),
@@ -2351,20 +2217,58 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
 
+    # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
+    # `fromDDL`'s behavior.
+    def test_spark48834_from_ddl_matches_udf_schema_string(self):
+        from pyspark.sql.functions import udf
+
+        def schema_from_udf(ddl):
+            schema = (
+                self.spark.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+            )
+            assert len(schema) == 1
+            return schema[0].dataType
+
+        tests = [
+            ("a:int, b:string", True),
+            (
+                "a struct<>, b map<int, binary>, "
+                + "c array<array<map<struct<a: int, b: int>, binary>>>",
+                True,
+            ),
+            ("struct<>", True),
+            ("struct<a: string, b: array<long>>", True),
+            ("", True),
+            ("<a: int, b: variant>", False),
+            ("randomstring", False),
+            ("struct", False),
+        ]
+        for test, is_valid_input in tests:
+            if is_valid_input:
+                self.assertEqual(DataType.fromDDL(test), schema_from_udf(test))
+            else:
+                with self.assertRaises(ParseException) as from_ddl_pe:
+                    DataType.fromDDL(test)
+                with self.assertRaises(ParseException) as udf_pe:
+                    schema_from_udf(test)
+                self.assertEqual(
+                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                )
+
     def test_collated_string(self):
         dfs = [
-            self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
+            self.spark.sql("SELECT 'abc' collate UTF8_LCASE"),
             self.spark.createDataFrame(
-                [], StructType([StructField("id", StringType("UTF8_BINARY_LCASE"))])
+                [], StructType([StructField("id", StringType("UTF8_LCASE"))])
             ),
         ]
         for df in dfs:
             # performs both datatype -> proto & proto -> datatype conversions
             self.assertEqual(
-                df.to(StructType([StructField("new", StringType("UTF8_BINARY_LCASE"))]))
+                df.to(StructType([StructField("new", StringType("UTF8_LCASE"))]))
                 .schema[0]
                 .dataType,
-                StringType("UTF8_BINARY_LCASE"),
+                StringType("UTF8_LCASE"),
             )
 
     def test_infer_array_element_type_with_struct(self):
@@ -2376,6 +2280,20 @@ class TypesTestsMixin:
                 ArrayType(ArrayType(LongType())),
                 self.spark.createDataFrame([[[[1, 1.0]]]]).schema.fields[0].dataType,
             )
+
+    def test_ym_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
+        with self.temp_env({"PYSPARK_YM_INTERVAL_LEGACY": "1"}):
+            self.assertEqual(
+                self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first(),
+                Row(interval=128),
+            )
+
+    def test_cal_interval_in_collect(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001)").first()[0]
 
 
 class DataTypeTests(unittest.TestCase):
@@ -2514,7 +2432,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
-            ("", StringType("UTF8_BINARY_LCASE")),
+            ("", StringType("UTF8_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -2583,7 +2501,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
-            (None, StringType("UTF8_BINARY_LCASE"), ValueError),
+            (None, StringType("UTF8_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)
