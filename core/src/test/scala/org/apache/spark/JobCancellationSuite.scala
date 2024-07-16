@@ -603,7 +603,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // Kill one of the action.
     Future {
       sem1.acquire()
-      f1.cancel()
+      val reason = "custom cancel reason"
+      f1.cancel(Option(reason))
       JobCancellationSuite.twoJobsSharingStageSemaphore.release(10)
     }
 

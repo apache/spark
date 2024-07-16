@@ -115,8 +115,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         case e: Throwable =>
           logDebug(s"Exception in execute: $e")
           // Always cancel all remaining execution after error.
-          executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(executeHolder.jobTag,
-          s"Exception in execute: ${e}")
+          executeHolder.sessionHolder.session.sparkContext
+            .cancelJobsWithTag(executeHolder.jobTag, s"Exception in execute: ${e}")
           // Rely on an internal interrupted flag, because Thread.interrupted() could be cleared,
           // and different exceptions like InterruptedException, ClosedByInterruptException etc.
           // could be thrown.

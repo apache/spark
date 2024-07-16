@@ -156,14 +156,13 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
   /**
    * Cancel the stage materialization if in progress; otherwise do nothing.
    */
-  final def cancel(): Unit = {
+  final def cancel(reason: Option[String] = None): Unit = {
     logDebug(s"Cancel query stage: $name")
-    doCancel()
+    doCancel(reason)
   }
 
-  protected def doCancel(reason: String): Unit
 
-  protected def doCancel(): Unit
+  protected def doCancel(reason: Option[String] = None): Unit
 
   /**
    * The canonicalized plan before applying query stage optimizer rules.
@@ -208,9 +207,8 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override protected def doCancel(reason: String): Unit = shuffle.cancelShuffleJob(reason)
-
-  override protected def doCancel(): Unit = shuffle.cancelShuffleJob()
+  override protected def doCancel(reason: Option[String] = None): Unit =
+    shuffle.cancelShuffleJob(reason)
 
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
@@ -256,7 +254,8 @@ case class BroadcastQueryStageExec(
     reuse
   }
 
-  override protected def doCancel(): Unit = broadcast.cancelBroadcastJob()
+  override protected def doCancel(reason: Option[String] = None): Unit =
+    broadcast.cancelBroadcastJob(reason)
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }
