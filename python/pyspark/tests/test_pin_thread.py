@@ -91,11 +91,25 @@ class PinThreadTests(unittest.TestCase):
             lambda job_group: self.sc.cancelJobGroup(job_group),
         )
 
+    def test_multiple_group_jobs_with_reason(self):
+        self.check_job_cancellation(
+            lambda job_group: self.sc.setJobGroup(
+                job_group, "test rdd collect with setting job group"
+            ),
+            lambda job_group: self.sc.cancelJobGroup(job_group, "test custom reason"),
+        )
+
     def test_multiple_group_tags(self):
         # SPARK-44194: Test pinned thread mode with job tags.
         self.check_job_cancellation(
             lambda job_tag: self.sc.addJobTag(job_tag),
             lambda job_tag: self.sc.cancelJobsWithTag(job_tag),
+        )
+
+    def test_multiple_group_tags_with_reason(self):
+        self.check_job_cancellation(
+            lambda job_tag: self.sc.addJobTag(job_tag),
+            lambda job_tag: self.sc.cancelJobsWithTag(job_tag, "test custom reason"),
         )
 
     def check_job_cancellation(self, setter, canceller):
