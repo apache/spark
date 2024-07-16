@@ -57,8 +57,8 @@ function image_ref {
 
 function docker_push {
   local image_name="$1"
-  if [ ! -z $(docker images -q "$(image_ref ${image_name})") ]; then
-    docker push "$(image_ref ${image_name})"
+  if [ ! -z $(nerdctl images -q "$(image_ref ${image_name})") ]; then
+    nerdctl push "$(image_ref ${image_name})"
     if [ $? -ne 0 ]; then
       error "Failed to push $image_name Docker image."
     fi
@@ -174,7 +174,7 @@ function build {
   local RDOCKERFILE=${RDOCKERFILE:-false}
   local ARCHS=${ARCHS:-"--platform linux/amd64,linux/arm64"}
 
-  (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
+  (cd $(img_ctx_dir base) && nerdctl build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .)
   if [ $? -ne 0 ]; then
@@ -187,7 +187,7 @@ function build {
   fi
 
   if [ "${PYDOCKERFILE}" != "false" ]; then
-    (cd $(img_ctx_dir pyspark) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    (cd $(img_ctx_dir pyspark) && nerdctl build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
       -t $(image_ref spark-py) \
       -f "$PYDOCKERFILE" .)
       if [ $? -ne 0 ]; then
@@ -201,14 +201,14 @@ function build {
   fi
 
   if [ "${RDOCKERFILE}" != "false" ]; then
-    (cd $(img_ctx_dir sparkr) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    (cd $(img_ctx_dir sparkr) && nerdctl build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
       -t $(image_ref spark-r) \
       -f "$RDOCKERFILE" .)
     if [ $? -ne 0 ]; then
       error "Failed to build SparkR Docker image, please refer to Docker build output for details."
     fi
     if [ "${CROSS_BUILD}" != "false" ]; then
-      (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push --provenance=false \
+      (cd $(img_ctx_dir sparkr) && nerdctl buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push --provenance=false \
         -t $(image_ref spark-r) \
         -f "$RDOCKERFILE" .)
     fi
