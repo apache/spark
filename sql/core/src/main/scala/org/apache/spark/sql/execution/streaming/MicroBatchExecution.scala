@@ -820,7 +820,7 @@ class MicroBatchExecution(
     sparkSessionToRunBatch.sparkContext.setLocalProperty(
       StreamExecution.IS_CONTINUOUS_PROCESSING, false.toString)
 
-    loggingThreadContext.put(MicroBatchExecution.BATCH_ID_KEY, execCtx.batchId.toString)
+    loggingThreadContext.put(LogKeys.BATCH_ID.name, execCtx.batchId.toString)
 
     execCtx.reportTimeTaken("queryPlanning") {
       execCtx.executionPlan = new IncrementalExecution(
