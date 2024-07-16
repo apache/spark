@@ -61,7 +61,7 @@ private[classification] object GLMClassificationModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept, threshold)
-      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(Seq(data)).write.parquet(Loader.dataPath(path))
     }
 
     /**

@@ -57,7 +57,7 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(Seq(data)).write.parquet(Loader.dataPath(path))
     }
 
     /**
