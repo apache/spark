@@ -209,10 +209,25 @@ object ClusterBySpec {
       normalizeClusterBySpec(schema, clusterBySpec, resolver).toJson
   }
 
+  /**
+   * Converts a ClusterBySpec to a map of table properties used to store the clustering
+   * information in the table catalog.
+   *
+   * @param clusterBySpec : existing ClusterBySpec to be converted to properties.
+   */
+  def toProperties(clusterBySpec: ClusterBySpec): Map[String, String] = {
+    val columnValue = mapper.writeValueAsString(clusterBySpec.columnNames.map(_.fieldNames))
+    Map(CatalogTable.PROP_CLUSTERING_COLUMNS -> columnValue)
+  }
+
   private def normalizeClusterBySpec(
       schema: StructType,
       clusterBySpec: ClusterBySpec,
       resolver: Resolver): ClusterBySpec = {
+    if (schema.isEmpty) {
+      return clusterBySpec
+    }
+
     val normalizedColumns = clusterBySpec.columnNames.map { columnName =>
       val position = SchemaUtils.findColumnPosition(
         columnName.fieldNames().toImmutableArraySeq, schema, resolver)
