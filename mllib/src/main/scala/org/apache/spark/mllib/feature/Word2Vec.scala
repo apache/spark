@@ -686,7 +686,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val metadata = compact(render(
         ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
