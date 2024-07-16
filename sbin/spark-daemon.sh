@@ -23,7 +23,8 @@
 #
 #   SPARK_CONF_DIR  Alternate conf dir. Default is ${SPARK_HOME}/conf.
 #   SPARK_LOG_DIR   Where log files are stored. ${SPARK_HOME}/logs by default.
-#   SPARK_LOG_MAX_FILES Max log files of Spark daemons can rotate to. Default is 5.
+#   SPARK_LOG_MAX_FILES Max log files of Spark daemons can rotate to. Default is 5. if set to -1, it will disable log rotation
+#   SPARK_LOG_FILENAME if set will allow custom log filename. Default is $SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out
 #   SPARK_MASTER    host:path where spark code should be rsync'd from
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
 #   SPARK_IDENT_STRING   A string representing this instance of spark. $USER by default
@@ -74,15 +75,16 @@ shift
 
 spark_rotate_log ()
 {
+    if [[ ${SPARK_LOG_MAX_FILES} -lt 0 ]]; then
+      echo "Log rotation disabled because SPARK_LOG_MAX_FILES set to $SPARK_LOG_MAX_FILES"
+      return
+    fi
     log=$1;
 
-    if [[ -z ${SPARK_LOG_MAX_FILES} ]]; then
-      num=5
-    elif [[ ${SPARK_LOG_MAX_FILES} -gt 0 ]]; then
+    if [[ ${SPARK_LOG_MAX_FILES} -gt 0 ]]; then
       num=${SPARK_LOG_MAX_FILES}
     else
-      echo "Error: SPARK_LOG_MAX_FILES must be a positive number, but got ${SPARK_LOG_MAX_FILES}"
-      exit -1
+      num=5
     fi
 
     if [ -f "$log" ]; then # rotate logs
@@ -126,7 +128,13 @@ if [ "$SPARK_PID_DIR" = "" ]; then
 fi
 
 # some variables
-log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
+if [[ "${SPARK_LOG_FILENAME}" == "" ]]; then
+  log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
+else
+  echo "Custom log name will be ${SPARK_LOG_FILENAME} from SPARK_LOG_FILENAME"
+  log="$SPARK_LOG_DIR/$SPARK_LOG_FILENAME"
+fi
+
 pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
 
 # Set default scheduling priority
