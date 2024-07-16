@@ -44,15 +44,20 @@ Example log entry:
 .. code-block:: python
 
     {
-      "ts": "2024-06-28T10:53:48.528Z",
+      "ts": "2024-06-28 19:53:48,563",
       "level": "ERROR",
       "logger": "DataFrameQueryContextLogger",
-      "msg": "[DIVIDE_BY_ZERO] Division by zero.",
+      "msg": "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== DataFrame ==\n\"__truediv__\" was called from\n/.../spark/python/test_error_context.py:17\n",
       "context": {
         "file": "/path/to/file.py",
         "line_no": "17",
-        "fragment": "__truediv__",
+        "fragment": "divide"
         "error_class": "DIVIDE_BY_ZERO"
+      },
+      "exception": {
+        "class": "Py4JJavaError",
+        "msg": "An error occurred while calling o52.showString.\n: org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== DataFrame ==\n\"__truediv__\" was called from\n/path/to/file.py:17 ...",
+        "stacktrace": ["Traceback (most recent call last):", "  File \".../spark/python/pyspark/errors/exceptions/captured.py\", line 247, in deco", "    return f(*a, **kw)", "  File \".../lib/python3.9/site-packages/py4j/protocol.py\", line 326, in get_return_value" ...]
       },
     }
 

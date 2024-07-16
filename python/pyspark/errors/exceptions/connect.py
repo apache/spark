@@ -37,7 +37,6 @@ from pyspark.errors.exceptions.base import (
     QueryContext as BaseQueryContext,
     QueryContextType,
 )
-from pyspark.logger import PySparkLogger
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo

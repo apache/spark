@@ -43,9 +43,6 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
 
-from pyspark.logger import PySparkLogger
-
-
 class CapturedException(PySparkException):
     def __init__(
         self,
