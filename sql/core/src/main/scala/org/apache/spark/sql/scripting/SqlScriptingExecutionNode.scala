@@ -18,8 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.parser.HandlerType
@@ -77,7 +76,7 @@ class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
     override val isInternal: Boolean,
-    var collectResult: Boolean = true)  // Whether the statement result should be collected in the final result.
+    var collectResult: Boolean = true)  // Whether the statement result should be collected
   extends LeafStatementExec with WithOrigin {
 
   /**
@@ -116,12 +115,19 @@ class SingleStatementExec(
   def execute(session: SparkSession): Unit = {
     try {
       isExecuted = true
+      print("EXECUTING\n\n\n")
       val result = Some(Dataset.ofRows(session, parsedPlan).collect())
       if (collectResult) data = result
     } catch {
-      case e: Exception =>
+      case e: SparkThrowable =>
         // TODO: check handlers for error conditions
         raisedError = true
+        errorState = Some(e.getSqlState)
+        print(s"\n\n\nError raised: ${e.getSqlState}\n\n")
+      case _: Throwable =>
+        print("\n\n\nError raised: UNKNOWN\n\n")
+        raisedError = true
+        errorState = Some("UNKNOWN")
     }
   }
 }
@@ -220,6 +226,7 @@ class CompoundBodyExec(
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)
             if (statement.raisedError) {
+              print(s"Error raised: ${statement.errorState.get}\n\n")
               val handler = getHandler(statement.errorState.get).get
               handler.execute()
               handler.reset()
@@ -253,6 +260,7 @@ class ErrorHandlerExec(
   def getHandlerType: HandlerType = handlerType
 
   def execute(): Unit = {
+    print("\n\n\nHANDLER\n\n\n")
     val iterator = body.getTreeIterator
 
     while (iterator.hasNext) iterator.next()
