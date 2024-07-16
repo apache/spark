@@ -53,7 +53,7 @@ case class StreamingGlobalLimitExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema, valueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState)
+      newStateSchema, session.sessionState, stateSchemaVersion)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

@@ -439,7 +439,7 @@ case class StateStoreRestoreExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, stateManager.getStateValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState)
+      newStateSchema, session.sessionState, stateSchemaVersion)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -510,7 +510,7 @@ case class StateStoreSaveExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, stateManager.getStateValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState)
+      newStateSchema, session.sessionState, stateSchemaVersion)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -723,7 +723,7 @@ case class SessionWindowStateStoreRestoreExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState)
+      newStateSchema, session.sessionState, stateSchemaVersion)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -814,7 +814,7 @@ case class SessionWindowStateStoreSaveExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState)
+      newStateSchema, session.sessionState, stateSchemaVersion)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1131,7 +1131,8 @@ case class StreamingDeduplicateExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, schemaForValueRow))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState, extraOptions = extraOptionOnStateStore)
+      newStateSchema, session.sessionState, stateSchemaVersion,
+      extraOptions = extraOptionOnStateStore)
   }
 }
 
@@ -1210,7 +1211,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
     val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, schemaForValueRow))
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newStateSchema, session.sessionState, extraOptions = extraOptionOnStateStore)
+      newStateSchema, session.sessionState, stateSchemaVersion,
+      extraOptions = extraOptionOnStateStore)
   }
 
   override protected def withNewChildInternal(

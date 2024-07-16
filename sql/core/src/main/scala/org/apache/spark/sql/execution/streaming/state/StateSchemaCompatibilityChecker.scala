@@ -178,7 +178,7 @@ object StateSchemaCompatibilityChecker {
       hadoopConf: Configuration,
       newStateSchema: Array[StateSchema],
       sessionState: SessionState,
-      stateSchemaVersion: Int = 2,
+      stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,
       storeName: String = StateStoreId.DEFAULT_STORE_NAME): Array[String] = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
