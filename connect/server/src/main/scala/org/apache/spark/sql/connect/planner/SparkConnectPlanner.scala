@@ -65,7 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -1967,6 +1967,40 @@ class SparkConnectPlanner(
           Some(
             JsonToStructs(
               schema = CharVarcharUtils.failIfHasCharVarchar(schema),
+              options = options,
+              child = children.head))
+        } else {
+          None
+        }
+
+      case "from_xml" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        // XmlToStructs constructor doesn't accept JSON-formatted schema.
+        val children = fun.getArgumentsList.asScala.map(transformExpression)
+
+        var schema: DataType = null
+        children(1) match {
+          case Literal(s, StringType) if s != null =>
+            try {
+              schema = DataType.fromJson(s.toString)
+            } catch {
+              case _: Exception =>
+            }
+          case _ =>
+        }
+
+        if (schema != null) {
+          schema match {
+            case t: StructType => t
+            case _ => throw DataTypeErrors.failedParsingStructTypeError(schema.sql)
+          }
+
+          var options = Map.empty[String, String]
+          if (children.length == 3) {
+            options = extractMapData(children(2), "Options")
+          }
+          Some(
+            XmlToStructs(
+              schema = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType],
               options = options,
               child = children.head))
         } else {
