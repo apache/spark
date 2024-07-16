@@ -18,7 +18,9 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
@@ -45,7 +47,9 @@ class MapStateImplWithTTL[K, V](
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long) extends CompositeKeyTTLStateImpl(stateName, store, batchTimestampMs)
+    batchTimestampMs: Long)
+  extends CompositeKeyTTLStateImpl[K](stateName, store,
+    keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
 
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
@@ -97,14 +101,14 @@ class MapStateImplWithTTL[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     StateStoreErrors.requireNonNullStateValue(value, stateName)
 
-    val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val serializedUserKey = stateTypesEncoder.serializeUserKey(key)
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    val encodedUserKey = stateTypesEncoder.encodeUserKey(key)
 
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
 
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey.getBytes, serializedUserKey)
+    upsertTTLForStateKey(ttlExpirationMs, encodedGroupingKey, encodedUserKey)
   }
 
   /** Get the map associated with grouping key */
@@ -170,13 +174,33 @@ class MapStateImplWithTTL[K, V](
    * @param groupingKey grouping key for which cleanup should be performed.
    * @param userKey     user key for which cleanup should be performed.
    */
-  override def clearIfExpired(groupingKey: Array[Byte], userKey: Array[Byte]): Long = {
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(groupingKey, userKey)
-    val retRow = store.get(encodedCompositeKey, stateName)
+  override def clearIfExpired(
+      groupingKeyRow: UnsafeRow,
+      userKeyRow: UnsafeRow): Long = {
+    println("I am inside clearIfExpired, groupingKey: " + groupingKeyRow.getString(0))
+    println("I am inside clearIfExpired, userKey: " + userKeyRow.getString(0))
+    println("inside clearIfExpired, composite schema: " +
+      getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
+    val compositeKeyRow =
+      UnsafeProjection.create(
+        getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
+        .apply(
+          new GenericInternalRow(
+            Array[Any](groupingKeyRow.asInstanceOf[InternalRow],
+              userKeyRow.asInstanceOf[InternalRow]))
+        )
+    println("inside clearIfExpired, after encode: " +
+      compositeKeyRow.numFields())
+    println("inside clearIfExpired, after encode, first struct: " +
+      compositeKeyRow.getStruct(0, 1).getString(0))
+    println("inside clearIfExpired, after encode, second struct: " +
+      compositeKeyRow.getStruct(1, 1).getString(0))
+    val retRow = store.get(compositeKeyRow, stateName)
     var numRemovedElements = 0L
     if (retRow != null) {
+      println("inside clearIfExpired, retRow is not null: ")
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        store.remove(encodedCompositeKey, stateName)
+        store.remove(compositeKeyRow, stateName)
         numRemovedElements += 1
       }
     }

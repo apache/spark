@@ -21,6 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -64,26 +65,18 @@ object TransformWithStateKeyValueRowSchema {
     schema.fields.head.dataType
   }
 
-  def realCompositeType(
-      keySchema: StructType,
-      userKeySchema: StructType): StructType = {
-    var compositeSchema = new StructType()
-    if (isPrimitiveType(keySchema)) {
-      compositeSchema =
-        compositeSchema.add("key", getPrimitiveType(keySchema))
-    } else {
-      compositeSchema = compositeSchema.add("key", keySchema)
-    }
+  def singleKeyTTLRowSchema(keySchema: StructType): StructType =
+    new StructType()
+      .add("expirationMs", LongType)
+      .add("groupingKey", keySchema)
 
-    if (isPrimitiveType(userKeySchema)) {
-      compositeSchema =
-        compositeSchema.add("userKey", getPrimitiveType(userKeySchema))
-    } else {
-      compositeSchema = compositeSchema.add("userKey", userKeySchema)
-    }
-
-    compositeSchema
-  }
+  def compositeKeyTTLRowSchema(
+      groupingKeySchema: StructType,
+      userKeySchema: StructType): StructType =
+    new StructType()
+      .add("expirationMs", LongType)
+      .add("groupingKey", groupingKeySchema)
+      .add("userKey", userKeySchema)
 }
 
 /**
@@ -166,6 +159,7 @@ class StateTypesEncoder[V](
 
   def isExpired(row: UnsafeRow, batchTimestampMs: Long): Boolean = {
     val expirationMs = decodeTtlExpirationMs(row)
+    println("I am inside isExpired, decoded expirationMs: " + expirationMs)
     expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
   }
 }
@@ -227,7 +221,7 @@ class CompositeKeyStateEncoder[K, V](
     keyProj.apply(InternalRow(keyRow))
   }
 
-  def serializeUserKey(userKey: K): Array[Byte] = {
+  def encodeUserKey(userKey: K): UnsafeRow = {
     val realKey =
       if (userKey.isInstanceOf[String]) UTF8String.fromString(userKey.asInstanceOf[String])
       else userKey
@@ -235,7 +229,7 @@ class CompositeKeyStateEncoder[K, V](
 
     val keyProj = UnsafeProjection.create(new StructType().add("userKey", keyEncoder.schema))
 
-    keyProj.apply(InternalRow(keyRow)).getBytes
+    keyProj.apply(InternalRow(keyRow))
   }
 
   def encodeCompositeKey(
@@ -273,7 +267,7 @@ class CompositeKeyStateEncoder[K, V](
     val compositeRow = new GenericInternalRow(Array[Any](keyRow, userKeyRow))
 
     val compositeKey = compositeKeyProjection(compositeRow)
-    println("I am putting unsafe row into rocksDB: " + decodeCompositeKey(compositeKey))
+    println("I am encoding unsafe row, after encode: " + decodeCompositeKey(compositeKey))
     println("inside encode composite key, num of composite field: " + compositeKey.numFields())
 
     val decode = compositeKey.getString(0)
@@ -295,5 +289,33 @@ class CompositeKeyStateEncoder[K, V](
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
     userKeyRowToObjDeserializer.apply(row.getStruct(1, 1))
+  }
+}
+
+class SingleKeyTTLEncoder(
+  keyExprEnc: ExpressionEncoder[Any]) {
+
+  private val TTLKeySchema = singleKeyTTLRowSchema(keyExprEnc.schema)
+  def encodeTTLRow(expirationMs: Long, groupingKey: UnsafeRow): UnsafeRow = {
+    // unsafeRow -> unsafeRow
+    UnsafeProjection.create(TTLKeySchema).apply(
+      InternalRow(expirationMs, groupingKey.asInstanceOf[InternalRow]))
+  }
+}
+
+class CompositeKeyTTLEncoder[K](
+  keyExprEnc: ExpressionEncoder[Any],
+  userKeyEnc: Encoder[K]) {
+
+  private val TTLKeySchema = compositeKeyTTLRowSchema(
+    keyExprEnc.schema, userKeyEnc.schema)
+  def encodeTTLRow(expirationMs: Long,
+                   groupingKey: UnsafeRow,
+                   userKey: UnsafeRow): UnsafeRow = {
+    // unsafeRow -> unsafeRow
+    UnsafeProjection.create(TTLKeySchema).apply(
+      InternalRow(expirationMs,
+        groupingKey.asInstanceOf[InternalRow],
+        userKey.asInstanceOf[InternalRow]))
   }
 }

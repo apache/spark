@@ -187,18 +187,13 @@ class PrefixKeyScanStateEncoder(
   }
 
   private val prefixKeyProjection: UnsafeProjection = {
-    println("I am inside prefix projection, prefix fields with idx: " + prefixKeyFieldsWithIdx)
     val refs = prefixKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
-    println("I am inside prefix projection, refs: " + refs)
     UnsafeProjection.create(refs)
   }
 
   private val remainingKeyProjection: UnsafeProjection = {
-    println("Keyshcmea here: " + keySchema)
-    println("remainingKeyFieldsWithIdx: " + remainingKeyFieldsWithIdx)
     val refs = remainingKeyFieldsWithIdx.map(x =>
       BoundReference(x._2, x._1.dataType, x._1.nullable))
-    println("I am inside remaining projection, refs: " + refs)
     UnsafeProjection.create(refs)
   }
 
@@ -209,12 +204,6 @@ class PrefixKeyScanStateEncoder(
   private val joinedRowOnKey = new JoinedRow()
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    println("inside prefix encodeKey, all fields: " + row.numFields())
-    println("I am inside prefix.encodeKey, extractPrefix here: " +
-      extractPrefixKey(row).numFields())
-    println("extractPrefixKey(row).groupingKey: " + extractPrefixKey(row).getString(0))
-    println("reamainingKey(row): " + remainingKeyProjection(row).getString(0))
-
     val prefixKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
     val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
 
@@ -261,8 +250,6 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    println("I am inside encodePrefixKey, prefix: " +
-      prefixKey.getStruct(0, 1).numFields())
     val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
     val (prefix, startingOffset) = encodeColumnFamilyPrefix(
       prefixKeyEncoded.length + 4

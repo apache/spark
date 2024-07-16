@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
@@ -41,7 +42,8 @@ class ValueStateImplWithTTL[S](
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long)
-  extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ValueState[S] {
+  extends SingleKeyTTLStateImpl(
+    stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
@@ -90,7 +92,7 @@ class ValueStateImplWithTTL[S](
     val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.put(serializedGroupingKey,
       encodedValue, stateName)
-    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey.getBytes)
+    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
   }
 
   /** Function to remove state for given key */
@@ -99,14 +101,13 @@ class ValueStateImplWithTTL[S](
     clearTTLState()
   }
 
-  def clearIfExpired(groupingKey: Array[Byte]): Long = {
-    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val retRow = store.get(encodedGroupingKey, stateName)
+  def clearIfExpired(groupingKey: UnsafeRow): Long = {
+    val retRow = store.get(groupingKey, stateName)
 
     var result = 0L
     if (retRow != null) {
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        store.remove(encodedGroupingKey, stateName)
+        store.remove(groupingKey, stateName)
         result = 1L
       }
     }

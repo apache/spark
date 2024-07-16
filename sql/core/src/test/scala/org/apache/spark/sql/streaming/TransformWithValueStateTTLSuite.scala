@@ -358,3 +358,195 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     }
   } */
 }
+
+class TTLTest extends StreamTest {
+
+  import testImplicits._
+  def getStateTTLMetricName: String = "numValueStateWithTTLVars"
+
+  def getProcessor(config: TTLConfig): StatefulProcessor[String,
+    InputEvent, OutputEvent] = new MapStateSingleKeyTTLProcessor(config)
+/*
+  test("validate state is evicted at ttl expiry") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputStream = MemoryStream[InputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+
+          AddData(inputStream, InputEvent("k1", "put", 1)),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          StopStream,
+
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // get this state, and make sure we get unexpired value
+          AddData(inputStream, InputEvent("k1", "get", -1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+          StopStream,
+
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // ensure ttl values were added correctly
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = true, 61000)),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+          StopStream,
+
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // advance clock so that state expires
+          AdvanceManualClock(60 * 1000),
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          // validate expired value is not returned
+          CheckNewAnswer(),
+          // ensure this state does not exist any longer in State
+          AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          Execute { q =>
+            // Filter for idle progress events and then verify the custom metrics
+            // for stateful operator
+            val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics.get(getStateTTLMetricName) > 0).size > 0)
+            assert(progData.filter(prog =>
+              prog.stateOperators(0).customMetrics
+                .get("numValuesRemovedDueToTTLExpiry") > 0).size > 0)
+          }
+        )
+      }
+    }
+  } */
+
+  test("verify iterator doesn't return expired keys") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+
+      val inputStream = MemoryStream[MapInputEvent]
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val result = inputStream.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState(
+          new MapStateTTLProcessor(ttlConfig),
+          TimeMode.ProcessingTime(),
+          OutputMode.Append())
+
+      val clock = new StreamManualClock
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputStream,
+          MapInputEvent("k1", "key1", "put", 1),
+          MapInputEvent("k1", "key2", "put", 2)
+        ),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 1000
+        CheckNewAnswer(),
+        AddData(inputStream,
+          MapInputEvent("k1", "key1", "get", -1),
+          MapInputEvent("k1", "key2", "get", -1)
+        ),
+        AdvanceManualClock(30 * 1000), // batch timestamp: 31000
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
+        ),
+        // get values from ttl state
+        AddData(inputStream,
+          MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+        ),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 32000
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
+          MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
+        ),
+        // advance clock to expire first two values
+        AdvanceManualClock(30 * 1000), // batch timestamp: 62000
+        AddData(inputStream,
+          MapInputEvent("k1", "key3", "put", 3),
+          MapInputEvent("k1", "key4", "put", 4),
+          MapInputEvent("k1", "key5", "put", 5),
+          MapInputEvent("k1", "", "iterator", -1)
+        ),
+        AdvanceManualClock(1 * 1000), // batch timestamp: 63000
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
+        ),
+        AddData(inputStream,
+          MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
+        ),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
+        ),
+        // get all values without enforcing ttl
+        AddData(inputStream,
+          MapInputEvent("k1", "key1", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key2", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key3", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key4", "get_without_enforcing_ttl", -1),
+          MapInputEvent("k1", "key5", "get_without_enforcing_ttl", -1)
+        ),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", 3, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
+          MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
+        ),
+        // check that updating a key updates its TTL
+        AddData(inputStream, MapInputEvent("k1", "key3", "put", 3)),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 126000),
+          MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
+          MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
+        ),
+        AddData(inputStream, MapInputEvent("k1", "key3", "get_ttl_value_from_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          MapOutputEvent("k1", "key3", 3, isTTLValue = true, 126000)
+        ),
+        StopStream
+      )
+    }
+  }
+
+}
+
+

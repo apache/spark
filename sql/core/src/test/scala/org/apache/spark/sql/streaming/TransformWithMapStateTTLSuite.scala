@@ -45,7 +45,9 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
       expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
+    println("I am inside map ttl, handleInputRows for key: " + key)
     for (row <- inputRows) {
+      println("I am inside map ttl, handleInputRows for row: " + row)
       val resultIter = processRow(row, _mapState)
       resultIter.foreach { r =>
         results = r :: results
@@ -122,8 +124,10 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
+    println("I am inside map handle, key: " + key)
 
     for (row <- inputRows) {
+      println("I am inside map handle, row: " + row)
       val resultIter = processRow(row, _mapState)
       resultIter.foreach { r =>
         results = r :: results
