@@ -382,7 +382,7 @@ case class TransformWithStateExec(
     val newColumnFamilySchemas = getColFamilySchemas()
 
     StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newColumnFamilySchemas.values.toArray, session.sessionState)
+      newColumnFamilySchemas.values.toArray, session.sessionState, stateSchemaVersion)
   }
 
   private def stateSchemaDirPath(storeName: String): Path = {
