@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
@@ -115,7 +116,6 @@ class SingleStatementExec(
   def execute(session: SparkSession): Unit = {
     try {
       isExecuted = true
-      print("EXECUTING\n\n\n")
       val result = Some(Dataset.ofRows(session, parsedPlan).collect())
       if (collectResult) data = result
     } catch {
@@ -123,9 +123,7 @@ class SingleStatementExec(
         // TODO: check handlers for error conditions
         raisedError = true
         errorState = Some(e.getSqlState)
-        print(s"\n\n\nError raised: ${e.getSqlState}\n\n")
       case _: Throwable =>
-        print("\n\n\nError raised: UNKNOWN\n\n")
         raisedError = true
         errorState = Some("UNKNOWN")
     }
@@ -226,7 +224,6 @@ class CompoundBodyExec(
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement.execute(session)
             if (statement.raisedError) {
-              print(s"Error raised: ${statement.errorState.get}\n\n")
               val handler = getHandler(statement.errorState.get).get
               handler.execute()
               handler.reset()
@@ -258,6 +255,8 @@ class ErrorHandlerExec(
     handlerType: HandlerType) extends CompoundStatementExec {
 
   def getHandlerType: HandlerType = handlerType
+
+  def getHandlerBody: CompoundBodyExec = body
 
   def execute(): Unit = {
     print("\n\n\nHANDLER\n\n\n")

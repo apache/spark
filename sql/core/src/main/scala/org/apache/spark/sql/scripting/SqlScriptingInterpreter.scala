@@ -113,8 +113,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
   def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
     executionPlan.flatMap {
-      case statement: SingleStatementExec if statement.collectResult =>
-        statement.data
+      case statement: SingleStatementExec if statement.collectResult => statement.data
       case _ => None
     }
   }
