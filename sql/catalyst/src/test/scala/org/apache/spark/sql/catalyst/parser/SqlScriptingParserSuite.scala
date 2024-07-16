@@ -203,11 +203,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl_end""".stripMargin
-    val e = intercept[SparkException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "INTERNAL_ERROR")
-    assert(e.getMessage.contains("Both labels should be same."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "LABELS_MISMATCH",
+      parameters = Map("beginLabel" -> "lbl_begin", "endLabel" -> "lbl_end"))
   }
 
   test("compound: endLabel") {
@@ -220,11 +222,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT a, b, c FROM T;
         |  SELECT * FROM T;
         |END lbl""".stripMargin
-    val e = intercept[SparkException] {
-      parseScript(sqlScriptText)
-    }
-    assert(e.getErrorClass === "INTERNAL_ERROR")
-    assert(e.getMessage.contains("End label can't exist without begin label."))
+
+    checkError(
+      exception = intercept[SparkException] {
+        parseScript(sqlScriptText)
+      },
+      errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
+      parameters = Map("endLabel" -> "lbl"))
   }
 
   test("compound: beginLabel + endLabel with different casing") {
