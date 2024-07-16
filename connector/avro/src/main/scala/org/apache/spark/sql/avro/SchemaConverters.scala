@@ -140,7 +140,7 @@ object SchemaConverters extends Logging {
             |${avroSchema.toString(true)}
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
-          println(
+          log.info(
             s"The field ${avroSchema.getFullName} of type ${avroSchema.getType.getName} is " +
               s"dropped at recursive depth $recursiveDepth."
           )
@@ -164,8 +164,11 @@ object SchemaConverters extends Logging {
           }.filter(_ != null).toSeq
           fields match {
             case Nil =>
-              convertEmptyAvroToStructWithDummyField(avroSchema.getFullName)
-
+              log.info(
+                s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
+                  "does not have any fields left likely due to recursive depth limit."
+              )
+              null
             case fds => SchemaType(StructType(fds), nullable = false)
           }
         }
@@ -178,7 +181,7 @@ object SchemaConverters extends Logging {
           stableIdPrefixForUnionType,
           recursiveFieldMaxDepth)
         if (schemaType == null) {
-          println(
+          log.info(
             s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
               "does not have any fields left likely due to recursive depth limit."
           )
@@ -194,7 +197,7 @@ object SchemaConverters extends Logging {
           existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType,
           recursiveFieldMaxDepth)
         if (schemaType == null) {
-          println(
+          log.info(
             s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
               "does not have any fields left likely due to recursive depth limit."
           )
@@ -226,7 +229,7 @@ object SchemaConverters extends Logging {
                 recursiveFieldMaxDepth)
             }
           if (schemaType == null) {
-            println(
+            log.info(
               s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
                 "does not have any fields left likely due to recursive depth limit."
             )
@@ -284,7 +287,11 @@ object SchemaConverters extends Logging {
 
             fields match {
               case Nil =>
-                convertEmptyAvroToStructWithDummyField(avroSchema.getFullName)
+                log.info(
+                  s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as " +
+                    "it does not have any fields left likely due to recursive depth limit."
+                )
+                null
 
               case fds => SchemaType(StructType(fds), nullable = false)
             }
@@ -368,11 +375,11 @@ object SchemaConverters extends Logging {
     }
   }
 
-  private def convertEmptyAvroToStructWithDummyField(fieldName: String): SchemaType = {
-    log.info(s"Keep $fieldName which is empty struct by inserting a dummy field.")
-    SchemaType(
-      StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil), nullable = true)
-  }
+//  private def convertEmptyAvroToStructWithDummyField(fieldName: String): SchemaType = {
+//    log.info(s"Keep $fieldName which is empty struct by inserting a dummy field.")
+//    SchemaType(
+//     StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil), nullable = true)
+//  }
 }
 
 private[avro] class IncompatibleSchemaException(

@@ -136,6 +136,9 @@ private[sql] class AvroOptions(
 
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
+
+  val recursiveFieldMaxDepth: Int =
+    parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -170,4 +173,6 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // When STABLE_ID_FOR_UNION_TYPE is enabled, the option allows to configure the prefix for fields
   // of Avro Union type.
   val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
+
+  val RECURSIVE_FIELD_MAX_DEPTH = newOption("recursiveFieldMaxDepth")
 }

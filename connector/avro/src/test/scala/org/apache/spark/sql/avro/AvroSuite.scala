@@ -2187,7 +2187,7 @@ abstract class AvroSuite
     }
   }
 
-  private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
+  private def checkSchemaWithRecursiveLoopError(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
       SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false, "")
     }.getMessage
@@ -2196,7 +2196,7 @@ abstract class AvroSuite
   }
 
   test("Detect recursive loop") {
-    checkSchemaWithRecursiveLoop("""
+    checkSchemaWithRecursiveLoopError("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2207,7 +2207,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoop("""
+    checkSchemaWithRecursiveLoopError("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2229,7 +2229,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoop("""
+    checkSchemaWithRecursiveLoopError("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2240,7 +2240,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoop("""
+    checkSchemaWithRecursiveLoopError("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2250,6 +2250,55 @@ abstract class AvroSuite
       |  ]
       |}
     """.stripMargin)
+  }
+
+  private def checkSchemaWithRecursiveLoop(
+      avroSchema: String, expectedSchema: StructType, recursiveFieldMaxDepth: Int): Unit = {
+    val sparkSchema =
+      SchemaConverters.toSqlType(
+        new Schema.Parser().parse(avroSchema), false, "", recursiveFieldMaxDepth).dataType
+
+    assert(sparkSchema === expectedSchema)
+  }
+
+  
+
+  test("dev test") {
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Id", IntegerType),
+        StructField("Name",
+          StructType(
+            Seq(
+              StructField("Id", IntegerType),
+              StructField("Name", StructType(Seq(StructField("Id", IntegerType)))))))))
+
+    val avroSchema = s"""
+                        |{
+                        |  "type" : "record",
+                        |  "name" : "test_schema",
+                        |  "fields" : [
+                        |    {"name": "Id", "type": "int"},
+                        |    {"name": "Name", "type": ["null", "test_schema"]}
+                        |  ]
+                        |}
+    """.stripMargin
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(2, Row(3, null)), Row(1, null))),
+      catalystSchema)
+
+    withTempPath { tempDir =>
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+      checkAnswer(
+        spark.read
+          .format("avro")
+          .option("avroSchema", avroSchema)
+          .option("recursiveFieldMaxDepth", 10)
+          .load(tempDir.getPath),
+        df)
+    }
+
   }
 
   test("log a warning of ignoreExtension deprecation") {
