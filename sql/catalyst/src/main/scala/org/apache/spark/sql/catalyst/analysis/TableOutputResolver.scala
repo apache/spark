@@ -413,8 +413,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
-      val func = LambdaFunction(res.head, Seq(param))
-      Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      if (res.head.fastEquals(param)) {
+        Some(Alias(nullCheckedInput, expected.name)())
+      } else {
+        val func = LambdaFunction(res.head, Seq(param))
+        Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
+      }
     } else {
       None
     }
@@ -452,11 +456,23 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
-      val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
-      val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
-      val newKeys = ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
-      val newValues = ArrayTransform(MapValues(nullCheckedInput), valueFunc)
-      Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      if (resKey.head.fastEquals(keyParam) && resValue.head.fastEquals(valueParam)) {
+        Some(Alias(nullCheckedInput, expected.name)())
+      } else {
+        val newKeys = if (!resKey.head.fastEquals(keyParam)) {
+          val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
+          ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+        } else {
+          MapKeys(nullCheckedInput)
+        }
+        val newValues = if (!resValue.head.fastEquals(valueParam)) {
+          val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
+          ArrayTransform(MapValues(nullCheckedInput), valueFunc)
+        } else {
+          MapValues(nullCheckedInput)
+        }
+        Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
+      }
     } else {
       None
     }
