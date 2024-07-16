@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
 import org.apache.spark.util.NextIterator
@@ -43,8 +44,8 @@ class ListStateImplWithTTL[S](
     batchTimestampMs: Long)
   extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ListState[S] {
 
-  private lazy val stateTypesEncoder = StateTypesEncoder(
-    keyExprEnc, valEncoder, stateName, hasTtl = true)
+  private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
+    stateName, hasTtl = true)
 
   private lazy val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
@@ -52,7 +53,8 @@ class ListStateImplWithTTL[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
+    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema,
+      valueRowSchemaWithTTL(valEncoder.schema),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema), useMultipleValuesPerKey = true)
   }
 

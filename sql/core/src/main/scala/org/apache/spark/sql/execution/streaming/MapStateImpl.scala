@@ -76,7 +76,6 @@ class MapStateImpl[K, V](
 
   /** Get the map associated with grouping key */
   override def iterator(): Iterator[(K, V)] = {
-    println("I am inside mapstateimpl.iterator")
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.prefixScan(encodedGroupingKey, stateName)
       .map {

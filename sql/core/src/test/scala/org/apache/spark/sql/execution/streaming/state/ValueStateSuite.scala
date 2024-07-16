@@ -318,7 +318,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
         Encoders.STRING, ttlConfig).asInstanceOf[ValueStateImplWithTTL[String]]
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update("v1")
-      assert(testState.get() === "v1")
+      println("testState.get here is: " + testState.get().getClass)
+      assert(testState.get().asInstanceOf[String] === "v1")
       assert(testState.getWithoutEnforcingTTL().get === "v1")
 
       val ttlExpirationMs = timestampMs + 60000

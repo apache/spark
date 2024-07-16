@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
@@ -56,9 +57,11 @@ class MapStateImplWithTTL[K, V](
   initialize()
 
   private def initialize(): Unit = {
-    // TODO
-    store.createColFamilyIfAbsent(stateName, keyExprEnc.schema, valEncoder.schema,
-      PrefixKeyScanStateEncoderSpec(keyExprEnc.schema, 1))
+    val schemaForCompositeKeyRow =
+      getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
+    store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow,
+      valueRowSchemaWithTTL(valEncoder.schema),
+      PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
   }
 
   /** Whether state exists or not. */
@@ -98,8 +101,7 @@ class MapStateImplWithTTL[K, V](
     val serializedUserKey = stateTypesEncoder.serializeUserKey(key)
 
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(
-      serializedGroupingKey.getBytes, serializedUserKey)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
 
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey.getBytes, serializedUserKey)
