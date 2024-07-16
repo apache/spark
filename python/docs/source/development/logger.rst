@@ -76,7 +76,7 @@ You can create a logger instance by calling the :meth:`PySparkLogger.getLogger`.
 
 Logging Messages
 ----------------
-The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warning`, :meth:`PySparkLogger.error`.
+The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warning` and :meth:`PySparkLogger.error`.
 
 - **PySparkLogger.info**: Use this method to log informational messages.
   
