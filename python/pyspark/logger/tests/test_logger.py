@@ -44,6 +44,7 @@ class LoggerTestsMixin:
         self.assertEqual(
             log_json["context"], {"action": "test_action_info", "user": "test_user_info"}
         )
+        self.assertTrue("exception" not in log_json)
 
     def test_log_warn(self):
         self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
@@ -53,6 +54,7 @@ class LoggerTestsMixin:
         self.assertEqual(
             log_json["context"], {"action": "test_action_warn", "user": "test_user_warn"}
         )
+        self.assertTrue("exception" not in log_json)
 
     def test_log_error(self):
         self.logger.error(
@@ -64,6 +66,22 @@ class LoggerTestsMixin:
         self.assertEqual(
             log_json["context"], {"action": "test_action_error", "user": "test_user_error"}
         )
+        self.assertTrue("exception" not in log_json)
+
+    def test_log_exception(self):
+        self.logger.exception(
+            "This is an exception log", user="test_user_exception", action="test_action_exception"
+        )
+        log_json = json.loads(self.handler.stream.getvalue().strip())
+
+        self.assertEqual(log_json["msg"], "This is an exception log")
+        self.assertEqual(
+            log_json["context"], {"action": "test_action_exception", "user": "test_user_exception"}
+        )
+        self.assertTrue("exception" in log_json)
+        self.assertTrue("class" in log_json["exception"])
+        self.assertTrue("msg" in log_json["exception"])
+        self.assertTrue("stacktrace" in log_json["exception"])
 
 
 class LoggerTests(LoggerTestsMixin, unittest.TestCase):

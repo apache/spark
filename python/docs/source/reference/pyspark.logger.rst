@@ -44,3 +44,4 @@ Methods
     PySparkLogger.info
     PySparkLogger.warning
     PySparkLogger.error
+    PySparkLogger.exception

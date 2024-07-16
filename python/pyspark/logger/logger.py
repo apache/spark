@@ -54,6 +54,13 @@ class JSONFormatter(logging.Formatter):
             "msg": record.getMessage(),
             "context": record.__dict__.get("kwargs", {}),
         }
+        if record.exc_info:
+            exc_type, exc_value, exc_tb = record.exc_info
+            log_entry["exception"] = {
+                "class": exc_type.__name__ if exc_type else "UnknownException",
+                "msg": str(exc_value),
+                "stacktrace": self.formatException(record.exc_info).splitlines(),
+            }
         return json.dumps(log_entry, ensure_ascii=False)
 
 
@@ -133,3 +140,17 @@ class PySparkLogger(logging.Logger):
             The log message.
         """
         super().error(msg, *args, extra={"kwargs": kwargs})
+
+    def exception(self, msg: object, *args: object, **kwargs: object) -> None:
+        """
+        Convenience method for logging an ERROR with exception information.
+
+        Parameters
+        ----------
+        msg : str
+            The log message.
+        exc_info : bool = True
+            If True, exception information is added to the logging message.
+            This includes the exception type, value, and traceback. Default is True.
+        """
+        super().error(msg, *args, exc_info=True, extra={"kwargs": kwargs})

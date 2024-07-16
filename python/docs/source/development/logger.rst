@@ -31,6 +31,7 @@ This module includes a :class:`PySparkLogger` class that provides several method
 - :meth:`PySparkLogger.info`
 - :meth:`PySparkLogger.warning`
 - :meth:`PySparkLogger.error`
+- :meth:`PySparkLogger.exception`
 
 The logger can be easily configured to write logs to either the console or a specified file.
 
@@ -75,7 +76,7 @@ You can create a logger instance by calling the :meth:`PySparkLogger.getLogger`.
 
 Logging Messages
 ----------------
-The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warning`, and :meth:`PySparkLogger.error`.
+The logger provides three main methods for log messages: :meth:`PySparkLogger.info`, :meth:`PySparkLogger.warning`, :meth:`PySparkLogger.error`.
 
 - **PySparkLogger.info**: Use this method to log informational messages.
   
