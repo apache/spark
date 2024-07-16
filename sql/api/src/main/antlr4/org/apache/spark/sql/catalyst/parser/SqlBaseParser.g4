@@ -1790,6 +1790,7 @@ nonReserved
     | CODEGEN
     | COLLATE
     | COLLATION
+    | COLLATIONS
     | COLLECTION
     | COLUMN
     | COLUMNS

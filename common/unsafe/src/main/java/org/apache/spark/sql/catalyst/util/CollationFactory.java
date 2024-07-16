@@ -731,6 +731,7 @@ public final class CollationFactory {
           Collation collation = CollationSpecICU.fromCollationId(collationId).buildCollation();
           collations.add(collation);
         } catch (SparkException ignored) {
+          // ignore
         }
       }
 
