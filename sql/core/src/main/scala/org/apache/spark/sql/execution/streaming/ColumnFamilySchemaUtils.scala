@@ -18,23 +18,12 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchema, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchema}
 
-trait ColumnFamilySchemaUtils {
-  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchema
+object StateSchemaUtils {
 
-  def getListStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchema
-
-  def getMapStateSchema[K, V](
-      stateName: String,
-      userKeyEnc: Encoder[K],
-      hasTtl: Boolean): ColumnFamilySchema
-}
-
-object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
-
-  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    ColumnFamilySchemaV1(
+  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): StateSchema = {
+    StateSchema(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -42,11 +31,11 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       } else {
         VALUE_ROW_SCHEMA
       },
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+      Some(NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)))
   }
 
-  def getListStateSchema[T](stateName: String, hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    ColumnFamilySchemaV1(
+  def getListStateSchema[T](stateName: String, hasTtl: Boolean): StateSchema = {
+    StateSchema(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -54,14 +43,14 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       } else {
         VALUE_ROW_SCHEMA
       },
-      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+      Some(NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)))
   }
 
   def getMapStateSchema[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],
-      hasTtl: Boolean): ColumnFamilySchemaV1 = {
-    ColumnFamilySchemaV1(
+      hasTtl: Boolean): StateSchema = {
+    StateSchema(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -69,7 +58,6 @@ object ColumnFamilySchemaUtilsV1 extends ColumnFamilySchemaUtils {
       } else {
         VALUE_ROW_SCHEMA
       },
-      PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
-      Some(userKeyEnc.schema))
+      Some(PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1)))
   }
 }

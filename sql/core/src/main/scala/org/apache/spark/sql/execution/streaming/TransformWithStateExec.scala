@@ -110,7 +110,7 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  private def getColFamilySchemas(): Map[String, ColumnFamilySchema] = {
+  private def getColFamilySchemas(): Map[String, StateSchema] = {
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
@@ -380,14 +380,9 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): Array[String] = {
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
-    val schemaFile = new StateSchemaV3File(
-      hadoopConf, stateSchemaDirPath(StateStoreId.DEFAULT_STORE_NAME).toString)
-    // TODO: [SPARK-48849] Read the schema path from the OperatorStateMetadata file
-    // and validate it with the new schema
 
-    // Write the new schema to the schema file
-    val schemaPath = schemaFile.addWithUUID(batchId, newColumnFamilySchemas.values.toList)
-    Array(schemaPath.toString)
+    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newColumnFamilySchemas.values.toArray, session.sessionState)
   }
 
   private def stateSchemaDirPath(storeName: String): Path = {
