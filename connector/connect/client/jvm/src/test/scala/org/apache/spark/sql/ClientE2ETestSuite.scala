@@ -240,7 +240,7 @@ class ClientE2ETestSuite
     val ex = intercept[SparkException] {
       df.collect()
     }
-    assert(ex.getMessage.contains("io.grpc.StatusRuntimeException: UNKNOWN"))
+    assert(ex.getMessage.contains("grpc.StatusRuntimeException: UNKNOWN"))
   }
 
   test("many tables") {

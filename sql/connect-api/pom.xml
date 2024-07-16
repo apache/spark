@@ -114,7 +114,6 @@
                     <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
                     <shadeTestJar>false</shadeTestJar>
                     <artifactSet>
-                        <!-- TODO make sure this is complete. -->
                         <includes>
                             <include>org.spark-project.spark:unused</include>
                             <include>com.google.guava:*</include>
@@ -128,6 +127,8 @@
                             <include>com.google.j2objc:j2objc-annotations</include>
                             <include>org.checkerframework:checker-qual</include>
                             <include>com.google.code.gson:gson</include>
+                            <include>org.apache.tomcat:annotations-api</include>
+                            <include>com.google.code.findbugs:jsr305</include>
                         </includes>
                     </artifactSet>
                     <relocations>
@@ -178,6 +179,10 @@
                             <pattern>com.google.gson</pattern>
                             <shadedPattern>${spark.shade.packageName}.connect.gson</shadedPattern>
                         </relocation>
+                        <relocation>
+                            <pattern>javax.annotation</pattern>
+                            <shadedPattern>${spark.shade.packageName}.connect.javax.annotation</shadedPattern>
+                        </relocation>
                         <!--
                           For `com.google.api.grpc:proto-google-common-protos`, do not directly define pattern
                           as `common.google`, otherwise, the relocation result may be uncertain due
@@ -212,6 +217,17 @@
                             <shadedPattern>${spark.shade.packageName}.connect.google_protos.type</shadedPattern>
                         </relocation>
                     </relocations>
+                    <filters>
+                        <filter>
+                            <artifact>org.apache.tomcat:annotations-api</artifact>
+                            <includes>
+                                <include>javax/annotation/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>javax/**</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                     <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
                     <transformers>
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
