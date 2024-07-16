@@ -136,7 +136,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
       (one, another) match {
         case (a: JavaMirror, b: JavaMirror) =>
           Iterator.iterate(b.classLoader)(_.getParent).contains(a.classLoader) ||
-            Iterator.iterate(a.classLoader)(_.getParent).contains(b.classLoader)
+          Iterator.iterate(a.classLoader)(_.getParent).contains(b.classLoader)
         case _ => one == another
       }
     }
