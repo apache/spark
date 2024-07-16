@@ -19,15 +19,22 @@ import logging
 import unittest
 import json
 from io import StringIO
+from pyspark.errors import ArithmeticException
 from pyspark.logger.logger import PySparkLogger
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class LoggerTestsMixin:
     def setUp(self):
+        self.handler = logging.StreamHandler(StringIO())
+
         self.logger = PySparkLogger.getLogger("TestLogger")
         self.logger.setLevel(logging.INFO)
-        self.handler = logging.StreamHandler(StringIO())
         self.logger.addHandler(self.handler)
+
+        dataframe_query_context_logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
+        dataframe_query_context_logger.setLevel(logging.INFO)
+        dataframe_query_context_logger.addHandler(self.handler)
 
     def test_log_structure(self):
         self.logger.info("Test logging structure")
@@ -83,8 +90,28 @@ class LoggerTestsMixin:
         self.assertTrue("msg" in log_json["exception"])
         self.assertTrue("stacktrace" in log_json["exception"])
 
+    def test_dataframe_query_context_logger(self):
+        with self.sql_conf({"spark.sql.ansi.enabled": True}):
+            df = self.spark.range(10)
 
-class LoggerTests(LoggerTestsMixin, unittest.TestCase):
+            with self.assertRaises(ArithmeticException):
+                df.withColumn("div_zero", df.id / 0).collect()
+            log_json = json.loads(self.handler.stream.getvalue().strip())
+
+            err_msg = "[DIVIDE_BY_ZERO] Division by zero."
+            self.assertTrue(err_msg in log_json["msg"])
+            self.assertTrue(err_msg in log_json["exception"]["msg"])
+            self.assertEqual(log_json["context"]["fragment"], "__truediv__")
+            self.assertEqual(log_json["context"]["error_class"], "DIVIDE_BY_ZERO")
+            # Only the class name is different between classic and connect.
+            # Py4JJavaError for classic, _MultiThreadedRendezvous for connect
+            self.assertTrue(
+                log_json["exception"]["class"] in ("Py4JJavaError", "_MultiThreadedRendezvous")
+            )
+            self.assertTrue("Traceback" in log_json["exception"]["stacktrace"][0])
+
+
+class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
     pass
 
 

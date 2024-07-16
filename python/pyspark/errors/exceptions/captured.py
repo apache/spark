@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
 
 
-from pyspark.logger.logger import PySparkLogger
+from pyspark.logger import PySparkLogger
 
 
 class CapturedException(PySparkException):
@@ -180,28 +180,6 @@ class CapturedException(PySparkException):
             return contexts
         else:
             return []
-
-    def _log_exception(self) -> None:
-        query_contexts = self.getQueryContext()
-        query_context = query_contexts[0] if len(query_contexts) != 0 else None
-        if query_context:
-            if isinstance(query_context, DataFrameQueryContext):
-                logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
-                call_site = query_context.callSite().split(":")
-                line_no = call_site[1] if len(call_site) == 2 else ""
-                logger.exception(
-                    self._desc,
-                    file=call_site[0],
-                    line_no=line_no,
-                    fragment=query_context.fragment(),
-                    error_class=self.getErrorClass(),
-                )
-            else:
-                logger = PySparkLogger.getLogger("SQLQueryContextLogger")
-                logger.exception(
-                    self._desc,
-                    error_class=self.getErrorClass(),
-                )
 
 
 def convert_exception(e: "Py4JJavaError") -> CapturedException:
