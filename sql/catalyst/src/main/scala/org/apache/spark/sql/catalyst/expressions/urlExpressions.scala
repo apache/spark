@@ -52,7 +52,7 @@ import org.apache.spark.unsafe.types.UTF8String
 case class UrlEncode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
@@ -89,7 +89,7 @@ case class UrlEncode(child: Expression)
 case class UrlDecode(child: Expression)
   extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
 
-  override def replacement: Expression =
+  override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
       SQLConf.get.defaultStringType,
