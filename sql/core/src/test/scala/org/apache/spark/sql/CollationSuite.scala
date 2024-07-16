@@ -1465,4 +1465,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("show collations") {
+    assert(sql("SHOW COLLATIONS").collect().length == 562)
+
+    checkAnswer(sql("SHOW COLLATIONS LIKE '*UTF8_BINARY*'"),
+      Row("UTF8_BINARY", "spark", "1.0", true, true, false))
+    checkAnswer(sql("SHOW COLLATIONS '*zh_Hant_HKG*'"),
+      Seq(Row("zh_Hant_HKG", "icu", "153.120.0.0", false, false, false),
+        Row("zh_Hant_HKG_CI", "icu", "153.120.0.0", false, false, false),
+        Row("zh_Hant_HKG_AI", "icu", "153.120.0.0", false, false, false),
+        Row("zh_Hant_HKG_CI_AI", "icu", "153.120.0.0", false, false, false)))
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW COLLATIONS")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION"
+      )
+    }
+  }
 }

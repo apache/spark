@@ -1116,4 +1116,18 @@ class SparkSqlAstBuilder extends AstBuilder {
       withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
   }
+
+  /**
+   * Create a [[ShowCollationsCommand]] command.
+   * Expected format:
+   * {{{
+   *   SHOW COLLATIONS (LIKE? pattern)?;
+   * }}}
+   */
+  override def visitShowCollations(ctx: ShowCollationsContext): LogicalPlan = withOrigin(ctx) {
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
+    ShowCollationsCommand(Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
 }
