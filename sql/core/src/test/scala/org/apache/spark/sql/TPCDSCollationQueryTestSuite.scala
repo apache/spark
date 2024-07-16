@@ -247,14 +247,20 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       val queryString = resourceToString(
         s"tpcds/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
-      test(name)(runQuery(queryString, Map.empty, emptyResults.contains(name)))
+      test(name) {
+        System.gc()
+        runQuery(queryString, Map.empty, emptyResults.contains(name))
+      }
     }
 
     tpcdsQueriesV2_7_0.foreach { name =>
       val queryString = resourceToString(
         s"tpcds-v2.7.0/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
-      test(s"$name-v2.7")(runQuery(queryString, Map.empty, emptyResultsV2_7_0.contains(name)))
+      test(s"$name-v2.7") {
+        System.gc()
+        runQuery(queryString, Map.empty, emptyResultsV2_7_0.contains(name))
+      }
     }
   } else {
     ignore("skipped because env 'SPARK_TPCDS_DATA' is not set") {}
