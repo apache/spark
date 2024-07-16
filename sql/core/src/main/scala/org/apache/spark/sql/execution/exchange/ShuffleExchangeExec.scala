@@ -84,9 +84,22 @@ trait ShuffleExchangeLike extends Exchange {
   protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
 
   /**
+   * Cancels the shuffle job with a reason string.
+   */
+  final def cancelShuffleJob(reason: String): Unit = {
+    if (isMaterializationStarted()) {
+      shuffleFuture match {
+        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
+          action.cancel(reason)
+        case _ =>
+      }
+    }
+  }
+
+  /**
    * Cancels the shuffle job.
    */
-  final def cancelShuffleJob: Unit = {
+  final def cancelShuffleJob(): Unit = {
     if (isMaterializationStarted()) {
       shuffleFuture match {
         case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>

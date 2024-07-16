@@ -161,6 +161,8 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
     doCancel()
   }
 
+  protected def doCancel(reason: String): Unit
+
   protected def doCancel(): Unit
 
   /**
@@ -206,7 +208,9 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override protected def doCancel(): Unit = shuffle.cancelShuffleJob
+  override protected def doCancel(reason: String): Unit = shuffle.cancelShuffleJob(reason)
+
+  override protected def doCancel(): Unit = shuffle.cancelShuffleJob()
 
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
