@@ -23,11 +23,8 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.collection.mutable
-
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -43,7 +40,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4855,6 +4852,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |LocalTableScan [x#N, y#N]
         |"""
     )
+  }
+
+  test("SPARK-36680: Files hint options should be put into resolveDataSource function") {
+    val df1 = spark.range(100).toDF()
+    withTempPath(f => {
+      df1.write.json(f.getCanonicalPath)
+      val df2 = sql(
+        s"""
+           |SELECT id
+           |FROM json.`${f.getCanonicalPath}`
+           |WITH (`key1` = 1, `key2` = 2)
+        """.stripMargin
+      )
+      checkAnswer(df2, df1)
+      df2.queryExecution.analyzed foreach {
+        case LogicalRelation(fs: HadoopFsRelation, _, _, _) =>
+          assert(fs.options == Map("key1" -> "1", "key2" -> "2"))
+        case _: LogicalRelation =>
+          assert(false)
+        case _ =>
+      }
+    })
   }
 }
 
