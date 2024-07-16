@@ -2635,11 +2635,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * for more information.
    *
    * @param groupId the group ID to cancel
-   * @param reason optional reason for cancellation
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
    */
   def cancelJobGroup(groupId: String, reason: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, Option(reason))
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = false, Option(reason))
   }
 
   /**
@@ -2650,7 +2652,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, None)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = false, None)
   }
 
   /**
@@ -2660,11 +2662,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * is to be added, the oldest job group tracked will be discarded.
    *
    * @param groupId the group ID to cancel
-   * @param reason optional reason for cancellation
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
    */
   def cancelJobGroupAndFutureJobs(groupId: String, reason: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, Option(reason), cancelFutureJobs = true)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true, Option(reason))
   }
 
   /**
@@ -2677,15 +2681,16 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def cancelJobGroupAndFutureJobs(groupId: String): Unit = {
     assertNotStopped()
-    dagScheduler.cancelJobGroup(groupId, None, cancelFutureJobs = true)
+    dagScheduler.cancelJobGroup(groupId, cancelFutureJobs = true, None)
   }
 
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
-   * @param reason optional reason for cancellation
-   * @since 3.5.0
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
    */
   def cancelJobsWithTag(tag: String, reason: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
@@ -2697,6 +2702,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
    *
    * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   *
    * @since 3.5.0
    */
   def cancelJobsWithTag(tag: String): Unit = {
@@ -2715,7 +2721,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
-   * @param reason optional reason for cancellation
+   * @param reason reason for cancellation
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int, reason: String): Unit = {

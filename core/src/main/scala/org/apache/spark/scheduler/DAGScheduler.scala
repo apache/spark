@@ -1108,10 +1108,10 @@ private[spark] class DAGScheduler(
    * Cancel all jobs in the given job group ID.
    * @param cancelFutureJobs if true, future submitted jobs in this job group will be cancelled
    */
-  def cancelJobGroup(groupId: String, reason: Option[String], cancelFutureJobs: Boolean = false): Unit = {
+  def cancelJobGroup(groupId: String, cancelFutureJobs: Boolean = false, reason: Option[String]): Unit = {
     logInfo(log"Asked to cancel job group ${MDC(GROUP_ID, groupId)} with " +
       log"cancelFutureJobs=${MDC(CANCEL_FUTURE_JOBS, cancelFutureJobs)}")
-    eventProcessLoop.post(JobGroupCancelled(groupId, reason, cancelFutureJobs))
+    eventProcessLoop.post(JobGroupCancelled(groupId, cancelFutureJobs, reason))
   }
 
   /**
@@ -1209,8 +1209,8 @@ private[spark] class DAGScheduler(
 
   private[scheduler] def handleJobGroupCancelled(
       groupId: String,
-      reason: Option[String],
-      cancelFutureJobs: Boolean): Unit = {
+      cancelFutureJobs: Boolean,
+      reason: Option[String]): Unit = {
     // If cancelFutureJobs is true, store the cancelled job group id into internal states.
     // When a job belonging to this job group is submitted, skip running it.
     if (cancelFutureJobs) {
@@ -3110,8 +3110,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case JobCancelled(jobId, reason) =>
       dagScheduler.handleJobCancellation(jobId, reason)
 
-    case JobGroupCancelled(groupId, reason, cancelFutureJobs) =>
-      dagScheduler.handleJobGroupCancelled(groupId, reason, cancelFutureJobs)
+    case JobGroupCancelled(groupId, cancelFutureJobs, reason) =>
+      dagScheduler.handleJobGroupCancelled(groupId, cancelFutureJobs, reason)
 
     case JobTagCancelled(tag, reason) =>
       dagScheduler.handleJobTagCancelled(tag, reason)
