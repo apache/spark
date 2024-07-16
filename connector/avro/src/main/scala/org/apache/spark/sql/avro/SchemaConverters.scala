@@ -27,6 +27,7 @@ import org.apache.avro.LogicalTypes.{Date, Decimal, LocalTimestampMicros, LocalT
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.Decimal.minBytesForPrecision
  * versa.
  */
 @DeveloperApi
-object SchemaConverters {
+object SchemaConverters extends Logging {
   private lazy val nullSchema = Schema.create(Schema.Type.NULL)
 
   /**
@@ -54,8 +55,10 @@ object SchemaConverters {
   def toSqlType(
       avroSchema: Schema,
       useStableIdForUnionType: Boolean,
-      stableIdPrefixForUnionType: String): SchemaType = {
-    toSqlTypeHelper(avroSchema, Set.empty, useStableIdForUnionType, stableIdPrefixForUnionType)
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int = -1): SchemaType = {
+    toSqlTypeHelper(avroSchema, Map.empty, useStableIdForUnionType, stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth)
   }
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
@@ -63,7 +66,7 @@ object SchemaConverters {
    * @since 2.4.0
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
-    toSqlType(avroSchema, false, "")
+    toSqlType(avroSchema, false, "", -1)
   }
 
   @deprecated("using toSqlType(..., useStableIdForUnionType: Boolean) instead", "4.0.0")
@@ -71,9 +74,10 @@ object SchemaConverters {
     val avroOptions = AvroOptions(options)
     toSqlTypeHelper(
       avroSchema,
-      Set.empty,
+      Map.empty,
       avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType)
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth)
   }
 
   // The property specifies Catalyst type of the given field
@@ -81,9 +85,10 @@ object SchemaConverters {
 
   private def toSqlTypeHelper(
       avroSchema: Schema,
-      existingRecordNames: Set[String],
+      existingRecordNames: Map[String, Int],
       useStableIdForUnionType: Boolean,
-      stableIdPrefixForUnionType: String): SchemaType = {
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -128,62 +133,112 @@ object SchemaConverters {
       case NULL => SchemaType(NullType, nullable = true)
 
       case RECORD =>
-        if (existingRecordNames.contains(avroSchema.getFullName)) {
+        val recursiveDepth: Int = existingRecordNames.getOrElse(avroSchema.getFullName, 0)
+        if (recursiveDepth > 0 && recursiveFieldMaxDepth < 0) {
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark:
             |${avroSchema.toString(true)}
           """.stripMargin)
-        }
-        val newRecordNames = existingRecordNames + avroSchema.getFullName
-        val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toSqlTypeHelper(
-            f.schema(),
-            newRecordNames,
-            useStableIdForUnionType,
-            stableIdPrefixForUnionType)
-          StructField(f.name, schemaType.dataType, schemaType.nullable)
-        }
+        } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
+          println(
+            s"The field ${avroSchema.getFullName} of type ${avroSchema.getType.getName} is " +
+              s"dropped at recursive depth $recursiveDepth."
+          )
+          null
+        } else {
+          val newRecordNames =
+            existingRecordNames + (avroSchema.getFullName -> (recursiveDepth + 1))
+          val fields = avroSchema.getFields.asScala.map { f =>
+            val schemaType = toSqlTypeHelper(
+              f.schema(),
+              newRecordNames,
+              useStableIdForUnionType,
+              stableIdPrefixForUnionType,
+              recursiveFieldMaxDepth)
+            if (schemaType == null) {
+              null
+            }
+            else {
+              StructField(f.name, schemaType.dataType, schemaType.nullable)
+            }
+          }.filter(_ != null).toSeq
+          fields match {
+            case Nil =>
+              convertEmptyAvroToStructWithDummyField(avroSchema.getFullName)
 
-        SchemaType(StructType(fields.toArray), nullable = false)
+            case fds => SchemaType(StructType(fds), nullable = false)
+          }
+        }
 
       case ARRAY =>
         val schemaType = toSqlTypeHelper(
           avroSchema.getElementType,
           existingRecordNames,
           useStableIdForUnionType,
-          stableIdPrefixForUnionType)
-        SchemaType(
-          ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
-          nullable = false)
+          stableIdPrefixForUnionType,
+          recursiveFieldMaxDepth)
+        if (schemaType == null) {
+          println(
+            s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
+              "does not have any fields left likely due to recursive depth limit."
+          )
+          null
+        } else {
+          SchemaType(
+            ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
+            nullable = false)
+        }
 
       case MAP =>
         val schemaType = toSqlTypeHelper(avroSchema.getValueType,
-          existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType)
-        SchemaType(
-          MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
-          nullable = false)
+          existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType,
+          recursiveFieldMaxDepth)
+        if (schemaType == null) {
+          println(
+            s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
+              "does not have any fields left likely due to recursive depth limit."
+          )
+          null
+        } else {
+          SchemaType(
+            MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
+            nullable = false)
+        }
 
       case UNION =>
         if (avroSchema.getTypes.asScala.exists(_.getType == NULL)) {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = AvroUtils.nonNullUnionBranches(avroSchema)
-          if (remainingUnionTypes.size == 1) {
-            toSqlTypeHelper(
-              remainingUnionTypes.head,
-              existingRecordNames,
-              useStableIdForUnionType,
-              stableIdPrefixForUnionType).copy(nullable = true)
+          val schemaType =
+            if (remainingUnionTypes.size == 1) {
+              toSqlTypeHelper(
+                remainingUnionTypes.head,
+                existingRecordNames,
+                useStableIdForUnionType,
+                stableIdPrefixForUnionType,
+                recursiveFieldMaxDepth)
+            } else {
+              toSqlTypeHelper(
+                Schema.createUnion(remainingUnionTypes.asJava),
+                existingRecordNames,
+                useStableIdForUnionType,
+                stableIdPrefixForUnionType,
+                recursiveFieldMaxDepth)
+            }
+          if (schemaType == null) {
+            println(
+              s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
+                "does not have any fields left likely due to recursive depth limit."
+            )
+            null
           } else {
-            toSqlTypeHelper(
-              Schema.createUnion(remainingUnionTypes.asJava),
-              existingRecordNames,
-              useStableIdForUnionType,
-              stableIdPrefixForUnionType).copy(nullable = true)
+            schemaType.copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
             toSqlTypeHelper(avroSchema.getTypes.get(0),
-              existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType)
+              existingRecordNames, useStableIdForUnionType, stableIdPrefixForUnionType,
+              recursiveFieldMaxDepth)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
@@ -201,29 +256,38 @@ object SchemaConverters {
                   s,
                   existingRecordNames,
                   useStableIdForUnionType,
-                  stableIdPrefixForUnionType)
-
-                val fieldName = if (useStableIdForUnionType) {
-                  // Avro's field name may be case sensitive, so field names for two named type
-                  // could be "a" and "A" and we need to distinguish them. In this case, we throw
-                  // an exception.
-                  // Stable id prefix can be empty so the name of the field can be just the type.
-                  val tempFieldName = s"${stableIdPrefixForUnionType}${s.getName}"
-                  if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
-                    throw new IncompatibleSchemaException(
-                      "Cannot generate stable identifier for Avro union type due to name " +
-                      s"conflict of type name ${s.getName}")
-                  }
-                  tempFieldName
+                  stableIdPrefixForUnionType,
+                  recursiveFieldMaxDepth)
+                if (schemaType == null) {
+                  null
                 } else {
-                  s"member$i"
+                  val fieldName = if (useStableIdForUnionType) {
+                    // Avro's field name may be case sensitive, so field names for two named type
+                    // could be "a" and "A" and we need to distinguish them. In this case, we throw
+                    // an exception.
+                    // Stable id prefix can be empty so the name of the field can be just the type.
+                    val tempFieldName = s"${stableIdPrefixForUnionType}${s.getName}"
+                    if (!fieldNameSet.add(tempFieldName.toLowerCase(Locale.ROOT))) {
+                      throw new IncompatibleSchemaException(
+                        "Cannot generate stable identifier for Avro union type due to name " +
+                          s"conflict of type name ${s.getName}")
+                    }
+                    tempFieldName
+                  } else {
+                    s"member$i"
+                  }
+
+                  // All fields are nullable because only one of them is set at a time
+                  StructField(fieldName, schemaType.dataType, nullable = true)
                 }
+            }.filter(_ != null).toSeq
 
-                // All fields are nullable because only one of them is set at a time
-                StructField(fieldName, schemaType.dataType, nullable = true)
+            fields match {
+              case Nil =>
+                convertEmptyAvroToStructWithDummyField(avroSchema.getFullName)
+
+              case fds => SchemaType(StructType(fds), nullable = false)
             }
-
-            SchemaType(StructType(fields.toArray), nullable = false)
         }
 
       case other => throw new IncompatibleSchemaException(s"Unsupported type $other")
@@ -302,6 +366,12 @@ object SchemaConverters {
     } else {
       schema
     }
+  }
+
+  private def convertEmptyAvroToStructWithDummyField(fieldName: String): SchemaType = {
+    log.info(s"Keep $fieldName which is empty struct by inserting a dummy field.")
+    SchemaType(
+      StructType(StructField("__dummy_field_in_empty_struct", StringType) :: Nil), nullable = true)
   }
 }
 
