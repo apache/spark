@@ -101,7 +101,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @param environment Environment variables to set on worker nodes
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
-           environment: JMap[String, String]) =
+      environment: JMap[String, String]) =
     this(
       new SparkContext(master, appName, sparkHome, jars.toImmutableArraySeq, environment.asScala))
 
@@ -316,10 +316,10 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def sequenceFile[K, V](path: String,
-                         keyClass: Class[K],
-                         valueClass: Class[V],
-                         minPartitions: Int
-                        ): JavaPairRDD[K, V] = {
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int
+    ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions))
@@ -384,12 +384,12 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
-                                               conf: JobConf,
-                                               inputFormatClass: Class[F],
-                                               keyClass: Class[K],
-                                               valueClass: Class[V],
-                                               minPartitions: Int
-                                             ): JavaPairRDD[K, V] = {
+    conf: JobConf,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int
+    ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     val rdd = sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minPartitions)
@@ -414,11 +414,11 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
-                                               conf: JobConf,
-                                               inputFormatClass: Class[F],
-                                               keyClass: Class[K],
-                                               valueClass: Class[V]
-                                             ): JavaPairRDD[K, V] = {
+    conf: JobConf,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V]
+    ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     val rdd = sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass)
@@ -434,12 +434,12 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
-                                                path: String,
-                                                inputFormatClass: Class[F],
-                                                keyClass: Class[K],
-                                                valueClass: Class[V],
-                                                minPartitions: Int
-                                              ): JavaPairRDD[K, V] = {
+    path: String,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minPartitions: Int
+    ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     val rdd = sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions)
@@ -455,11 +455,11 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
-                                                path: String,
-                                                inputFormatClass: Class[F],
-                                                keyClass: Class[K],
-                                                valueClass: Class[V]
-                                              ): JavaPairRDD[K, V] = {
+    path: String,
+    inputFormatClass: Class[F],
+    keyClass: Class[K],
+    valueClass: Class[V]
+    ): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
     implicit val ctagV: ClassTag[V] = ClassTag(valueClass)
     val rdd = sc.hadoopFile(path, inputFormatClass, keyClass, valueClass)
@@ -476,11 +476,11 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
-                                                         path: String,
-                                                         fClass: Class[F],
-                                                         kClass: Class[K],
-                                                         vClass: Class[V],
-                                                         conf: Configuration): JavaPairRDD[K, V] = {
+    path: String,
+    fClass: Class[F],
+    kClass: Class[K],
+    vClass: Class[V],
+    conf: Configuration): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(kClass)
     implicit val ctagV: ClassTag[V] = ClassTag(vClass)
     val rdd = sc.newAPIHadoopFile(path, fClass, kClass, vClass, conf)
@@ -505,10 +505,10 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-                                                        conf: Configuration,
-                                                        fClass: Class[F],
-                                                        kClass: Class[K],
-                                                        vClass: Class[V]): JavaPairRDD[K, V] = {
+    conf: Configuration,
+    fClass: Class[F],
+    kClass: Class[K],
+    vClass: Class[V]): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(kClass)
     implicit val ctagV: ClassTag[V] = ClassTag(vClass)
     val rdd = sc.newAPIHadoopRDD(conf, fClass, kClass, vClass)
