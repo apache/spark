@@ -143,25 +143,16 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def createTransformFunc: String => Seq[String] = {
     val re = $(pattern).r
+    val localToLowercase = $(toLowercase)
+    val localGaps = $(gaps)
     val localMinTokenLength = $(minTokenLength)
 
-    ($(toLowercase), $(gaps)) match {
-      case (true, true) =>
-        (originStr: String) =>
-          re.split(originStr.toLowerCase()).toImmutableArraySeq
-            .filter(_.length >= localMinTokenLength)
-
-      case (true, false) =>
-        (originStr: String) => re.findAllIn(originStr.toLowerCase()).toSeq
-          .filter(_.length >= localMinTokenLength)
-
-      case (false, true) =>
-        (originStr: String) => re.split(originStr).toImmutableArraySeq
-          .filter(_.length >= localMinTokenLength)
-
-      case (false, false) =>
-        (originStr: String) => re.findAllIn(originStr).toSeq
-          .filter(_.length >= localMinTokenLength)
+    (originStr: String) => {
+      // scalastyle:off caselocale
+      val str = if (localToLowercase) originStr.toLowerCase() else originStr
+      // scalastyle:on caselocale
+      val tokens = if (localGaps) re.split(str).toImmutableArraySeq else re.findAllIn(str).toSeq
+      tokens.filter(_.length >= localMinTokenLength)
     }
   }
 
