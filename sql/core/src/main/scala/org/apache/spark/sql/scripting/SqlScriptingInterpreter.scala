@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorCondition, ErrorHandler, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
-
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -74,7 +74,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true, collectResult = false))
           .reverse
 
         val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
@@ -113,7 +113,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
   def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
     executionPlan.flatMap {
-      case statement: SingleStatementExec if !statement.isExecuted && statement.collectResult =>
+      case statement: SingleStatementExec if statement.collectResult =>
         statement.data
       case _ => None
     }

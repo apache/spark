@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, WithOrigin}
-
-import scala.collection.mutable
 
 /**
  * Trait for all SQL Scripting logical operators that are product of parsing phase.

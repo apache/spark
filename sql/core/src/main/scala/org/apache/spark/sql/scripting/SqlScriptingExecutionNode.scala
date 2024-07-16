@@ -76,7 +76,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
-    override val isInternal: Boolean)
+    override val isInternal: Boolean,
+    var collectResult: Boolean = true)  // Whether the statement result should be collected in the final result.
   extends LeafStatementExec with WithOrigin {
 
   /**
@@ -89,11 +90,6 @@ class SingleStatementExec(
    * Whether an error was raised during the execution of this statement.
    */
   var raisedError = false
-
-  /**
-   * Whether the statement result should be collected in the final result.
-   */
-  var collectResult = false
 
   /**
    * Data returned after execution.

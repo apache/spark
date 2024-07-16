@@ -677,7 +677,7 @@ class SparkSession private(
           // execute the plan directly if it is not a single statement
           val lastRow = executeScript(plan).foldLeft(Array.empty[Row])((_, next) => next)
           val attributes = DataTypeUtils.toAttributes(lastRow.head.schema)
-          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow))
+          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
       }
     }
 
@@ -746,7 +746,7 @@ class SparkSession private(
           // execute the plan directly if it is not a single statement
           val lastRow = executeScript(plan).foldLeft(Array.empty[Row])((_, next) => next)
           val attributes = DataTypeUtils.toAttributes(lastRow.head.schema)
-          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow))
+          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
       }
     }
 
