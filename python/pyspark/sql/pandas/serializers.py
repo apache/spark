@@ -1149,10 +1149,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             TransformWithStateInPandasSerializer,
             self
         ).__init__(timezone, safecheck, assign_cols_by_name)
-
-        # self.state_server_port = state_server_port
-
-        # # open client connection to state server socket
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
 
