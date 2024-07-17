@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -513,6 +514,21 @@ class JacksonParser(
       throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
   }
 
+  private val useUnsafeRow = SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW)
+  private val cachedUnsafeProjection = mutable.HashMap.empty[StructType, UnsafeProjection]
+
+  protected final def convertRow(row: InternalRow, schema: StructType): InternalRow = {
+    if (useUnsafeRow) {
+      val p = cachedUnsafeProjection.getOrElseUpdate(schema, UnsafeProjection.create(schema))
+      // The copy is necessary: each time `UnsafeProjection` produces a row, it updates an
+      // internal `UnsafeRow` object and returns the reference. We need to avoid overwriting
+      // previously returned results.
+      p(row).copy()
+    } else {
+      row
+    }
+  }
+
   /**
    * Parse an object from the token stream into a new Row representing the schema.
    * Fields in the json that are not defined in the requested schema will be dropped.
@@ -556,7 +572,7 @@ class JacksonParser(
       None
     } else if (badRecordException.isEmpty) {
       applyExistenceDefaultValuesToRow(schema, row, bitmask)
-      Some(row)
+      Some(convertRow(row, schema))
     } else {
       throw PartialResultException(row, badRecordException.get)
     }

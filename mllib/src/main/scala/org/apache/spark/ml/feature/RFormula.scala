@@ -506,7 +506,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
       // Save model data: columnsToPrune
       val data = Data(instance.columnsToPrune.toSeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -598,7 +598,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
       // Save model data: vectorCol, prefixesToRewrite
       val data = Data(instance.vectorCol, instance.prefixesToRewrite)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 

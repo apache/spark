@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, con
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLStmt
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_BANG_EQUALS_NOT
@@ -150,10 +150,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
         if bl.multipartIdentifier().getText.nonEmpty &&
           bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-          throw SparkException.internalError("Both labels should be same.")
-      case (None, Some(_)) =>
-        throw SparkException.internalError("End label can't exist without begin label.")
+              el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
+        throw SqlScriptingErrors.labelsMismatch(
+          bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+      case (None, Some(el: EndLabelContext)) =>
+        throw SqlScriptingErrors.endLabelWithoutBeginLabel(el.multipartIdentifier().getText)
       case _ =>
     }
 
