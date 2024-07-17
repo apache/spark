@@ -62,11 +62,18 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   setDefault(inverse -> false)
 
-  override protected def createTransformFunc: Vector => Vector = { vec =>
-    val result = vec.toArray
-    val jTransformer = new DoubleDCT_1D(result.length)
-    if ($(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
-    Vectors.dense(result)
+  override protected def createTransformFunc: Vector => Vector = {
+    val localInverse = $(inverse)
+    (vec: Vector) => {
+      val result = vec.toArray
+      val jTransformer = new DoubleDCT_1D(result.length)
+      if (localInverse) {
+        jTransformer.inverse(result, true)
+      } else {
+        jTransformer.forward(result, true)
+      }
+      Vectors.dense(result)
+    }
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
