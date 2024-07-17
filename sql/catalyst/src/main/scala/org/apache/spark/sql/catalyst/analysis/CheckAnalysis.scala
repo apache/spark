@@ -905,17 +905,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
       // are not part of the correlated columns.
 
-      // Collect the inner query attributes that are guaranteed to have a single value for each
-      // outer row. See comment on getCorrelatedEquivalentInnerColumns.
-      val correlatedEquivalentCols = getCorrelatedEquivalentInnerExpressions(query)
+      // Collect the inner query expressions that are guaranteed to have a single value for each
+      // outer row. See comment on getCorrelatedEquivalentInnerExpressions.
+      val correlatedEquivalentExprs = getCorrelatedEquivalentInnerExpressions(query)
       // Unlike 'groupByCols', preserve the entire grouping expression.
       val groupByExprs =
         ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference]))
-      val nonEquivalentGroupByCols = groupByExprs -- correlatedEquivalentCols
+      val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
 
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
-        nonEquivalentGroupByCols
+        nonEquivalentGroupByExprs
       } else {
         // Legacy incorrect logic for checking for invalid group-by columns (see SPARK-48503).
         // Allows any inner attribute that appears in a correlated predicate, even if it is a
@@ -927,7 +927,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           .filterNot(conditions.flatMap(_.references).contains)
         val correlatedCols = AttributeSet(subqueryColumns)
         val invalidColsLegacy = groupByCols -- correlatedCols
-        if (!nonEquivalentGroupByCols.isEmpty && invalidColsLegacy.isEmpty) {
+        if (!nonEquivalentGroupByExprs.isEmpty && invalidColsLegacy.isEmpty) {
           logWarning(log"Using legacy behavior for " +
             log"${MDC(LogKeys.CONFIG, SQLConf
             .LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE.key)}. " +
