@@ -134,6 +134,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       case _ => true
     })
 
+    val requireNoOffsetInCorrelatedSubquery = correlationConditions.nonEmpty
+
     // For the OrderBy, consider whether or not the result of the subquery is required to be sorted.
     // This is to maintain test determinism. This is affected by whether the subquery has a limit
     // clause or an offset clause.
@@ -152,10 +154,13 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       operatorInSubquery match {
         case lo: LimitAndOffset =>
-          if (lo.offsetValue == 0 && lo.limitValue == 0) {
+          var offsetValue = lo.offsetValue
+          if (requireNoOffsetInCorrelatedSubquery) offsetValue = 0
+
+          if (offsetValue == 0 && lo.limitValue == 0) {
             None
           } else {
-            Some(lo)
+            Some(LimitAndOffset(lo.limitValue, offsetValue))
           }
         case _ => None
       }
