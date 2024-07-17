@@ -30,6 +30,11 @@ import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
+case class StateSchemaValidationResult(
+    evolvedSchema: Boolean,
+    schemaPath: String
+)
+
 case class StateSchema(
     colFamilyName: String,
     keySchema: StructType,
@@ -133,14 +138,16 @@ class StateSchemaCompatibilityChecker(
 
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: Array[StateSchema],
-      ignoreValueSchema: Boolean): Unit = {
+      ignoreValueSchema: Boolean): Boolean = {
     val existingSchema = getExistingKeyAndValueSchema()
     if (existingSchema.isEmpty) {
       // write the schema file if it doesn't exist
       createSchemaFile(newStateSchema.head.keySchema, newStateSchema.head.valueSchema)
+      true
     } else {
       // validate if the new schema is compatible with the existing schema
       check(existingSchema.head, newStateSchema.head, ignoreValueSchema)
+      false
     }
   }
 
@@ -180,7 +187,7 @@ object StateSchemaCompatibilityChecker {
       sessionState: SessionState,
       stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,
-      storeName: String = StateStoreId.DEFAULT_STORE_NAME): Array[String] = {
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME): StateSchemaValidationResult = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -202,15 +209,21 @@ object StateSchemaCompatibilityChecker {
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
     // compatibility checker for value schema as well.
+
+    var evolvedSchema = false
     val result = Try(
       checker.validateAndMaybeEvolveStateSchema(newStateSchema,
         ignoreValueSchema = !storeConf.formatValidationCheckValue)
-    ).toEither.fold(Some(_), _ => None)
+    ).toEither.fold(Some(_),
+      hasEvolvedSchema => {
+        evolvedSchema = hasEvolvedSchema
+        None
+      })
 
     // if schema validation is enabled and an exception is thrown, we re-throw it and fail the query
     if (storeConf.stateSchemaCheckEnabled && result.isDefined) {
       throw result.get
     }
-    Array(checker.schemaFileLocation.toString)
+    StateSchemaValidationResult(evolvedSchema, checker.schemaFileLocation.toString)
   }
 }

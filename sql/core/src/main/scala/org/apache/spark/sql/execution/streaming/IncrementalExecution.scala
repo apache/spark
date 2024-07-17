@@ -205,7 +205,7 @@ class IncrementalExecution(
             getConf(SQLConf.STREAMING_TRANSFORM_WITH_STATE_OP_STATE_SCHEMA_VERSION)
           case _ => STATE_SCHEMA_DEFAULT_VERSION
         }
-        val stateSchemaPaths = statefulOp.
+        val schemaValidationResult = statefulOp.
           validateAndMaybeEvolveStateSchema(hadoopConf, currentBatchId, stateSchemaVersion)
         // write out the state schema paths to the metadata file
         statefulOp match {

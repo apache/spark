@@ -377,12 +377,11 @@ case class TransformWithStateExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
-      stateSchemaVersion: Int): Array[String] = {
+      stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
-
-    StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newColumnFamilySchemas.values.toArray, session.sessionState, stateSchemaVersion)
+    List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
+      newColumnFamilySchemas.values.toArray, session.sessionState, stateSchemaVersion))
   }
 
   private def stateSchemaDirPath(storeName: String): Path = {
