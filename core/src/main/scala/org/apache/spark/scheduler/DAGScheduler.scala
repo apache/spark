@@ -1230,7 +1230,7 @@ private[spark] class DAGScheduler(
         log"Cannot find active jobs for it.")
     }
     val jobIds = activeInGroup.map(_.jobId)
-    val updatedReason = reason.orElse(Some("part of cancelled job group %s".format(groupId)))
+    val updatedReason = reason.getOrElse("part of cancelled job group %s".format(groupId))
     jobIds.foreach(handleJobCancellation(_, updatedReason))
   }
 
