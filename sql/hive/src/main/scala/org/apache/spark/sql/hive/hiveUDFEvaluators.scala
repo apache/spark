@@ -129,7 +129,11 @@ class HiveGenericUDFEvaluator(
   override def returnType: DataType = inspectorToDataType(returnInspector)
 
   def setArg(index: Int, arg: Any): Unit =
-    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
+    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => arg)
+
+  def setException(index: Int, exp: Throwable): Unit = {
+    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(() => throw exp)
+  }
 
   override def doEvaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
@@ -139,10 +143,10 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataTyp
   extends DeferredObject with HiveInspectors {
 
   private val wrapper = wrapperFor(oi, dataType)
-  private var func: Any = _
-  def set(func: Any): Unit = {
+  private var func: () => Any = _
+  def set(func: () => Any): Unit = {
     this.func = func
   }
   override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrapper(func).asInstanceOf[AnyRef]
+  override def get(): AnyRef = wrapper(func()).asInstanceOf[AnyRef]
 }

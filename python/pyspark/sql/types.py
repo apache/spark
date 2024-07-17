@@ -194,16 +194,7 @@ class DataType:
         >>> DataType.fromDDL("b: string, a: int")
         StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
         """
-        from pyspark.sql import SparkSession
-        from pyspark.sql.functions import udf
-
-        # Intentionally uses SparkSession so one implementation can be shared with/without
-        # Spark Connect.
-        schema = (
-            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
-        )
-        assert len(schema) == 1
-        return schema[0].dataType
+        return _parse_datatype_string(ddl)
 
     @classmethod
     def _data_type_build_formatted_string(
@@ -1577,6 +1568,12 @@ class VariantType(AtomicType):
         if obj is None or not all(key in obj for key in ["value", "metadata"]):
             return None
         return VariantVal(obj["value"], obj["metadata"])
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "VariantType.toInternal"},
+        )
 
 
 class UserDefinedType(DataType):

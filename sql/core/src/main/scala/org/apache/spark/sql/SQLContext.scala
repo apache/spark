@@ -252,7 +252,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   object implicits extends SQLImplicits with Serializable {
-    protected override def _sqlContext: SQLContext = self
+    protected override def session: SparkSession = self.sparkSession
   }
   // scalastyle:on
 

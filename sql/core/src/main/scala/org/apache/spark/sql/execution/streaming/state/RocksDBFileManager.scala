@@ -171,6 +171,15 @@ class RocksDBFileManager(
     fileMappings
   }
 
+  private def getChangelogVersion(useColumnFamilies: Boolean): Short = {
+    val changelogVersion: Short = if (useColumnFamilies) {
+      2
+    } else {
+      1
+    }
+    changelogVersion
+  }
+
   def getChangeLogWriter(
       version: Long,
       useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
@@ -180,10 +189,16 @@ class RocksDBFileManager(
       if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
       rootDirChecked = true
     }
-    val changelogWriter = if (useColumnFamilies) {
-      new StateStoreChangelogWriterV2(fm, changelogFile, codec)
-    } else {
-      new StateStoreChangelogWriterV1(fm, changelogFile, codec)
+
+    val changelogVersion = getChangelogVersion(useColumnFamilies)
+    val changelogWriter = changelogVersion match {
+      case 1 =>
+        new StateStoreChangelogWriterV1(fm, changelogFile, codec)
+      case 2 =>
+        new StateStoreChangelogWriterV2(fm, changelogFile, codec)
+      case _ =>
+        throw new IllegalArgumentException(s"Failed to find changelog writer for " +
+          s"version=$changelogVersion")
     }
     changelogWriter
   }
@@ -193,11 +208,23 @@ class RocksDBFileManager(
       version: Long,
       useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version)
-    if (useColumnFamilies) {
-      new StateStoreChangelogReaderV2(fm, changelogFile, codec)
-    } else {
-      new StateStoreChangelogReaderV1(fm, changelogFile, codec)
+
+    // Note that ideally we should get the version for the reader from the
+    // changelog itself. However, since we don't record this for v1, we need to
+    // rely on external arguments to make this call today. Within the reader, we verify
+    // for the correctness of the decided/expected version. We might revisit this pattern
+    // as we add more changelog versions in the future.
+    val changelogVersion = getChangelogVersion(useColumnFamilies)
+    val changelogReader = changelogVersion match {
+      case 1 =>
+        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
+      case 2 =>
+        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
+      case _ =>
+        throw new IllegalArgumentException(s"Failed to find changelog reader for " +
+          s"version=$changelogVersion")
     }
+    changelogReader
   }
 
   /**

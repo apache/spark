@@ -42,6 +42,32 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
+  private val variantInputScript: String =
+    """
+      |class InputVariantUDTF:
+      |    def eval(self, a):
+      |        yield str(a)
+      |""".stripMargin
+
+  private val variantStr =
+    "VariantVal(VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])))"
+
+  private val variantOutputScript: String =
+    """
+      |class SimpleOutputVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield {0}
+      |""".format(variantStr).stripMargin
+
+  private val arrayOfVariantOutputScript: String =
+    """
+      |class OutputArrayOfVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield [{0}]
+      |""".format(variantStr).stripMargin
+
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
@@ -71,10 +97,109 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       UDTFForwardStateFromAnalyze.name,
       UDTFForwardStateFromAnalyze.pythonScript, None)
 
+  private val variantInputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "InputVariantUDTF",
+      variantInputScript,
+      Some(StructType.fromDDL("o STRING"))
+    )
+
+  private val variantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "SimpleOutputVariantUDTF",
+      variantOutputScript,
+      Some(StructType.fromDDL("v VARIANT"))
+    )
+
+  private val arrayOfVariantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "OutputArrayOfVariantUDTF",
+      arrayOfVariantOutputScript,
+      Some(StructType.fromDDL("v ARRAY<VARIANT>"))
+    )
+
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
     val df = pythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
+  }
+
+  test("Simple variant input UDTF") {
+    assume(shouldTestPythonUDFs)
+    withTempView("t") {
+      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
+      spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select udtf.* from t, lateral variantInputUDTF(v) udtf").collect()
+        },
+        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
+          "dataType" -> "VARIANT"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(v) udtf",
+          start = 30,
+          stop = 53)))
+    }
+  }
+
+  test("Complex variant input UDTF") {
+    assume(shouldTestPythonUDFs)
+    withTempView("t") {
+      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
+      spark.range(0, 10)
+        .selectExpr("map(id, parse_json(cast(id as string))) map_v")
+        .createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select udtf.* from t, lateral variantInputUDTF(map_v) udtf").collect()
+        },
+        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
+          "dataType" -> "MAP<BIGINT, VARIANT>"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(map_v) udtf",
+          start = 30,
+          stop = 57)))
+    }
+  }
+
+  test("Simple variant output UDTF") {
+    assume(shouldTestPythonUDFs)
+      spark.udtf.registerPython("variantOutUDTF", variantOutputUDTF)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select * from variantOutUDTF()").collect()
+        },
+        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
+          "dataType" -> "VARIANT"),
+        context = ExpectedContext(
+          fragment = "variantOutUDTF()",
+          start = 14,
+          stop = 29))
+  }
+
+  test("Complex variant output UDTF") {
+    assume(shouldTestPythonUDFs)
+      spark.udtf.registerPython("arrayOfVariantOutUDTF", arrayOfVariantOutputUDTF)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select * from arrayOfVariantOutUDTF()").collect()
+        },
+        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
+          "dataType" -> "ARRAY<VARIANT>"),
+        context = ExpectedContext(
+          fragment = "arrayOfVariantOutUDTF()",
+          start = 14,
+          stop = 36))
   }
 
   test("PythonUDTF with lateral join") {

@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -110,15 +110,17 @@ class QueryExecution(
     case _ => "command"
   }
 
-  private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
-    case c: Command =>
+  private def eagerlyExecuteCommands(p: LogicalPlan) = {
+    def eagerlyExecute(
+        p: LogicalPlan,
+        name: String,
+        mode: CommandExecutionMode.Value): LogicalPlan = {
       // Since Command execution will eagerly take place here,
       // and in most cases be the bulk of time and effort,
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
-      val name = commandExecutionName(c)
+      val qe = sparkSession.sessionState.executePlan(p, mode)
       val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
         SQLExecution.withNewExecutionId(qe, Some(name)) {
           qe.executedPlan.executeCollect()
@@ -129,7 +131,14 @@ class QueryExecution(
         qe.commandExecuted,
         qe.executedPlan,
         result.toImmutableArraySeq)
-    case other => other
+    }
+    p transformDown {
+      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
+        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+      case c: Command =>
+        val name = commandExecutionName(c)
+        eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
+    }
   }
 
   // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
