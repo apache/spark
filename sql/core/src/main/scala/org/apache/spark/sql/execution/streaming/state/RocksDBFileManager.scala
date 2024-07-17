@@ -311,8 +311,6 @@ class RocksDBFileManager(
       metadataFile.delete()
       metadata
     }
-    // Initialize maxVersion on load
-    if (maxVersion.isEmpty) initializeMaxVersion()
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     metadata

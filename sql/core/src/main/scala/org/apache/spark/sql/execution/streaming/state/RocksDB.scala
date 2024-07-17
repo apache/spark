@@ -556,11 +556,10 @@ class RocksDB(
         }
       }
 
-      // Set maxVersion when checkpoint files synced to DFS successfully
+      // Set maxVersion when checkpoint files are synced to DFS successfully
       // We need to handle this explicitly in RocksDB as we could use different
       // changeLogWriter instances in fileManager instance when committing
       fileManager.setMaxVersion(newVersion)
-
 
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion

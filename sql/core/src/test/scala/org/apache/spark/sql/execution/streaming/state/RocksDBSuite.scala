@@ -230,12 +230,49 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   testWithColumnFamilies(
-    "RocksDB: purge changelog and snapshots",
+    "RocksDB: only delete files when number of stale version files >= minVersionsToDelete",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    // When minVersionsToDelete > 0 deleting version files only occurs
+    // when number of stale version files >= minVersionsToDelete
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val conf = dbConf.copy(
+      minVersionsToRetain = 5,
+      minDeltasForSnapshot = 0,
+      minVersionsToDelete = 3)
+
+    withDB(remoteDir = remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      // Commit 7 versions
+      // invoke maintenance for each batch
+      // 5 versions to keep, 2 stale versions
+      for (version <- 0 to 6) {
+        db.load(version)
+        db.commit()
+        // no files should be deleted as number of stale files is less than minVersionsToDelete = 3
+        db.doMaintenance()
+      }
+
+      // Verify no snapshot versions or change log versions files were deleted
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 7))
+
+      // Commit version 8
+      db.load(7)
+      db.commit()
+
+      // 3 stale version files present
+      // should delete versions 1 to 3 and keep 5 latest versions
+      db.doMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) == (4 to 8))
+    }
+  }
+
+  testWithColumnFamilies(
+    "RocksDB: purge changelog and snapshots with minVersionsToDelete = 0",
     TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
-      minVersionsToRetain = 3, minDeltasForSnapshot = 1)
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 0)
     withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       db.load(0)
       db.commit()
@@ -268,6 +305,63 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // 5 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
       assert(snapshotVersionsPresent(remoteDir) === Seq(5, 8))
       assert(changelogVersionsPresent(remoteDir) == (5 to 8))
+    }
+  }
+
+  testWithColumnFamilies(
+    "RocksDB: purge changelog and snapshots with minVersionsToDelete > 0",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val conf = dbConf.copy(enableChangelogCheckpointing = true,
+      minVersionsToRetain = 3, minDeltasForSnapshot = 1, minVersionsToDelete = 3)
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      // Commit 4 versions
+      // stale versions: (1, 2)
+      // keep versions: (3, 4)
+      for (version <- 0 to 3) {
+        db.load(version)
+        db.commit()
+        db.doMaintenance()
+      }
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 4))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 4))
+
+      // Commit 2 more versions
+      // stale versions: (1, 2, 3)
+      // keep versions: (4, 5, 6)
+      for (version <- 4 to 5) {
+        db.load(version)
+        db.commit()
+      }
+
+      assert(snapshotVersionsPresent(remoteDir) == (1 to 4))
+      assert(changelogVersionsPresent(remoteDir) == (1 to 6))
+
+      // Should delete stale versions for zip files and change log files
+      // since number of stale versions >= minVersionsToDelete
+      db.doMaintenance()
+
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 6))
+      assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
+
+      // Commit 2 more versions
+      // stale versions: (4, 5)
+      // keep versions: (6, 7, 8)
+      for (version <- 6 to 7) {
+        db.load(version)
+        db.commit()
+      }
+
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 6))
+      assert(changelogVersionsPresent(remoteDir) == (4 to 8))
+
+      // should upload latest snapshot but not delete any files
+      // since number of stale versions < minVersionsToDelete
+      db.doMaintenance()
+
+      assert(snapshotVersionsPresent(remoteDir) == Seq(4, 6, 8))
+      assert(changelogVersionsPresent(remoteDir) == (4 to 8))
     }
   }
 
