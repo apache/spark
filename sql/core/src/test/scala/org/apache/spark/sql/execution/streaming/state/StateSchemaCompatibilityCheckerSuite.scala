@@ -235,8 +235,10 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val queryId = UUID.randomUUID()
     val providerId = StateStoreProviderId(
       StateStoreId(dir, opId, partitionId), queryId)
+    val storeColFamilySchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema, valueSchema))
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-    checker.createSchemaFile(keySchema, valueSchema,
+    checker.createSchemaFile(storeColFamilySchema,
       SchemaHelper.SchemaWriter.createSchemaWriter(1))
     val stateSchema = checker.readSchemaFile().head
     val (resultKeySchema, resultValueSchema) = (stateSchema.keySchema, stateSchema.valueSchema)

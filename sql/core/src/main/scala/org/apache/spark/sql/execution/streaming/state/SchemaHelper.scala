@@ -138,11 +138,10 @@ object SchemaHelper {
     def version: Int
 
     final def write(
-        keySchema: StructType,
-        valueSchema: StructType,
+        stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit = {
       writeVersion(outputStream)
-      writeSchema(keySchema, valueSchema, outputStream)
+      writeSchema(stateStoreColFamilySchema, outputStream)
     }
 
     private def writeVersion(outputStream: FSDataOutputStream): Unit = {
@@ -150,8 +149,7 @@ object SchemaHelper {
     }
 
     protected def writeSchema(
-        keySchema: StructType,
-        valueSchema: StructType,
+        stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit
   }
 
@@ -168,11 +166,12 @@ object SchemaHelper {
     override def version: Int = 1
 
     def writeSchema(
-        keySchema: StructType,
-        valueSchema: StructType,
+        stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit = {
-      outputStream.writeUTF(keySchema.json)
-      outputStream.writeUTF(valueSchema.json)
+      assert(stateStoreColFamilySchema.length == 1)
+      val stateSchema = stateStoreColFamilySchema.head
+      outputStream.writeUTF(stateSchema.keySchema.json)
+      outputStream.writeUTF(stateSchema.valueSchema.json)
     }
   }
 
@@ -183,15 +182,16 @@ object SchemaHelper {
     final val MAX_UTF_CHUNK_SIZE = 65535
 
     def writeSchema(
-        keySchema: StructType,
-        valueSchema: StructType,
+        stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit = {
+      assert(stateStoreColFamilySchema.length == 1)
+      val stateSchema = stateStoreColFamilySchema.head
       val buf = new Array[Char](MAX_UTF_CHUNK_SIZE)
 
       // DataOutputStream.writeUTF can't write a string at once
       // if the size exceeds 65535 (2^16 - 1) bytes.
       // So a key as well as a value consist of multiple chunks in schema version 2.
-      val keySchemaJson = keySchema.json
+      val keySchemaJson = stateSchema.keySchema.json
       val numKeyChunks = (keySchemaJson.length - 1) / MAX_UTF_CHUNK_SIZE + 1
       val keyStringReader = new StringReader(keySchemaJson)
       outputStream.writeInt(numKeyChunks)
@@ -200,7 +200,7 @@ object SchemaHelper {
         outputStream.writeUTF(new String(buf, 0, numRead))
       }
 
-      val valueSchemaJson = valueSchema.json
+      val valueSchemaJson = stateSchema.valueSchema.json
       val numValueChunks = (valueSchemaJson.length - 1) / MAX_UTF_CHUNK_SIZE + 1
       val valueStringReader = new StringReader(valueSchemaJson)
       outputStream.writeInt(numValueChunks)

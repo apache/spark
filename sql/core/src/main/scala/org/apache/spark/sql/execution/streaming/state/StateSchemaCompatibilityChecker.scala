@@ -84,18 +84,17 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
-  private def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
-    createSchemaFile(keySchema, valueSchema, schemaWriter)
+  private def createSchemaFile(stateStoreColFamilySchema: List[StateStoreColFamilySchema]): Unit = {
+    createSchemaFile(stateStoreColFamilySchema, schemaWriter)
   }
 
   // Visible for testing
   private[sql] def createSchemaFile(
-      keySchema: StructType,
-      valueSchema: StructType,
+      stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       schemaWriter: SchemaWriter): Unit = {
     val outStream = fm.createAtomic(schemaFileLocation, overwriteIfPossible = false)
     try {
-      schemaWriter.write(keySchema, valueSchema, outStream)
+      schemaWriter.write(stateStoreColFamilySchema, outStream)
       outStream.close()
     } catch {
       case e: Throwable =>
@@ -144,7 +143,7 @@ class StateSchemaCompatibilityChecker(
 
     if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
-      createSchemaFile(newStateSchema.head.keySchema, newStateSchema.head.valueSchema)
+      createSchemaFile(newStateSchemaList)
       true
     } else {
       // validate if the new schema is compatible with the existing schema
