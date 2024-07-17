@@ -2774,6 +2774,10 @@
             <groupId>com.google.http-client</groupId>
             <artifactId>google-http-client</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
