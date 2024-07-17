@@ -325,6 +325,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
+      ResolveEncodersInUDF ::
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
@@ -352,8 +353,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // operators may need null handling as well, so we should run these two rules repeatedly.
       HandleNullInputsForUDF,
       UpdateAttributeNullability),
-    Batch("UDF", Once,
-      ResolveEncodersInUDF),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
@@ -2578,8 +2577,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         executeSameContext(e.plan)
       }
 
-      checkAnalysis(newSubqueryPlan)
-
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
       if (newSubqueryPlan.resolved) {
@@ -2601,19 +2598,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _) if !sub.analyzed =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.analyzed =>
+        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(sub, _, exprId, _, _, _))
-            if values.forall(_.resolved) && !sub.analyzed =>
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
+            if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.analyzed =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a: FunctionTableSubqueryArgumentExpression if !a.plan.analyzed =>
+        case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }

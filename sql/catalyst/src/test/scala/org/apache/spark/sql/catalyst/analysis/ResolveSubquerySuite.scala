@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Exists, Expression, GetStructField, InSubquery, LambdaFunction, LateralSubquery, ListQuery, Literal, OuterReference, ScalarSubquery, ScalaUDF, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetStructField, InSubquery, LambdaFunction, LateralSubquery, ListQuery, OuterReference, ScalarSubquery, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType}
 
 /**
  * Unit tests for [[ResolveSubquery]].
@@ -299,59 +298,5 @@ class ResolveSubquerySuite extends AnalysisTest {
       expectedErrorClass =
         "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       expectedMessageParameters = Map.empty[String, String])
-  }
-
-  val testRelation = LocalRelation($"a".int, $"b".double)
-  val testRelation2 = LocalRelation($"c".int, $"d".string)
-
-  test("SPARK-48921: ScalaUDF in subquery should run through analyzer") {
-    val integer = testRelation2.output(0)
-    val udf = ScalaUDF((_: Int) => "x", StringType, integer :: Nil,
-      Option(ExpressionEncoder[Int]()) :: Nil)
-
-    var subPlan =
-      testRelation2
-        .where($"d" === udf)
-        .select(Literal(1)).analyze
-
-    // Manually remove the resolved encoder from the UDF.
-    // This simulates the case where the UDF is resolved during analysis
-    // but its encoders are not resolved.
-    subPlan = subPlan.transformUp {
-      case f: Filter =>
-        f.copy(condition = f.condition transform {
-          case s: ScalaUDF =>
-            val newUDF = s.copy(inputEncoders = Option(ExpressionEncoder[Int]()) :: Nil)
-            assert(newUDF.resolved)
-            newUDF
-        })
-    }
-
-    val existsSubquery =
-      testRelation
-        .where(Exists(subPlan))
-        .select($"a").analyze
-    assert(existsSubquery.resolved)
-
-    val existPlan = existsSubquery.collect {
-      case f: Filter =>
-        f.condition.collect {
-          case e: Exists =>
-            e.plan.collect {
-              case f: Filter => f
-            }
-        }
-    }.flatten.flatten.head
-
-    val udfs = existPlan.expressions.flatMap(e => e.collect {
-      case s: ScalaUDF =>
-        assert(s.inputEncoders.nonEmpty)
-        val encoder = s.inputEncoders.head
-        assert(encoder.isDefined)
-        assert(encoder.get.objDeserializer.resolved)
-
-        s
-    })
-    assert(udfs.size == 1)
   }
 }
