@@ -41,6 +41,9 @@ class StateStoreConf(
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
+  /** Minimum number of stale versions to delete when maintenance is invoked */
+  val minVersionsToDelete: Int = sqlConf.minVersionsToDelete
+
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
 

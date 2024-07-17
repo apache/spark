@@ -146,6 +146,9 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
+  private var maxVersion: Option[Long] = None
+  private var minVersion = 1L
+
   @volatile private var rootDirChecked: Boolean = false
   @volatile private var fileMappings = RocksDBFileMappings(
     new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]],
@@ -308,6 +311,8 @@ class RocksDBFileManager(
       metadataFile.delete()
       metadata
     }
+    // Initialize maxVersion on load
+    if (maxVersion.isEmpty) initializeMaxVersion()
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     metadata
@@ -399,6 +404,32 @@ class RocksDBFileManager(
   }
 
   /**
+   *  Set maxVersion to max of itself and version we are uploading.
+   *  This is to ensure accuracy in the case the query has restarted from a particular version.
+   */
+  def setMaxVersion(version: Long): Unit = {
+    if (maxVersion.isDefined) {
+      maxVersion = Some(Math.max(maxVersion.get, version))
+    }
+  }
+
+  /**
+   *  Initialize maxVersion by listing version files in the checkpoint directory
+   */
+  def initializeMaxVersion(): Unit = {
+    if (maxVersion.isDefined) return
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      maxVersion = Some(fm.list(path, onlyZipFiles)
+        .map(_.getPath.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+        .foldLeft(0L)(math.max))
+    } else {
+      maxVersion = Some(0)
+    }
+  }
+
+  /**
    * Delete old versions by deleting the associated version and SST files.
    * At a high-level, this method finds which versions to delete, and which SST files that were
    * last used in those versions. It's safe to delete these SST files because a SST file can
@@ -426,7 +457,19 @@ class RocksDBFileManager(
    * - SST files that were used in a version, but that version got overwritten with a different
    *   set of SST files.
    */
-  def deleteOldVersions(numVersionsToRetain: Int): Unit = {
+  def deleteOldVersions(numVersionsToRetain: Int, minVersionsToDelete: Int = 0): Unit = {
+    // If minVersionsToDelete <= 0, we call list every time maintenance is invoked
+    // This is the original behaviour without list api call optimization
+    if (minVersionsToDelete > 0) {
+      // When maxVersion is defined, we check the if number of stale version files
+      // are at least the value of minVersionsToDelete for batch deletion of files
+      // We still proceed with deleteOldVersions if maxVersion isn't set
+      if (maxVersion.isDefined) {
+        val versionsToDelete = maxVersion.get - minVersion + 1 - numVersionsToRetain
+        if (versionsToDelete < minVersionsToDelete) return
+      }
+    }
+
     val path = new Path(dfsRootDir)
     val allFiles = fm.list(path).map(_.getPath)
     val snapshotFiles = allFiles.filter(file => onlyZipFiles.accept(file))
@@ -450,6 +493,8 @@ class RocksDBFileManager(
     val minVersionToRetain = sortedSnapshotVersions
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
       .foldLeft(0L)(math.max)
+
+    minVersion = minVersionToRetain
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
     // We only delete orphan files when there are at least 2 versions,
