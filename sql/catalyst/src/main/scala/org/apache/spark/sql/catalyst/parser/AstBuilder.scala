@@ -5504,7 +5504,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
   }
 
-  override def visitCompoundSetVariable(ctx: CompoundSetVariableContext): LogicalPlan =
+  override def visitSetVariableWithOptionalKeyword(
+      ctx: SetVariableWithOptionalKeywordContext): LogicalPlan =
     withOrigin(ctx) {
       visitSetVariableImpl(ctx.query(), ctx.multipartIdentifierList(), ctx.assignmentList())
     }

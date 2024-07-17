@@ -66,9 +66,9 @@ compoundStatement
     ;
 
 setStatementWithOptionalVarKeyword
-    : SET (VARIABLE | VAR)? assignmentList                      #compoundSetVariable
+    : SET (VARIABLE | VAR)? assignmentList                      #setVariableWithOptionalKeyword
     | SET (VARIABLE | VAR)? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                            #compoundSetVariable
+        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
     ;
 
 singleStatement
