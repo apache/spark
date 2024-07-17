@@ -192,8 +192,8 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  *   Executable nodes for nested statements within the CompoundBody.
  */
 class CompoundBodyExec(
+      label: Option[String],
       statements: Seq[CompoundStatementExec],
-      handlers: Seq[ErrorHandlerExec] = Seq.empty,
       conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
       session: SparkSession = null)
   extends CompoundNestedStatementIteratorExec(statements) {
@@ -225,12 +225,10 @@ class CompoundBodyExec(
             statement.execute(session)
             if (statement.raisedError) {
               val handler = getHandler(statement.errorState.get).get
-              handler.execute()
-              handler.reset()
-
+              handler.executeAndReset()
               if (handler.getHandlerType == HandlerType.EXIT) {
                 // TODO: premature exit from the compound ...
-                curr = None
+                curr = None // throws error because of none
               }
             }
             statement
@@ -250,18 +248,18 @@ class CompoundBodyExec(
 }
 
 class ErrorHandlerExec(
-    conditions: Seq[String],
     body: CompoundBodyExec,
     handlerType: HandlerType) extends CompoundStatementExec {
 
   def getHandlerType: HandlerType = handlerType
 
-  def getHandlerBody: CompoundBodyExec = body
+  def executeAndReset(): Unit = {
+    execute()
+    reset()
+  }
 
-  def execute(): Unit = {
-    print("\n\n\nHANDLER\n\n\n")
+  private def execute(): Unit = {
     val iterator = body.getTreeIterator
-
     while (iterator.hasNext) iterator.next()
   }
 

@@ -22,7 +22,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, ErrorCondition, ErrorHandler, SingleStatement}
+import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 
@@ -83,7 +83,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           val handlerBodyExec = transformTreeIntoExecutable(handler.body).
             asInstanceOf[CompoundBodyExec]
           val handlerExec =
-            new ErrorHandlerExec(handler.conditions, handlerBodyExec, handler.handlerType)
+            new ErrorHandlerExec(handlerBodyExec, handler.handlerType)
 
           handler.conditions.foreach(condition => {
             val conditionValue = body.conditions.getOrElse(condition, condition)
@@ -94,21 +94,18 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         })
 
         new CompoundBodyExec(
+          body.label,
           body.collection.
             map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
-          handlers.toSeq, conditionHandlerMap, session)
+            conditionHandlerMap, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           isInternal = false)
-      case handler: ErrorHandler =>
-        val handlerBodyExec = transformTreeIntoExecutable(handler.body).
-          asInstanceOf[CompoundBodyExec]
-        new ErrorHandlerExec(handler.conditions, handlerBodyExec, handler.handlerType)
-      case condition: ErrorCondition =>
+      case _ =>
         throw new UnsupportedOperationException(
-          s"Error condition $condition is not supported in the execution plan.")
+          s"Unsupported operation in the execution plan.")
     }
 
   def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {

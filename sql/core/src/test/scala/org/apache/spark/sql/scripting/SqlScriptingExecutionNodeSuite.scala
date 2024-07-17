@@ -37,7 +37,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
     extends CompoundNestedStatementIteratorExec(statements)
 
   case class TestBody(statements: Seq[CompoundStatementExec])
-    extends CompoundBodyExec(statements)
+    extends CompoundBodyExec(None, statements)
 
   case class TestSparkStatementWithPlan(testVal: String)
     extends SingleStatementExec(
