@@ -56,7 +56,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       sparkSession,
       paths = Seq(ident.last),
       className = ident.head,
-      options = unresolved.options.asCaseSensitiveMap.asScala.toMap)
+      options = unresolved.options.asScala.toMap)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
     // it and return the original plan, so that the analyzer can report table not found later.
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
