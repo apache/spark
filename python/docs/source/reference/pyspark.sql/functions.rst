@@ -580,6 +580,7 @@ URL Functions
     parse_url
     url_decode
     url_encode
+    try_url_decode
 
 
 Misc Functions
