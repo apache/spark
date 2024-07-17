@@ -2263,34 +2263,6 @@ abstract class AvroSuite
     assert(sparkSchema === expectedSchema)
   }
 
-  test("Recursive schema resolve to be empty struct") {
-    val avroSchema = """
-      |{
-      |  "type": "record",
-      |  "name": "LongList",
-      |  "fields": [
-      |    {
-      |      "name": "value",
-      |      "type": {
-      |        "type": "record",
-      |        "name": "foo",
-      |        "fields": [
-      |          {
-      |            "name": "parent",
-      |            "type": "LongList"
-      |          }
-      |        ]
-      |      }
-      |    }
-      |  ]
-      |}
-    """.stripMargin
-    val expectedSchema = StructType(Seq())
-    for (i <- 0 to 5) {
-      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
-    }
-  }
-
   test("Translate recursive schema - 1") {
     val avroSchema = """
       |{
@@ -2316,6 +2288,38 @@ abstract class AvroSuite
       |{
       |  "type": "record",
       |  "name": "LongList",
+      |  "fields": [
+      |    {
+      |      "name": "value",
+      |      "type": {
+      |        "type": "record",
+      |        "name": "foo",
+      |        "fields": [
+      |          {
+      |            "name": "parent",
+      |            "type": "LongList"
+      |          }
+      |        ]
+      |      }
+      |    }
+      |  ]
+      |}
+    """.stripMargin
+    val nonRecursiveFields = new StructType().add("value", StructType(Seq()), nullable = false)
+    var expectedSchema = nonRecursiveFields
+    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
+    for (i <- 1 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+      expectedSchema = new StructType().add("value",
+          new StructType().add("parent", expectedSchema, nullable = false), nullable = false)
+    }
+  }
+
+  test("Translate recursive schema - 3") {
+    val avroSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
       |  "fields" : [
       |    {"name": "value", "type": "long"},
       |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
@@ -2332,7 +2336,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Translate recursive schema - 3") {
+  test("Translate recursive schema - 4") {
     val avroSchema = """
       |{
       |  "type": "record",
@@ -2354,33 +2358,33 @@ abstract class AvroSuite
     }
   }
 
-  test("dev test") {
+  test("recursive schema integration test") {
     val catalystSchema =
       StructType(Seq(
         StructField("Id", IntegerType),
-        StructField("Name",
-          StructType(
-            Seq(
-              StructField("Id", IntegerType),
-              StructField("Name", StructType(Seq(StructField("Id", IntegerType)))))))))
+        StructField("Name", StructType(Seq(
+          StructField("Id", IntegerType),
+          StructField("Name", StructType(Seq(
+            StructField("Id", IntegerType),
+            StructField("Name", NullType)))))))))
 
     val avroSchema = s"""
-                        |{
-                        |  "type" : "record",
-                        |  "name" : "test_schema",
-                        |  "fields" : [
-                        |    {"name": "Id", "type": "int"},
-                        |    {"name": "Name", "type": ["null", "test_schema"]}
-                        |  ]
-                        |}
+      |{
+      |  "type" : "record",
+      |  "name" : "test_schema",
+      |  "fields" : [
+      |    {"name": "Id", "type": "int"},
+      |    {"name": "Name", "type": ["null", "test_schema"]}
+      |  ]
+      |}
     """.stripMargin
 
     val df = spark.createDataFrame(
-      spark.sparkContext.parallelize(Seq(Row(2, Row(3, null)), Row(1, null))),
+      spark.sparkContext.parallelize(Seq(Row(2, Row(3, Row(4, null))), Row(1, null))),
       catalystSchema)
 
     withTempPath { tempDir =>
-      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+      df.write.format("avro").save(tempDir.getPath)
       checkAnswer(
         spark.read
           .format("avro")
@@ -2388,6 +2392,14 @@ abstract class AvroSuite
           .option("recursiveFieldMaxDepth", 10)
           .load(tempDir.getPath),
         df)
+
+      checkAnswer(
+        spark.read
+          .format("avro")
+          .option("avroSchema", avroSchema)
+          .option("recursiveFieldMaxDepth", 1)
+          .load(tempDir.getPath),
+        df.select("Id"))
     }
 
   }

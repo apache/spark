@@ -59,9 +59,8 @@ object SchemaConverters extends Logging {
       recursiveFieldMaxDepth: Int = -1): SchemaType = {
     val schema = toSqlTypeHelper(avroSchema, Map.empty, useStableIdForUnionType,
       stableIdPrefixForUnionType, recursiveFieldMaxDepth)
-    if (schema == null) {
-      return SchemaType(StructType(Nil), nullable = true)
-    }
+    // the top level record should never return null
+    assert(schema != null)
     schema
   }
   /**
@@ -165,15 +164,8 @@ object SchemaConverters extends Logging {
               StructField(f.name, schemaType.dataType, schemaType.nullable)
             }
           }.filter(_ != null).toSeq
-          fields match {
-            case Nil =>
-              log.info(
-                s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as it " +
-                  "does not have any fields left likely due to recursive depth limit."
-              )
-              null
-            case fds => SchemaType(StructType(fds), nullable = false)
-          }
+
+          SchemaType(StructType(fields), nullable = false)
         }
 
       case ARRAY =>
@@ -288,16 +280,7 @@ object SchemaConverters extends Logging {
                 }
             }.filter(_ != null).toSeq
 
-            fields match {
-              case Nil =>
-                log.info(
-                  s"Dropping ${avroSchema.getFullName} of type ${avroSchema.getType.getName} as " +
-                    "it does not have any fields left likely due to recursive depth limit."
-                )
-                null
-
-              case fds => SchemaType(StructType(fds), nullable = false)
-            }
+            SchemaType(StructType(fields), nullable = false)
         }
 
       case other => throw new IncompatibleSchemaException(s"Unsupported type $other")
