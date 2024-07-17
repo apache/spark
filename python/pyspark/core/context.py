@@ -2403,7 +2403,7 @@ class SparkContext:
         """
         return self._jsc.sc().sparkUser()
 
-    def cancelJobGroup(self, groupId: str, reason: Optional[str] = None) -> None:
+    def cancelJobGroup(self, groupId: str) -> None:
         """
         Cancel active jobs for the specified group. See :meth:`SparkContext.setJobGroup`.
         for more information.
@@ -2414,19 +2414,14 @@ class SparkContext:
         ----------
         groupId : str
             The group ID to cancel the job.
-        reason : str, optional
-            Optional reason for cancellation.
 
         See Also
         --------
         :meth:`SparkContext.setJobGroup`
         """
-        if reason is None:
-            self._jsc.sc().cancelJobGroup(groupId)
-        else:
-            self._jsc.sc().cancelJobGroup(groupId, reason)
+        self._jsc.sc().cancelJobGroup(groupId)
 
-    def cancelJobsWithTag(self, tag: str, reason: Optional[str] = None) -> None:
+    def cancelJobsWithTag(self, tag: str) -> None:
         """
         Cancel active jobs that have the specified tag. See
         :meth:`SparkContext.addJobTag`.
@@ -2437,8 +2432,6 @@ class SparkContext:
         ----------
         tag : str
             The tag to be cancelled. Cannot contain ',' (comma) character.
-        reason : str, optional
-            Optional reason for cancellation.
 
         See Also
         --------
@@ -2448,10 +2441,7 @@ class SparkContext:
         :meth:`SparkContext.clearJobTags`
         :meth:`SparkContext.setInterruptOnCancel`
         """
-        if reason is None:
-            return self._jsc.cancelJobsWithTag(tag)
-        else:
-            return self._jsc.cancelJobsWithTag(tag, reason)
+        return self._jsc.cancelJobsWithTag(tag)
 
     def cancelAllJobs(self) -> None:
         """

@@ -529,7 +529,6 @@ clearJobGroup <- function() {
 #' Cancel active jobs for the specified group
 #'
 #' @param groupId the ID of job group to be cancelled
-#' @param reason optional reason for cancellation
 #' @rdname cancelJobGroup
 #' @name cancelJobGroup
 #' @examples
@@ -538,13 +537,9 @@ clearJobGroup <- function() {
 #' cancelJobGroup("myJobGroup")
 #'}
 #' @note cancelJobGroup since 1.5.0
-cancelJobGroup <- function(groupId, reason = NULL) {
+cancelJobGroup <- function(groupId) {
   sc <- getSparkContext()
-  if (is.null(reason)) {
-    invisible(callJMethod(sc, "cancelJobGroup", groupId))
-  } else {
-    invisible(callJMethod(sc, "cancelJobGroup", groupId, reason))
-  }
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
 #' Set the behavior of job cancellation from jobs started in this thread.
@@ -632,7 +627,6 @@ clearJobTags <- function() {
 #' Cancel active jobs that have the specified tag.
 #'
 #' @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
-#' @param reason optional reason for cancellation
 #' @rdname cancelJobsWithTag
 #' @name cancelJobsWithTag
 #' @examples
@@ -640,14 +634,10 @@ clearJobTags <- function() {
 #' sparkR.session()
 #' cancelJobsWithTag("myTag")
 #'}
-#' @note cancelJobsWithTag since 3.5.0
-cancelJobsWithTag <- function(tag, reason = NULL) {
+#' @note cancelJobGroup since 3.5.0
+cancelJobsWithTag <- function(tag) {
   sc <- getSparkContext()
-  if (is.null(reason)) {
-    invisible(callJMethod(sc, "cancelJobsWithTag", tag))
-  } else {
-    invisible(callJMethod(sc, "cancelJobsWithTag", tag, reason))
-  }
+  invisible(callJMethod(sc, "cancelJobsWithTag", tag))
 }
 
 #' Set a human readable description of the current job.
