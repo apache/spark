@@ -75,8 +75,8 @@ object TransformWithStateKeyValueRowSchema {
       userKeySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
-      .add("groupingKey", groupingKeySchema)
-      .add("userKey", userKeySchema)
+      .add("groupingKey", new StructType(groupingKeySchema.fields))
+      .add("userKey", new StructType(userKeySchema.fields))
 }
 
 /**
@@ -232,12 +232,6 @@ class CompositeKeyStateEncoder[K, V](
     keyProj.apply(InternalRow(keyRow))
   }
 
-  def encodeCompositeKey(
-      groupingKeyByteArr: Array[Byte],
-      userKeyByteArr: Array[Byte]): UnsafeRow = {
-    compositeKeyProjection(InternalRow(groupingKeyByteArr, userKeyByteArr))
-  }
-
 
   /**
    * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
@@ -276,11 +270,22 @@ class CompositeKeyStateEncoder[K, V](
     compositeKey
   }
 
-  def decodeUserKeyFromTTLRow(row: CompositeKeyTTLRow): K = {
-    val bytes = row.userKey
-    reusedKeyRow.pointTo(bytes, bytes.length)
-    val userKey = userKeyRowToObjDeserializer.apply(reusedKeyRow)
-    userKey
+  def decodeUserKey(row: UnsafeRow): K = {
+    /*
+    println("I am inside decodeUserKeyFromTTLRow, row.getStruct: " +
+    row.getStruct(0, userKeyEnc.schema.length).getString(0).length)
+    println("I am inside decodeUserKeyFromTTLRow, row.numfileds: " +
+      row.numFields())
+    println("I am inside decodeUserKeyFromTTLRow, row.numFields: " +
+      row.getStruct(0, userKeyEnc.schema.length).numFields())
+    println("I am inside decodeUserKeyFromTTLRow, after decoding: " +
+      userKeyRowToObjDeserializer.apply(row.getStruct(0, userKeyEnc.schema.length))
+        .asInstanceOf[String].length)
+    println("I am inside decodeUserKeyFromTTLRow, schema: " +
+      userKeyExpressionEnc.schema)
+    println("I am inside decodeUserKeyFromTTLRow, composite schema: " +
+      schemaForCompositeKeyRow) */
+    userKeyRowToObjDeserializer.apply(row)
   }
 
   /**
@@ -288,7 +293,11 @@ class CompositeKeyStateEncoder[K, V](
    * Only user key is returned though grouping key also exist in the row.
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
-    userKeyRowToObjDeserializer.apply(row.getStruct(1, 1))
+    val userKey = userKeyRowToObjDeserializer.apply(row.getStruct(1, 1))
+    println("I am inside decodeCompositeKey, after decode: " + userKey)
+    println("I am inside decodeCompositeKey, after length: " +
+      userKey.asInstanceOf[String].length)
+    userKey
   }
 }
 
@@ -313,9 +322,11 @@ class CompositeKeyTTLEncoder[K](
                    groupingKey: UnsafeRow,
                    userKey: UnsafeRow): UnsafeRow = {
     // unsafeRow -> unsafeRow
+    println("I am inside encodeTTLRow, TTLKeySchema: " + TTLKeySchema)
     UnsafeProjection.create(TTLKeySchema).apply(
-      InternalRow(expirationMs,
-        groupingKey.asInstanceOf[InternalRow],
-        userKey.asInstanceOf[InternalRow]))
+      new GenericInternalRow(
+        Array[Any](expirationMs,
+        groupingKey.getStruct(0, 1).asInstanceOf[InternalRow],
+        userKey.getStruct(0, 1).asInstanceOf[InternalRow])))
   }
 }

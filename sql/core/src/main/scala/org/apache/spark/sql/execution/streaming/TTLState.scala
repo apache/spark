@@ -38,7 +38,7 @@ object StateTTLSchema {
  * @param expirationMs expiration time for the grouping key
  */
 case class SingleKeyTTLRow(
-    groupingKey: Array[Byte],
+    groupingKey: UnsafeRow,
     expirationMs: Long)
 
 /**
@@ -49,8 +49,8 @@ case class SingleKeyTTLRow(
  * @param expirationMs expiration time for the grouping key
  */
 case class CompositeKeyTTLRow(
-   groupingKey: Array[Byte],
-   userKey: Array[Byte],
+   groupingKey: UnsafeRow,
+   userKey: UnsafeRow,
    expirationMs: Long)
 
 /**
@@ -145,13 +145,13 @@ abstract class SingleKeyTTLStateImpl(
         val kv = ttlIterator.next()
         SingleKeyTTLRow(
           expirationMs = kv.key.getLong(0),
-          groupingKey = kv.key.getBinary(1)
+          groupingKey = kv.key.getStruct(1, keyExprEnc.schema.length)
         )
       }
     }
   }
 
-  private[sql] def getValuesInTTLState(groupingKey: Array[Byte]): Iterator[Long] = {
+  private[sql] def getValuesInTTLState(groupingKey: UnsafeRow): Iterator[Long] = {
     val ttlIterator = ttlIndexIterator()
     var nextValue: Option[Long] = None
 
@@ -160,7 +160,8 @@ abstract class SingleKeyTTLStateImpl(
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val valueGroupingKey = nextTtlValue.groupingKey
-          if (valueGroupingKey sameElements groupingKey) {
+          // TODO if equals work
+          if (valueGroupingKey equals groupingKey) {
             nextValue = Some(nextTtlValue.expirationMs)
           }
         }
@@ -233,8 +234,18 @@ abstract class CompositeKeyTTLStateImpl[K](
       expirationMs: Long,
       groupingKey: UnsafeRow,
       userKey: UnsafeRow): Unit = {
+    println("I am before upsertTTLForStateKey, grouping key row: " +
+      groupingKey.getStruct(0, 1).getString(0).length)
     val encodedTtlKey = keyRowEncoder.encodeTTLRow(
       expirationMs, groupingKey, userKey)
+    val gkr = encodedTtlKey.getStruct(1, keyExprEnc.schema.length)
+    val kr = encodedTtlKey.getStruct(2, uerKeyEncoder.schema.length)
+    println("I am inside upsertTTLForStateKey, gk: " + gkr.getString(0))
+    println("I am inside upsertTTLForStateKey, k: " + kr.getString(0))
+    println("I am inside upsertTTLForStateKey, gk len: " +
+      gkr.getString(0).length)
+    println("I am inside upsertTTLForStateKey, k len: " +
+      kr.getString(0).length)
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
 
@@ -252,6 +263,14 @@ abstract class CompositeKeyTTLStateImpl[K](
       numRemovedElements += clearIfExpired(
         kv.key.getStruct(1, keyExprEnc.schema.length),
         kv.key.getStruct(2, uerKeyEncoder.schema.length))
+      val gkr = kv.key.getStruct(1, keyExprEnc.schema.length)
+      val kr = kv.key.getStruct(2, uerKeyEncoder.schema.length)
+      println("I am inside clearExpiredState, gk: " + gkr.getString(0))
+      println("I am inside clearExpiredState, k: " + kr.getString(0))
+      println("I am inside clearExpiredState, gk len: " +
+        gkr.getString(0).length)
+      println("I am inside clearExpiredState, k len: " +
+        kr.getString(0).length)
       store.remove(kv.key, ttlColumnFamilyName)
     }
     numRemovedElements
@@ -265,10 +284,18 @@ abstract class CompositeKeyTTLStateImpl[K](
 
       override def next(): CompositeKeyTTLRow = {
         val kv = ttlIterator.next()
+        println("I am inside ttlIndexIterator, long: " +
+          kv.key.getLong(0))
+        println("I am inside ttlIndexIterator, grouping: " +
+          kv.key.getStruct(1, 1)
+            .getString(0).length)
+        println("I am inside ttlIndexIterator, user: " +
+          kv.key.getStruct(2, 1)
+            .getString(0).length)
         CompositeKeyTTLRow(
           expirationMs = kv.key.getLong(0),
-          groupingKey = kv.key.getBinary(1),
-          userKey = kv.key.getBinary(2)
+          groupingKey = kv.key.getStruct(1, keyExprEnc.schema.length),
+          userKey = kv.key.getStruct(2, uerKeyEncoder.schema.length)
         )
       }
     }

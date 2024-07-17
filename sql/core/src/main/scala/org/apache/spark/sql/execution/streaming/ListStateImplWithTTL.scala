@@ -215,6 +215,6 @@ class ListStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey().getBytes)
+    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey())
   }
 }

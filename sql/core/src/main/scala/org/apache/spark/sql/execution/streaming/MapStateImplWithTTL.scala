@@ -105,6 +105,10 @@ class MapStateImplWithTTL[K, V](
     val encodedUserKey = stateTypesEncoder.encodeUserKey(key)
 
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
+    println("I am inside updateValue, encodedKeyRow: " +
+      encodedGroupingKey.getStruct(0, 1).getString(0).length)
+    println("I am inside updateValue, encodedUserKeyRow: " +
+      encodedUserKey.getStruct(0, 1).getString(0).length)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
 
@@ -177,8 +181,13 @@ class MapStateImplWithTTL[K, V](
   override def clearIfExpired(
       groupingKeyRow: UnsafeRow,
       userKeyRow: UnsafeRow): Long = {
-    println("I am inside clearIfExpired, groupingKey: " + groupingKeyRow.getString(0))
+    println("I am inside clearIfExpired, groupingKey: " +
+      groupingKeyRow.getString(0))
     println("I am inside clearIfExpired, userKey: " + userKeyRow.getString(0))
+    println("I am inside clearIfExpired, groupingKey len: " +
+      groupingKeyRow.getString(0).length)
+    println("I am inside clearIfExpired, userKey len: " +
+      userKeyRow.getString(0).length)
     println("inside clearIfExpired, composite schema: " +
       getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
     val compositeKeyRow =
@@ -196,6 +205,10 @@ class MapStateImplWithTTL[K, V](
     println("inside clearIfExpired, after encode, second struct: " +
       compositeKeyRow.getStruct(1, 1).getString(0))
     val retRow = store.get(compositeKeyRow, stateName)
+    println("inside clearIfExpired, after encode, decode here: " +
+      stateTypesEncoder.decodeCompositeKey(compositeKeyRow))
+    println("inside clearIfExpired, after encode, decode length here: " +
+      stateTypesEncoder.decodeCompositeKey(compositeKeyRow).asInstanceOf[String].length)
     var numRemovedElements = 0L
     if (retRow != null) {
       println("inside clearIfExpired, retRow is not null: ")
@@ -259,8 +272,10 @@ class MapStateImplWithTTL[K, V](
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val groupingKey = nextTtlValue.groupingKey
-          if (groupingKey sameElements implicitGroupingKey.getBytes) {
-            val userKey = stateTypesEncoder.decodeUserKeyFromTTLRow(nextTtlValue)
+          if (groupingKey equals implicitGroupingKey
+            .getStruct(0, keyExprEnc.schema.length)) {
+            val userKey = stateTypesEncoder.decodeUserKey(
+              nextTtlValue.userKey)
             nextValue = Some(userKey, nextTtlValue.expirationMs)
           }
         }
