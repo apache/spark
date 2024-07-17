@@ -159,7 +159,6 @@ class StateTypesEncoder[V](
 
   def isExpired(row: UnsafeRow, batchTimestampMs: Long): Boolean = {
     val expirationMs = decodeTtlExpirationMs(row)
-    println("I am inside isExpired, decoded expirationMs: " + expirationMs)
     expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
   }
 }
@@ -271,20 +270,6 @@ class CompositeKeyStateEncoder[K, V](
   }
 
   def decodeUserKey(row: UnsafeRow): K = {
-    /*
-    println("I am inside decodeUserKeyFromTTLRow, row.getStruct: " +
-    row.getStruct(0, userKeyEnc.schema.length).getString(0).length)
-    println("I am inside decodeUserKeyFromTTLRow, row.numfileds: " +
-      row.numFields())
-    println("I am inside decodeUserKeyFromTTLRow, row.numFields: " +
-      row.getStruct(0, userKeyEnc.schema.length).numFields())
-    println("I am inside decodeUserKeyFromTTLRow, after decoding: " +
-      userKeyRowToObjDeserializer.apply(row.getStruct(0, userKeyEnc.schema.length))
-        .asInstanceOf[String].length)
-    println("I am inside decodeUserKeyFromTTLRow, schema: " +
-      userKeyExpressionEnc.schema)
-    println("I am inside decodeUserKeyFromTTLRow, composite schema: " +
-      schemaForCompositeKeyRow) */
     userKeyRowToObjDeserializer.apply(row)
   }
 
@@ -293,11 +278,7 @@ class CompositeKeyStateEncoder[K, V](
    * Only user key is returned though grouping key also exist in the row.
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
-    val userKey = userKeyRowToObjDeserializer.apply(row.getStruct(1, 1))
-    println("I am inside decodeCompositeKey, after decode: " + userKey)
-    println("I am inside decodeCompositeKey, after length: " +
-      userKey.asInstanceOf[String].length)
-    userKey
+    userKeyRowToObjDeserializer.apply(row.getStruct(1, userKeyEnc.schema.length))
   }
 }
 
@@ -321,12 +302,12 @@ class CompositeKeyTTLEncoder[K](
   def encodeTTLRow(expirationMs: Long,
                    groupingKey: UnsafeRow,
                    userKey: UnsafeRow): UnsafeRow = {
-    // unsafeRow -> unsafeRow
-    println("I am inside encodeTTLRow, TTLKeySchema: " + TTLKeySchema)
     UnsafeProjection.create(TTLKeySchema).apply(
       new GenericInternalRow(
         Array[Any](expirationMs,
-        groupingKey.getStruct(0, 1).asInstanceOf[InternalRow],
-        userKey.getStruct(0, 1).asInstanceOf[InternalRow])))
+        groupingKey.getStruct(0, keyExprEnc.schema.length)
+          .asInstanceOf[InternalRow],
+        userKey.getStruct(0, userKeyEnc.schema.length)
+          .asInstanceOf[InternalRow])))
   }
 }

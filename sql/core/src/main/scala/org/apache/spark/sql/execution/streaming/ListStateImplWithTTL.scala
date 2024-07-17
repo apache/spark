@@ -155,18 +155,17 @@ class ListStateImplWithTTL[S](
    */
   override def clearIfExpired(groupingKey: UnsafeRow): Long = {
     var numValuesExpired = 0L
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
+    val unsafeRowValuesIterator = store.valuesIterator(groupingKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
-    store.remove(encodedKey, stateName)
+    store.remove(groupingKey, stateName)
     var isFirst = true
     unsafeRowValuesIterator.foreach { encodedValue =>
       if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
         if (isFirst) {
-          store.put(encodedKey, encodedValue, stateName)
+          store.put(groupingKey, encodedValue, stateName)
           isFirst = false
         } else {
-          store.merge(encodedKey, encodedValue, stateName)
+          store.merge(groupingKey, encodedValue, stateName)
         }
       } else {
         numValuesExpired += 1

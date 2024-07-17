@@ -105,10 +105,6 @@ class MapStateImplWithTTL[K, V](
     val encodedUserKey = stateTypesEncoder.encodeUserKey(key)
 
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
-    println("I am inside updateValue, encodedKeyRow: " +
-      encodedGroupingKey.getStruct(0, 1).getString(0).length)
-    println("I am inside updateValue, encodedUserKeyRow: " +
-      encodedUserKey.getStruct(0, 1).getString(0).length)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
 
@@ -198,12 +194,6 @@ class MapStateImplWithTTL[K, V](
             Array[Any](groupingKeyRow.asInstanceOf[InternalRow],
               userKeyRow.asInstanceOf[InternalRow]))
         )
-    println("inside clearIfExpired, after encode: " +
-      compositeKeyRow.numFields())
-    println("inside clearIfExpired, after encode, first struct: " +
-      compositeKeyRow.getStruct(0, 1).getString(0))
-    println("inside clearIfExpired, after encode, second struct: " +
-      compositeKeyRow.getStruct(1, 1).getString(0))
     val retRow = store.get(compositeKeyRow, stateName)
     println("inside clearIfExpired, after encode, decode here: " +
       stateTypesEncoder.decodeCompositeKey(compositeKeyRow))

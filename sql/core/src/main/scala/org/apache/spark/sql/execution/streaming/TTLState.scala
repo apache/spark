@@ -127,7 +127,6 @@ abstract class SingleKeyTTLStateImpl(
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, ttlExpirationMs)
     }.foreach { kv =>
-      // TODO numFields
       val groupingKey = kv.key.getStruct(1, keyExprEnc.schema.length)
       numValuesExpired += clearIfExpired(groupingKey)
       store.remove(kv.key, ttlColumnFamilyName)
@@ -234,18 +233,10 @@ abstract class CompositeKeyTTLStateImpl[K](
       expirationMs: Long,
       groupingKey: UnsafeRow,
       userKey: UnsafeRow): Unit = {
-    println("I am before upsertTTLForStateKey, grouping key row: " +
-      groupingKey.getStruct(0, 1).getString(0).length)
     val encodedTtlKey = keyRowEncoder.encodeTTLRow(
       expirationMs, groupingKey, userKey)
     val gkr = encodedTtlKey.getStruct(1, keyExprEnc.schema.length)
     val kr = encodedTtlKey.getStruct(2, uerKeyEncoder.schema.length)
-    println("I am inside upsertTTLForStateKey, gk: " + gkr.getString(0))
-    println("I am inside upsertTTLForStateKey, k: " + kr.getString(0))
-    println("I am inside upsertTTLForStateKey, gk len: " +
-      gkr.getString(0).length)
-    println("I am inside upsertTTLForStateKey, k len: " +
-      kr.getString(0).length)
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
 
@@ -263,14 +254,6 @@ abstract class CompositeKeyTTLStateImpl[K](
       numRemovedElements += clearIfExpired(
         kv.key.getStruct(1, keyExprEnc.schema.length),
         kv.key.getStruct(2, uerKeyEncoder.schema.length))
-      val gkr = kv.key.getStruct(1, keyExprEnc.schema.length)
-      val kr = kv.key.getStruct(2, uerKeyEncoder.schema.length)
-      println("I am inside clearExpiredState, gk: " + gkr.getString(0))
-      println("I am inside clearExpiredState, k: " + kr.getString(0))
-      println("I am inside clearExpiredState, gk len: " +
-        gkr.getString(0).length)
-      println("I am inside clearExpiredState, k len: " +
-        kr.getString(0).length)
       store.remove(kv.key, ttlColumnFamilyName)
     }
     numRemovedElements
@@ -284,14 +267,6 @@ abstract class CompositeKeyTTLStateImpl[K](
 
       override def next(): CompositeKeyTTLRow = {
         val kv = ttlIterator.next()
-        println("I am inside ttlIndexIterator, long: " +
-          kv.key.getLong(0))
-        println("I am inside ttlIndexIterator, grouping: " +
-          kv.key.getStruct(1, 1)
-            .getString(0).length)
-        println("I am inside ttlIndexIterator, user: " +
-          kv.key.getStruct(2, 1)
-            .getString(0).length)
         CompositeKeyTTLRow(
           expirationMs = kv.key.getLong(0),
           groupingKey = kv.key.getStruct(1, keyExprEnc.schema.length),

@@ -200,50 +200,57 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
   override def getStateTTLMetricName: String = "numValueStateWithTTLVars"
 
-  test("validate only expired keys are removed from the state") {
+  test("validate multiple value states") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val inputStream = MemoryStream[InputEvent]
+      classOf[RocksDBStateStoreProvider].getName) {
+      val ttlKey = "k1"
+      val noTtlKey = "k2"
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .groupByKey(x => x.key)
         .transformWithState(
-          getProcessor(ttlConfig),
+          new MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig),
           TimeMode.ProcessingTime(),
           OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, InputEvent("k1", "put", 1)),
+        AddData(inputStream, InputEvent(ttlKey, "put", 1)),
+        AddData(inputStream, InputEvent(noTtlKey, "put", 2)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
-        // advance clock halfway to expiration ttl, and add another key
-        AdvanceManualClock(30 * 1000),
-        AddData(inputStream, InputEvent("k2", "put", 2)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // advance clock so that key k1 is expired
-        AdvanceManualClock(30 * 1000),
-        AddData(inputStream, InputEvent("k1", "get", 1)),
-        AddData(inputStream, InputEvent("k2", "get", -1)),
-        AdvanceManualClock(1 * 1000),
-        // validate k1 is expired and k2 is not
-        CheckNewAnswer(OutputEvent("k2", 2, isTTLValue = false, -1)),
-        // validate k1 is deleted from state
-        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1)),
-        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // validate k2 exists in state
-        AddData(inputStream, InputEvent("k2", "get_ttl_value_from_state", -1)),
-        AddData(inputStream, InputEvent("k2", "get_values_in_ttl_state", -1)),
+        // get both state values, and make sure we get unexpired value
+        AddData(inputStream, InputEvent(ttlKey, "get", -1)),
+        AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
-          OutputEvent("k2", 2, isTTLValue = true, 92000),
-          OutputEvent("k2", -1, isTTLValue = true, 92000))
+          OutputEvent(ttlKey, 1, isTTLValue = false, -1),
+          OutputEvent(noTtlKey, 2, isTTLValue = false, -1)
+        ),
+        // ensure ttl values were added correctly, and noTtlKey has no ttl values
+        AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
+        AddData(inputStream, InputEvent(noTtlKey, "get_ttl_value_from_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent(ttlKey, 1, isTTLValue = true, 61000)),
+        AddData(inputStream, InputEvent(ttlKey, "get_values_in_ttl_state", -1)),
+        AddData(inputStream, InputEvent(noTtlKey, "get_values_in_ttl_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent(ttlKey, -1, isTTLValue = true, 61000)),
+        // advance clock after expiry
+        AdvanceManualClock(60 * 1000),
+        AddData(inputStream, InputEvent(ttlKey, "get", -1)),
+        AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        // validate ttlKey is expired, bot noTtlKey is still present
+        CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        // validate ttl value is removed in the value state column family
+        AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer()
       )
     }
   }
