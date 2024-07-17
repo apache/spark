@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{IntParam, Utils}
 
@@ -177,8 +177,8 @@ private[spark] object FileAppender extends Logging {
             inputStream, file, new SizeBasedRollingPolicy(bytes), conf, closeStreams = closeStreams)
         case _ =>
           logWarning(
-            log"Illegal size [${MDC(NUM_BYTES, rollingSizeBytes)}] " +
-              log"for rolling executor logs, rolling logs not enabled")
+            log"Illegal size [${MDC(LogKeys.NUM_BYTES, rollingSizeBytes)}] " +
+            log"for rolling executor logs, rolling logs not enabled")
           new FileAppender(inputStream, file, closeStreams = closeStreams)
       }
     }
@@ -192,8 +192,8 @@ private[spark] object FileAppender extends Logging {
         createSizeBasedAppender()
       case _ =>
         logWarning(
-          s"Illegal strategy [$rollingStrategy] for rolling executor logs, " +
-            s"rolling logs not enabled")
+          log"Illegal strategy [${MDC(LogKeys.STRATEGY, rollingStrategy)}] for " +
+          log"rolling executor logs, rolling logs not enabled")
         new FileAppender(inputStream, file, closeStreams = closeStreams)
     }
   }
