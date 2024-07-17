@@ -408,9 +408,6 @@ object StateStoreProvider {
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    // scalastyle:off println
-    println(s"provider config is ${storeConf.providerClass}, all config = ${storeConf.sqlConfs}")
-    // scalastyle:on println
     provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     provider

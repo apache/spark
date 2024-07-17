@@ -116,7 +116,7 @@ class TransformWithStateInPandasPythonRunner(
         groupingKeySchema))
 
     context.addTaskCompletionListener[Unit] { _ =>
-      logWarning(s"completion listener called")
+      logInfo(s"completion listener called")
       executor.awaitTermination(10, TimeUnit.SECONDS)
       executor.shutdownNow()
       val socketFile = Path.of(socketPath)
@@ -128,7 +128,7 @@ class TransformWithStateInPandasPythonRunner(
 
   private def closeServerSocketChannelSilently(serverChannel: UnixServerSocketChannel): Unit = {
     try {
-      logWarning(s"closing the state server socket")
+      logInfo(s"closing the state server socket")
       serverChannel.close()
     } catch {
       case e: Exception =>

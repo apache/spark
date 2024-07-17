@@ -48,9 +48,7 @@ class TransformWithStateInPandasStateServer(
   private val valueStates = mutable.HashMap[String, ValueState[Any]]()
 
   def run(): Unit = {
-    logWarning(s"Waiting for connection from Python worker")
     val channel = serverChannel.accept()
-    logWarning(s"listening on channel - ${channel.getLocalAddress}")
 
     inputStream = new DataInputStream(
       Channels.newInputStream(channel))
@@ -62,24 +60,18 @@ class TransformWithStateInPandasStateServer(
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
 
       try {
-        logWarning(s"reading the version")
         val version = inputStream.readInt()
 
         if (version != -1) {
-          logWarning(s"version = ${version}")
           assert(version == 0)
           val messageLen = inputStream.readInt()
-          logWarning(s"parsing a message of ${messageLen} bytes")
 
           val messageBytes = new Array[Byte](messageLen)
           inputStream.read(messageBytes)
-          logWarning(s"read bytes = ${messageBytes.mkString("Array(", ", ", ")")}")
 
           val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
 
-          logWarning(s"read message = $message")
           handleRequest(message)
-          logWarning(s"flush output stream")
 
           outputStream.flush()
         }
@@ -96,7 +88,7 @@ class TransformWithStateInPandasStateServer(
           return
       }
     }
-    logWarning(s"done from the state server thread")
+    logInfo(s"done from the state server thread")
   }
 
   private def handleRequest(message: StateRequest): Unit = {
@@ -107,13 +99,13 @@ class TransformWithStateInPandasStateServer(
         val requestedState = statefulProcessorHandleRequest.getSetHandleState.getState
         requestedState match {
           case HandleState.CREATED =>
-            logWarning(s"set handle state to Created")
+            logInfo(s"set handle state to Created")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CREATED)
           case HandleState.INITIALIZED =>
-            logWarning(s"set handle state to Initialized")
+            logInfo(s"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
           case HandleState.CLOSED =>
-            logWarning(s"set handle state to Closed")
+            logInfo(s"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
           case _ =>
         }
@@ -122,7 +114,7 @@ class TransformWithStateInPandasStateServer(
         StatefulProcessorCall.MethodCase.GETVALUESTATE) {
         val stateName = statefulProcessorHandleRequest.getGetValueState.getStateName
         val schema = statefulProcessorHandleRequest.getGetValueState.getSchema
-        logWarning(s"initializing value state $stateName")
+        logInfo(s"initializing value state $stateName")
         initializeState("ValueState", stateName, schema)
       } else {
         throw new IllegalArgumentException("Invalid method call")
@@ -134,10 +126,8 @@ class TransformWithStateInPandasStateServer(
           ValueStateCall.MethodCase.EXISTS) {
           val stateName = message.getStateVariableRequest.getValueStateCall.getExists.getStateName
           if (valueStates.contains(stateName) && valueStates(stateName).exists()) {
-            logWarning(s"state $stateName exists")
             sendResponse(0)
           } else {
-            logWarning(s"state $stateName doesn't exist")
             sendResponse(-1)
           }
         } else if (message.getStateVariableRequest.getValueStateCall.getMethodCase ==
@@ -149,12 +139,9 @@ class TransformWithStateInPandasStateServer(
             if (valueOption.isDefined) {
               sendResponse(0)
               val value = valueOption.get.toString
-              logWarning("got state value " + value)
               val valueBytes = value.getBytes("UTF-8")
               val byteLength = valueBytes.length
-              logWarning(s"writing value bytes of length $byteLength")
               outputStream.writeInt(byteLength)
-              logWarning(s"writing value bytes: ${valueBytes.mkString("Array(", ", ", ")")}")
               outputStream.write(valueBytes)
             } else {
               logWarning(s"state $stateName doesn't exist")
@@ -171,8 +158,6 @@ class TransformWithStateInPandasStateServer(
           val updateValueString = updateRequest.getValue.toStringUtf8
           val dataType = StructType.fromString(updateRequest.getSchema).fields(0).dataType
           val updatedValue = castToType(updateValueString, dataType)
-          logWarning(s"updating state $stateName with value $updatedValue and" +
-            s" type ${updatedValue.getClass}")
           if (valueStates.contains(stateName)) {
             valueStates(stateName).update(updatedValue)
             sendResponse(0)
@@ -200,15 +185,12 @@ class TransformWithStateInPandasStateServer(
         val key = message.getImplicitGroupingKeyRequest.getSetImplicitKey.getKey
         val groupingKeyType = groupingKeySchema.fields(0).dataType
         val castedData = castToType(key, groupingKeyType)
-        logWarning(s"setting implicit key to $castedData with type ${castedData.getClass}")
         val row = Row(castedData)
         ImplicitGroupingKeyTracker.setImplicitKey(row)
         sendResponse(0)
       } else if (message.getImplicitGroupingKeyRequest.getMethodCase ==
         ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY) {
-        logWarning(s"removing implicit key")
         ImplicitGroupingKeyTracker.removeImplicitKey()
-        logWarning(s"removed implicit key")
         sendResponse(0)
       } else {
         throw new IllegalArgumentException("Invalid method call")
@@ -224,15 +206,9 @@ class TransformWithStateInPandasStateServer(
       responseMessageBuilder.setErrorMessage(errorMessage)
     }
     val responseMessage = responseMessageBuilder.build()
-    logWarning(s"sending state response: $responseMessage with size" +
-      s" ${responseMessage.getSerializedSize}, status: ${responseMessage.getStatusCode}," +
-      s" error: ${responseMessage.getErrorMessage}")
     val responseMessageBytes = responseMessage.toByteArray
     val byteLength = responseMessageBytes.length
-    logWarning(s"writing state response bytes of length $byteLength")
     outputStream.writeInt(byteLength)
-    logWarning(s"writing state response bytes:" +
-      s" ${responseMessageBytes.mkString("Array(", ", ", ")")}")
     outputStream.write(responseMessageBytes)
   }
 

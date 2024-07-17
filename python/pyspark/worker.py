@@ -1631,7 +1631,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
 
-        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler

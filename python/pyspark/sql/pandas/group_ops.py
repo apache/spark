@@ -378,24 +378,7 @@ class PandasGroupedOpsMixin:
         invocations.
 
         The `stateful_processor` should be a Python class that implements the interface defined in
-        pyspark.sql.streaming.stateful_processor. The stateful processor consists 3 functions:
-        `init`, `handleInputRows`, and `close`.
-
-        The `init` function will be invoked as the first method that allows for users to initialize
-        all their state variables and perform other init actions before handling data.
-
-        The `handleInputRows` function will allow users to interact with input data rows. It should
-        take parameters (key, Iterator[`pandas.DataFrame`]) and return another
-        Iterator[`pandas.DataFrame`]. For each group, all columns are passed together as
-        `pandas.DataFrame` to the `handleInputRows` function, and the returned `pandas.DataFrame`
-        across all invocations are combined as a :class:`DataFrame`. Note that the `handleInputRows`
-        function should not make a guess of the number of elements in the iterator. To process all
-        data, the `handleInputRows` function needs to iterate all elements and process them. On the
-        other hand, the `handleInputRows` function is not strictly required toiterate through all
-        elements in the iterator if it intends to read a part of data.
-
-        The `close` function will be called as the last method that allows for users to perform any
-        cleanup or teardown operations.
+        pyspark.sql.streaming.stateful_processor.StatefulProcessor.
 
         The `outputStructType` should be a :class:`StructType` describing the schema of all
         elements in the returned value, `pandas.DataFrame`. The column labels of all elements in
@@ -410,13 +393,13 @@ class PandasGroupedOpsMixin:
 
         Parameters
         ----------
-        stateful_processor : StatefulProcessor
-            Instance of statefulProcessor whose functions will be invoked by the operator.
+        stateful_processor : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessor`
+            Instance of StatefulProcessor whose functions will be invoked by the operator.
         outputStructType : :class:`pyspark.sql.types.DataType` or str
-            the type of the output records. The value can be either a
+            The type of the output records. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         outputMode : str
-            the output mode of the stateful processor.
+            The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
 
@@ -463,14 +446,10 @@ class PandasGroupedOpsMixin:
                                   inputRows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
             handle = StatefulProcessorHandle(state_api_client)
 
-            print(f"checking handle state: {state_api_client.handle_state}")
             if (state_api_client.handle_state == StatefulProcessorHandleState.CREATED):
-                print("initializing stateful processor")
                 stateful_processor.init(handle)
-                print("setting handle state to initialized")
                 state_api_client.set_handle_state(StatefulProcessorHandleState.INITIALIZED)
 
-            print(f"handling input rows for key: {key[0]}")
             state_api_client.set_implicit_key(str(key[0]))
             result = stateful_processor.handleInputRows(key, inputRows)
             state_api_client.remove_implicit_key()

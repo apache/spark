@@ -33,6 +33,10 @@ if TYPE_CHECKING:
 
 
 class ValueState:
+    """
+    Class used for arbitrary stateful operations with the v2 API to capture single value state.
+    """
+
     def __init__(self,
             value_state_client: ValueStateClient,
             state_name: str,
@@ -42,9 +46,19 @@ class ValueState:
         self.schema = schema
 
     def exists(self) -> bool:
+        """
+        Whether state exists or not.
+
+        .. versionadded:: 4.0.0
+        """
         return self._value_state_client.exists(self._state_name)
 
     def get(self) -> Any:
+        """
+        Get the state value if it exists.
+
+        .. versionadded:: 4.0.0
+        """
         value_str = self._value_state_client.get(self._state_name)
         columns = [field.name for field in self.schema.fields]
         dtypes = {}
@@ -67,26 +81,73 @@ class ValueState:
         return df
 
     def update(self, new_value: Any) -> None:
+        """
+        Update the value of the state.
+
+        .. versionadded:: 4.0.0
+        """
         self._value_state_client.update(self._state_name, self.schema, new_value)
 
     def clear(self) -> None:
+        """
+        Remove this state.
+
+        .. versionadded:: 4.0.0
+        """
         self._value_state_client.clear(self._state_name)
 
 
 class StatefulProcessorHandle:
+    """
+    Represents the operation handle provided to the stateful processor used in the arbitrary state
+    API v2.
+    """
+
     def __init__(
             self,
             state_api_client: StateApiClient) -> None:
         self.state_api_client = state_api_client
 
     def getValueState(self, state_name: str, schema: Union[StructType, str]) -> ValueState:
+        """
+        Function to create new or return existing single value state variable of given type.
+        The user must ensure to call this function only within the `init()` method of the
+        StatefulProcessor.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        state_name : str
+            name of the state variable
+        schema : :class:`pyspark.sql.types.DataType` or str
+            The schema of the state variable. The value can be either a
+            :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        """
         self.state_api_client.get_value_state(state_name, schema)
         return ValueState(ValueStateClient(self.state_api_client), state_name, schema)
 
 
 class StatefulProcessor(ABC):
+    """
+    Class that represents the arbitrary stateful logic that needs to be provided by the user to
+    perform stateful manipulations on keyed streams.
+    """
+
     @abstractmethod
     def init(self, handle: StatefulProcessorHandle) -> None:
+        """
+        Function that will be invoked as the first method that allows for users to initialize all
+        their state variables and perform other init actions before handling data.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        handle : :class:`pyspark.sql.streaming.stateful_processor.StatefulProcessorHandle`
+            Handle to the stateful processor that provides access to the state store and other
+            stateful processing related APIs.
+        """
         pass
 
     @abstractmethod
@@ -94,8 +155,34 @@ class StatefulProcessor(ABC):
             self,
             key: Any,
             rows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
+        """
+        Function that will allow users to interact with input data rows along with the grouping key.
+        It should take parameters (key, Iterator[`pandas.DataFrame`]) and return another
+        Iterator[`pandas.DataFrame`]. For each group, all columns are passed together as
+        `pandas.DataFrame` to the function, and the returned `pandas.DataFrame` across all
+        invocations are combined as a :class:`DataFrame`. Note that the function should not make a
+        guess of the number of elements in the iterator. To process all data, the `handleInputRows`
+        function needs to iterate all elements and process them. On the other hand, the
+        `handleInputRows` function is not strictly required to iterate through all elements in the
+        iterator if it intends to read a part of data.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        rows : iterable of :class:`pandas.DataFrame`
+            iterator of input rows associated with grouping key
+        """
         pass
 
     @abstractmethod
     def close(self) -> None:
+        """
+        Function called as the last method that allows for users to perform any cleanup or teardown
+        operations.
+
+        .. versionadded:: 4.0.0
+        """
         pass

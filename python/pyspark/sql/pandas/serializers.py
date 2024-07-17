@@ -1171,7 +1171,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         chunks for each group, so that the caller can lazily materialize the data chunk.
         """
         import pyarrow as pa
-        from itertools import tee
 
         def generate_data_batches(batches):
             for batch in batches:
@@ -1180,11 +1179,9 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                 batch_key = tuple(s[0] for s in key_series)
                 yield (batch_key, data_pandas)
 
-        print("Generating data batches...")
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
-        print("Returning data batches...")
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             yield (k, g)
 
@@ -1196,13 +1193,3 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         """
         result = [(b, t) for x in iterator for y, t in x for b in y]    
         super().dump_stream(result, stream)
-    
-class ImplicitGroupingKeyTracker:
-    def __init__(self) -> None:
-        self._key = None
-
-    def setKey(self, key: Any) -> None:
-        self._key = key
-
-    def getKey(self) -> Any:
-        return self._key

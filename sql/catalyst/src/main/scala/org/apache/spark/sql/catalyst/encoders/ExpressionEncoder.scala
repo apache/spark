@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, InternalRow, JavaTypeInference, ScalaReflection, SerializerBuildHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
@@ -202,7 +201,7 @@ object ExpressionEncoder {
    * object.  Thus, the caller should copy the result before making another call if required.
    */
   class Serializer[T](private val expressions: Seq[Expression])
-    extends (T => InternalRow) with Serializable with Logging {
+    extends (T => InternalRow) with Serializable {
     @transient
     private[this] var inputRow: GenericInternalRow = _
 
