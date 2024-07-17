@@ -39,9 +39,14 @@ trait FutureAction[T] extends Future[T] {
   // documentation (with reference to the word "action").
 
   /**
-   * Cancels the execution of this action with an optional reason.
+   * Cancels the execution of this action with a reason.
    */
-  def cancel(reason: Option[String] = None): Unit
+  def cancel(reason: String): Unit
+
+  /**
+   * Cancels the execution of this action.
+   */
+  def cancel(): Unit
 
   /**
    * Blocks until this action completes.
@@ -114,9 +119,14 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
   @volatile private var _cancelled: Boolean = false
 
-  override def cancel(reason: Option[String] = None): Unit = {
+  override def cancel(reason: String): Unit = {
     _cancelled = true
     jobWaiter.cancel(reason)
+  }
+
+  override def cancel(): Unit = {
+    _cancelled = true
+    jobWaiter.cancel()
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
@@ -188,10 +198,16 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   // A promise used to signal the future.
   private val p = Promise[T]().completeWith(run(jobSubmitter))
 
-  override def cancel(reason: Option[String] = None): Unit = synchronized {
+  override def cancel(reason: String): Unit = synchronized {
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
     subActions.foreach(_.cancel(reason))
+  }
+
+  override def cancel(): Unit = synchronized {
+    _cancelled = true
+    p.tryFailure(new SparkException("Action has been cancelled"))
+    subActions.foreach(_.cancel())
   }
 
   private def jobSubmitter = new JobSubmitter {

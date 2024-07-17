@@ -827,7 +827,7 @@ case class AdaptiveSparkPlanExec(
       // so we should avoid calling cancel on it to re-trigger the failure again.
       case s: ExchangeQueryStageExec if !earlyFailedStage.contains(s.id) =>
         try {
-          s.cancel(Option("cancelled by cleanup in AdaptiveSparkPlanExec"))
+          s.cancel("cancelled by cleanup in AdaptiveSparkPlanExec")
         } catch {
           case NonFatal(t) =>
             logError(log"Exception in cancelling query stage: " +

@@ -74,14 +74,21 @@ trait BroadcastExchangeLike extends Exchange {
   protected def completionFuture: scala.concurrent.Future[broadcast.Broadcast[Any]]
 
   /**
-   * Cancels broadcast job with an optional reason.
+   * Cancels broadcast job with a reason.
    */
-  final def cancelBroadcastJob(reason: Option[String] = None): Unit = {
+  final def cancelBroadcastJob(reason: String): Unit = {
     if (isMaterializationStarted() && !this.relationFuture.isDone) {
-      reason match {
-        case Some(r) => sparkContext.cancelJobsWithTag(this.jobTag, r)
-        case None => sparkContext.cancelJobsWithTag(this.jobTag)
-      }
+      sparkContext.cancelJobsWithTag(this.jobTag, reason)
+      this.relationFuture.cancel(true)
+    }
+  }
+
+  /**
+   * Cancels broadcast job.
+   */
+  final def cancelBroadcastJob(): Unit = {
+    if (isMaterializationStarted() && !this.relationFuture.isDone) {
+      sparkContext.cancelJobsWithTag(this.jobTag)
       this.relationFuture.cancel(true)
     }
   }

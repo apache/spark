@@ -45,12 +45,19 @@ private[spark] class JobWaiter[T](
   def completionFuture: Future[Unit] = jobPromise.future
 
   /**
-   * Sends a signal to the DAGScheduler to cancel the job with an optional reason. The
+   * Sends a signal to the DAGScheduler to cancel the job and specify a reason. The
    * cancellation itself is handled asynchronously. After the low level scheduler cancels
    * all the tasks belonging to this job, it will fail this job with a SparkException.
    */
-  def cancel(reason: Option[String] = None): Unit = {
-    dagScheduler.cancelJob(jobId, reason)
+  def cancel(reason: String): Unit = {
+    dagScheduler.cancelJob(jobId, Option(reason))
+  }
+
+  /**
+   * Sends a signal to the DAGScheduler to cancel the job.
+   */
+  def cancel(): Unit = {
+    dagScheduler.cancelJob(jobId, None)
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {
