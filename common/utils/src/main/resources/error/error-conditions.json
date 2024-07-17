@@ -514,7 +514,7 @@
     "subClass" : {
       "EXPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+          "Error occurred due to the mismatch between explicit collations: [<explicitTypes>]. Decide on a single explicit collation and remove others."
         ]
       },
       "IMPLICIT" : {
