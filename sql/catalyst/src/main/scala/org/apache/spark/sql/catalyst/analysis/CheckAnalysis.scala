@@ -905,12 +905,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
       // are not part of the correlated columns.
 
-      // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
-      val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
       // Collect the inner query attributes that are guaranteed to have a single value for each
       // outer row. See comment on getCorrelatedEquivalentInnerColumns.
-      val correlatedEquivalentCols = getCorrelatedEquivalentInnerColumns(query)
-      val nonEquivalentGroupByCols = groupByCols -- correlatedEquivalentCols
+      val correlatedEquivalentCols = getCorrelatedEquivalentInnerExpressions(query)
+      // Unlike 'groupByCols', preserve the entire grouping expression.
+      val groupByExprs =
+        ExpressionSet(agg.groupingExpressions.filter(x => !x.isInstanceOf[OuterReference]))
+      val nonEquivalentGroupByCols = groupByExprs -- correlatedEquivalentCols
 
       val invalidCols = if (!SQLConf.get.getConf(
         SQLConf.LEGACY_SCALAR_SUBQUERY_ALLOW_GROUP_BY_NON_EQUALITY_CORRELATED_PREDICATE)) {
@@ -920,6 +921,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Allows any inner attribute that appears in a correlated predicate, even if it is a
         // non-equality predicate or under an operator that can change the values of the attribute
         // (see comments on getCorrelatedEquivalentInnerColumns for examples).
+        // Note: groupByCols does not contain outer refs - grouping by an outer ref is always ok
+        val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
         val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
           .filterNot(conditions.flatMap(_.references).contains)
         val correlatedCols = AttributeSet(subqueryColumns)
@@ -936,10 +939,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       }
 
       if (invalidCols.nonEmpty) {
+        val names = invalidCols.map { el =>
+          el match {
+            case attr: Attribute => attr.name
+            case expr: Expression => expr.toString
+          }
+        }
         expr.failAnalysis(
           errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
             "NON_CORRELATED_COLUMNS_IN_GROUP_BY",
-          messageParameters = Map("value" -> invalidCols.map(_.name).mkString(",")))
+          messageParameters = Map("value" -> names.mkString(",")))
       }
     }
 
