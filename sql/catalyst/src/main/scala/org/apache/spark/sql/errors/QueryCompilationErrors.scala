@@ -1072,10 +1072,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("database" -> database))
   }
 
-  def cannotDropDefaultDatabaseError(database: String): Throwable = {
+  def cannotDropDefaultDatabaseError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
-      messageParameters = Map("database" -> toSQLId(database)))
+      messageParameters = Map("database" -> toSQLId(nameParts)))
   }
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
@@ -3675,7 +3675,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> toSQLId(explicitTypes)
+        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
       )
     )
   }
@@ -3823,6 +3823,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
+  }
+
+  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {

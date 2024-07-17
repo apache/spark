@@ -115,10 +115,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_INDETERMINATE", "UNICODE"),
       ("UNICODE_CI_INDETERMINATE", "UNICODE")
     ).foreach{case (collationName, proposals) =>
-      val error = intercept[SparkException] { fetchCollation(collationName) }
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
+      checkCollationNameError(collationName, proposals)
     }
   }
 
@@ -154,8 +151,8 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         testCase.expectedResult)
 
       val hash1 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      assert(hash1 == hash2)
+      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s2))
+      assert((hash1 == hash2) == testCase.expectedResult)
     })
   }
 
@@ -316,13 +313,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       // no locale specified
       ("_CI_AI", "af_CI_AI, am_CI_AI, ar_CI_AI"),
       ("", "af, am, ar")
-    ).foreach { case (collationName, proposals) => {
-      val error = intercept[SparkException] { fetchCollation(collationName) }
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
-    }}
+    ).foreach { case (collationName, proposals) =>
+      checkCollationNameError(collationName, proposals)
+    }
   }
 
   test("collations name normalization for ICU non-root localization") {
@@ -427,13 +420,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODECSAS", "UNICODE"),
       ("_CS_AS_UNICODE", "UNICODE")
     ).foreach { case (collationName, proposals) =>
-      val error = intercept[SparkException] {
-        fetchCollation(collationName)
-      }
-
-      assert(error.getErrorClass === "COLLATION_INVALID_NAME")
-      assert(error.getMessageParameters.asScala === Map(
-        "collationName" -> collationName, "proposals" -> proposals))
+      checkCollationNameError(collationName, proposals)
     }
   }
 
@@ -464,5 +451,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       val result = collation.comparator.compare(toUTF8(testCase.s1), toUTF8(testCase.s2))
       assert(Integer.signum(result) == testCase.expectedResult)
     })
+  }
+
+  private def checkCollationNameError(collationName: String, proposals: String): Unit = {
+    val e = intercept[SparkException] {
+      fetchCollation(collationName)
+    }
+    assert(e.getErrorClass === "COLLATION_INVALID_NAME")
+    assert(e.getMessageParameters.asScala === Map(
+      "collationName" -> collationName, "proposals" -> proposals))
   }
 }

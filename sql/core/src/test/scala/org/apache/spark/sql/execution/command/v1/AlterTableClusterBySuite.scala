@@ -36,7 +36,7 @@ trait AlterTableClusterBySuiteBase extends command.AlterTableClusterBySuiteBase
   override def validateClusterBy(tableName: String, clusteringColumns: Seq[String]): Unit = {
     val catalog = spark.sessionState.catalog
     val (_, db, t) = parseTableName(tableName)
-    val table = catalog.getTableMetadata(TableIdentifier.apply(t, Some(db)))
+    val table = catalog.getTableMetadata(TableIdentifier(t, Some(db)))
     assert(table.clusterBySpec === Some(ClusterBySpec(clusteringColumns.map(FieldReference(_)))))
   }
 }

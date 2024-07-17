@@ -1999,6 +1999,16 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
 trait SupportsSubquery extends LogicalPlan
 
 /**
+ * Trait that logical plans can extend to check whether it can allow non-deterministic
+ * expressions and pass the CheckAnalysis rule.
+ */
+trait SupportsNonDeterministicExpression extends LogicalPlan {
+
+  /** Returns whether it allows non-deterministic expressions. */
+  def allowNonDeterministicExpression: Boolean
+}
+
+/**
  * Collect arbitrary (named) metrics from a dataset. As soon as the query reaches a completion
  * point (batch query completes or streaming query epoch completes) an event is emitted on the
  * driver which can be observed by attaching a listener to the spark session. The metrics are named
