@@ -2578,6 +2578,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         executeSameContext(e.plan)
       }
 
+      checkAnalysis(newSubqueryPlan)
+
       // If the subquery plan is fully resolved, pull the outer references and record
       // them as children of SubqueryExpression.
       if (newSubqueryPlan.resolved) {
