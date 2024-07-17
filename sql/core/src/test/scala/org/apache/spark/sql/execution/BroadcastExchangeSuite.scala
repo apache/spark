@@ -34,7 +34,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class BroadcastExchangeSuite extends SparkPlanTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper
+  {
 
   import testImplicits._
 
@@ -82,7 +83,7 @@ class BroadcastExchangeSuite extends SparkPlanTest
       val events = jobEvents.toArray
       val hasStart = events(0).isInstanceOf[SparkListenerJobStart]
       val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
-        .asInstanceOf[JobFailed].exception.getMessage.contains("cancelled job tag")
+        .asInstanceOf[JobFailed].exception.getMessage.contains("Could not execute broadcast")
       events.length == 2 && hasStart && hasCancelled
     }
   }

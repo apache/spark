@@ -252,7 +252,8 @@ private[hive] class SparkExecuteStatementOperation(
         // task interrupted, it may have started some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
-          session.sparkContext.cancelJobGroup(statementId, s"failed to execute statement ${redactedStatement}: ${e}")
+          session.sparkContext.cancelJobGroup(statementId,
+            s"failed to execute statement ${redactedStatement}: ${e}")
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
