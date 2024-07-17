@@ -61,11 +61,11 @@ compoundBody
 
 compoundStatement
     : statement
-    | compoundSetStatement
+    | setStatementWithOptionalVarKeyword
     | beginEndCompoundBlock
     ;
 
-compoundSetStatement
+setStatementWithOptionalVarKeyword
     : SET (VARIABLE | VAR)? assignmentList                      #compoundSetVariable
     | SET (VARIABLE | VAR)? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                            #compoundSetVariable
