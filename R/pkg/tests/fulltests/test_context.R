@@ -95,10 +95,6 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
-
-  setJobGroup("anotherGroupId", "job description", TRUE)
-  cancelJobGroup("anotherGroupId", "custom cancellation reason")
-  clearJobGroup()
   setInterruptOnCancel(TRUE)
 
   sparkR.session.stop()
@@ -115,9 +111,6 @@ test_that("job tag functions can be called", {
   removeJobTag("A")
   expect_true(identical(getJobTags(), list()))
   cancelJobsWithTag("A")
-  addJobTag("C")
-  cancelJobsWithTag("C", "custom reason")
-  removeJobTag("C")
 
   sparkR.session.stop()
   expect_true(TRUE)
