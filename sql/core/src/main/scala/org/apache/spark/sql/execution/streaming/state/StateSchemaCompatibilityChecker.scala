@@ -35,7 +35,7 @@ case class StateSchemaValidationResult(
     schemaPath: String
 )
 
-case class StateSchema(
+case class StateStoreColFamilySchema(
     colFamilyName: String,
     keySchema: StructType,
     valueSchema: StructType,
@@ -56,7 +56,7 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  def readSchemaFile(): Array[StateSchema] = {
+  def readSchemaFile(): List[StateStoreColFamilySchema] = {
     val inStream = fm.open(schemaFileLocation)
     try {
       val versionStr = inStream.readUTF()
@@ -76,11 +76,11 @@ class StateSchemaCompatibilityChecker(
    * exists
    * @return - Option of (keySchema, valueSchema) if the schema file exists, None otherwise
    */
-  private def getExistingKeyAndValueSchema(): Array[StateSchema] = {
+  private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
     if (fm.exists(schemaFileLocation)) {
       readSchemaFile()
     } else {
-      Array.empty
+      List.empty
     }
   }
 
@@ -115,8 +115,8 @@ class StateSchemaCompatibilityChecker(
    * @param ignoreValueSchema - whether to ignore value schema or not
    */
   private def check(
-      oldSchema: StateSchema,
-      newSchema: StateSchema,
+      oldSchema: StateStoreColFamilySchema,
+      newSchema: StateStoreColFamilySchema,
       ignoreValueSchema: Boolean) : Unit = {
     val (storedKeySchema, storedValueSchema) = (oldSchema.keySchema,
       oldSchema.valueSchema)
@@ -137,16 +137,21 @@ class StateSchemaCompatibilityChecker(
   }
 
   def validateAndMaybeEvolveStateSchema(
-      newStateSchema: Array[StateSchema],
+      newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean): Boolean = {
-    val existingSchema = getExistingKeyAndValueSchema()
-    if (existingSchema.isEmpty) {
+    val existingStateSchemaList = getExistingKeyAndValueSchema().sortBy(_.colFamilyName)
+    val newStateSchemaList = newStateSchema.sortBy(_.colFamilyName)
+
+    if (existingStateSchemaList.isEmpty) {
       // write the schema file if it doesn't exist
       createSchemaFile(newStateSchema.head.keySchema, newStateSchema.head.valueSchema)
       true
     } else {
       // validate if the new schema is compatible with the existing schema
-      check(existingSchema.head, newStateSchema.head, ignoreValueSchema)
+      existingStateSchemaList.lazyZip(newStateSchemaList).foreach {
+        case (existingStateSchema, newStateSchema) =>
+          check(existingStateSchema, newStateSchema, ignoreValueSchema)
+      }
       false
     }
   }
@@ -175,7 +180,7 @@ object StateSchemaCompatibilityChecker {
    *
    * @param stateInfo - StatefulOperatorStateInfo containing the state store information
    * @param hadoopConf - Hadoop configuration
-   * @param stateSchema - Array of input state schema
+   * @param newStateSchema - Array of new schema for state store column families
    * @param sessionState - session state used to retrieve session config
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
@@ -183,7 +188,7 @@ object StateSchemaCompatibilityChecker {
   def validateAndMaybeEvolveStateSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,
-      newStateSchema: Array[StateSchema],
+      newStateSchema: List[StateStoreColFamilySchema],
       sessionState: SessionState,
       stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,

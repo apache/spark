@@ -110,7 +110,7 @@ case class TransformWithStateExec(
    * Fetching the columnFamilySchemas from the StatefulProcessorHandle
    * after init is called.
    */
-  private def getColFamilySchemas(): Map[String, StateSchema] = {
+  private def getColFamilySchemas(): Map[String, StateStoreColFamilySchema] = {
     val columnFamilySchemas = getDriverProcessorHandle().getColumnFamilySchemas
     closeProcessorHandle()
     columnFamilySchemas
@@ -381,7 +381,7 @@ case class TransformWithStateExec(
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newColumnFamilySchemas.values.toArray, session.sessionState, stateSchemaVersion))
+      newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion))
   }
 
   private def stateSchemaDirPath(storeName: String): Path = {

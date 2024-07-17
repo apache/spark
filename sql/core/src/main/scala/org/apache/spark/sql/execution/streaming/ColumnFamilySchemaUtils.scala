@@ -18,12 +18,12 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchema}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
 
 object StateSchemaUtils {
 
-  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): StateSchema = {
-    StateSchema(
+  def getValueStateSchema[T](stateName: String, hasTtl: Boolean): StateStoreColFamilySchema = {
+    StateStoreColFamilySchema(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -34,8 +34,8 @@ object StateSchemaUtils {
       Some(NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA)))
   }
 
-  def getListStateSchema[T](stateName: String, hasTtl: Boolean): StateSchema = {
-    StateSchema(
+  def getListStateSchema[T](stateName: String, hasTtl: Boolean): StateStoreColFamilySchema = {
+    StateStoreColFamilySchema(
       stateName,
       KEY_ROW_SCHEMA,
       if (hasTtl) {
@@ -49,8 +49,8 @@ object StateSchemaUtils {
   def getMapStateSchema[K, V](
       stateName: String,
       userKeyEnc: Encoder[K],
-      hasTtl: Boolean): StateSchema = {
-    StateSchema(
+      hasTtl: Boolean): StateStoreColFamilySchema = {
+    StateStoreColFamilySchema(
       stateName,
       COMPOSITE_KEY_ROW_SCHEMA,
       if (hasTtl) {

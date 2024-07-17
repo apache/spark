@@ -302,10 +302,10 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode)
 
   // Because this is only happening on the driver side, there is only
   // one task modifying and accessing this map at a time
-  private[sql] val columnFamilySchemas: mutable.Map[String, StateSchema] =
-    new mutable.HashMap[String, StateSchema]()
+  private[sql] val columnFamilySchemas: mutable.Map[String, StateStoreColFamilySchema] =
+    new mutable.HashMap[String, StateStoreColFamilySchema]()
 
-  def getColumnFamilySchemas: Map[String, StateSchema] = columnFamilySchemas.toMap
+  def getColumnFamilySchemas: Map[String, StateStoreColFamilySchema] = columnFamilySchemas.toMap
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)

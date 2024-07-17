@@ -193,7 +193,7 @@ trait FlatMapGroupsWithStateExecBase
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       groupingAttributes.toStructType, stateManager.stateSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))

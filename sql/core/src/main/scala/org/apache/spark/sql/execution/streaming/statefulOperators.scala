@@ -437,7 +437,7 @@ case class StateStoreRestoreExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
@@ -509,7 +509,7 @@ case class StateStoreSaveExec(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
@@ -722,7 +722,7 @@ case class SessionWindowStateStoreRestoreExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
@@ -813,7 +813,7 @@ case class SessionWindowStateStoreSaveExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       stateManager.getStateKeySchema, stateManager.getStateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
@@ -1130,7 +1130,7 @@ case class StreamingDeduplicateExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, schemaForValueRow))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
@@ -1210,7 +1210,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
-    val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+    val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
       keyExpressions.toStructType, schemaForValueRow))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,

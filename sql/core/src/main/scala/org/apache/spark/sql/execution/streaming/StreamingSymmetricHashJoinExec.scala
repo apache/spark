@@ -261,7 +261,7 @@ case class StreamingSymmetricHashJoinExec(
 
     // validate and maybe evolve schema for all state stores across both sides of the join
     result.map { case (stateStoreName, (keySchema, valueSchema)) =>
-      val newStateSchema = Array(StateSchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
         keySchema, valueSchema))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
         newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
