@@ -12426,6 +12426,51 @@ def url_decode(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def try_url_decode(str: "ColumnOrName") -> Column:
+    """
+    This is a special version of `url_decode` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a URL-encoded string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the decoded string.
+
+    Examples
+    --------
+    Example 1: Decoding a URL-encoded string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show(truncate=False)
+    +------------------------+
+    |try_url_decode(url)     |
+    +------------------------+
+    |https://spark.apache.org|
+    +------------------------+
+
+    Example 2: Return NULL if the decoding cannot be performed.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2spark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show()
+    +-------------------+
+    |try_url_decode(url)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
+    """
+    return _invoke_function_over_columns("try_url_decode", str)
+
+
+@_try_remote_functions
 def url_encode(str: "ColumnOrName") -> Column:
     """
     URL function: Encodes a string into a URL-encoded string in
