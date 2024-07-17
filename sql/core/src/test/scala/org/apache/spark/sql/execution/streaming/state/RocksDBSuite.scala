@@ -306,11 +306,19 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
     }
 
+    // pick up from the last snapshot and the next upload will be for version 21
     withDB(remoteDir, conf = conf) { db =>
       db.load(18)
       db.commit()
       db.doMaintenance()
-      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 19))
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
+
+      for (version <- 19 to 20) {
+        db.load(version)
+        db.commit()
+      }
+      db.doMaintenance()
+      assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
     }
   }
 
@@ -1645,7 +1653,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   testWithChangelogCheckpointingEnabled("time travel 5 -" +
     "validate successful RocksDB load when metadata file is not overwritten") {
-    // Ensure commit doesn't modify the latestSnapshot that doMaintenance will upload
     val fmClass = "org.apache.spark.sql.execution.streaming.state." +
       "NoOverwriteFileSystemBasedCheckpointFileManager"
     withTempDir { dir =>
@@ -1663,9 +1670,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(0)
         db.put("a", "1")
 
-        // upload version 1 snapshot created above
+        // do not upload version 1 snapshot created previously
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+        assert(snapshotVersionsPresent(remoteDir) == Seq.empty)
 
         db.commit() // create snapshot again
 
