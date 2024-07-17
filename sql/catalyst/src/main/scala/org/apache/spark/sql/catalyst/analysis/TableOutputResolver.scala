@@ -414,7 +414,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
     if (res.length == 1) {
       if (res.head.fastEquals(param)) {
-        Some(Alias(nullCheckedInput, expected.name)())
+        input match {
+          case n: NamedExpression =>
+            checkField(tableName, expected, n, byName, conf, addError, colPath)
+          case _ => None
+        }
       } else {
         val func = LambdaFunction(res.head, Seq(param))
         Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
@@ -457,7 +461,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     if (resKey.length == 1 && resValue.length == 1) {
       if (resKey.head.fastEquals(keyParam) && resValue.head.fastEquals(valueParam)) {
-        Some(Alias(nullCheckedInput, expected.name)())
+        input match {
+          case n: NamedExpression =>
+            checkField(tableName, expected, n, byName, conf, addError, colPath)
+          case _ => None
+        }
       } else {
         val newKeys = if (!resKey.head.fastEquals(keyParam)) {
           val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
