@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
 /**
@@ -52,15 +53,15 @@ class TimerStateImpl(
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
   private val schemaForPrefixKey: StructType = new StructType()
-    .add("key", BinaryType)
+    .add("key", new StructType(keyExprEnc.schema.fields))
 
   private val schemaForKeyRow: StructType = new StructType()
-    .add("key", BinaryType)
+    .add("key", new StructType(keyExprEnc.schema.fields))
     .add("expiryTimestampMs", LongType, nullable = false)
 
   private val keySchemaForSecIndex: StructType = new StructType()
     .add("expiryTimestampMs", LongType, nullable = false)
-    .add("key", BinaryType)
+    .add("key", new StructType(keyExprEnc.schema.fields))
 
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
@@ -98,17 +99,25 @@ class TimerStateImpl(
   }
 
   private def encodeKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    val keyRow = keyEncoder(InternalRow(keyByteArr, expiryTimestampMs))
-    keyRow
+    val realGroupingKey =
+      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
+      else groupingKey
+
+    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
+    val compositeRow = new GenericInternalRow(Array[Any](keyRow, expiryTimestampMs))
+    keyEncoder.apply(compositeRow)
   }
 
   // We maintain a secondary index that inverts the ordering of the timestamp
   // and grouping key
   private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    val keyRow = secIndexKeyEncoder(InternalRow(expiryTimestampMs, keyByteArr))
-    keyRow
+    val realGroupingKey =
+      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
+      else groupingKey
+
+    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
+    val compositeRow = new GenericInternalRow(Array[Any](expiryTimestampMs, keyRow))
+    secIndexKeyEncoder.apply(compositeRow)
   }
 
   /**
@@ -158,10 +167,20 @@ class TimerStateImpl(
   }
 
   def listTimers(): Iterator[Long] = {
-    val keyByteArr = keySerializer.apply(getGroupingKey(keyToTsCFName))
-      .asInstanceOf[UnsafeRow].getBytes()
-    val keyRow = prefixKeyEncoder(InternalRow(keyByteArr))
-    val iter = store.prefixScan(keyRow, keyToTsCFName)
+    val groupingKey = getGroupingKey(keyToTsCFName)
+    val encodedGroupingKey: UnsafeRow = {
+      val realGroupingKey =
+        if (groupingKey.isInstanceOf[String]) {
+          UTF8String.fromString(groupingKey.asInstanceOf[String])
+        }
+        else groupingKey
+      val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
+
+      val keyProj = UnsafeProjection.create(schemaForPrefixKey)
+      keyProj.apply(InternalRow(keyRow))
+    }
+
+    val iter = store.prefixScan(encodedGroupingKey, keyToTsCFName)
     iter.map { kv =>
       val keyRow = kv.key
       keyRow.getLong(1)
@@ -170,9 +189,8 @@ class TimerStateImpl(
 
   private def getTimerRowFromSecIndex(keyRow: UnsafeRow): (Any, Long) = {
     // Decode the key object from the UnsafeRow
-    val keyBytes = keyRow.getBinary(1)
-    val retUnsafeRow = new UnsafeRow(1)
-    retUnsafeRow.pointTo(keyBytes, keyBytes.length)
+    val retUnsafeRow = keyRow.getStruct(1, keyExprEnc.schema.length)
+
     val keyObj = keyExprEnc.resolveAndBind()
       .createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
 

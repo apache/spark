@@ -201,7 +201,6 @@ class CompositeKeyStateEncoder[K, V](
 
   private val userKeyRowToObjDeserializer =
     userKeyExpressionEnc.resolveAndBind().createDeserializer()
-  private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
 
   override def encodeGroupingKey(): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
