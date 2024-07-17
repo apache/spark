@@ -57,8 +57,12 @@ object SchemaConverters extends Logging {
       useStableIdForUnionType: Boolean,
       stableIdPrefixForUnionType: String,
       recursiveFieldMaxDepth: Int = -1): SchemaType = {
-    toSqlTypeHelper(avroSchema, Map.empty, useStableIdForUnionType, stableIdPrefixForUnionType,
-      recursiveFieldMaxDepth)
+    val schema = toSqlTypeHelper(avroSchema, Map.empty, useStableIdForUnionType,
+      stableIdPrefixForUnionType, recursiveFieldMaxDepth)
+    if (schema == null) {
+      return SchemaType(StructType(Nil), nullable = true)
+    }
+    schema
   }
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
@@ -72,9 +76,8 @@ object SchemaConverters extends Logging {
   @deprecated("using toSqlType(..., useStableIdForUnionType: Boolean) instead", "4.0.0")
   def toSqlType(avroSchema: Schema, options: Map[String, String]): SchemaType = {
     val avroOptions = AvroOptions(options)
-    toSqlTypeHelper(
+    toSqlType(
       avroSchema,
-      Map.empty,
       avroOptions.useStableIdForUnionType,
       avroOptions.stableIdPrefixForUnionType,
       avroOptions.recursiveFieldMaxDepth)

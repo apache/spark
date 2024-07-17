@@ -459,8 +459,10 @@ abstract class AvroSuite
       val e = intercept[Exception] {
         checkUnionStableId(
           List(
-            Schema.createRecord("myRecord", "", null, false, List[Schema.Field]().asJava),
-            Schema.createRecord("myrecord", "", null, false, List[Schema.Field]().asJava)),
+            Schema.createRecord("myRecord", "", null, false, List[Schema.Field](
+              new Schema.Field("F", Schema.create(Type.FLOAT))).asJava),
+            Schema.createRecord("myrecord", "", null, false, List[Schema.Field](
+              new Schema.Field("F", Schema.create(Type.FLOAT))).asJava)),
           "",
           Seq())
       }
@@ -2187,7 +2189,7 @@ abstract class AvroSuite
     }
   }
 
-  private def checkSchemaWithRecursiveLoopError(avroSchema: String): Unit = {
+  private def checkSchemaWithRecursiveLoop(avroSchema: String): Unit = {
     val message = intercept[IncompatibleSchemaException] {
       SchemaConverters.toSqlType(new Schema.Parser().parse(avroSchema), false, "")
     }.getMessage
@@ -2196,7 +2198,7 @@ abstract class AvroSuite
   }
 
   test("Detect recursive loop") {
-    checkSchemaWithRecursiveLoopError("""
+    checkSchemaWithRecursiveLoop("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2207,7 +2209,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoopError("""
+    checkSchemaWithRecursiveLoop("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2229,7 +2231,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoopError("""
+    checkSchemaWithRecursiveLoop("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2240,7 +2242,7 @@ abstract class AvroSuite
       |}
     """.stripMargin)
 
-    checkSchemaWithRecursiveLoopError("""
+    checkSchemaWithRecursiveLoop("""
       |{
       |  "type": "record",
       |  "name": "LongList",
@@ -2252,7 +2254,7 @@ abstract class AvroSuite
     """.stripMargin)
   }
 
-  private def checkSchemaWithRecursiveLoop(
+  private def checkSparkSchemaEquals(
       avroSchema: String, expectedSchema: StructType, recursiveFieldMaxDepth: Int): Unit = {
     val sparkSchema =
       SchemaConverters.toSqlType(
@@ -2261,7 +2263,96 @@ abstract class AvroSuite
     assert(sparkSchema === expectedSchema)
   }
 
-  
+  test("Recursive schema resolve to be empty struct") {
+    val avroSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields": [
+      |    {
+      |      "name": "value",
+      |      "type": {
+      |        "type": "record",
+      |        "name": "foo",
+      |        "fields": [
+      |          {
+      |            "name": "parent",
+      |            "type": "LongList"
+      |          }
+      |        ]
+      |      }
+      |    }
+      |  ]
+      |}
+    """.stripMargin
+    val expectedSchema = StructType(Seq())
+    for (i <- 0 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+    }
+  }
+
+  test("Translate recursive schema - 1") {
+    val avroSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},             // each element has a long
+      |    {"name": "next", "type": ["null", "LongList"]} // optional next element
+      |  ]
+      |}
+    """.stripMargin
+    val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
+    var expectedSchema = nonRecursiveFields
+    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
+    for (i <- 1 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+      expectedSchema = nonRecursiveFields.add("next", expectedSchema)
+    }
+  }
+
+  test("Translate recursive schema - 2") {
+    val avroSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "array", "type": {"type": "array", "items": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin
+    val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
+    var expectedSchema = nonRecursiveFields
+    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
+    for (i <- 1 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+      expectedSchema =
+        nonRecursiveFields.add("array", new ArrayType(expectedSchema, false), nullable = false)
+    }
+  }
+
+  test("Translate recursive schema - 3") {
+    val avroSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "LongList",
+      |  "fields" : [
+      |    {"name": "value", "type": "long"},
+      |    {"name": "map", "type": {"type": "map", "values": "LongList"}}
+      |  ]
+      |}
+    """.stripMargin
+    val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
+    var expectedSchema = nonRecursiveFields
+    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
+    for (i <- 1 to 5) {
+      checkSparkSchemaEquals(avroSchema, expectedSchema, i)
+      expectedSchema =
+        nonRecursiveFields.add("map",
+          new MapType(StringType, expectedSchema, false), nullable = false)
+    }
+  }
 
   test("dev test") {
     val catalystSchema =
@@ -2793,7 +2884,7 @@ abstract class AvroSuite
   }
 
   test("SPARK-40667: validate Avro Options") {
-    assert(AvroOptions.getAllOptions.size == 11)
+    assert(AvroOptions.getAllOptions.size == 12)
     // Please add validation on any new Avro options here
     assert(AvroOptions.isValidOption("ignoreExtension"))
     assert(AvroOptions.isValidOption("mode"))
@@ -2806,6 +2897,7 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("datetimeRebaseMode"))
     assert(AvroOptions.isValidOption("enableStableIdentifiersForUnionType"))
     assert(AvroOptions.isValidOption("stableIdentifierPrefixForUnionType"))
+    assert(AvroOptions.isValidOption("recursiveFieldMaxDepth"))
   }
 
   test("SPARK-46633: read file with empty blocks") {
