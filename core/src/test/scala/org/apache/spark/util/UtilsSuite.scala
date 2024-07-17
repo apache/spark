@@ -1091,6 +1091,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     // Set a non-secret key
     sparkConf.set("spark.regular.property", "regular_value")
     sparkConf.set("spark.hadoop.fs.s3a.access_key", "regular_value")
+    sparkConf.set("spark.hadoop.fs.s3.awsAccessKeyId", "regular_value")
     // Set a property with a regular key but secret in the value
     sparkConf.set("spark.sensitive.property", "has_secret_in_value")
 
@@ -1103,6 +1104,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
     assert(redactedConf("spark.hadoop.fs.s3a.access.key") === Utils.REDACTION_REPLACEMENT_TEXT)
     assert(redactedConf("spark.hadoop.fs.s3a.access_key") === "regular_value")
+    assert(
+      redactedConf("spark.hadoop.fs.s3.awsAccessKeyId") === Utils.REDACTION_REPLACEMENT_TEXT)
   }
 
   test("redact sensitive information in command line args") {
