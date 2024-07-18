@@ -758,6 +758,7 @@ private[spark] object LogKeys {
   case object STORAGE_LEVEL_REPLICATION extends LogKey
   case object STORAGE_MEMORY_SIZE extends LogKey
   case object STORE_ID extends LogKey
+  case object STRATEGY extends LogKey
   case object STREAMING_CONTEXT extends LogKey
   case object STREAMING_DATA_SOURCE_DESCRIPTION extends LogKey
   case object STREAMING_DATA_SOURCE_NAME extends LogKey
