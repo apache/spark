@@ -1480,6 +1480,7 @@ case class Transpose (
     child: LogicalPlan
 ) extends UnresolvedUnaryNode {
   override def output: Seq[Attribute] = {
+    // scalastyle:off println
     val firstColumn = child.output.head
     val secondColumn = child.output(1)
 
@@ -1488,8 +1489,21 @@ case class Transpose (
       secondColumn.withName(value.toString)
     }
 
+
+    // Find the least common type among all child columns excluding index column
+    val otherColumns = child.output.tail
+    val leastCommonType = otherColumns.map(_.dataType).reduce { (dataType1, dataType2) =>
+      TypeCoercion.findTightestCommonType(dataType1, dataType2).getOrElse(StringType)
+    }
+    println(s"leastCommonType: $leastCommonType")
+
+    // Cast dynamic attributes to the least common type
+    val typedDynamicAttributes = dynamicAttributes.map { attr =>
+      attr.withDataType(leastCommonType)
+    }
+
     // Combine the first column with the dynamically generated attributes
-    Seq(firstColumn) ++ dynamicAttributes
+    Seq(firstColumn) ++ typedDynamicAttributes
   }
   override lazy val resolved: Boolean = childrenResolved && output.forall(_.resolved)
 
