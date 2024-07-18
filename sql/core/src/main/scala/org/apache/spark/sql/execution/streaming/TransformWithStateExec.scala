@@ -383,7 +383,8 @@ case class TransformWithStateExec(
     val stateSchemaDir = stateSchemaDirPath()
     val stateSchemaFilePath = new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
-      newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion))
+      newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion,
+      schemaFilePath = Some(stateSchemaFilePath)))
   }
 
   private def stateSchemaDirPath(): Path = {

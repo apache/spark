@@ -196,7 +196,8 @@ object StateSchemaCompatibilityChecker {
       sessionState: SessionState,
       stateSchemaVersion: Int,
       extraOptions: Map[String, String] = Map.empty,
-      storeName: String = StateStoreId.DEFAULT_STORE_NAME): StateSchemaValidationResult = {
+      storeName: String = StateStoreId.DEFAULT_STORE_NAME,
+      schemaFilePath: Option[Path] = None): StateSchemaValidationResult = {
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -213,7 +214,8 @@ object StateSchemaCompatibilityChecker {
     val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf, stateSchemaVersion)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf, stateSchemaVersion,
+      schemaFilePath = schemaFilePath)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema
