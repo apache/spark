@@ -2274,7 +2274,6 @@ abstract class AvroSuite
     """.stripMargin
     val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
     var expectedSchema = nonRecursiveFields
-    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
     for (i <- 1 to 5) {
       checkSparkSchemaEquals(avroSchema, expectedSchema, i)
       expectedSchema = nonRecursiveFields.add("next", expectedSchema)
@@ -2305,7 +2304,6 @@ abstract class AvroSuite
     """.stripMargin
     val nonRecursiveFields = new StructType().add("value", StructType(Seq()), nullable = false)
     var expectedSchema = nonRecursiveFields
-    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
     for (i <- 1 to 5) {
       checkSparkSchemaEquals(avroSchema, expectedSchema, i)
       expectedSchema = new StructType().add("value",
@@ -2326,7 +2324,6 @@ abstract class AvroSuite
     """.stripMargin
     val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
     var expectedSchema = nonRecursiveFields
-    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
     for (i <- 1 to 5) {
       checkSparkSchemaEquals(avroSchema, expectedSchema, i)
       expectedSchema =
@@ -2347,7 +2344,6 @@ abstract class AvroSuite
     """.stripMargin
     val nonRecursiveFields = new StructType().add("value", LongType, nullable = false)
     var expectedSchema = nonRecursiveFields
-    checkSparkSchemaEquals(avroSchema, expectedSchema, 0)
     for (i <- 1 to 5) {
       checkSparkSchemaEquals(avroSchema, expectedSchema, i)
       expectedSchema =

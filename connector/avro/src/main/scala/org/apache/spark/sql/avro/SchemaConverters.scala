@@ -136,7 +136,7 @@ object SchemaConverters extends Logging {
 
       case RECORD =>
         val recursiveDepth: Int = existingRecordNames.getOrElse(avroSchema.getFullName, 0)
-        if (recursiveDepth > 0 && recursiveFieldMaxDepth < 0) {
+        if (recursiveDepth > 0 && recursiveFieldMaxDepth <= 0) {
           throw new IncompatibleSchemaException(s"""
             |Found recursive reference in Avro schema, which can not be processed by Spark:
             |${avroSchema.toString(true)}
