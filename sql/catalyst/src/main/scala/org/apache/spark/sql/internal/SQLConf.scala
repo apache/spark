@@ -4431,7 +4431,7 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
-  val ORACLE_DIALECT_VERSION = buildConf("spark.sql.Dialect oracle.dialectVersion")
+  val ORACLE_DIALECT_VERSION = buildConf("spark.sql.connector.oracle.dialectVersion")
     .internal()
     .doc("JDBC version used for oracle connector.")
     .version("4.0.0")
