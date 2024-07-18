@@ -2190,15 +2190,28 @@ class Dataset[T] private[sql](
    * @since 4.0.0
    */
   def transpose(indexColumn: Option[Column] = None): DataFrame = withPlan {
-//    val actualIndexColumn = indexColumn.getOrElse(col(this.columns.head))
     if (this.isEmpty) {
       this.logicalPlan
     } else {
+      val actualIndexColumn = indexColumn.getOrElse(col(this.columns.head))
+      val indexColumnValues = collectIndexColumnValues(actualIndexColumn)
       Transpose(
-//        actualIndexColumn.named,
+        actualIndexColumn.named,
+        indexColumnValues.map(v => Literal(v.toString)),
         logicalPlan
       )
     }
+  }
+
+  private[sql] def collectIndexColumnValues(indexColumn: Column): Seq[Any] = {
+    val maxValues = 5000
+    val values = this.select(indexColumn)
+      .limit(maxValues + 1)
+      .collect()
+      .map(_.get(0))
+      .toImmutableArraySeq
+
+    values
   }
 
   /**

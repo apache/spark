@@ -1475,14 +1475,22 @@ case class Pivot(
 }
 
 case class Transpose (
-//    indexColumn: Expression,
+    indexColumn: Expression,
+    indexColumnValues: Seq[Expression],
     child: LogicalPlan
 ) extends UnresolvedUnaryNode {
-  override def output: Seq[Attribute] = Seq(
-    child.output(0), // Reuse the first attribute from the child
-    child.output(1).withName("test1"), // Reuse and rename the second attribute
-    child.output(1).withName("test2") // Reuse and rename the second attribute again
-  )
+  override def output: Seq[Attribute] = {
+    val firstColumn = child.output.head
+    val secondColumn = child.output(1)
+
+    // Generate new attributes based on the index column values
+    val dynamicAttributes = indexColumnValues.map { value =>
+      secondColumn.withName(value.toString)
+    }
+
+    // Combine the first column with the dynamically generated attributes
+    Seq(firstColumn) ++ dynamicAttributes
+  }
   override lazy val resolved: Boolean = childrenResolved && output.forall(_.resolved)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)

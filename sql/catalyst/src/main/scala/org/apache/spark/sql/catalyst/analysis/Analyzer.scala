@@ -4004,7 +4004,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveTranspose extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(TRANSPOSE), ruleId) {
-      case t @ Transpose(child) if !t.resolved && child.resolved =>
+      case t @ Transpose(indexColumn, indexColumnValues, child) if !t.resolved && child.resolved =>
         t
     }
   }
