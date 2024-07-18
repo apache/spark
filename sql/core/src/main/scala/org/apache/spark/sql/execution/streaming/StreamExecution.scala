@@ -413,7 +413,9 @@ abstract class StreamExecution(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString),
             errorClassOpt))
 
-        loggingThreadContext.close()
+        if (loggingThreadContext != null) {
+          loggingThreadContext.close()
+        }
 
         // Delete the temp checkpoint when either force delete enabled or the query didn't fail
         if (deleteCheckpointOnStop &&
