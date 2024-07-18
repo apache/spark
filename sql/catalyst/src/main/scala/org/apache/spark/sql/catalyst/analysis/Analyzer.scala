@@ -357,8 +357,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // rewrite rules.
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable,
-        RewriteUpdateTable,
-        RewriteMergeIntoTable),
+      RewriteUpdateTable,
+      RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
