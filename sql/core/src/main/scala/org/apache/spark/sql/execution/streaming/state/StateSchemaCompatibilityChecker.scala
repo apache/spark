@@ -30,11 +30,13 @@ import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.{DataType, StructType}
 
+// Result returned after validating the schema of the state store for schema changes
 case class StateSchemaValidationResult(
     evolvedSchema: Boolean,
     schemaPath: String
 )
 
+// Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(
     colFamilyName: String,
     keySchema: StructType,
@@ -47,6 +49,10 @@ class StateSchemaCompatibilityChecker(
     hadoopConf: Configuration,
     stateSchemaVersion: Int = 2,
     schemaFilePath: Option[Path] = None) extends Logging {
+
+  if (stateSchemaVersion == 3 && schemaFilePath.isEmpty) {
+    throw new IllegalStateException("Schema file path is required for schema version 3")
+  }
 
   private val schemaFileLocation = if (schemaFilePath.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()
@@ -188,6 +194,7 @@ object StateSchemaCompatibilityChecker {
    * @param sessionState - session state used to retrieve session config
    * @param extraOptions - any extra options to be passed for StateStoreConf creation
    * @param storeName - optional state store name
+   * @param schemaFilePath - optional schema file path
    */
   def validateAndMaybeEvolveStateSchema(
       stateInfo: StatefulOperatorStateInfo,
