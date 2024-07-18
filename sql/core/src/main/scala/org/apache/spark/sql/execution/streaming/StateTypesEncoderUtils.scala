@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Helper object for getting schema of key/value row that are used in state schema
- * files and to be passed into `RocksDBStateProvider`.
+ * files and to be passed into `RocksDBStateKey(/Value)Encoder`.
  */
 object TransformWithStateKeyValueRowSchemaUtils {
   def getCompositeKeySchema(
