@@ -72,6 +72,8 @@ class PySparkLogger(logging.Logger):
     with existing logging setups. It customizes the log output to JSON format, including additional
     context information, making it more useful for PySpark applications.
 
+    .. versionadded:: 4.0.0
+
     Example
     -------
     >>> import logging
