@@ -1111,10 +1111,37 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    val e = intercept[AnalysisException] {
-      spark.read.parquet(testDataPath).collect()
-    }
-    assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))."))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      errorClass = "PARQUET_TYPE_ILLEGAL",
+      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
+    )
+  }
+
+  test("SPARK-47261: parquet file with unsupported type") {
+    val testDataPath = testFile("test-data/interval-using-fixed-len-byte-array.parquet")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      errorClass = "PARQUET_TYPE_NOT_SUPPORTED",
+      parameters = Map("parquetType" -> "FIXED_LEN_BYTE_ARRAY (INTERVAL)")
+    )
+  }
+
+  test("SPARK-47261: parquet file with unrecognized parquet type") {
+    val testDataPath = testFile("test-data/group-field-with-enum-as-logical-annotation.parquet")
+    val expectedParameter = "required group my_list (ENUM) {\n  repeated group list {\n" +
+      "    optional binary element (STRING);\n  }\n}"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.parquet(testDataPath).collect()
+      },
+      errorClass = "PARQUET_TYPE_NOT_RECOGNIZED",
+      parameters = Map("field" -> expectedParameter)
+    )
   }
 
   // =======================================================
