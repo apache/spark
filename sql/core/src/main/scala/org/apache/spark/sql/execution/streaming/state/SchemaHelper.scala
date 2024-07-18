@@ -49,6 +49,7 @@ object SchemaHelper {
       version match {
         case 1 => new SchemaV1Reader
         case 2 => new SchemaV2Reader
+        case 3 => new SchemaV3Reader
       }
     }
   }
@@ -119,6 +120,7 @@ object SchemaHelper {
       version match {
         case 1 if Utils.isTesting => new SchemaV1Writer
         case 2 => new SchemaV2Writer
+        case 3 => new SchemaV3Writer
       }
     }
   }
