@@ -461,6 +461,14 @@ class UDTFRegistration:
         >>> spark.sql("SELECT * FROM VALUES (0, 1), (1, 2) t(x, y), LATERAL plus_one(x)").collect()
         [Row(x=0, y=1, c1=0, c2=1), Row(x=1, y=2, c1=1, c2=2)]
         """
+        if not isinstance(f, UserDefinedTableFunction):
+            raise PySparkTypeError(
+                error_class="CANNOT_REGISTER_UDTF",
+                message_parameters={
+                    "name": name,
+                },
+            )
+
         if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
             raise PySparkTypeError(
                 error_class="INVALID_UDTF_EVAL_TYPE",
