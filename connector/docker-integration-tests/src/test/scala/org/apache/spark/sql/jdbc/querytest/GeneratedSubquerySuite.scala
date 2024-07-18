@@ -154,8 +154,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       operatorInSubquery match {
         case lo: LimitAndOffset =>
-          var offsetValue = lo.offsetValue
-          if (requireNoOffsetInCorrelatedSubquery) offsetValue = 0
+          val offsetValue = if (requireNoOffsetInCorrelatedSubquery) 0 else lo.offsetValue
 
           if (offsetValue == 0 && lo.limitValue == 0) {
             None
@@ -379,10 +378,10 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       val aggregates = combinations.map {
         case (af, groupBy) => Aggregate(Seq(af), if (groupBy) Seq(groupByColumn) else Seq())
       }
-      val limitValue = Seq(0, 1, 10)
-      val offsetValue = Seq(0, 1, 10)
-      val limitAndOffsetOperators = limitValue.flatMap(limit => offsetValue.map(offset =>
-        LimitAndOffset(limit, offset))).filter(lo => lo.limitValue != 0 || lo.offsetValue != 0)
+      val limitValues = Seq(0, 1, 10)
+      val offsetValues = Seq(0, 1, 10)
+      val limitAndOffsetOperators = limitValues.flatMap(limit => offsetValues.map(offset =>
+        LimitAndOffset(limit, offset))).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
       val subqueryOperators = limitAndOffsetOperators ++ aggregates
 
       for {

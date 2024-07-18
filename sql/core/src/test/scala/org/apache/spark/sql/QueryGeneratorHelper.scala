@@ -189,10 +189,10 @@ trait QueryGeneratorHelper {
     override def toString: String = {
       val limitClause = if (limitValue > 0) { s"LIMIT $limitValue" } else { "" }
       val offsetClause = if (offsetValue > 0) { s"OFFSET $offsetValue" } else { "" }
-      if (limitClause.nonEmpty || offsetClause.nonEmpty) {
-        limitClause + " " + offsetClause
+      if (limitClause.nonEmpty && offsetClause.nonEmpty) {
+        s"$limitClause $offsetClause"
       } else {
-          ""
+        s"$limitClause$offsetClause"
       }
     }
   }
