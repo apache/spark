@@ -146,11 +146,11 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       expectedNotLikeAll: R)
     val notLikeAllTestCases = Seq(
       NotLikeAllTestCase("foo", "%foo%", "%oo", "UTF8_BINARY", false),
-      NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true), // diff
+      NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true),
       NotLikeAllTestCase("Foo", "%foo%", "%oo", "UTF8_LCASE", false),
-      NotLikeAllTestCase("Foo", "%goo%", "%bar%", "UTF8_LCASE", true), // diff
+      NotLikeAllTestCase("Foo", "%goo%", "%bar%", "UTF8_LCASE", true),
       NotLikeAllTestCase("foo", "%foo%", "%oo", "UTF8_BINARY", false),
-      NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true), // diff
+      NotLikeAllTestCase("foo", "%goo%", "%bar%", "UTF8_BINARY", true),
       NotLikeAllTestCase("foo", "%foo%", null, "UTF8_BINARY", false),
       NotLikeAllTestCase("foo", "%feo%", null, "UTF8_BINARY", null),
       NotLikeAllTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
@@ -165,11 +165,11 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     case class LikeAnyTestCase[R](l: String, p1: String, p2: String, collation: String,
       expectedLikeAny: R)
     val likeAnyTestCases = Seq(
-      LikeAnyTestCase("foo", "%goo%", "%hoo", "UTF8_BINARY", false), // diff
+      LikeAnyTestCase("foo", "%goo%", "%hoo", "UTF8_BINARY", false),
       LikeAnyTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", true),
-      LikeAnyTestCase("Foo", "%goo%", "%hoo", "UTF8_LCASE", false), // diff
+      LikeAnyTestCase("Foo", "%goo%", "%hoo", "UTF8_LCASE", false),
       LikeAnyTestCase("Foo", "%foo%", "%bar%", "UTF8_LCASE", true),
-      LikeAnyTestCase("foo", "%goo%", "%hoo", "UTF8_BINARY", false), // diff
+      LikeAnyTestCase("foo", "%goo%", "%hoo", "UTF8_BINARY", false),
       LikeAnyTestCase("foo", "%foo%", "%bar%", "UTF8_BINARY", true),
       LikeAnyTestCase("foo", "%foo%", null, "UTF8_BINARY", true),
       LikeAnyTestCase("foo", "%feo%", null, "UTF8_BINARY", null),
@@ -185,12 +185,12 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     case class NotLikeAnyTestCase[R](l: String, p1: String, p2: String, collation: String,
       expectedNotLikeAny: R)
     val notLikeAnyTestCases = Seq(
-      NotLikeAnyTestCase("foo", "%foo%", "%hoo", "UTF8_BINARY", true), // diff
-      NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false), // diff
-      NotLikeAnyTestCase("Foo", "%Foo%", "%hoo", "UTF8_LCASE", true), //diff
-      NotLikeAnyTestCase("Foo", "%foo%", "%oo%", "UTF8_LCASE", false), // diff
-      NotLikeAnyTestCase("foo", "%Foo%", "%hoo", "UTF8_BINARY", true), // diff
-      NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false), // diff
+      NotLikeAnyTestCase("foo", "%foo%", "%hoo", "UTF8_BINARY", true),
+      NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false),
+      NotLikeAnyTestCase("Foo", "%Foo%", "%hoo", "UTF8_LCASE", true),
+      NotLikeAnyTestCase("Foo", "%foo%", "%oo%", "UTF8_LCASE", false),
+      NotLikeAnyTestCase("foo", "%Foo%", "%hoo", "UTF8_BINARY", true),
+      NotLikeAnyTestCase("foo", "%foo%", "%oo%", "UTF8_BINARY", false),
       NotLikeAnyTestCase("foo", "%foo%", null, "UTF8_BINARY", null),
       NotLikeAnyTestCase("foo", "%feo%", null, "UTF8_BINARY", true),
       NotLikeAnyTestCase(null, "%foo%", "%oo", "UTF8_BINARY", null)
