@@ -897,18 +897,16 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema0 = ColumnFamilySchemaV1(
           "countState",
           keySchema,
-          new StructType().add("value",
-            new StructType().add("value", LongType, false)),
+          new StructType().add("value", LongType, false),
           NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
         val schema1 = ColumnFamilySchemaV1(
           "listState",
           keySchema,
-          new StructType().add("value",
-            new StructType()
+          new StructType()
               .add("id", LongType, false)
-              .add("name", StringType)),
+              .add("name", StringType),
           NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
@@ -922,8 +920,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val schema2 = ColumnFamilySchemaV1(
           "mapState",
           compositeKeySchema,
-          new StructType().add("value",
-            new StructType().add("value", StringType)),
+          new StructType().add("value", StringType),
           PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
           Option(userKeySchema)
         )
@@ -952,9 +949,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
             assert(colFamilySeq.length == 3)
-            assert(colFamilySeq(0) == schema0)
-            assert(colFamilySeq(2) == schema2)
-            assert(colFamilySeq(1) == schema1)
             assert(colFamilySeq.map(_.toString).toSet == Set(
               schema0, schema1, schema2
             ).map(_.toString))

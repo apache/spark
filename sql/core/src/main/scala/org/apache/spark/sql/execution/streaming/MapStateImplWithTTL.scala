@@ -64,7 +64,7 @@ class MapStateImplWithTTL[K, V](
     val schemaForCompositeKeyRow =
       getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
     store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow,
-      getValueRowSchemaWithTTL(valEncoder.schema),
+      getValueSchemaWithTTL(valEncoder.schema, true),
       PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
   }
 

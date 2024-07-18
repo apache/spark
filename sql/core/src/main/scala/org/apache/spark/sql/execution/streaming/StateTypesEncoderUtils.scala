@@ -47,15 +47,11 @@ object TransformWithStateKeyValueRowSchemaUtils {
       .add("groupingKey", new StructType(groupingKeySchema.fields))
       .add("userKey", new StructType(userKeySchema.fields))
 
-  def getValueRowSchemaWithTTL(valueRowSchema: StructType): StructType =
-    valueRowSchema.add("ttlExpirationMs", LongType)
-
   def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
-    val valSchema = if (hasTTL) {
-      new StructType(schema.fields).add("ttlExpirationMs", LongType)
+    if (hasTTL) {
+      new StructType().add("value", schema)
+        .add("ttlExpirationMs", LongType)
     } else schema
-    new StructType()
-      .add("value", valSchema)
   }
 }
 
@@ -84,8 +80,9 @@ class StateTypesEncoder[V](
   private val valExpressionEnc = encoderFor(valEncoder)
   private val objToRowSerializer = valExpressionEnc.createSerializer()
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
+  // This variable is only used when has Ttl is true
   private val valueTTLProjection =
-    UnsafeProjection.create(valEncoder.schema.add("ttlExpirationMs", LongType))
+    UnsafeProjection.create(getValueSchemaWithTTL(valEncoder.schema, true))
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -111,14 +108,13 @@ class StateTypesEncoder[V](
    */
   def encodeValue(value: V, expirationMs: Long): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
-    val newValArr: Array[Any] =
-      objRow.toSeq(valEncoder.schema).toArray :+ expirationMs
-
-    valueTTLProjection.apply(new GenericInternalRow(newValArr))
+    valueTTLProjection.apply(InternalRow(objRow, expirationMs))
   }
 
   def decodeValue(row: UnsafeRow): V = {
-    rowToObjDeserializer.apply(row)
+    if (hasTtl) {
+      rowToObjDeserializer.apply(row.getStruct(0, valEncoder.schema.length))
+    } else rowToObjDeserializer.apply(row)
   }
 
   /**
@@ -129,7 +125,7 @@ class StateTypesEncoder[V](
   def decodeTtlExpirationMs(row: UnsafeRow): Option[Long] = {
     // ensure ttl has been set
     assert(hasTtl)
-    val expirationMs = row.getLong(valEncoder.schema.length)
+    val expirationMs = row.getLong(1)
     if (expirationMs == -1) {
       None
     } else {

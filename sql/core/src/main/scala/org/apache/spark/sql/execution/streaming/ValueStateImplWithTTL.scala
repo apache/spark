@@ -54,7 +54,7 @@ class ValueStateImplWithTTL[S](
 
   private def initialize(): Unit = {
     store.createColFamilyIfAbsent(stateName,
-      keyExprEnc.schema, getValueRowSchemaWithTTL(valEncoder.schema),
+      keyExprEnc.schema, getValueSchemaWithTTL(valEncoder.schema, true),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 

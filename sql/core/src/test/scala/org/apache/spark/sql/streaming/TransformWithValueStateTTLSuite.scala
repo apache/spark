@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
-import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File, TestClass}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
@@ -170,19 +170,20 @@ class TTLProcessorWithCompositeTypes(
       ttlConfig: TTLConfig)
   extends MultipleValueStatesTTLProcessor(
     ttlKey: String, noTtlKey: String, ttlConfig: TTLConfig) {
-  @transient private var _listStateWithTTL: ListStateImplWithTTL[Int] = _
-  @transient private var _mapStateWithTTL: MapStateImplWithTTL[Int, String] = _
+  @transient private var _listStateWithTTL: ListStateImplWithTTL[TestClass] = _
+  @transient private var _mapStateWithTTL: MapStateImplWithTTL[POJOTestClass, String] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     super.init(outputMode, timeMode)
     _listStateWithTTL = getHandle
-      .getListState("listState", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ListStateImplWithTTL[Int]]
+      .getListState("listState", Encoders.product[TestClass], ttlConfig)
+      .asInstanceOf[ListStateImplWithTTL[TestClass]]
     _mapStateWithTTL = getHandle
-      .getMapState("mapState", Encoders.scalaInt, Encoders.STRING, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[Int, String]]
+      .getMapState("mapState", Encoders.bean(classOf[POJOTestClass]),
+        Encoders.STRING, ttlConfig)
+      .asInstanceOf[MapStateImplWithTTL[POJOTestClass, String]]
   }
 }
 
@@ -269,16 +270,16 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           "valueStateTTL",
           keySchema,
           new StructType().add("value",
-            new StructType().add("value", IntegerType, false)
-              .add("ttlExpirationMs", LongType)),
+            new StructType()
+              .add("value", IntegerType, false))
+          .add("ttlExpirationMs", LongType),
           NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
         val schema1 = ColumnFamilySchemaV1(
           "valueState",
           keySchema,
-          new StructType().add("value",
-            new StructType().add("value", IntegerType, false)),
+          new StructType().add("value", IntegerType, false),
           NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
@@ -287,23 +288,28 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           keySchema,
           new StructType().add("value",
             new StructType()
-              .add("value", IntegerType, false)
-              .add("ttlExpirationMs", LongType)),
+              .add("id", LongType, false)
+              .add("name", StringType))
+            .add("ttlExpirationMs", LongType),
           NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
+
+        val userKeySchema = new StructType()
+          .add("id", IntegerType, false)
+          .add("name", StringType)
         val compositeKeySchema = new StructType()
           .add("key", new StructType().add("value", StringType))
-          .add("userKey", new StructType().add("value", IntegerType, false))
+          .add("userKey", userKeySchema)
         val schema3 = ColumnFamilySchemaV1(
           "mapState",
           compositeKeySchema,
           new StructType().add("value",
             new StructType()
-              .add("value", StringType)
-              .add("ttlExpirationMs", LongType)),
+              .add("value", StringType))
+            .add("ttlExpirationMs", LongType),
           PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
-          Option(new StructType().add("value", IntegerType, false))
+          Option(userKeySchema)
         )
 
         val ttlKey = "k1"
