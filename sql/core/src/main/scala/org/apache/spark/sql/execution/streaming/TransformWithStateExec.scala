@@ -77,9 +77,11 @@ case class TransformWithStateExec(
     initialStateDeserializer: Expression,
     initialState: SparkPlan)
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
-  private val VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
 
   override def shortName: String = "transformWithStateExec"
+
+  // dummy value schema, the real schema will get during state variable init time
+  private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
@@ -441,7 +443,7 @@ case class TransformWithStateExec(
             val store = StateStore.get(
               storeProviderId = storeProviderId,
               keyEncoder.schema,
-              VALUE_ROW_SCHEMA,
+              DUMMY_VALUE_ROW_SCHEMA,
               NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
@@ -461,7 +463,7 @@ case class TransformWithStateExec(
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
           keyEncoder.schema,
-          VALUE_ROW_SCHEMA,
+          DUMMY_VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
@@ -511,7 +513,7 @@ case class TransformWithStateExec(
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
       keyEncoder.schema,
-      VALUE_ROW_SCHEMA,
+      DUMMY_VALUE_ROW_SCHEMA,
       NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
       useColumnFamilies = true,
       storeConf = storeConf,

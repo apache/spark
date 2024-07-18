@@ -235,6 +235,7 @@ class CompositeKeyStateEncoder[K, V](
   }
 }
 
+/** Class for TTL with single key serialization */
 class SingleKeyTTLEncoder(
   keyExprEnc: ExpressionEncoder[Any]) {
 
@@ -245,6 +246,7 @@ class SingleKeyTTLEncoder(
   }
 }
 
+/** Class for TTL with composite key serialization */
 class CompositeKeyTTLEncoder[K](
   keyExprEnc: ExpressionEncoder[Any],
   userKeyEnc: Encoder[K]) {
@@ -265,6 +267,7 @@ class CompositeKeyTTLEncoder[K](
   }
 }
 
+/** Class for timer state serialization */
 class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
   private val schemaForPrefixKey: StructType =
     new StructType()
