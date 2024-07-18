@@ -459,10 +459,8 @@ abstract class AvroSuite
       val e = intercept[Exception] {
         checkUnionStableId(
           List(
-            Schema.createRecord("myRecord", "", null, false, List[Schema.Field](
-              new Schema.Field("F", Schema.create(Type.FLOAT))).asJava),
-            Schema.createRecord("myrecord", "", null, false, List[Schema.Field](
-              new Schema.Field("F", Schema.create(Type.FLOAT))).asJava)),
+            Schema.createRecord("myRecord", "", null, false, List[Schema.Field]().asJava),
+            Schema.createRecord("myrecord", "", null, false, List[Schema.Field]().asJava)),
           "",
           Seq())
       }
