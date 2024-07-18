@@ -134,8 +134,6 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       case _ => true
     })
 
-    val requireNoOffsetInCorrelatedSubquery = correlationConditions.nonEmpty
-
     // For the OrderBy, consider whether or not the result of the subquery is required to be sorted.
     // This is to maintain test determinism. This is affected by whether the subquery has a limit
     // clause or an offset clause.
@@ -147,6 +145,10 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       None
     }
 
+    // SPARK-46446: offset operator in correlated subquery is not supported
+    // as it creates incorrect results for now.
+    val requireNoOffsetInCorrelatedSubquery = correlationConditions.nonEmpty
+
     // For the Limit clause, consider whether the subquery needs to return 1 row, or whether the
     // operator to be included is a Limit.
     val limitAndOffsetClause = if (requiresExactlyOneRowOutput) {
@@ -155,7 +157,6 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       operatorInSubquery match {
         case lo: LimitAndOffset =>
           val offsetValue = if (requireNoOffsetInCorrelatedSubquery) 0 else lo.offsetValue
-
           if (offsetValue == 0 && lo.limitValue == 0) {
             None
           } else {
@@ -355,6 +356,16 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       }
     }
 
+    def limitAndOffsetChoices(): Seq[LimitAndOffset] = {
+      val limitValues = Seq(0, 1, 10)
+      val offsetValues = Seq(0, 1, 10)
+      limitValues.flatMap(
+        limit => offsetValues.map(
+          offset => LimitAndOffset(limit, offset)
+        )
+      ).filter(lo => !(lo._1 == 0 && lo._2 == 0))
+    }
+
     case class SubquerySpec(query: String, isCorrelated: Boolean, subqueryType: SubqueryType.Value)
 
     val generatedQuerySpecs = scala.collection.mutable.Set[SubquerySpec]()
@@ -378,11 +389,8 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
       val aggregates = combinations.map {
         case (af, groupBy) => Aggregate(Seq(af), if (groupBy) Seq(groupByColumn) else Seq())
       }
-      val limitValues = Seq(0, 1, 10)
-      val offsetValues = Seq(0, 1, 10)
-      val limitAndOffsetOperators = limitValues.flatMap(limit => offsetValues.map(offset =>
-        LimitAndOffset(limit, offset))).filter(lo => !(lo.limitValue == 0 && lo.offsetValue == 0))
-      val subqueryOperators = limitAndOffsetOperators ++ aggregates
+
+      val subqueryOperators = limitAndOffsetChoices() ++ aggregates
 
       for {
         subqueryOperator <- subqueryOperators
