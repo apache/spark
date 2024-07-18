@@ -325,10 +325,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
-      ResolveEncodersInUDF ::
-      RewriteDeleteFromTable ::
-      RewriteUpdateTable ::
-      RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
@@ -353,6 +349,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // operators may need null handling as well, so we should run these two rules repeatedly.
       HandleNullInputsForUDF,
       UpdateAttributeNullability),
+    Batch("UDF", Once,
+      ResolveEncodersInUDF),
+    Batch("DML rewrite", fixedPoint,
+      RewriteDeleteFromTable ::
+        RewriteUpdateTable ::
+        RewriteMergeIntoTable :: Nil),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
