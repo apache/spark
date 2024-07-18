@@ -151,21 +151,30 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   test("session vars - var out of scope") {
+    val varName: String = "testVarName"
     val e = intercept[AnalysisException] {
       val sqlScript =
-        """
+        s"""
           |BEGIN
           | BEGIN
-          |   DECLARE testVarName = 1;
-          |   SELECT testVarName;
+          |   DECLARE $varName = 1;
+          |   SELECT $varName;
           | END;
-          | SELECT testVarName;
+          | SELECT $varName;
           |END
           |""".stripMargin
       verifySqlScriptResult(sqlScript, Seq.empty)
     }
-    assert(e.getErrorClass === "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-    assert(e.getMessage.contains("testVarName"))
+    checkError(
+      exception = e,
+      errorClass = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map("objectName" -> s"`$varName`"),
+      context = ExpectedContext(
+        fragment = s"$varName",
+        start = 79,
+        stop = 89)
+    )
   }
 
   test("session vars - drop var statement") {
