@@ -48,9 +48,14 @@ class StateSchemaCompatibilityChecker(
     stateSchemaVersion: Int = 2,
     schemaFilePath: Option[Path] = None) extends Logging {
 
-  private val storeCpLocation = providerId.storeId.storeCheckpointLocation()
-  private val fm = CheckpointFileManager.create(storeCpLocation, hadoopConf)
-  private val schemaFileLocation = schemaFile(storeCpLocation)
+  private val schemaFileLocation = if (schemaFilePath.isEmpty) {
+    val storeCpLocation = providerId.storeId.storeCheckpointLocation()
+    schemaFile(storeCpLocation)
+  } else {
+    schemaFilePath.get
+  }
+
+  private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
   private val schemaWriter =
     SchemaWriter.createSchemaWriter(stateSchemaVersion)
 

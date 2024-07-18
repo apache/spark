@@ -380,16 +380,17 @@ case class TransformWithStateExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val newColumnFamilySchemas = getColFamilySchemas()
+    val stateSchemaDir = stateSchemaDirPath()
+    val stateSchemaFilePath = new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}")
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newColumnFamilySchemas.values.toList, session.sessionState, stateSchemaVersion))
   }
 
-  private def stateSchemaDirPath(storeName: String): Path = {
-    assert(storeName == StateStoreId.DEFAULT_STORE_NAME)
-    def stateInfo = getStateInfo
+  private def stateSchemaDirPath(): Path = {
+    val storeName = StateStoreId.DEFAULT_STORE_NAME
     val stateCheckpointPath =
       new Path(getStateInfo.checkpointLocation,
-        s"${stateInfo.operatorId.toString}")
+        s"${getStateInfo.operatorId.toString}")
 
     val storeNamePath = new Path(stateCheckpointPath, storeName)
     new Path(new Path(storeNamePath, "_metadata"), "schema")

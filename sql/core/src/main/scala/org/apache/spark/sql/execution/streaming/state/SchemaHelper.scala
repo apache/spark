@@ -186,5 +186,4 @@ object SchemaHelper {
       Serialization.write(stateSchema, outputStream)
     }
   }
-
 }
