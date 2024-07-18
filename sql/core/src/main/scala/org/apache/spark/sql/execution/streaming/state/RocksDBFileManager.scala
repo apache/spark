@@ -412,22 +412,6 @@ class RocksDBFileManager(
   }
 
   /**
-   *  Initialize maxVersion by listing version files in the checkpoint directory
-   */
-  def initializeMaxVersion(): Unit = {
-    if (maxVersion.isDefined) return
-    val path = new Path(dfsRootDir)
-    if (fm.exists(path)) {
-      maxVersion = Some(fm.list(path, onlyZipFiles)
-        .map(_.getPath.getName.stripSuffix(".zip"))
-        .map(_.toLong)
-        .foldLeft(0L)(math.max))
-    } else {
-      maxVersion = Some(0)
-    }
-  }
-
-  /**
    * Delete old versions by deleting the associated version and SST files.
    * At a high-level, this method finds which versions to delete, and which SST files that were
    * last used in those versions. It's safe to delete these SST files because a SST file can
@@ -461,7 +445,8 @@ class RocksDBFileManager(
     if (minVersionsToDelete > 0) {
       // When maxVersion is defined, we check the if number of stale version files
       // are at least the value of minVersionsToDelete for batch deletion of files
-      // We still proceed with deleteOldVersions if maxVersion isn't set
+      // We still proceed with deletion if maxVersion isn't set to ensure the fallback
+      // is to clean up files if maxVersion fails to be initialized
       if (maxVersion.isDefined) {
         val versionsToDelete = maxVersion.get - minVersion + 1 - numVersionsToRetain
         if (versionsToDelete < minVersionsToDelete) return
@@ -491,8 +476,6 @@ class RocksDBFileManager(
     val minVersionToRetain = sortedSnapshotVersions
       .filter(_ <= maxSnapshotVersionPresent - numVersionsToRetain + 1)
       .foldLeft(0L)(math.max)
-
-    minVersion = minVersionToRetain
 
     // When snapshotVersionToDelete is non-empty, there are at least 2 snapshot versions.
     // We only delete orphan files when there are at least 2 versions,
@@ -548,6 +531,10 @@ class RocksDBFileManager(
       }
     }
 
+    // Set minVersion to expected value
+    val oldMinVersionToRetain = minVersion
+    minVersion = minVersionToRetain
+
     // Delete the version files and forget about them
     snapshotVersionsToDelete.foreach { version =>
       val versionFile = dfsBatchZipFile(version)
@@ -557,6 +544,8 @@ class RocksDBFileManager(
         logDebug(s"Deleted version $version")
       } catch {
         case e: Exception =>
+          // If deletion fails, reset minVersion to the previous value
+          minVersion = oldMinVersionToRetain
           logWarning(log"Error deleting version file ${MDC(LogKeys.PATH, versionFile)} for " +
             log"version ${MDC(LogKeys.FILE_VERSION, version)}", e)
       }

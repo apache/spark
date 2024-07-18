@@ -41,7 +41,11 @@ class StateStoreConf(
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
-  /** Minimum number of stale versions to delete when maintenance is invoked */
+  /**
+   * Minimum number of stale snapshot version files that need to be present
+   * in the DFS checkpoint directory when maintenance is invoked, after which
+   * RocksDBFileManager will delete version and other associated files.
+   */
   val minVersionsToDelete: Int = sqlConf.minVersionsToDelete
 
   /** Maximum count of versions a State Store implementation should retain in memory */

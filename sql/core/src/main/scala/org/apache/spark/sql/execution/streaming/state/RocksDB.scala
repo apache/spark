@@ -186,7 +186,7 @@ class RocksDB(
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
         loadedVersion = latestSnapshotVersion
         // Initialize maxVersion upon successful load from DFS
-        fileManager.initializeMaxVersion()
+        fileManager.setMaxVersion(version)
 
         // reset last snapshot version
         if (lastSnapshotVersion > latestSnapshotVersion) {
