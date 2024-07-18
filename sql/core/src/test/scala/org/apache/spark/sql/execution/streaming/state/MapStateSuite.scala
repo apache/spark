@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
  * operators such as transformWithState
  */
 class MapStateSuite extends StateVariableSuiteBase {
-  // Overwrite Key schema as MapState use composite key
+  // dummy schema for initializing rocksdb provider
   override def schemaForKeyRow: StructType = new StructType()
     .add("key", BinaryType)
     .add("userKey", BinaryType)

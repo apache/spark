@@ -437,6 +437,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
 
   import StateStoreTestsHelper._
 
+  // dummy schema for initializing rocksdb provider
   protected def schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected def schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
