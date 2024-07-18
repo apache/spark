@@ -88,7 +88,10 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
-  private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
+  private[spark] def apply(collationId: Int): StringType = {
+    assert (collationId >= 0 && collationId <= (1 << 12))
+    new StringType(collationId)
+  }
 
   def apply(collation: String): StringType = {
     val collationId = CollationFactory.collationNameToId(collation)
