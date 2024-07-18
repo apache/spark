@@ -257,9 +257,12 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val runId = UUID.randomUUID()
     val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
     val storeColFamilySchema = List(
-      StateStoreColFamilySchema("test1", keySchema, valueSchema),
-      StateStoreColFamilySchema("test2", longKeySchema, longValueSchema),
-      StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes))
+      StateStoreColFamilySchema("test1", keySchema, valueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema)),
+      StateStoreColFamilySchema("test2", longKeySchema, longValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, longKeySchema)),
+      StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)))
     val stateSchemaDir = stateSchemaDirPath(stateInfo)
     val schemaFilePath = Some(new Path(stateSchemaDir,
     s"${batchId}_${UUID.randomUUID().toString}"))
@@ -327,6 +330,15 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
+  private def getKeyStateEncoderSpec(stateSchemaVersion: Int, keySchema: StructType):
+    Option[KeyStateEncoderSpec] = {
+    if (stateSchemaVersion == 3) {
+      Some(NoPrefixKeyStateEncoderSpec(keySchema))
+    } else {
+      None
+    }
+  }
+
   private def verifyException(
       oldKeySchema: StructType,
       oldValueSchema: StructType,
@@ -348,8 +360,10 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       } else {
         None
       }
+
       val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        oldKeySchema, oldValueSchema))
+        oldKeySchema, oldValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       val result = Try(
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
           oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
@@ -361,7 +375,8 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       } else {
         intercept[SparkUnsupportedOperationException] {
           val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-            newKeySchema, newValueSchema))
+            newKeySchema, newValueSchema,
+            keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
           StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
             newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
             schemaFilePath = schemaFilePath, extraOptions = extraOptions)
@@ -407,13 +422,15 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       }
 
       val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        oldKeySchema, oldValueSchema))
+        oldKeySchema, oldValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
         schemaFilePath = schemaFilePath, extraOptions = extraOptions)
 
       val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        newKeySchema, newValueSchema))
+        newKeySchema, newValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
       StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
         newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
         schemaFilePath = schemaFilePath, extraOptions = extraOptions)

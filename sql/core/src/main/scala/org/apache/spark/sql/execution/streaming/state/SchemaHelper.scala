@@ -19,7 +19,11 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.StringReader
 
+import scala.util.Try
+
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.execution.streaming.MetadataVersionUtil
 import org.apache.spark.sql.types.StructType
@@ -88,14 +92,29 @@ object SchemaHelper {
     override def version: Int = 3
 
     override def read(inputStream: FSDataInputStream): List[StateStoreColFamilySchema] = {
+      implicit val formats: DefaultFormats.type = DefaultFormats
       val numEntries = inputStream.readInt()
       (0 until numEntries).map { _ =>
+        // read the col family name and the key and value schema
         val colFamilyName = inputStream.readUTF()
         val keySchemaStr = readJsonSchema(inputStream)
         val valueSchemaStr = readJsonSchema(inputStream)
+        val keySchema = StructType.fromString(keySchemaStr)
+
+        // use the key schema to also populate the encoder spec
+        val keyEncoderSpecStr = readJsonSchema(inputStream)
+        val colFamilyMap = JsonMethods.parse(keyEncoderSpecStr).extract[Map[String, Any]]
+        val encoderSpec = KeyStateEncoderSpec.fromJson(keySchema, colFamilyMap)
+
+        // read the user key encoder spec if provided
+        val userKeyEncoderSchemaStr = readJsonSchema(inputStream)
+        val userKeyEncoderSchema = Try(StructType.fromString(userKeyEncoderSchemaStr)).toOption
+
         StateStoreColFamilySchema(colFamilyName,
-          StructType.fromString(keySchemaStr),
-          StructType.fromString(valueSchemaStr))
+          keySchema,
+          StructType.fromString(valueSchemaStr),
+          Some(encoderSpec),
+          userKeyEncoderSchema)
       }.toList
     }
   }
@@ -178,14 +197,25 @@ object SchemaHelper {
   class SchemaV3Writer extends SchemaWriter {
     override def version: Int = 3
 
+    private val emptyJsonStr = """{    }"""
+
     def writeSchema(
         stateStoreColFamilySchema: List[StateStoreColFamilySchema],
         outputStream: FSDataOutputStream): Unit = {
       outputStream.writeInt(stateStoreColFamilySchema.size)
       stateStoreColFamilySchema.foreach { colFamilySchema =>
+        assert(colFamilySchema.keyStateEncoderSpec.isDefined)
         outputStream.writeUTF(colFamilySchema.colFamilyName)
         writeJsonSchema(outputStream, colFamilySchema.keySchema.json)
         writeJsonSchema(outputStream, colFamilySchema.valueSchema.json)
+        writeJsonSchema(outputStream, colFamilySchema.keyStateEncoderSpec.get.json)
+        // write user key encoder schema if provided and empty json otherwise
+        val userKeyEncoderStr = if (colFamilySchema.userKeyEncoderSchema.isDefined) {
+          colFamilySchema.userKeyEncoderSchema.get.json
+        } else {
+          emptyJsonStr
+        }
+        writeJsonSchema(outputStream, userKeyEncoderStr)
       }
     }
   }

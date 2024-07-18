@@ -41,7 +41,8 @@ case class StateStoreColFamilySchema(
     colFamilyName: String,
     keySchema: StructType,
     valueSchema: StructType,
-    keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None
+    keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
+    userKeyEncoderSchema: Option[StructType] = None
 )
 
 class StateSchemaCompatibilityChecker(
