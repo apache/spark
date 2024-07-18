@@ -136,10 +136,11 @@ object SchemaConverters extends Logging {
 
       case RECORD =>
         val recursiveDepth: Int = existingRecordNames.getOrElse(avroSchema.getFullName, 0)
-        if (recursiveDepth > 0 && recursiveFieldMaxDepth <= 0) {
+        if (recursiveDepth > 0 && (recursiveFieldMaxDepth <= 0 || recursiveFieldMaxDepth > 10)) {
           throw new IncompatibleSchemaException(s"""
-            |Found recursive reference in Avro schema, which can not be processed by Spark:
-            |${avroSchema.toString(true)}
+            |Found recursive reference in Avro schema, which can not be processed by Spark by
+            | default: ${avroSchema.toString(true)}. Try setting the option `recursiveFieldMaxDepth`
+            | to 0 - 10. Going beyond 10 levels of recursion is not allowed.
           """.stripMargin)
         } else if (recursiveDepth > 0 && recursiveDepth >= recursiveFieldMaxDepth) {
           log.info(
