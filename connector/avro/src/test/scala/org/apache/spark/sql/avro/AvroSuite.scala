@@ -2395,7 +2395,6 @@ abstract class AvroSuite
           .load(tempDir.getPath),
         df.select("Id"))
     }
-
   }
 
   test("log a warning of ignoreExtension deprecation") {
