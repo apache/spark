@@ -203,7 +203,6 @@ class CompositeKeyStateEncoder[K, V](
     userKeyProjection(InternalRow(userKeyRow))
   }
 
-
   /**
    * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
    * Grouping key will be encoded in `RocksDBStateEncoder` as the prefix column.

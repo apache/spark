@@ -159,7 +159,6 @@ abstract class SingleKeyTTLStateImpl(
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val valueGroupingKey = nextTtlValue.groupingKey
-          // TODO if equals work
           if (valueGroupingKey equals groupingKey) {
             nextValue = Some(nextTtlValue.expirationMs)
           }
@@ -248,7 +247,6 @@ abstract class CompositeKeyTTLStateImpl[K](
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, ttlExpirationMs)
     }.foreach { kv =>
-      // TODO get the right numFields
       numRemovedElements += clearIfExpired(
         kv.key.getStruct(1, keyExprEnc.schema.length),
         kv.key.getStruct(2, uerKeyEncoder.schema.length))
