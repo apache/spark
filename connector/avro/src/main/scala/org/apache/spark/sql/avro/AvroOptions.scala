@@ -150,7 +150,7 @@ private[sql] class AvroOptions(
    * The following lists the parsed schema with different values for this setting.
    *  1:  `struct<Id: int>`
    *  2:  `struct<Id: int, Next: struct<Id: int>>`
-   *  3:  `struct<Id: int, Next: struct<id: int, Next: struct<Id: int>>>`
+   *  3:  `struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>`
    * and so on.
    */
   val recursiveFieldMaxDepth: Int =
