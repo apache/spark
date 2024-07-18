@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
 /**
@@ -52,25 +51,8 @@ class TimerStateImpl(
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  private val schemaForPrefixKey: StructType = new StructType()
-    .add("key", new StructType(keyExprEnc.schema.fields))
-
-  private val schemaForKeyRow: StructType = new StructType()
-    .add("key", new StructType(keyExprEnc.schema.fields))
-    .add("expiryTimestampMs", LongType, nullable = false)
-
-  private val keySchemaForSecIndex: StructType = new StructType()
-    .add("expiryTimestampMs", LongType, nullable = false)
-    .add("key", new StructType(keyExprEnc.schema.fields))
-
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
-
-  private val prefixKeyEncoder = UnsafeProjection.create(schemaForPrefixKey)
-
-  private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
-
-  private val secIndexKeyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
 
   private val timerCFName = if (timeMode == TimeMode.ProcessingTime) {
     TimerStateUtils.PROC_TIMERS_STATE_NAME
@@ -78,11 +60,17 @@ class TimerStateImpl(
     TimerStateUtils.EVENT_TIMERS_STATE_NAME
   }
 
+  private val rowEncoder = new TimerKeyEncoder(keyExprEnc)
+
+  private val schemaForKeyRow = rowEncoder.schemaForKeyRow
   private val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
   store.createColFamilyIfAbsent(keyToTsCFName, schemaForKeyRow,
     schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
     useMultipleValuesPerKey = false, isInternal = true)
 
+  // We maintain a secondary index that inverts the ordering of the timestamp
+  // and grouping key
+  private val keySchemaForSecIndex = rowEncoder.keySchemaForSecIndex
   private val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
   store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
     schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, Seq(0)),
@@ -96,28 +84,6 @@ class TimerStateImpl(
     keyOption.get
   }
 
-  private def encodeKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val realGroupingKey =
-      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
-      else groupingKey
-
-    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-    val compositeRow = new GenericInternalRow(Array[Any](keyRow, expiryTimestampMs))
-    keyEncoder.apply(compositeRow)
-  }
-
-  // We maintain a secondary index that inverts the ordering of the timestamp
-  // and grouping key
-  private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val realGroupingKey =
-      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
-      else groupingKey
-
-    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-    val compositeRow = new GenericInternalRow(Array[Any](expiryTimestampMs, keyRow))
-    secIndexKeyEncoder.apply(compositeRow)
-  }
-
   /**
    * Function to check if the timer for the given key and timestamp is already registered
    * @param expiryTimestampMs - expiry timestamp of the timer
@@ -128,7 +94,7 @@ class TimerStateImpl(
   }
 
   private def getImpl(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    store.get(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
+    store.get(rowEncoder.encodedKey(groupingKey, expiryTimestampMs), keyToTsCFName)
   }
 
   /**
@@ -141,8 +107,9 @@ class TimerStateImpl(
       logWarning(log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
         log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
     } else {
-      store.put(encodeKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
-      store.put(encodeSecIndexKey(groupingKey, expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
+      store.put(rowEncoder.encodedKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
+      store.put(rowEncoder.encodeSecIndexKey(groupingKey, expiryTimestampMs),
+        EMPTY_ROW, tsToKeyCFName)
       logDebug(s"Registered timer for key=$groupingKey and timestamp=$expiryTimestampMs")
     }
   }
@@ -158,23 +125,15 @@ class TimerStateImpl(
       logWarning(log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
         log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it does not exist")
     } else {
-      store.remove(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
-      store.remove(encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)
+      store.remove(rowEncoder.encodedKey(groupingKey, expiryTimestampMs), keyToTsCFName)
+      store.remove(rowEncoder.encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)
       logDebug(s"Deleted timer for key=$groupingKey and timestamp=$expiryTimestampMs")
     }
   }
 
   def listTimers(): Iterator[Long] = {
     val groupingKey = getGroupingKey(keyToTsCFName)
-    val encodedGroupingKey: UnsafeRow = {
-      val realGroupingKey =
-        if (groupingKey.isInstanceOf[String]) {
-          UTF8String.fromString(groupingKey.asInstanceOf[String])
-        }
-        else groupingKey
-      val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-      prefixKeyEncoder.apply(InternalRow(keyRow))
-    }
+    val encodedGroupingKey: UnsafeRow = rowEncoder.encodePrefixKey(groupingKey)
 
     val iter = store.prefixScan(encodedGroupingKey, keyToTsCFName)
     iter.map { kv =>
@@ -186,9 +145,7 @@ class TimerStateImpl(
   private def getTimerRowFromSecIndex(keyRow: UnsafeRow): (Any, Long) = {
     // Decode the key object from the UnsafeRow
     val retUnsafeRow = keyRow.getStruct(1, keyExprEnc.schema.length)
-
-    val keyObj = keyExprEnc.resolveAndBind()
-      .createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
+    val keyObj = rowEncoder.decodePrefixKey(retUnsafeRow)
 
     val expiryTimestampMs = keyRow.getLong(0)
     (keyObj, expiryTimestampMs)

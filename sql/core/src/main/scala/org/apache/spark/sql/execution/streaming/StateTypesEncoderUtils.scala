@@ -264,3 +264,43 @@ class CompositeKeyTTLEncoder[K](
           .asInstanceOf[InternalRow])))
   }
 }
+
+class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
+  private val schemaForPrefixKey: StructType =
+    new StructType()
+      .add("key", new StructType(keyExprEnc.schema.fields))
+
+  val keySchemaForSecIndex: StructType =
+    new StructType()
+      .add("expiryTimestampMs", LongType, nullable = false)
+      .add("key", new StructType(keyExprEnc.schema.fields))
+
+  val schemaForKeyRow: StructType = new StructType()
+    .add("key", new StructType(keyExprEnc.schema.fields))
+    .add("expiryTimestampMs", LongType, nullable = false)
+
+  private val keySerializer = keyExprEnc.createSerializer()
+  private val keyDeserializer = keyExprEnc.resolveAndBind().createDeserializer()
+  private val prefixKeyProjection = UnsafeProjection.create(schemaForPrefixKey)
+  private val keyRowProjection = UnsafeProjection.create(schemaForKeyRow)
+  private val secIndexKeyProjection = UnsafeProjection.create(keySchemaForSecIndex)
+
+  def encodedKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
+    val keyRow = keySerializer.apply(groupingKey)
+    keyRowProjection.apply(InternalRow(keyRow, expiryTimestampMs))
+  }
+
+  def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
+    val keyRow = keySerializer.apply(groupingKey)
+    secIndexKeyProjection.apply(InternalRow(expiryTimestampMs, keyRow))
+  }
+
+  def encodePrefixKey(groupingKey: Any): UnsafeRow = {
+    val keyRow = keySerializer.apply(groupingKey)
+    prefixKeyProjection.apply(InternalRow(keyRow))
+  }
+
+  def decodePrefixKey(retUnsafeRow: UnsafeRow): Any = {
+    keyDeserializer.apply(retUnsafeRow)
+  }
+}
