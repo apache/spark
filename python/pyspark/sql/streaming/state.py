@@ -18,7 +18,7 @@ import datetime
 import json
 from typing import Tuple, Optional
 
-from pyspark.sql.types import DateType, Row, StructType
+from pyspark.sql.types import Row, StructType, TimestampType
 from pyspark.sql.utils import has_numpy
 
 __all__ = ["GroupState", "GroupStateTimeout"]
@@ -195,7 +195,7 @@ class GroupState:
             )
 
         if isinstance(timestampMs, datetime.datetime):
-            timestampMs = DateType().toInternal(timestampMs)
+            timestampMs = TimestampType().toInternal(timestampMs) / 1000
 
         if timestampMs <= 0:
             raise ValueError("Timeout timestamp must be positive")
