@@ -137,6 +137,22 @@ private[sql] class AvroOptions(
   val stableIdPrefixForUnionType: String = parameters
     .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
 
+  /**
+   * Adds support for recursive fields. If this option is not specified or is set to 1, recursive
+   * fields are not permitted. Setting it to 1 allows recursive field to be recursed once,
+   * and 2 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
+   * allowed in order avoid inadvertently creating very large schemas. If a avro message has depth
+   * beyond this limit, the Spark struct returned is truncated after the recursion limit.
+   *
+   * Examples. Consider a Avro with a recursive field:
+   * {"type" : "record", "name" : "node", "fields" : [{"name": "Id", "type": "int"},
+   * {"name": "Next", "type": ["null", "node"]}]}
+   * The following lists the schema with different values for this setting.
+   *  1:  `struct<Id: int>`
+   *  2:  `struct<Id: int, Next: struct<Id: int>>`
+   *  3:  `struct<Id: int, Next: struct<id: int, Next: struct<Id: int>>>`
+   * and so on.
+   */
   val recursiveFieldMaxDepth: Int =
     parameters.get(RECURSIVE_FIELD_MAX_DEPTH).map(_.toInt).getOrElse(-1)
 }
