@@ -67,9 +67,11 @@ object StreamStreamJoinStateHelper {
 
     val newHadoopConf = session.sessionState.newHadoopConf()
 
+    // read the key schema from the keyToNumValues store for the join keys
     val manager = new StateSchemaCompatibilityChecker(providerIdForKeyToNumValues, newHadoopConf)
     val keySchema = manager.readSchemaFile().head.keySchema
 
+    // read the value schema from the keyWithIndexToValue store for the values
     val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
       newHadoopConf)
     val valueSchema = manager2.readSchemaFile().head.valueSchema

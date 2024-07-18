@@ -262,7 +262,10 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       StateStoreColFamilySchema("test2", longKeySchema, longValueSchema,
         keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, longKeySchema)),
       StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)))
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)),
+      StateStoreColFamilySchema("test4", keySchema, valueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema),
+        userKeyEncoderSchema = Some(structSchema)))
     val stateSchemaDir = stateSchemaDirPath(stateInfo)
     val schemaFilePath = Some(new Path(stateSchemaDir,
     s"${batchId}_${UUID.randomUUID().toString}"))
