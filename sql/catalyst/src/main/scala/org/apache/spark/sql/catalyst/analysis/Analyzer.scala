@@ -351,6 +351,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       UpdateAttributeNullability),
     Batch("UDF", Once,
       ResolveEncodersInUDF),
+    // The rewrite rules might move resolved query plan into subquery. Once the resolved plan
+    // contains ScalaUDF, their encoders won't be resolved if `ResolveEncodersInUDF` is not
+    // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
+    // rewrite rules.
     Batch("DML rewrite", fixedPoint,
       RewriteDeleteFromTable ::
         RewriteUpdateTable ::
