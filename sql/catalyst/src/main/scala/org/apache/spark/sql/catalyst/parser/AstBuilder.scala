@@ -133,11 +133,35 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
-      label: Option[String]): CompoundBody = {
+      label: Option[String],
+      allowPrefixDeclare: Boolean): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(compoundStatement => {
       buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
     })
+
+    val compoundStatements = buff.toList
+
+    if (allowPrefixDeclare) {
+      val declareAfterPrefix = compoundStatements.dropWhile(
+          statement => statement.isInstanceOf[SingleStatement] &&
+          statement.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
+        .filter(_.isInstanceOf[SingleStatement])
+        .exists(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
+
+      if(declareAfterPrefix) {
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning()
+      }
+
+    } else {
+      val declareExists = compoundStatements
+        .filter(_.isInstanceOf[SingleStatement])
+        .exists(_.asInstanceOf[SingleStatement].parsedPlan.isInstanceOf[CreateVariable])
+
+      if (declareExists) {
+        throw SqlScriptingErrors.variableDeclarationNotAllowedInScope()
+      }
+    }
 
     CompoundBody(buff.toSeq, label)
   }
@@ -161,11 +185,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     val labelText = beginLabelCtx.
       map(_.multipartIdentifier().getText).getOrElse(java.util.UUID.randomUUID.toString).
       toLowerCase(Locale.ROOT)
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText))
+    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), true)
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx, None)
+    visitCompoundBodyImpl(ctx, None, false)
   }
 
   override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
