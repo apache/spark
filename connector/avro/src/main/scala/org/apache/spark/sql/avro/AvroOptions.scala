@@ -144,10 +144,10 @@ private[sql] class AvroOptions(
    * allowed in order avoid inadvertently creating very large schemas. If a avro message has depth
    * beyond this limit, the Spark struct returned is truncated after the recursion limit.
    *
-   * Examples. Consider a Avro with a recursive field:
+   * Examples: Consider an Avro schema with a recursive field:
    * {"type" : "record", "name" : "node", "fields" : [{"name": "Id", "type": "int"},
    * {"name": "Next", "type": ["null", "node"]}]}
-   * The following lists the schema with different values for this setting.
+   * The following lists the parsed schema with different values for this setting.
    *  1:  `struct<Id: int>`
    *  2:  `struct<Id: int, Next: struct<Id: int>>`
    *  3:  `struct<Id: int, Next: struct<id: int, Next: struct<Id: int>>>`
