@@ -17,16 +17,18 @@
 package org.apache.spark.sql.application
 
 import java.io.{InputStream, OutputStream}
+import java.nio.file.Paths
 import java.util.concurrent.Semaphore
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import ammonite.compiler.CodeClassWrapper
 import ammonite.compiler.iface.CodeWrapper
 import ammonite.util.{Bind, Imports, Name, Util}
 
+import org.apache.spark.SparkBuildInfo.spark_version
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClientParser}
 
@@ -37,18 +39,21 @@ import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClie
 object ConnectRepl {
   private val name = "Spark Connect REPL"
 
-  private val splash =
-    """
-      |Spark session available as 'spark'.
-      |   _____                  __      ______                            __
-      |  / ___/____  ____ ______/ /__   / ____/___  ____  ____  ___  _____/ /_
-      |  \__ \/ __ \/ __ `/ ___/ //_/  / /   / __ \/ __ \/ __ \/ _ \/ ___/ __/
-      | ___/ / /_/ / /_/ / /  / ,<    / /___/ /_/ / / / / / / /  __/ /__/ /_
-      |/____/ .___/\__,_/_/  /_/|_|   \____/\____/_/ /_/_/ /_/\___/\___/\__/
-      |    /_/
-      |""".stripMargin
+  private val splash: String = """Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version %s
+      /_/
+
+Type in expressions to have them evaluated.
+Spark session available as 'spark'.
+   """.format(spark_version)
 
   def main(args: Array[String]): Unit = doMain(args)
+
+  private var server: Option[Process] = None
+  private val sparkHome = System.getenv("SPARK_HOME")
 
   private[application] def doMain(
       args: Array[String],
@@ -56,9 +61,37 @@ object ConnectRepl {
       inputStream: InputStream = System.in,
       outputStream: OutputStream = System.out,
       errorStream: OutputStream = System.err): Unit = {
-    // For interpreters, structured logging is disabled by default to avoid generating mixed
-    // plain text and structured logs on the same console.
-    Logging.disableStructuredLogging()
+    val configs: Map[String, String] =
+      sys.props
+        .filter(p =>
+          p._1.startsWith("spark.") &&
+            p._2.nonEmpty &&
+            // Don't include spark.remote that we manually set later.
+            !p._1.startsWith("spark.remote") &&
+            // We use Driver class path in spark-shell. Exclude it.
+            !p._1.startsWith("spark.driver.extraClassPath"))
+        .toMap
+
+    val remoteString: Option[String] =
+      Option(System.getProperty("spark.remote")) // Set from Spark Submit
+        .orElse(sys.env.get("SPARK_REMOTE"))
+
+    if (remoteString.exists(_.startsWith("local"))) {
+      server = Some {
+        val args = Seq(
+          Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
+          "--master",
+          remoteString.get) ++ configs.flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
+        val pb = new ProcessBuilder(args: _*)
+        // So don't exclude spark-sql jar in classpath
+        pb.environment().put("SPARK_CONNECT_SHELL", "0")
+        pb.start()
+      }
+      // Let the server start. We will directly request to set the configurations
+      // and this sleep makes less noisy with retries.
+      Thread.sleep(2000L)
+      System.setProperty("spark.remote", "sc://localhost")
+    }
 
     // Build the client.
     val client =
@@ -83,6 +116,13 @@ object ConnectRepl {
 
     // Build the session.
     val spark = SparkSession.builder().client(client).getOrCreate()
+
+    // The configurations might not be all runtime configurations.
+    // Try to set them with ignoring failures for now.
+    configs
+      .filter(_._1.startsWith("spark.sql"))
+      .foreach { case (k, v) => Try(spark.conf.set(k, v)) }
+
     val sparkBind = new Bind("spark", spark)
 
     // Add the proper imports and register a [[ClassFinder]].
@@ -105,11 +145,18 @@ object ConnectRepl {
       inputStream = inputStream,
       outputStream = outputStream,
       errorStream = errorStream)
-    if (semaphore.nonEmpty) {
-      // Used for testing.
-      main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
-    } else {
-      main.run(sparkBind)
+    try {
+      if (semaphore.nonEmpty) {
+        // Used for testing.
+        main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
+      } else {
+        main.run(sparkBind)
+      }
+    } finally {
+      if (server.isDefined) {
+        new ProcessBuilder(Paths.get(sparkHome, "sbin", "stop-connect-server.sh").toString)
+          .start()
+      }
     }
   }
 }

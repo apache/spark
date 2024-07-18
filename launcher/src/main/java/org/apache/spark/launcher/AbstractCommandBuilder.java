@@ -206,7 +206,17 @@ abstract class AbstractCommandBuilder {
           addToClassPath(cp, f.toString());
         }
       }
-      addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      boolean isConnectShell = "1".equals(getenv("SPARK_CONNECT_SHELL"));
+      if (isConnectShell) {
+        for (File f: new File(jarsDir).listFiles()) {
+          // Exclude Spark Classic SQL jar if we're in Spark Connect Shell
+          if (!f.getName().startsWith("spark-sql_")) {
+            addToClassPath(cp, f.toString());
+          }
+        }
+      } else {
+        addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      }
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));

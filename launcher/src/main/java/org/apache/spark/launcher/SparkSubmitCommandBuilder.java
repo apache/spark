@@ -83,6 +83,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private static final Map<String, String> specialClasses = new HashMap<>();
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
+    specialClasses.put("org.apache.spark.sql.application.ConnectRepl", "connect-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
