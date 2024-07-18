@@ -177,14 +177,8 @@ class MapStateImplWithTTL[K, V](
   override def clearIfExpired(
       groupingKeyRow: UnsafeRow,
       userKeyRow: UnsafeRow): Long = {
-    val compositeKeyRow =
-      UnsafeProjection.create(
-        getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
-        .apply(
-          new GenericInternalRow(
-            Array[Any](groupingKeyRow.asInstanceOf[InternalRow],
-              userKeyRow.asInstanceOf[InternalRow]))
-        )
+    val compositeKeyRow = stateTypesEncoder.encodeCompositeKey(groupingKeyRow, userKeyRow)
+
     val retRow = store.get(compositeKeyRow, stateName)
     var numRemovedElements = 0L
     if (retRow != null) {
@@ -248,8 +242,8 @@ class MapStateImplWithTTL[K, V](
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val groupingKey = nextTtlValue.groupingKey
-          if (groupingKey equals implicitGroupingKey
-            .getStruct(0, keyExprEnc.schema.length)) {
+          if (groupingKey equals implicitGroupingKey.getStruct(
+            0, keyExprEnc.schema.length)) {
             val userKey = stateTypesEncoder.decodeUserKey(
               nextTtlValue.userKey)
             nextValue = Some(userKey, nextTtlValue.expirationMs)

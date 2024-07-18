@@ -25,6 +25,10 @@ import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSch
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types._
 
+/**
+ * Helper object for getting schema of key/value row that are used in state schema
+ * files and to be passed into `RocksDBStateProvider`.
+ */
 object TransformWithStateKeyValueRowSchemaUtils {
   def getCompositeKeySchema(
       groupingKeySchema: StructType,
@@ -216,6 +220,10 @@ class CompositeKeyStateEncoder[K, V](
 
     // Create the final unsafeRow combining the keyRow and userKeyRow
     compositeKeyProjection(InternalRow(keyRow, userKeyRow))
+  }
+
+  def encodeCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow): UnsafeRow = {
+    compositeKeyProjection(InternalRow(groupingKey, userKey))
   }
 
   def decodeUserKey(row: UnsafeRow): K = {
