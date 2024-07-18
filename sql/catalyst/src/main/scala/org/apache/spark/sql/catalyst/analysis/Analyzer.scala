@@ -356,9 +356,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // applied before the rewrite rules. So we need to apply `ResolveEncodersInUDF` before the
     // rewrite rules.
     Batch("DML rewrite", fixedPoint,
-      RewriteDeleteFromTable ::
-        RewriteUpdateTable ::
-        RewriteMergeIntoTable :: Nil),
+      RewriteDeleteFromTable,
+        RewriteUpdateTable,
+        RewriteMergeIntoTable),
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
