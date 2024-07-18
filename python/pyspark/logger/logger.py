@@ -67,6 +67,44 @@ class JSONFormatter(logging.Formatter):
 class PySparkLogger(logging.Logger):
     """
     Custom logging.Logger wrapper for PySpark that logs messages in a structured JSON format.
+
+    PySparkLogger extends the standard Python logging.Logger class, allowing seamless integration
+    with existing logging setups. It customizes the log output to JSON format, including additional
+    context information, making it more useful for PySpark applications.
+
+    Example
+    -------
+    >>> import logging
+    >>> import json
+    >>> from io import StringIO
+    >>> from pyspark.logger import PySparkLogger
+
+    >>> logger = PySparkLogger.getLogger("ExampleLogger")
+    >>> logger.setLevel(logging.INFO)
+    >>> stream = StringIO()
+    >>> handler = logging.StreamHandler(stream)
+    >>> logger.addHandler(handler)
+
+    >>> logger.info(
+    ...     "This is an informational message",
+    ...     extra={"user": "test_user", "action": "test_action"}
+    ... )
+    >>> log_output = stream.getvalue().strip().split('\\n')[0]
+    >>> log = json.loads(log_output)
+    >>> _ = log.pop("ts")  # Remove the timestamp field for static testing
+
+    >>> print(json.dumps(log, ensure_ascii=False, indent=2))
+    {
+      "level": "INFO",
+      "logger": "ExampleLogger",
+      "msg": "This is an informational message",
+      "context": {
+        "extra": {
+          "user": "test_user",
+          "action": "test_action"
+        }
+      }
+    }
     """
 
     def __init__(self, name: str = "PySparkLogger"):
