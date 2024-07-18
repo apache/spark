@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -995,12 +995,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkSQLFeatureNotSupportedException(
       errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
       messageParameters = Map("tableName" -> tableName))
-  }
-
-  def dataTypeUnsupportedYetError(dataType: DataType): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2088",
-      messageParameters = Map("dataType" -> dataType.toString()))
   }
 
   def unsupportedOperationForDataTypeError(
@@ -2748,7 +2742,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("charset"),
-        "charset" -> charset))
+        "charset" -> charset,
+        "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
   }
 
   def malformedCharacterCoding(functionName: String, charset: String): RuntimeException = {

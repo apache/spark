@@ -147,7 +147,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       // Create JSON metadata.
       val metadata = compact(render
         (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~ ("k" -> weights.length)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataArray = Array.tabulate(weights.length) { i =>

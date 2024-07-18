@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.Jo
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -59,11 +59,17 @@ class StateTable(
     if (sourceOptions.joinSide != JoinSideValues.none) {
       desc += s"[joinSide=${sourceOptions.joinSide}]"
     }
-    if (sourceOptions.snapshotStartBatchId.isDefined) {
-      desc += s"[snapshotStartBatchId=${sourceOptions.snapshotStartBatchId}]"
+    sourceOptions.fromSnapshotOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[snapshotStartBatchId=${fromSnapshotOptions.snapshotStartBatchId}]"
+        desc += s"[snapshotPartitionId=${fromSnapshotOptions.snapshotPartitionId}]"
+      case _ =>
     }
-    if (sourceOptions.snapshotPartitionId.isDefined) {
-      desc += s"[snapshotPartitionId=${sourceOptions.snapshotPartitionId}]"
+    sourceOptions.readChangeFeedOptions match {
+      case Some(fromSnapshotOptions) =>
+        desc += s"[changeStartBatchId=${fromSnapshotOptions.changeStartBatchId}"
+        desc += s"[changeEndBatchId=${fromSnapshotOptions.changeEndBatchId}"
+      case _ =>
     }
     desc
   }
@@ -76,16 +82,26 @@ class StateTable(
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
   private def isValidSchema(schema: StructType): Boolean = {
-    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
-      false
-    } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
+    val expectedFieldNames =
+      if (sourceOptions.readChangeFeed) {
+        Seq("batch_id", "change_type", "key", "value", "partition_id")
+      } else {
+        Seq("key", "value", "partition_id")
+      }
+    val expectedTypes = Map(
+      "batch_id" -> classOf[LongType],
+      "change_type" -> classOf[StringType],
+      "key" -> classOf[StructType],
+      "value" -> classOf[StructType],
+      "partition_id" -> classOf[IntegerType])
+
+    if (schema.fieldNames.toImmutableArraySeq != expectedFieldNames) {
       false
     } else {
-      true
+      schema.fieldNames.forall { fieldName =>
+        expectedTypes(fieldName).isAssignableFrom(
+          SchemaUtil.getSchemaAsDataType(schema, fieldName).getClass)
+      }
     }
   }
 

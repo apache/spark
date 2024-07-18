@@ -434,8 +434,13 @@ object KeyGroupedPartitioning {
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
 
-    KeyGroupedPartitioning(projectedExpressions, projectedPartitionValues.length,
-      projectedPartitionValues, projectedOriginalPartitionValues)
+    val finalPartitionValues = projectedPartitionValues
+        .map(InternalRowComparableWrapper(_, projectedExpressions))
+        .distinct
+        .map(_.row)
+
+    KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
+      finalPartitionValues, projectedOriginalPartitionValues)
   }
 
   def project(
@@ -871,20 +876,12 @@ case class KeyGroupedShuffleSpec(
     if (results.forall(p => p.isEmpty)) None else Some(results)
   }
 
-  override def canCreatePartitioning: Boolean = {
-    // Allow one side shuffle for SPJ for now only if partially-clustered is not enabled
-    // and for join keys less than partition keys only if transforms are not enabled.
-    val checkExprType = if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-      e: Expression => e.isInstanceOf[AttributeReference]
-    } else {
-      e: Expression => e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
-    }
+  override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-      partitioning.expressions.forall(checkExprType)
-  }
-
-
+      partitioning.expressions.forall { e =>
+        e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
+      }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val newExpressions: Seq[Expression] = clustering.zip(partitioning.expressions).map {

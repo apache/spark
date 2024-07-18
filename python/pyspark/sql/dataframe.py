@@ -1887,7 +1887,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.dropDuplicates
+        DataFrame.dropDuplicates : Remove duplicate rows from this DataFrame.
 
         Examples
         --------
@@ -2951,7 +2951,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.summary
+        DataFrame.summary : Computes summary statistics for numeric and string columns.
         """
         ...
 
@@ -3022,7 +3022,7 @@ class DataFrame:
 
         See Also
         --------
-        DataFrame.display
+        DataFrame.describe : Computes basic statistics for numeric and string columns.
         """
         ...
 
@@ -3790,7 +3790,7 @@ class DataFrame:
         self, groupingSets: Sequence[Sequence["ColumnOrName"]], *cols: "ColumnOrName"
     ) -> "GroupedData":
         """
-        Create multi-dimensional aggregation for the current `class`:DataFrame using the specified
+        Create multi-dimensional aggregation for the current :class:`DataFrame` using the specified
         grouping sets, so we can run aggregation on them.
 
         .. versionadded:: 4.0.0
@@ -3873,7 +3873,7 @@ class DataFrame:
 
         See Also
         --------
-        GroupedData
+        DataFrame.rollup : Compute hierarchical summaries at multiple levels.
         """
         ...
 
@@ -5420,7 +5420,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnsRenamed`
+        DataFrame.withColumnsRenamed
 
         Examples
         --------
@@ -5480,7 +5480,7 @@ class DataFrame:
 
         See Also
         --------
-        :meth:`withColumnRenamed`
+        DataFrame.withColumnRenamed
 
         Examples
         --------
@@ -6018,6 +6018,10 @@ class DataFrame:
         ...     .whenNotMatched().insertAll()
         ...     .whenNotMatchedBySource().delete()
         ...     .merge())
+
+        Notes
+        -----
+        This method does not support streaming queries.
         """
         ...
 
@@ -6183,6 +6187,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
+        DataFrame.mapInArrow
         """
         ...
 
@@ -6259,7 +6264,7 @@ class DataFrame:
         See Also
         --------
         pyspark.sql.functions.pandas_udf
-        pyspark.sql.DataFrame.mapInPandas
+        DataFrame.mapInPandas
         """
         ...
 

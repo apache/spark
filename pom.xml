@@ -98,13 +98,13 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
+    <module>connect/server</module>
+    <module>connect/common</module>
     <module>connector/kafka-0-10-token-provider</module>
     <module>connector/kafka-0-10</module>
     <module>connector/kafka-0-10-assembly</module>
     <module>connector/kafka-0-10-sql</module>
     <module>connector/avro</module>
-    <module>connector/connect/server</module>
-    <module>connector/connect/common</module>
     <module>connector/connect/client/jvm</module>
     <module>connector/protobuf</module>
     <!-- See additional modules enabled by profiles below -->
@@ -180,19 +180,19 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.17.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.17.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.17.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.17.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.17.0</commons-codec.version>
+    <commons-codec.version>1.17.1</commons-codec.version>
     <commons-compress.version>1.26.2</commons-compress.version>
     <commons-io.version>2.16.1</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.14.0</commons-lang3.version>
+    <commons-lang3.version>3.15.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -230,7 +230,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.13.0</kubernetes-client.version>
+    <kubernetes-client.version>6.13.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -288,7 +288,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.1.0-jre</connect.guava.version>
+    <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.62.2</io.grpc.version>
     <mima.version>1.1.3</mima.version>
@@ -1264,7 +1264,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java</artifactId>
-        <version>3.3.6</version>
+        <version>3.4.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1284,7 +1284,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java-transport-zerodep</artifactId>
-        <version>3.3.6</version>
+        <version>3.4.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

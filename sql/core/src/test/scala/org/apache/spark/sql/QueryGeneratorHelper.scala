@@ -82,9 +82,22 @@ trait QueryGeneratorHelper {
   case class Equals(expr: Expression, rightSideExpr: Expression) extends Predicate {
     override def toString: String = f"$expr = $rightSideExpr"
   }
+  case class NotEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr <> $rightSideExpr"
+  }
   case class LessThan(expr: Expression, rightSideExpr: Expression) extends Predicate {
     override def toString: String = f"$expr < $rightSideExpr"
   }
+  case class LessThanOrEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr <= $rightSideExpr"
+  }
+  case class GreaterThan(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr > $rightSideExpr"
+  }
+  case class GreaterThanOrEquals(expr: Expression, rightSideExpr: Expression) extends Predicate {
+    override def toString: String = f"$expr >= $rightSideExpr"
+  }
+
   case class In(expr: Expression, inner: Operator)
     extends Predicate {
     override def toString: String = f"$expr IN ($inner)"
@@ -96,7 +109,10 @@ trait QueryGeneratorHelper {
     // Subquery to be treated as a Relation.
     val RELATION = Value
     // Subquery is a Predicate - types of predicate subqueries.
-    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_LESS_THAN, IN, NOT_IN, EXISTS, NOT_EXISTS = Value
+    val SCALAR_PREDICATE_EQUALS, SCALAR_PREDICATE_NOT_EQUALS,
+      SCALAR_PREDICATE_LESS_THAN, SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+      SCALAR_PREDICATE_GREATER_THAN, SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
+      IN, NOT_IN, EXISTS, NOT_EXISTS = Value
   }
 
   trait SubqueryExpression extends Expression {
