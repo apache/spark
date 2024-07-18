@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -31,6 +32,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite {
   // Helpers
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
+
+    override def execute(session: SparkSession): Unit = ()
   }
 
   case class TestNestedStatementIterator(statements: Seq[CompoundStatementExec])

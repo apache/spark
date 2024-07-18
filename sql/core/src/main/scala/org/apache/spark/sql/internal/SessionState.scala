@@ -19,10 +19,8 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.artifact.ArtifactManager
@@ -36,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.datasources.DataSourceManager
+import org.apache.spark.sql.scripting.SqlScriptingInterpreter
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
@@ -80,6 +79,7 @@ private[sql] class SessionState(
     val dataSourceRegistration: DataSourceRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
+    val sqlScriptingInterpreter: SqlScriptingInterpreter,
     analyzerBuilder: () => Analyzer,
     optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,

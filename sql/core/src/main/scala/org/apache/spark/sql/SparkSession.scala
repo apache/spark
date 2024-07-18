@@ -21,11 +21,9 @@ import java.io.Closeable
 import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
@@ -40,6 +38,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.parser.CompoundBody
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -631,6 +630,12 @@ class SparkSession private(
   /* ----------------- *
    |  Everything else  |
    * ----------------- */
+
+  private def executeScript(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val interpreter = sessionState.sqlScriptingInterpreter
+    val executionPlan = interpreter.buildExecutionPlan(compoundBody)
+    interpreter.execute(executionPlan)
+  }
 
   /**
    * Executes a SQL query substituting positional parameters by the given arguments,
