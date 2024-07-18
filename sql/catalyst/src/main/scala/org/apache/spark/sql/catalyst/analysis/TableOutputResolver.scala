@@ -413,6 +413,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
+      // If the element expression have not changed, we just check original array field.
+      // Otherwise, we add transformations to the elements.
       if (res.head.fastEquals(param)) {
         input match {
           case n: NamedExpression =>
@@ -460,6 +462,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
+      // If the key and value expressions have not changed, we just check original map field.
+      // Otherwise, we construct a new map by adding transformations to the keys and values.
       if (resKey.head.fastEquals(keyParam) && resValue.head.fastEquals(valueParam)) {
         input match {
           case n: NamedExpression =>
