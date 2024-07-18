@@ -18,7 +18,7 @@ import datetime
 import json
 from typing import Tuple, Optional
 
-from pyspark.sql.types import DateType, Row, StructType, TimestampType
+from pyspark.sql.types import Row, StructType, TimestampType
 from pyspark.sql.utils import has_numpy
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkRuntimeError
 
