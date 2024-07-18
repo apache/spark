@@ -17,8 +17,9 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
-from pyspark.sql.column import Column
+from pyspark.sql import Column, functions as F
 from pyspark.sql.utils import is_remote
+from typing import Union
 
 
 def product(col: Column, dropna: bool) -> Column:
@@ -171,3 +172,16 @@ def null_index(col: Column) -> Column:
 
         sc = SparkContext._active_spark_context
         return Column(sc._jvm.PythonSQLUtils.nullIndex(col._jc))
+
+
+def make_interval(unit: str, e: Union[Column, int, float]) -> Column:
+    unit_mapping = {
+        "YEAR": "years",
+        "MONTH": "months",
+        "WEEK": "weeks",
+        "DAY": "days",
+        "HOUR": "hours",
+        "MINUTE": "mins",
+        "SECOND": "secs",
+    }
+    return F.make_interval(**{unit_mapping[unit]: F.lit(e)})

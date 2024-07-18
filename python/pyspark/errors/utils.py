@@ -14,13 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import re
 import functools
 import inspect
+import itertools
 import os
 import threading
-from typing import Any, Callable, Dict, Match, TypeVar, Type, Optional, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Match,
+    TypeVar,
+    Type,
+    Optional,
+    Union,
+    TYPE_CHECKING,
+    overload,
+)
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
@@ -167,17 +180,36 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     """
     # Filtering out PySpark code and keeping user code only
     pyspark_root = os.path.dirname(pyspark.__file__)
-    stack = [
-        frame_info for frame_info in inspect.stack() if pyspark_root not in frame_info.filename
-    ]
 
-    selected_frames = stack[:depth]
+    def inspect_stack() -> Iterator[inspect.FrameInfo]:
+        frame = inspect.currentframe()
+        while frame:
+            frameinfo = (frame,) + inspect.getframeinfo(frame, context=0)
+            yield inspect.FrameInfo(*frameinfo)
+            frame = frame.f_back
+
+    stack = (
+        frame_info for frame_info in inspect_stack() if pyspark_root not in frame_info.filename
+    )
+
+    selected_frames: Iterator[inspect.FrameInfo] = itertools.islice(stack, depth)
 
     # We try import here since IPython is not a required dependency
     try:
-        from IPython import get_ipython
+        import IPython
 
-        ipython = get_ipython()
+        # ipykernel is required for IPython
+        import ipykernel  # type: ignore[import-not-found]
+
+        ipython = IPython.get_ipython()
+        # Filtering out IPython related frames
+        ipy_root = os.path.dirname(IPython.__file__)
+        ipykernel_root = os.path.dirname(ipykernel.__file__)
+        selected_frames = (
+            frame
+            for frame in selected_frames
+            if (ipy_root not in frame.filename) and (ipykernel_root not in frame.filename)
+        )
     except ImportError:
         ipython = None
 
@@ -240,20 +272,36 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def with_origin_to_class(cls: Type[T]) -> Type[T]:
+@overload
+def with_origin_to_class(cls_or_ignores: Type[T], ignores: Optional[List[str]] = None) -> Type[T]:
+    ...
+
+
+@overload
+def with_origin_to_class(
+    cls_or_ignores: Optional[List[str]] = None,
+) -> Callable[[Type[T]], Type[T]]:
+    ...
+
+
+def with_origin_to_class(
+    cls_or_ignores: Optional[Union[Type[T], List[str]]] = None, ignores: Optional[List[str]] = None
+) -> Union[Type[T], Callable[[Type[T]], Type[T]]]:
     """
     Decorate all methods of a class with `_with_origin` to capture call site information.
     """
-    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
-        for name, method in cls.__dict__.items():
-            # Excluding Python magic methods that do not utilize JVM functions.
-            if callable(method) and name not in (
-                "__init__",
-                "__new__",
-                "__iter__",
-                "__nonzero__",
-                "__repr__",
-                "__bool__",
-            ):
-                setattr(cls, name, _with_origin(method))
-    return cls
+    if cls_or_ignores is None or isinstance(cls_or_ignores, list):
+        ignores = cls_or_ignores or []
+        return lambda cls: with_origin_to_class(cls, ignores)
+    else:
+        cls = cls_or_ignores
+        if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+            skipping = set(
+                ["__init__", "__new__", "__iter__", "__nonzero__", "__repr__", "__bool__"]
+                + (ignores or [])
+            )
+            for name, method in cls.__dict__.items():
+                # Excluding Python magic methods that do not utilize JVM functions.
+                if callable(method) and name not in skipping:
+                    setattr(cls, name, _with_origin(method))
+        return cls

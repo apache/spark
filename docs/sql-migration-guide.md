@@ -64,6 +64,7 @@ license: |
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
 - Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
+- Since 3.5.2, the `base64` function will return a non-chunked string. To restore the behavior of chunking base64 encoded strings into lines of at most 76 characters, set `spark.sql.legacy.chunkBase64String.enabled` to `true`.
 
 ## Upgrading from Spark SQL 3.5.0 to 3.5.1
 
@@ -97,6 +98,7 @@ license: |
   - Since Spark 3.4, `BinaryType` is not supported in CSV datasource. In Spark 3.3 or earlier, users can write binary columns in CSV datasource, but the output content in CSV files is `Object.toString()` which is meaningless; meanwhile, if users read CSV tables with binary columns, Spark will throw an `Unsupported type: binary` exception.
   - Since Spark 3.4, bloom filter joins are enabled by default. To restore the legacy behavior, set `spark.sql.optimizer.runtime.bloomFilter.enabled` to `false`.
   - Since Spark 3.4, when schema inference on external Parquet files, INT64 timestamps with annotation `isAdjustedToUTC=false` will be inferred as TimestampNTZ type instead of Timestamp type. To restore the legacy behavior, set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
+  - Since Spark 3.4, the behavior for `CREATE TABLE AS SELECT ...` is changed from OVERWRITE to APPEND when `spark.sql.legacy.allowNonEmptyLocationInCTAS` is set to `true`. Users are recommended to avoid CTAS with a non-empty table location.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 

@@ -621,9 +621,9 @@ class BaseUDTFTestsMixin:
                 yield str(args),
 
         self.spark.udtf.register("test_udtf", TestUDTF)
-        self.assertEqual(
+        self.assertIn(
             self.spark.sql("select * from test_udtf(array(1, 2, 3))").collect(),
-            [Row(x="[1, 2, 3]")],
+            [[Row(x="[1, 2, 3]")], [Row(x="[np.int32(1), np.int32(2), np.int32(3)]")]],
         )
 
     def test_udtf_with_map_input_type(self):

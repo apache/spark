@@ -32,7 +32,7 @@ import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TP
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
-    val sqlContext: SQLContext,
+    val session: SparkSession,
     parentSession: HiveSession,
     statement: String,
     confOverlay: JMap[String, String],
@@ -49,8 +49,6 @@ private[hive] class SparkExecuteStatementOperation(
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with SparkOperation
   with Logging {
-
-  val session = sqlContext.sparkSession
 
   // If a timeout value `queryTimeout` is specified by users and it is smaller than
   // a global timeout value, we use the user-specified value.
@@ -90,10 +88,10 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): TRowSet = withLocalProperties {
     try {
-      sqlContext.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
+      session.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
       getNextRowSetInternal(order, maxRowsL)
     } finally {
-      sqlContext.sparkContext.clearJobGroup()
+      session.sparkContext.clearJobGroup()
     }
   }
 
@@ -224,7 +222,7 @@ private[hive] class SparkExecuteStatementOperation(
         }
       }
       // Always use the latest class loader provided by executionHive's state.
-      val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+      val executionHiveClassLoader = session.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
       // Always set the session state classloader to `executionHiveClassLoader` even for sync mode
@@ -232,12 +230,12 @@ private[hive] class SparkExecuteStatementOperation(
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
 
-      sqlContext.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
-      result = sqlContext.sql(statement)
+      session.sparkContext.setJobGroup(statementId, redactedStatement, forceCancel)
+      result = session.sql(statement)
       logDebug(result.queryExecution.toString())
       HiveThriftServer2.eventManager.onStatementParsed(statementId,
         result.queryExecution.toString())
-      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+      iter = if (session.conf.get(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         new IterableFetchIterator[Row](new Iterable[Row] {
           override def iterator: Iterator[Row] = result.toLocalIterator().asScala
         })
@@ -254,7 +252,7 @@ private[hive] class SparkExecuteStatementOperation(
         // task interrupted, it may have start some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
-          sqlContext.sparkContext.cancelJobGroup(statementId)
+          session.sparkContext.cancelJobGroup(statementId)
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
@@ -271,7 +269,7 @@ private[hive] class SparkExecuteStatementOperation(
           e match {
             case _: HiveSQLException => throw e
             case _ => throw HiveThriftServerErrors.runningQueryError(
-              e, sqlContext.sparkSession.sessionState.conf.errorMessageFormat)
+              e, session.sessionState.conf.errorMessageFormat)
           }
         }
     } finally {
@@ -281,7 +279,7 @@ private[hive] class SparkExecuteStatementOperation(
           HiveThriftServer2.eventManager.onStatementFinish(statementId)
         }
       }
-      sqlContext.sparkContext.clearJobGroup()
+      session.sparkContext.clearJobGroup()
     }
   }
 
@@ -318,7 +316,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
     // RDDs will be cleaned automatically upon garbage collection.
     if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
+      session.sparkContext.cancelJobGroup(statementId)
     }
   }
 }

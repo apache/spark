@@ -73,6 +73,7 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.merge import MergeIntoWriter
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
@@ -1975,7 +1976,6 @@ class DataFrame(ParentDataFrame):
         query = self._plan.to_proto(self._session.client)
         return self._session.client.explain_string(query, explain_mode)
 
-    @functools.cache
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
     ) -> None:
@@ -2186,6 +2186,14 @@ class DataFrame(ParentDataFrame):
             self._execution_info = ei
 
         return DataFrameWriterV2(self._plan, self._session, table, cb)
+
+    def mergeInto(self, table: str, condition: Column) -> MergeIntoWriter:
+        def cb(ei: "ExecutionInfo") -> None:
+            self._execution_info = ei
+
+        return MergeIntoWriter(
+            self._plan, self._session, table, condition, cb  # type: ignore[arg-type]
+        )
 
     def offset(self, n: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=n), session=self._session)

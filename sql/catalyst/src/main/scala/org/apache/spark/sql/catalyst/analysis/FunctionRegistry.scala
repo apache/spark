@@ -461,6 +461,7 @@ object FunctionRegistry {
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
+    expression[TryUrlDecode]("try_url_decode"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),

@@ -718,8 +718,8 @@ def wrap_perf_profiler(f, result_id):
     )
 
     def profiling_func(*args, **kwargs):
-        pr = cProfile.Profile()
-        ret = pr.runcall(f, *args, **kwargs)
+        with cProfile.Profile() as pr:
+            ret = f(*args, **kwargs)
         st = pstats.Stats(pr)
         st.stream = None  # make it picklable
         st.strip_dirs()

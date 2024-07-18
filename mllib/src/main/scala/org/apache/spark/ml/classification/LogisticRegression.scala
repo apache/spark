@@ -1315,7 +1315,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = Data(instance.numClasses, instance.numFeatures, instance.interceptVector,
         instance.coefficientMatrix, instance.isMultinomial)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
