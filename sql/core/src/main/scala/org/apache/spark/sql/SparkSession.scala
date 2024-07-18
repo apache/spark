@@ -722,14 +722,27 @@ class SparkSession private(
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        val parsedPlan = sessionState.sqlParser.parseScript(sqlText)
+        parsedPlan match {
+          case CompoundBody(Seq(singleStmtPlan: SingleStatement), label) if args.nonEmpty =>
+            CompoundBody(List(SingleStatement(
+              NameParameterizedQuery(
+                singleStmtPlan.parsedPlan, args.transform((_, v) => lit(v).expr)))), label)
+          case p =>
+            assert(args.isEmpty, "Positional parameters are not supported for batch queries")
+            p
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case CompoundBody(Seq(singleStmtPlan: SingleStatement), _) =>
+          Dataset.ofRows(self, singleStmtPlan.parsedPlan, tracker)
+        case _ =>
+          // execute the plan directly if it is not a single statement
+          val lastRow = executeScript(plan).foldLeft(Array.empty[Row])((_, next) => next)
+          val attributes = DataTypeUtils.toAttributes(lastRow.head.schema)
+          Dataset.ofRows(self, LocalRelation.fromExternalRows(attributes, lastRow.toIndexedSeq))
+      }
     }
 
   /**
