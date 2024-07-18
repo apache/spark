@@ -40,7 +40,8 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
@@ -51,6 +52,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.scripting.CompoundBody
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -651,13 +653,31 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody => compoundBody
+          case logicalPlan: LogicalPlan if args.nonEmpty =>
+            PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
+          case p =>
+            assert(args.isEmpty, "Named parameters are not supported for batch queries")
+            p
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // execute the SQL script
+          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody, self)
+          if (result.isEmpty) {
+            emptyDataFrame
+          } else {
+            val attributes = DataTypeUtils.toAttributes(result.head.schema)
+            Dataset.ofRows(
+              self, LocalRelation.fromExternalRows(attributes, result, isSqlScript = true))
+          }
+        case logicalPlan: LogicalPlan =>
+          // execute the standalone SQL statement
+          Dataset.ofRows(self, logicalPlan, tracker)
+      }
     }
 
   /**
@@ -704,13 +724,31 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody => compoundBody
+          case logicalPlan: LogicalPlan if args.nonEmpty =>
+            NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
+          case p =>
+            assert(args.isEmpty, "Named parameters are not supported for batch queries")
+            p
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // execute the SQL script
+          val result = sessionState.sqlScriptingInterpreter.execute(compoundBody, self)
+          if (result.isEmpty) {
+            emptyDataFrame
+          } else {
+            val attributes = DataTypeUtils.toAttributes(result.head.schema)
+            Dataset.ofRows(
+              self, LocalRelation.fromExternalRows(attributes, result, isSqlScript = true))
+          }
+        case logicalPlan: LogicalPlan =>
+          // execute the standalone SQL statement
+          Dataset.ofRows(self, logicalPlan, tracker)
+      }
     }
 
   /**

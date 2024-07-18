@@ -913,6 +913,11 @@
       "Slice with step is not supported."
     ]
   },
+  "SQL_SCRIPTING_NOT_ENABLED": {
+    "message": [
+      "SQL Scripting is under development and not all features are supported. To enable existing features set <sqlScriptingEnabled> to `true`."
+    ]
+  },
   "STATE_NOT_EXISTS": {
     "message": [
       "State is either not defined or has already been removed."
