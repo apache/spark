@@ -20,7 +20,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{COMPOSITE_KEY_ROW_SCHEMA, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
 
-object StateSchemaUtils {
+object StateStoreColumnFamilySchemaUtils {
 
   def getValueStateSchema[T](stateName: String, hasTtl: Boolean): StateStoreColFamilySchema = {
     StateStoreColFamilySchema(
