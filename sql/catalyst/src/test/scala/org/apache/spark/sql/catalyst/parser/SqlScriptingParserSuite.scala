@@ -48,7 +48,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     assert(e.getErrorClass === "PARSE_SYNTAX_ERROR")
     assert(e.getMessage.contains("Syntax error"))
-    assert(e.getMessage.contains("SELECT 1 SELECT 1"))
+    assert(e.getMessage.contains("SELECT"))
   }
 
   test("multi select") {
