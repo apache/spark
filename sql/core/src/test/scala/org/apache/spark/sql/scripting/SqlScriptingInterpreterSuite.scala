@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
-    val interpreter = SqlScriptingInterpreter()
+    val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
     val executionPlan = interpreter.buildExecutionPlan(compoundBody)
     val result = executionPlan.flatMap {

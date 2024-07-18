@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import scala.collection.mutable
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.parser.HandlerType
+import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 
@@ -71,7 +76,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
-    override val isInternal: Boolean)
+    override val isInternal: Boolean,
+    var collectResult: Boolean = true)  // Whether the statement result should be collected
   extends LeafStatementExec with WithOrigin {
 
   /**
@@ -79,6 +85,21 @@ class SingleStatementExec(
    * Example: Statements in conditions of If/Else, While, etc.
    */
   var isExecuted = false
+
+  /**
+   * Whether an error was raised during the execution of this statement.
+   */
+  var raisedError = false
+
+  /**
+   * Data returned after execution.
+   */
+  var data: Option[Array[Row]] = None
+
+  /**
+   * Error state of the statement.
+   */
+  var errorState: Option[String] = None
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -91,6 +112,22 @@ class SingleStatementExec(
   }
 
   override def reset(): Unit = isExecuted = false
+
+  def execute(session: SparkSession): Unit = {
+    try {
+      isExecuted = true
+      val result = Some(Dataset.ofRows(session, parsedPlan).collect())
+      if (collectResult) data = result
+    } catch {
+      case e: SparkThrowable =>
+        // TODO: check handlers for error conditions
+        raisedError = true
+        errorState = Some(e.getSqlState)
+      case _: Throwable =>
+        raisedError = true
+        errorState = Some("UNKNOWN")
+    }
+  }
 }
 
 /**
@@ -102,10 +139,11 @@ class SingleStatementExec(
 abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
   extends NonLeafStatementExec {
 
-  private var localIterator = collection.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  protected var localIterator: Iterator[CompoundStatementExec] = collection.iterator
+  protected var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
 
-  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+  protected lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = {
         val childHasNext = curr match {
@@ -123,7 +161,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
-          case Some(statement: LeafStatementExec) =>
+          case Some(statement: SingleStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
           case Some(body: NonLeafStatementExec) =>
@@ -153,5 +191,77 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec])
-  extends CompoundNestedStatementIteratorExec(statements)
+class CompoundBodyExec(
+      label: Option[String],
+      statements: Seq[CompoundStatementExec],
+      conditionHandlerMap: mutable.HashMap[String, ErrorHandlerExec] = mutable.HashMap(),
+      session: SparkSession = null)
+  extends CompoundNestedStatementIteratorExec(statements) {
+
+  private def getHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+  }
+
+  override protected lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = {
+        val childHasNext = curr match {
+          case Some(body: NonLeafStatementExec) => body.getTreeIterator.hasNext
+          case Some(_: LeafStatementExec) => true
+          case None => false
+          case _ => throw SparkException.internalError(
+            "Unknown statement type encountered during SQL script interpretation.")
+        }
+        localIterator.hasNext || childHasNext
+      }
+
+      @scala.annotation.tailrec
+      override def next(): CompoundStatementExec = {
+        curr match {
+          case None => throw SparkException.internalError(
+            "No more elements to iterate through in the current SQL compound statement.")
+          case Some(statement: SingleStatementExec) =>
+            curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            statement.execute(session)
+            if (statement.raisedError) {
+              val handler = getHandler(statement.errorState.get).get
+              handler.executeAndReset()
+              if (handler.getHandlerType == HandlerType.EXIT) {
+                // TODO: premature exit from the compound ...
+                curr = None // throws error because of none
+              }
+            }
+            statement
+          case Some(body: NonLeafStatementExec) =>
+            if (body.getTreeIterator.hasNext) {
+              body.getTreeIterator.next()
+            } else {
+              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              next()
+            }
+          case _ => throw SparkException.internalError(
+            "Unknown statement type encountered during SQL script interpretation.")
+        }
+      }
+    }
+
+}
+
+class ErrorHandlerExec(
+    body: CompoundBodyExec,
+    handlerType: HandlerType) extends CompoundStatementExec {
+
+  def getHandlerType: HandlerType = handlerType
+
+  def executeAndReset(): Unit = {
+    execute()
+    reset()
+  }
+
+  private def execute(): Unit = {
+    val iterator = body.getTreeIterator
+    while (iterator.hasNext) iterator.next()
+  }
+
+  override def reset(): Unit = body.reset()
+}

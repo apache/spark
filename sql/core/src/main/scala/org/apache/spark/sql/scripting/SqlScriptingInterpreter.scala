@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, SingleStatement}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
@@ -25,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.Origin
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
  */
-case class SqlScriptingInterpreter() {
+case class SqlScriptingInterpreter(session: SparkSession) {
 
   /**
    * Build execution plan and return statements that need to be executed,
@@ -70,14 +74,44 @@ case class SqlScriptingInterpreter() {
         }
         val dropVariables = variables
           .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), isInternal = true))
+          .map(new SingleStatementExec(_, Origin(), isInternal = true, collectResult = false))
           .reverse
+
+        val conditionHandlerMap = mutable.HashMap[String, ErrorHandlerExec]()
+        val handlers = ListBuffer[ErrorHandlerExec]()
+        body.handlers.foreach(handler => {
+          val handlerBodyExec = transformTreeIntoExecutable(handler.body).
+            asInstanceOf[CompoundBodyExec]
+          val handlerExec =
+            new ErrorHandlerExec(handlerBodyExec, handler.handlerType)
+
+          handler.conditions.foreach(condition => {
+            val conditionValue = body.conditions.getOrElse(condition, condition)
+            conditionHandlerMap.put(conditionValue, handlerExec)
+          })
+
+          handlers += handlerExec
+        })
+
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables)
+          body.label,
+          body.collection.
+            map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+            conditionHandlerMap, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           isInternal = false)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported operation in the execution plan.")
     }
+
+  def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
+    executionPlan.flatMap {
+      case statement: SingleStatementExec if statement.collectResult => statement.data
+      case _ => None
+    }
+  }
 }
