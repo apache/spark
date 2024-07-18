@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import scala.jdk.CollectionConverters.MapHasAsScala
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._

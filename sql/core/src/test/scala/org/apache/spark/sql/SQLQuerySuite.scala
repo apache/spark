@@ -4859,7 +4859,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-36680: Files hint options should be put into resolveDataSource function") {
     val df1 = spark.range(100).toDF()
-    withTempPath(f => {
+    withTempPath { f =>
       df1.write.json(f.getCanonicalPath)
       val df2 = sql(
         s"""
@@ -4869,14 +4869,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         """.stripMargin
       )
       checkAnswer(df2, df1)
-      df2.queryExecution.analyzed foreach {
-        case LogicalRelation(fs: HadoopFsRelation, _, _, _) =>
-          assert(fs.options == Map("key1" -> "1", "key2" -> "2"))
-        case _: LogicalRelation =>
-          assert(false)
-        case _ =>
+      val relations = df2.queryExecution.analyzed.collect {
+        case LogicalRelation(fs: HadoopFsRelation, _, _, _) => fs
       }
-    })
+      assert(relations.size == 1)
+      assert(relations.head.options == Map("key1" -> "1", "key2" -> "2"))
+    }
   }
 }
 
