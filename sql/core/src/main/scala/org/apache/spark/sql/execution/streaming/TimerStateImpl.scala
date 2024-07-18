@@ -66,8 +66,6 @@ class TimerStateImpl(
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  private val keySerializer = keyExprEnc.createSerializer()
-
   private val prefixKeyEncoder = UnsafeProjection.create(schemaForPrefixKey)
 
   private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
@@ -175,9 +173,7 @@ class TimerStateImpl(
         }
         else groupingKey
       val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-
-      val keyProj = UnsafeProjection.create(schemaForPrefixKey)
-      keyProj.apply(InternalRow(keyRow))
+      prefixKeyEncoder.apply(InternalRow(keyRow))
     }
 
     val iter = store.prefixScan(encodedGroupingKey, keyToTsCFName)

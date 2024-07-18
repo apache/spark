@@ -21,31 +21,11 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
-object TransformWithStateKeyValueRowSchema {
-  /**
-   * The following are the key/value row schema used in StateStore layer.
-   * Key/value rows will be serialized into Binary format in `StateTypesEncoder`.
-   * The "real" key/value row schema will be written into state schema metadata.
-   */
-  def valueRowSchemaWithTTL(valueRowSchema: StructType): StructType =
-    valueRowSchema.add("ttlExpirationMs", LongType)
-
-  /** Helper functions for passing the key/value schema to write to state schema metadata. */
-  // Return value schema with additional TTL column if TTL is enabled.
-  def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
-    val valSchema = if (hasTTL) {
-      new StructType(schema.fields).add("ttlExpirationMs", LongType)
-    } else schema
-    new StructType()
-      .add("value", valSchema)
-  }
-
-  // Given grouping key and user key schema, return the schema of the composite key.
+object TransformWithStateKeyValueRowSchemaUtils {
   def getCompositeKeySchema(
       groupingKeySchema: StructType,
       userKeySchema: StructType): StructType = {
@@ -54,29 +34,29 @@ object TransformWithStateKeyValueRowSchema {
       .add("userKey", new StructType(userKeySchema.fields))
   }
 
-  // keyEncoder.schema will attach a default "value" as field name if
-  // the object is a primitive type encoder
-  private def isPrimitiveType(schema: StructType): Boolean = {
-    schema.length == 1 && schema.fields.head.name == "value"
-  }
-
-  private def getPrimitiveType(schema: StructType): DataType = {
-    assert(isPrimitiveType(schema))
-    schema.fields.head.dataType
-  }
-
-  def singleKeyTTLRowSchema(keySchema: StructType): StructType =
+  def getSingleKeyTTLRowSchema(keySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
       .add("groupingKey", keySchema)
 
-  def compositeKeyTTLRowSchema(
+  def getCompositeKeyTTLRowSchema(
       groupingKeySchema: StructType,
       userKeySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
       .add("groupingKey", new StructType(groupingKeySchema.fields))
       .add("userKey", new StructType(userKeySchema.fields))
+
+  def getValueRowSchemaWithTTL(valueRowSchema: StructType): StructType =
+    valueRowSchema.add("ttlExpirationMs", LongType)
+
+  def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
+    val valSchema = if (hasTTL) {
+      new StructType(schema.fields).add("ttlExpirationMs", LongType)
+    } else schema
+    new StructType()
+      .add("value", valSchema)
+  }
 }
 
 /**
@@ -180,25 +160,27 @@ class CompositeKeyStateEncoder[K, V](
     stateName: String,
     hasTtl: Boolean = false)
   extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
-  import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+  import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 
-  // keyEncoder.schema will attach a default "value" as field name if
-  // the object is a primitive type encoder
-  private def isPrimitiveType(schema: StructType): Boolean = {
-    schema.length == 1 && schema.fields.head.name == "value"
-  }
-
-  private def getPrimitiveType(schema: StructType): DataType = {
-    assert(isPrimitiveType(schema))
-    schema.fields.head.dataType
-  }
-
-  private val schemaForCompositeKeyRow =
-    getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
-  private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
-  private val reusedKeyRow = new UnsafeRow(userKeyEnc.schema.fields.length)
+  /** Encoders */
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)
 
+  /** Schema */
+  private val schemaForGroupingKeyRow = new StructType().add("key", keyEncoder.schema)
+  private val schemaForUserKeyRow = new StructType().add("userKey", userKeyEnc.schema)
+  private val schemaForCompositeKeyRow =
+    getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
+
+  /** Projection */
+  private val userKeyProjection = UnsafeProjection.create(schemaForUserKeyRow)
+  private val groupingKeyProjection = UnsafeProjection.create(schemaForGroupingKeyRow)
+  private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
+
+  /** Serializer */
+  private val groupingKeySerializer = keyEncoder.createSerializer()
+  private val userKeySerializer = userKeyExpressionEnc.createSerializer()
+
+  /** Deserializer */
   private val userKeyRowToObjDeserializer =
     userKeyExpressionEnc.resolveAndBind().createDeserializer()
 
@@ -208,26 +190,17 @@ class CompositeKeyStateEncoder[K, V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
     val groupingKey = keyOption.get
+    val groupingKeyRow = groupingKeySerializer.apply(groupingKey)
 
-    val realGroupingKey =
-      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
-      else groupingKey
-    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-
-    val keyProj = UnsafeProjection.create(new StructType().add("key", keyEncoder.schema))
-
-    keyProj.apply(InternalRow(keyRow))
+    // Create the final unsafeRow mapping column name "key" to the keyRow
+    groupingKeyProjection(InternalRow(groupingKeyRow))
   }
 
   def encodeUserKey(userKey: K): UnsafeRow = {
-    val realKey =
-      if (userKey.isInstanceOf[String]) UTF8String.fromString(userKey.asInstanceOf[String])
-      else userKey
-    val keyRow = new GenericInternalRow(Array[Any](realKey))
+    val userKeyRow = userKeySerializer.apply(userKey)
 
-    val keyProj = UnsafeProjection.create(new StructType().add("userKey", keyEncoder.schema))
-
-    keyProj.apply(InternalRow(keyRow))
+    // Create the final unsafeRow mapping column name "userKey" to the userKeyRow
+    userKeyProjection(InternalRow(userKeyRow))
   }
 
 
@@ -242,30 +215,11 @@ class CompositeKeyStateEncoder[K, V](
     }
     val groupingKey = keyOption.get
 
-    val realGroupingKey =
-      if (groupingKey.isInstanceOf[String]) UTF8String.fromString(groupingKey.asInstanceOf[String])
-      else groupingKey
-    val realUserKey =
-      if (userKey.isInstanceOf[String]) UTF8String.fromString(userKey.asInstanceOf[String])
-      else userKey
-    println("I am inside encode Composite key, composite key schema: " +
-      schemaForCompositeKeyRow)
+    val keyRow = groupingKeySerializer.apply(groupingKey)
+    val userKeyRow = userKeySerializer.apply(userKey)
 
-    // Create the nested InternalRows for the inner structs (value)
-    val keyRow = new GenericInternalRow(Array[Any](realGroupingKey))
-    val userKeyRow = new GenericInternalRow(Array[Any](realUserKey))
-
-    // Create the final InternalRow combining the nested keyRow and userKeyRow
-    val compositeRow = new GenericInternalRow(Array[Any](keyRow, userKeyRow))
-
-    val compositeKey = compositeKeyProjection(compositeRow)
-    println("I am encoding unsafe row, after encode: " + decodeCompositeKey(compositeKey))
-    println("inside encode composite key, num of composite field: " + compositeKey.numFields())
-
-    val decode = compositeKey.getString(0)
-    println("inside encode composite key, first field: " + decode)
-
-    compositeKey
+    // Create the final unsafeRow combining the keyRow and userKeyRow
+    compositeKeyProjection(InternalRow(keyRow, userKeyRow))
   }
 
   def decodeUserKey(row: UnsafeRow): K = {
@@ -284,9 +238,8 @@ class CompositeKeyStateEncoder[K, V](
 class SingleKeyTTLEncoder(
   keyExprEnc: ExpressionEncoder[Any]) {
 
-  private val TTLKeySchema = singleKeyTTLRowSchema(keyExprEnc.schema)
+  private val TTLKeySchema = getSingleKeyTTLRowSchema(keyExprEnc.schema)
   def encodeTTLRow(expirationMs: Long, groupingKey: UnsafeRow): UnsafeRow = {
-    // unsafeRow -> unsafeRow
     UnsafeProjection.create(TTLKeySchema).apply(
       InternalRow(expirationMs, groupingKey.asInstanceOf[InternalRow]))
   }
@@ -296,11 +249,12 @@ class CompositeKeyTTLEncoder[K](
   keyExprEnc: ExpressionEncoder[Any],
   userKeyEnc: Encoder[K]) {
 
-  private val TTLKeySchema = compositeKeyTTLRowSchema(
+  private val TTLKeySchema = getCompositeKeyTTLRowSchema(
     keyExprEnc.schema, userKeyEnc.schema)
-  def encodeTTLRow(expirationMs: Long,
-                   groupingKey: UnsafeRow,
-                   userKey: UnsafeRow): UnsafeRow = {
+  def encodeTTLRow(
+      expirationMs: Long,
+      groupingKey: UnsafeRow,
+      userKey: UnsafeRow): UnsafeRow = {
     UnsafeProjection.create(TTLKeySchema).apply(
       new GenericInternalRow(
         Array[Any](expirationMs,

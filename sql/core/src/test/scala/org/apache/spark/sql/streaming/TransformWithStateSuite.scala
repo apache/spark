@@ -20,15 +20,18 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.UUID
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, POJOTestClass, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException, TestClass}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, POJOTestClass, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateSchemaV3File, StateStoreMultipleColumnFamiliesNotSupportedException, TestClass}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -308,7 +311,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
 // class for verify state schema is correctly written for all state var types
 class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor {
   @transient private var _listState: ListState[TestClass] = _
-  @transient private var _mapState: MapState[String, POJOTestClass] = _
+  @transient private var _mapState: MapState[POJOTestClass, String] = _
 
   override def init(
       outputMode: OutputMode,
@@ -316,8 +319,8 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
     _listState = getHandle.getListState[TestClass](
       "listState", Encoders.product[TestClass])
-    _mapState = getHandle.getMapState[String, POJOTestClass](
-      "mapState", Encoders.STRING, Encoders.bean(classOf[POJOTestClass]))
+    _mapState = getHandle.getMapState[POJOTestClass, String](
+      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
   }
 }
 
@@ -802,7 +805,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  /*
   test("transformWithState - verify StateSchemaV3 serialization and deserialization" +
     " works with one batch") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -810,11 +812,13 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
+        val testKeyEncoder = Encoders.STRING
+        val testValueEncoder = Encoders.scalaInt
         val schema = List(ColumnFamilySchemaV1(
           "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          testKeyEncoder.schema,
+          testValueEncoder.schema,
+          NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
           None
         ))
 
@@ -834,28 +838,29 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
       withTempDir { checkpointDir =>
-
+        val testKeyEncoder = Encoders.STRING
+        val testValueEncoder = Encoders.scalaInt
         val schema0 = List(ColumnFamilySchemaV1(
           "countState",
-          KEY_ROW_SCHEMA,
-          VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          testKeyEncoder.schema,
+          testValueEncoder.schema,
+          NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
           None
         ))
 
         val schema1 = List(
           ColumnFamilySchemaV1(
             "countState",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
-            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            testKeyEncoder.schema,
+            testValueEncoder.schema,
+            NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
             None
           ),
           ColumnFamilySchemaV1(
             "mostRecent",
-            KEY_ROW_SCHEMA,
-            VALUE_ROW_SCHEMA,
-            NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            testKeyEncoder.schema,
+            testValueEncoder.schema,
+            NoPrefixKeyStateEncoderSpec(testKeyEncoder.schema),
             None
           )
         )
@@ -888,37 +893,39 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
+        val keySchema = new StructType().add("value", StringType)
         val schema0 = ColumnFamilySchemaV1(
           "countState",
-          new StructType().add("key",
-            new StructType().add("value", StringType)),
+          keySchema,
           new StructType().add("value",
             new StructType().add("value", LongType, false)),
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
         val schema1 = ColumnFamilySchemaV1(
           "listState",
-          new StructType().add("key",
-            new StructType().add("value", StringType)),
+          keySchema,
           new StructType().add("value",
             new StructType()
               .add("id", LongType, false)
               .add("name", StringType)),
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
+
+        val userKeySchema = new StructType()
+          .add("id", IntegerType, false)
+          .add("name", StringType)
+        val compositeKeySchema = new StructType()
+          .add("key", new StructType().add("value", StringType))
+          .add("userKey", userKeySchema)
         val schema2 = ColumnFamilySchemaV1(
           "mapState",
-          new StructType()
-            .add("key", new StructType().add("value", StringType))
-            .add("userKey", new StructType().add("value", StringType)),
+          compositeKeySchema,
           new StructType().add("value",
-            new StructType()
-              .add("id", IntegerType, false)
-              .add("name", StringType)),
-          PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
-          Option(new StructType().add("value", StringType))
+            new StructType().add("value", StringType)),
+          PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
+          Option(userKeySchema)
         )
 
         val inputData = MemoryStream[String]
@@ -945,6 +952,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
               q.lastProgress.stateOperators.head.customMetrics.get("numMapStateVars").toInt)
 
             assert(colFamilySeq.length == 3)
+            assert(colFamilySeq(0) == schema0)
+            assert(colFamilySeq(2) == schema2)
+            assert(colFamilySeq(1) == schema1)
             assert(colFamilySeq.map(_.toString).toSet == Set(
               schema0, schema1, schema2
             ).map(_.toString))
@@ -953,7 +963,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         )
       }
     }
-  } */
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {

@@ -245,8 +245,7 @@ class PrefixKeyScanStateEncoder(
   }
 
   private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    val extract = prefixKeyProjection(key)
-    extract
+    prefixKeyProjection(key)
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {

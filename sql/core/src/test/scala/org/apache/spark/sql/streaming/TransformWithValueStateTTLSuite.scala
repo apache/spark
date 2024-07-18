@@ -19,18 +19,15 @@ package org.apache.spark.sql.streaming
 
 import java.time.Duration
 
-// import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
-// import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1,
-// NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec,
-// RocksDBStateStoreProvider, StateSchemaV3File}
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.state.{ColumnFamilySchemaV1, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaV3File}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-// import org.apache.spark.sql.types._
+import org.apache.spark.sql.types._
 
 object TTLInputProcessFunction {
   def processRow(
@@ -131,7 +128,7 @@ class MultipleValueStatesTTLProcessor(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueStateWithTTL = getHandle
-      .getValueState("valueState", Encoders.scalaInt, ttlConfig)
+      .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
       .getValueState("valueState", Encoders.scalaInt)
@@ -254,7 +251,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
       )
     }
   }
-/*
+
   test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -267,38 +264,46 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
+        val keySchema = new StructType().add("value", StringType)
         val schema0 = ColumnFamilySchemaV1(
-          "valueState",
-          new StructType().add("key",
-            new StructType().add("value", StringType)),
+          "valueStateTTL",
+          keySchema,
           new StructType().add("value",
-            new StructType().add("value", LongType, false)
+            new StructType().add("value", IntegerType, false)
               .add("ttlExpirationMs", LongType)),
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+          NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
         val schema1 = ColumnFamilySchemaV1(
-          "listState",
-          new StructType().add("key",
-            new StructType().add("value", StringType)),
+          "valueState",
+          keySchema,
           new StructType().add("value",
-            new StructType()
-              .add("value", IntegerType, false)
-              .add("ttlExpirationMs", LongType)),
-          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
+            new StructType().add("value", IntegerType, false)),
+          NoPrefixKeyStateEncoderSpec(keySchema),
           None
         )
         val schema2 = ColumnFamilySchemaV1(
-          "mapState",
-          new StructType()
-            .add("key", new StructType().add("value", StringType))
-            .add("userKey", new StructType().add("value", StringType)),
+          "listState",
+          keySchema,
           new StructType().add("value",
             new StructType()
               .add("value", IntegerType, false)
               .add("ttlExpirationMs", LongType)),
-          PrefixKeyScanStateEncoderSpec(COMPOSITE_KEY_ROW_SCHEMA, 1),
-          Option(new StructType().add("value", StringType))
+          NoPrefixKeyStateEncoderSpec(keySchema),
+          None
+        )
+        val compositeKeySchema = new StructType()
+          .add("key", new StructType().add("value", StringType))
+          .add("userKey", new StructType().add("value", IntegerType, false))
+        val schema3 = ColumnFamilySchemaV1(
+          "mapState",
+          compositeKeySchema,
+          new StructType().add("value",
+            new StructType()
+              .add("value", StringType)
+              .add("ttlExpirationMs", LongType)),
+          PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1),
+          Option(new StructType().add("value", IntegerType, false))
         )
 
         val ttlKey = "k1"
@@ -322,7 +327,6 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
           Execute { q =>
-            println("last progress:" + q.lastProgress)
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
             val schemaFile = new StateSchemaV3File(hadoopConf, stateSchemaPath.getName)
             val colFamilySeq = schemaFile.deserialize(fm.open(schemaFilePath))
@@ -339,22 +343,14 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
               q.lastProgress.stateOperators.head.customMetrics
                 .get("numMapStateWithTTLVars").toInt)
 
-            // TODO when there are two state var with the same name,
-            // only one schema file is preserved
-            assert(colFamilySeq.length == 3)
-            /*
+            assert(colFamilySeq.length == 4)
             assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2
-            ).map(_.toString)) */
-
-            assert(colFamilySeq(1).toString == schema1.toString)
-            assert(colFamilySeq(2).toString == schema2.toString)
-            // The remaining schema file is the one without ttl
-            // assert(colFamilySeq.head.toString == schema0.toString)
+              schema0, schema1, schema2, schema3
+            ).map(_.toString))
           },
           StopStream
         )
       }
     }
-  } */
+  }
 }

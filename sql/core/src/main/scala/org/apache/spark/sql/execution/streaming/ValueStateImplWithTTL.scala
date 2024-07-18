@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
@@ -54,7 +54,7 @@ class ValueStateImplWithTTL[S](
 
   private def initialize(): Unit = {
     store.createColFamilyIfAbsent(stateName,
-      keyExprEnc.schema, valueRowSchemaWithTTL(valEncoder.schema),
+      keyExprEnc.schema, getValueRowSchemaWithTTL(valEncoder.schema),
       NoPrefixKeyStateEncoderSpec(keyExprEnc.schema))
   }
 

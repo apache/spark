@@ -21,7 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
@@ -64,7 +64,7 @@ class MapStateImplWithTTL[K, V](
     val schemaForCompositeKeyRow =
       getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
     store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow,
-      valueRowSchemaWithTTL(valEncoder.schema),
+      getValueRowSchemaWithTTL(valEncoder.schema),
       PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
   }
 
@@ -177,15 +177,6 @@ class MapStateImplWithTTL[K, V](
   override def clearIfExpired(
       groupingKeyRow: UnsafeRow,
       userKeyRow: UnsafeRow): Long = {
-    println("I am inside clearIfExpired, groupingKey: " +
-      groupingKeyRow.getString(0))
-    println("I am inside clearIfExpired, userKey: " + userKeyRow.getString(0))
-    println("I am inside clearIfExpired, groupingKey len: " +
-      groupingKeyRow.getString(0).length)
-    println("I am inside clearIfExpired, userKey len: " +
-      userKeyRow.getString(0).length)
-    println("inside clearIfExpired, composite schema: " +
-      getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
     val compositeKeyRow =
       UnsafeProjection.create(
         getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema))
@@ -195,13 +186,8 @@ class MapStateImplWithTTL[K, V](
               userKeyRow.asInstanceOf[InternalRow]))
         )
     val retRow = store.get(compositeKeyRow, stateName)
-    println("inside clearIfExpired, after encode, decode here: " +
-      stateTypesEncoder.decodeCompositeKey(compositeKeyRow))
-    println("inside clearIfExpired, after encode, decode length here: " +
-      stateTypesEncoder.decodeCompositeKey(compositeKeyRow).asInstanceOf[String].length)
     var numRemovedElements = 0L
     if (retRow != null) {
-      println("inside clearIfExpired, retRow is not null: ")
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(compositeKeyRow, stateName)
         numRemovedElements += 1

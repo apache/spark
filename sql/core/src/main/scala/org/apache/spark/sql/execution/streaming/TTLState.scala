@@ -22,7 +22,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{RangeKeyScanStateEncoderSpec, StateStore}
 import org.apache.spark.sql.types._
 
@@ -86,7 +86,7 @@ abstract class SingleKeyTTLStateImpl(
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
-  private val keySchema = singleKeyTTLRowSchema(keyExprEnc.schema)
+  private val keySchema = getSingleKeyTTLRowSchema(keyExprEnc.schema)
   private val keyTTLRowEncoder = new SingleKeyTTLEncoder(keyExprEnc)
 
   // empty row used for values
@@ -207,7 +207,7 @@ abstract class CompositeKeyTTLStateImpl[K](
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
-  private val keySchema = compositeKeyTTLRowSchema(
+  private val keySchema = getCompositeKeyTTLRowSchema(
     keyExprEnc.schema, uerKeyEncoder.schema
   )
 
@@ -235,8 +235,6 @@ abstract class CompositeKeyTTLStateImpl[K](
       userKey: UnsafeRow): Unit = {
     val encodedTtlKey = keyRowEncoder.encodeTTLRow(
       expirationMs, groupingKey, userKey)
-    val gkr = encodedTtlKey.getStruct(1, keyExprEnc.schema.length)
-    val kr = encodedTtlKey.getStruct(2, uerKeyEncoder.schema.length)
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
 

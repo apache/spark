@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
+import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.StructType
@@ -35,8 +35,6 @@ class MapStateImpl[K, V](
   private val schemaForCompositeKeyRow: StructType = {
     getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
   }
-  println("I am inside MapStateImpl, realComposite Key schema: " +
-    schemaForCompositeKeyRow)
   private val schemaForValueRow: StructType = valEncoder.schema
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName)

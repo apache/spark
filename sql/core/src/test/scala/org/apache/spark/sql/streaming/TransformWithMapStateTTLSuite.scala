@@ -45,9 +45,7 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
       expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
-    println("I am inside map ttl, handleInputRows for key: " + key)
     for (row <- inputRows) {
-      println("I am inside map ttl, handleInputRows for row: " + row)
       val resultIter = processRow(row, _mapState)
       resultIter.foreach { r =>
         results = r :: results
@@ -82,10 +80,8 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
     } else if (row.action == "put") {
       mapState.updateValue(userKey, row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      println("I am here inside get_values_in_ttl_state")
       val ttlValues = mapState.getKeyValuesInTTLState()
       ttlValues.foreach { v =>
-        println("Inside get_values_in_ttl_state, v here: " + v._2)
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v._2) :: results
       }
     }
@@ -126,10 +122,8 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
-    println("I am inside map handle, key: " + key)
 
     for (row <- inputRows) {
-      println("I am inside map handle, row: " + row)
       val resultIter = processRow(row, _mapState)
       resultIter.foreach { r =>
         results = r :: results
@@ -167,9 +161,6 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
     } else if (row.action == "get_values_in_ttl_state") {
       val ttlValues = mapState.getKeyValuesInTTLState()
       ttlValues.foreach { elem =>
-        println("I am inside get_values_in_ttl_state, ele: " + elem._1)
-        println("I am inside get_values_in_ttl_state, ele length: " + elem._1.length)
-        println("I am inside get_values_in_ttl_state, ele long: " + elem._2.getClass)
         results = MapOutputEvent(key, elem._1, -1, isTTLValue = true, ttlValue = elem._2) :: results
       }
     } else if (row.action == "iterator") {
