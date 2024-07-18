@@ -42,9 +42,9 @@ class StateStoreConf(
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
   /**
-   * Minimum number of stale snapshot version files that need to be present
-   * in the DFS checkpoint directory when maintenance is invoked, after which
-   * RocksDBFileManager will delete version and other associated files.
+   * Minimum number of stale checkpoint versions that need to be present in the DFS
+   * checkpoint directory for old state checkpoint version deletion to be invoked.
+   * This is to amortize the cost of discovering and deleting old checkpoint versions.
    */
   val minVersionsToDelete: Int = sqlConf.minVersionsToDelete
 

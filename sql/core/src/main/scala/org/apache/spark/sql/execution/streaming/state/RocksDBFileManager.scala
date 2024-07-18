@@ -146,8 +146,8 @@ class RocksDBFileManager(
 
   private def codec = CompressionCodec.createCodec(sparkConf, codecName)
 
-  private var maxVersion: Option[Long] = None
-  private var minVersion = 1L
+  private var maxSeenVersion: Option[Long] = None
+  private var minSeenVersion = 1L
 
   @volatile private var rootDirChecked: Boolean = false
   @volatile private var fileMappings = RocksDBFileMappings(
@@ -402,14 +402,14 @@ class RocksDBFileManager(
   }
 
   /**
-   *  Set maxVersion to max of itself and version we are uploading.
+   *  Set maxSeenVersion to max of itself and version we are uploading.
    *  This is to ensure accuracy in the case the query has restarted from a particular version.
    */
-  def setMaxVersion(version: Long): Unit = {
-    if (maxVersion.isDefined) {
-      maxVersion = Some(Math.max(maxVersion.get, version))
+  def setMaxSeenVersion(version: Long): Unit = {
+    if (maxSeenVersion.isDefined) {
+      maxSeenVersion = Some(Math.max(maxSeenVersion.get, version))
     } else {
-      maxVersion = Some(version)
+      maxSeenVersion = Some(version)
     }
   }
 
@@ -445,12 +445,12 @@ class RocksDBFileManager(
     // If minVersionsToDelete <= 0, we call list every time maintenance is invoked
     // This is the original behaviour without list api call optimization
     if (minVersionsToDelete > 0) {
-      // When maxVersion is defined, we check the if number of stale version files
+      // When maxSeenVersion is defined, we check the if number of stale version files
       // are at least the value of minVersionsToDelete for batch deletion of files
-      // We still proceed with deletion if maxVersion isn't set to ensure the fallback
-      // is to clean up files if maxVersion fails to be initialized
-      if (maxVersion.isDefined) {
-        val versionsToDelete = maxVersion.get - minVersion + 1 - numVersionsToRetain
+      // We still proceed with deletion if maxSeenVersion isn't set to ensure the fallback
+      // is to clean up files if maxSeenVersion fails to be initialized
+      if (maxSeenVersion.isDefined) {
+        val versionsToDelete = maxSeenVersion.get - minSeenVersion + 1 - numVersionsToRetain
         if (versionsToDelete < minVersionsToDelete) return
       }
     }
@@ -533,9 +533,9 @@ class RocksDBFileManager(
       }
     }
 
-    // Set minVersion to expected value
-    val oldMinVersionToRetain = minVersion
-    minVersion = minVersionToRetain
+    // Set minSeenVersion to expected value
+    val oldMinVersionToRetain = minSeenVersion
+    minSeenVersion = minVersionToRetain
 
     // Delete the version files and forget about them
     snapshotVersionsToDelete.foreach { version =>
@@ -546,8 +546,8 @@ class RocksDBFileManager(
         logDebug(s"Deleted version $version")
       } catch {
         case e: Exception =>
-          // If deletion fails, reset minVersion to the previous value
-          minVersion = oldMinVersionToRetain
+          // If deletion fails, reset minSeenVersion to the previous value
+          minSeenVersion = oldMinVersionToRetain
           logWarning(log"Error deleting version file ${MDC(LogKeys.PATH, versionFile)} for " +
             log"version ${MDC(LogKeys.FILE_VERSION, version)}", e)
       }
