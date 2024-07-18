@@ -533,10 +533,6 @@ class RocksDBFileManager(
       }
     }
 
-    // Set minSeenVersion to expected value
-    val oldMinVersionToRetain = minSeenVersion
-    minSeenVersion = minVersionToRetain
-
     // Delete the version files and forget about them
     snapshotVersionsToDelete.foreach { version =>
       val versionFile = dfsBatchZipFile(version)
@@ -546,8 +542,6 @@ class RocksDBFileManager(
         logDebug(s"Deleted version $version")
       } catch {
         case e: Exception =>
-          // If deletion fails, reset minSeenVersion to the previous value
-          minSeenVersion = oldMinVersionToRetain
           logWarning(log"Error deleting version file ${MDC(LogKeys.PATH, versionFile)} for " +
             log"version ${MDC(LogKeys.FILE_VERSION, version)}", e)
       }
@@ -560,6 +554,10 @@ class RocksDBFileManager(
       .map(_.getName.stripSuffix(".changelog")).map(_.toLong)
       .filter(_ < minVersionToRetain)
     deleteChangelogFiles(changelogVersionsToDelete)
+
+    // Always set minSeenVersion for regular deletion frequency even if deletion fails.
+    // This is safe because subsequent calls retry deleting old version files
+    minSeenVersion = minVersionToRetain
   }
 
   /** Save immutable files to DFS directory */
