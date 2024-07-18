@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.datasources.DataSourceManager
+import org.apache.spark.sql.scripting.SqlScriptingInterpreter
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
@@ -55,6 +56,7 @@ import org.apache.spark.util.{DependencyUtils, Utils}
  * @param catalogBuilder a function to create an internal catalog for managing table and database
  *                       states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
+ * @param sqlScriptingInterpreter Interpreter for SQL scripts.
  * @param analyzerBuilder A function to create the logical query plan analyzer for resolving
  *                        unresolved attributes and relations.
  * @param optimizerBuilder a function to create the logical query plan optimizer.
@@ -80,6 +82,7 @@ private[sql] class SessionState(
     val dataSourceRegistration: DataSourceRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
+    val sqlScriptingInterpreter: SqlScriptingInterpreter,
     analyzerBuilder: () => Analyzer,
     optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,

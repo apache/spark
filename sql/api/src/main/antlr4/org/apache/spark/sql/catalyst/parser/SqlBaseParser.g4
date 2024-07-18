@@ -88,11 +88,11 @@ singleStatement
     ;
 
 beginLabel
-    : multipartIdentifier COLON
+    : LABEL
     ;
 
 endLabel
-    : multipartIdentifier
+    : IDENTIFIER
     ;
 
 singleExpression

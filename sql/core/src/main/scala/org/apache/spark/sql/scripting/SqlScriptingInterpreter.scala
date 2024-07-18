@@ -17,16 +17,30 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, CompoundPlanStatement, IfElseStatement, SingleStatement, WhileStatement}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DropVariable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, IfElseStatement, LogicalPlan, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.Origin
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
+ *
+ * @param session
+ *   Spark session that SQL script is executed within.
  */
-case class SqlScriptingInterpreter() {
+case class SqlScriptingInterpreter(session: SparkSession) {
+
+  /**
+   * Execute the provided CompoundBody and return the result.
+   *
+   * @param compoundBody
+   *   CompoundBody to execute.
+   * @return Result of the execution.
+   */
+  def execute(compoundBody: CompoundBody): Seq[Row] = {
+    val resultsIter = executeInternal(compoundBody)
+    resultsIter.foldLeft(Array.empty[Row])((_, next) => next).toSeq
+  }
 
   /**
    * Build execution plan and return statements that need to be executed,
@@ -34,15 +48,11 @@ case class SqlScriptingInterpreter() {
    *
    * @param compound
    *   CompoundBody for which to build the plan.
-   * @param session
-   *   Spark session that SQL script is executed within.
    * @return
    *   Iterator through collection of statements to be executed.
    */
-  def buildExecutionPlan(
-      compound: CompoundBody,
-      session: SparkSession): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound, session).asInstanceOf[CompoundBodyExec].getTreeIterator
+  private def buildExecutionPlan(compound: CompoundBody): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound).asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**
@@ -63,13 +73,10 @@ case class SqlScriptingInterpreter() {
    *
    * @param node
    *   Root node of the parsed tree.
-   * @param session
-   *   Spark session that SQL script is executed within.
    * @return
    *   Executable statement.
    */
-  private def transformTreeIntoExecutable(
-      node: CompoundPlanStatement, session: SparkSession): CompoundStatementExec =
+  private def transformTreeIntoExecutable(node: CompoundPlanStatement): CompoundStatementExec =
     node match {
       case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
@@ -82,26 +89,42 @@ case class SqlScriptingInterpreter() {
           .map(new SingleStatementExec(_, Origin(), isInternal = true))
           .reverse
         new CompoundBodyExec(
-          body.collection.map(st => transformTreeIntoExecutable(st, session)) ++ dropVariables)
+          body.collection.map(st => transformTreeIntoExecutable(st)) ++ dropVariables,
+          session)
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
-          new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false))
+          new SingleStatementExec(condition.parsedPlan, condition.origin))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
       case WhileStatement(condition, body, _) =>
         val conditionExec =
           new SingleStatementExec(condition.parsedPlan, condition.origin, isInternal = false)
         val bodyExec =
-          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
+          transformTreeIntoExecutable(body).asInstanceOf[CompoundBodyExec]
         new WhileStatementExec(conditionExec, bodyExec, session)
       case sparkStatement: SingleStatement =>
         new SingleStatementExec(
           sparkStatement.parsedPlan,
           sparkStatement.origin,
-          isInternal = false)
+          shouldCollectResult = true)
     }
+
+  /**
+   * Execute the provided CompoundBody and return all results.
+   *
+   * @param compoundBody
+   *   CompoundBody to execute.
+   * @return Results from all leaf statements.
+   */
+  private[scripting] def executeInternal(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val execNodesIter = buildExecutionPlan(compoundBody)
+    execNodesIter.flatMap {
+      case statement: SingleStatementExec if statement.shouldCollectResult => statement.result
+      case _ => None
+    }
+  }
 }

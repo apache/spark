@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+import org.apache.spark.sql.scripting.SqlScriptingInterpreter
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -144,6 +145,13 @@ abstract class BaseSessionStateBuilder(
    */
   protected lazy val sqlParser: ParserInterface = {
     extensions.buildParser(session, new SparkSqlParser())
+  }
+
+  /**
+   * Script interpreter that produces execution plan and executes SQL scripts.
+   */
+  protected lazy val sqlScriptingInterpreter: SqlScriptingInterpreter = {
+    extensions.buildInterpreter(session, SqlScriptingInterpreter(session))
   }
 
   /**
@@ -395,6 +403,7 @@ abstract class BaseSessionStateBuilder(
       dataSourceRegistration,
       () => catalog,
       sqlParser,
+      sqlScriptingInterpreter,
       () => analyzer,
       () => optimizer,
       planner,

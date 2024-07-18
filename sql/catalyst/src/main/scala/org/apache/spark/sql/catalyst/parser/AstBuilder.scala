@@ -117,13 +117,14 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+      ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!SQLConf.get.sqlScriptingEnabled) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
-      val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
+      visitSingleStatement(ctx.singleStatement())
     }
   }
 
@@ -174,34 +175,28 @@ class AstBuilder extends DataTypeAstBuilder
     CompoundBody(buff.toSeq, label)
   }
 
-
   private def generateLabelText(
-      beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]): String = {
+      beginLabelCtx: BeginLabelContext, endLabelCtx: EndLabelContext): String = {
+    val beginLabelName = Option(beginLabelCtx).map(_.LABEL().getText.dropRight(1))
+    val endLabelName = Option(endLabelCtx).map(_.IDENTIFIER().getText)
 
-    (beginLabelCtx, endLabelCtx) match {
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get, bl.multipartIdentifier().getText, el.multipartIdentifier().getText)
+    (beginLabelName, endLabelName) match {
+      case (Some(bl: String), Some(el: String))
+        if bl.nonEmpty && bl.toLowerCase(Locale.ROOT) != el.toLowerCase(Locale.ROOT) =>
+        withOrigin(beginLabelCtx) {
+          throw SqlScriptingErrors.labelsMismatch(CurrentOrigin.get, bl, el)
         }
-      case (None, Some(el: EndLabelContext)) =>
-        withOrigin(el) {
-          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
-        }
+      case (None, Some(el: String)) => withOrigin(endLabelCtx) {
+        throw SqlScriptingErrors.endLabelWithoutBeginLabel(CurrentOrigin.get, el)
+      }
       case _ =>
     }
 
-    beginLabelCtx.map(_.multipartIdentifier().getText)
-      .getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
+    beginLabelName.getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
   }
 
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val labelText = generateLabelText(ctx.beginLabel(), ctx.endLabel())
     visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
   }
 
@@ -229,12 +224,11 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
-      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
-    )
+      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
   }
 
   override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val labelText = generateLabelText(ctx.beginLabel(), ctx.endLabel())
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {

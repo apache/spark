@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
+import org.apache.spark.sql.scripting.SqlScriptingInterpreter
 
 /**
  * :: Experimental ::
@@ -110,6 +111,7 @@ class SparkSessionExtensions {
   type CheckRuleBuilder = SparkSession => LogicalPlan => Unit
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
+  type InterpreterBuilder = (SparkSession, SqlScriptingInterpreter) => SqlScriptingInterpreter
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
   type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
@@ -327,6 +329,16 @@ class SparkSessionExtensions {
       initial: ParserInterface): ParserInterface = {
     parserBuilders.foldLeft(initial) { (parser, builder) =>
       builder(session, parser)
+    }
+  }
+
+  private[this] val interpreterBuilders = mutable.Buffer.empty[InterpreterBuilder]
+
+  private[sql] def buildInterpreter(
+      session: SparkSession,
+      initial: SqlScriptingInterpreter): SqlScriptingInterpreter = {
+    interpreterBuilders.foldLeft(initial) { (interpreter, builder) =>
+      builder(session, interpreter)
     }
   }
 

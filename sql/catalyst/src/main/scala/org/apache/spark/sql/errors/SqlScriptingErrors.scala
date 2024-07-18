@@ -20,6 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -73,5 +74,13 @@ private[sql] object SqlScriptingErrors {
       errorClass = "INVALID_BOOLEAN_STATEMENT",
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
+
+  def sqlScriptingNotEnabled(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_NOT_ENABLED",
+      cause = null,
+      origin = origin,
+      messageParameters = Map("sqlScriptingEnabled" -> SQLConf.SQL_SCRIPTING_ENABLED.key))
   }
 }

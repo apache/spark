@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -45,7 +45,14 @@ sealed trait CompoundStatementExec extends Logging {
 /**
  * Leaf node in the execution tree.
  */
-trait LeafStatementExec extends CompoundStatementExec
+trait LeafStatementExec extends CompoundStatementExec {
+
+  /**
+  * Execute the statement.
+  * @param session Spark session.
+  */
+  def execute(session: SparkSession): Unit
+}
 
 /**
  * Non-leaf node in the execution tree. It is an iterator over executable child nodes.
@@ -72,9 +79,6 @@ trait NonLeafStatementExec extends CompoundStatementExec {
       session: SparkSession,
       statement: LeafStatementExec): Boolean = statement match {
     case statement: SingleStatementExec =>
-      assert(!statement.isExecuted)
-      statement.isExecuted = true
-
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
       val df = Dataset.ofRows(session, statement.parsedPlan)
@@ -104,18 +108,21 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param shouldCollectResult
+ *   Whether we should collect result after statement execution. Example: results from conditions
+ *   in if-else or loops should not be collected.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
-    override val isInternal: Boolean)
+    override val isInternal: Boolean = false,
+    val shouldCollectResult: Boolean = false)
   extends LeafStatementExec with WithOrigin {
 
   /**
-   * Whether this statement has been executed during the interpretation phase.
-   * Example: Statements in conditions of If/Else, While, etc.
+   * Data returned after execution.
    */
-  var isExecuted = false
+  var result: Option[Array[Row]] = None
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -127,20 +134,39 @@ class SingleStatementExec(
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
-  override def reset(): Unit = isExecuted = false
+  override def reset(): Unit = ()
+
+  override def execute(session: SparkSession): Unit = {
+    val rows = Some(Dataset.ofRows(session, parsedPlan).collect())
+    if (shouldCollectResult) {
+      result = rows
+    }
+  }
 }
 
 /**
- * Abstract class for all statements that contain nested statements.
- * Implements recursive iterator logic over all child execution nodes.
- * @param collection
- *   Collection of child execution nodes.
+ * Executable node for CompoundBody.
+ * @param statements
+ *   Executable nodes for nested statements within the CompoundBody.
+ * @param session
+ *   Spark session.
  */
-abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundStatementExec])
+class CompoundBodyExec(
+    statements: Seq[CompoundStatementExec],
+    session: SparkSession)
   extends NonLeafStatementExec {
 
-  private var localIterator = collection.iterator
-  private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var localIterator: Iterator[CompoundStatementExec] = statements.iterator
+  private var curr: Option[CompoundStatementExec] =
+    if (localIterator.hasNext) Some(localIterator.next()) else None
+
+  def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    statements.foreach(_.reset())
+    localIterator = statements.iterator
+    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  }
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
@@ -162,6 +188,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(statement: LeafStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            statement.execute(session)  // Execute the leaf statement
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
@@ -175,23 +202,7 @@ abstract class CompoundNestedStatementIteratorExec(collection: Seq[CompoundState
         }
       }
     }
-
-  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
-
-  override def reset(): Unit = {
-    collection.foreach(_.reset())
-    localIterator = collection.iterator
-    curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-  }
 }
-
-/**
- * Executable node for CompoundBody.
- * @param statements
- *   Executable nodes for nested statements within the CompoundBody.
- */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec])
-  extends CompoundNestedStatementIteratorExec(statements)
 
 /**
  * Executable node for IfElseStatement.

@@ -2576,8 +2576,10 @@ class SparkConnectPlanner(
           s"SQL command expects either a SQL or a WithRelations, but got $other")
     }
 
-    // Check if commands have been executed.
+    // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
+    val isSqlScript: Boolean = df.logicalPlan.isInstanceOf[LocalRelation] &&
+      df.logicalPlan.asInstanceOf[LocalRelation].isSqlScript
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
@@ -2589,7 +2591,7 @@ class SparkConnectPlanner(
     val result = SqlCommandResult.newBuilder()
     // Only filled when isCommand
     val metrics = ExecutePlanResponse.Metrics.newBuilder()
-    if (isCommand) {
+    if (isCommand || isSqlScript) {
       // Convert the results to Arrow.
       val schema = df.schema
       val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
