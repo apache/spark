@@ -408,6 +408,8 @@ class RocksDBFileManager(
   def setMaxVersion(version: Long): Unit = {
     if (maxVersion.isDefined) {
       maxVersion = Some(Math.max(maxVersion.get, version))
+    } else {
+      maxVersion = Some(version)
     }
   }
 
