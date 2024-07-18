@@ -216,10 +216,4 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           normalized)
     }
   }
-
-  test("invalid StringType") {
-    intercept[AssertionError] {
-      Collate(Literal(null, StringType(123456)), "UTF8_BINARY")
-    }
-  }
 }

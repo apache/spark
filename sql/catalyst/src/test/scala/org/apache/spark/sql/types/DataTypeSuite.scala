@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.JsonParseException
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.expressions.{Collate, Literal}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
@@ -1008,5 +1009,11 @@ class DataTypeSuite extends SparkFunSuite {
       DataTypes.createVarcharType(-1)
     }
     assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
+  }
+
+  test("invalid StringType") {
+    intercept[AssertionError] {
+      Collate(Literal(null, StringType(123456)), "UTF8_BINARY")
+    }
   }
 }
