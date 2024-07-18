@@ -36,14 +36,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
  * Pre-running the tests, the spark connect artifact needs to be built using e.g. `build/sbt
- * package`. It is designed to start the server once but shared by all tests. It is equivalent to
- * use the following command to start the connect server via command line:
- *
- * {{{
- * bin/spark-shell \
- * --jars `ls connect/server/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
- * --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
- * }}}
+ * package`. It is designed to start the server once but shared by all tests.
  *
  * Set system property `spark.test.home` or env variable `SPARK_HOME` if the test is not executed
  * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` or
@@ -51,6 +44,9 @@ import org.apache.spark.util.ArrayImplicits._
  * console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
+
+  // The equivalent command to start the connect server via command line:
+  // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
   // Server port
   val port: Int =

@@ -1230,8 +1230,8 @@ private[spark] class DAGScheduler(
         log"Cannot find active jobs for it.")
     }
     val jobIds = activeInGroup.map(_.jobId)
-    val updatedReason = reason.orElse(Some("part of cancelled job group %s".format(groupId)))
-    jobIds.foreach(handleJobCancellation(_, updatedReason))
+    val updatedReason = reason.getOrElse("part of cancelled job group %s".format(groupId))
+    jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
 
   private[scheduler] def handleJobTagCancelled(tag: String, reason: Option[String]): Unit = {
@@ -1243,8 +1243,8 @@ private[spark] class DAGScheduler(
           .split(SparkContext.SPARK_JOB_TAGS_SEP).filter(!_.isEmpty).toSet.contains(tag)
       }
     }.map(_.jobId)
-    val updatedReason = reason.orElse(Some(s"part of cancelled job tag $tag"))
-    jobIds.foreach(handleJobCancellation(_, updatedReason))
+    val updatedReason = reason.getOrElse("part of cancelled job tag %s".format(tag))
+    jobIds.foreach(handleJobCancellation(_, Option(updatedReason)))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {

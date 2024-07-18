@@ -132,15 +132,34 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
     val inType = typeArgs.head
 
     import scala.reflect.api._
+    def areCompatibleMirrors(one: Mirror[_], another: Mirror[_]): Boolean = {
+      def checkAllParents(target: JavaMirror, candidate: JavaMirror): Boolean = {
+        var current = candidate.classLoader
+        while (current != null) {
+          if (current == target.classLoader) {
+            return true
+          }
+          current = current.getParent
+        }
+        false
+      }
+
+      (one, another) match {
+        case (a: JavaMirror, b: JavaMirror) =>
+          a == b || checkAllParents(a, b) || checkAllParents(b, a)
+        case _ => one == another
+      }
+    }
+
     TypeTag(
       mirror,
       new TypeCreator {
         def apply[U <: Universe with Singleton](m: Mirror[U]): U#Type =
-          if (m eq mirror) {
+          if (areCompatibleMirrors(m, mirror)) {
             inType.asInstanceOf[U#Type]
           } else {
             throw new IllegalArgumentException(
-              s"Type tag defined in $mirror cannot be migrated to other mirrors.")
+              s"Type tag defined in [$mirror] cannot be migrated to another mirror [$m].")
           }
       })
   }

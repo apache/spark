@@ -182,8 +182,11 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
     } else {
       Seq()
     }
-    val isScalarSubquery = Seq(SubqueryType.ATTRIBUTE, SubqueryType.SCALAR_PREDICATE_EQUALS,
-      SubqueryType.SCALAR_PREDICATE_LESS_THAN).contains(subqueryType)
+    val isScalarSubquery = Seq(SubqueryType.ATTRIBUTE,
+      SubqueryType.SCALAR_PREDICATE_EQUALS, SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
+      SubqueryType.SCALAR_PREDICATE_LESS_THAN, SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+      SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
+      SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS).contains(subqueryType)
     val subqueryOrganization = generateSubquery(
       innerTable, correlationConditions, isDistinct, operatorInSubquery, isScalarSubquery)
 
@@ -218,8 +221,16 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         val whereClausePredicate = subqueryType match {
           case SubqueryType.SCALAR_PREDICATE_EQUALS =>
             Equals(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_NOT_EQUALS =>
+            NotEquals(expr, Subquery(subqueryOrganization))
           case SubqueryType.SCALAR_PREDICATE_LESS_THAN =>
             LessThan(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS =>
+            LessThanOrEquals(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_GREATER_THAN =>
+            GreaterThan(expr, Subquery(subqueryOrganization))
+          case SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS =>
+            GreaterThanOrEquals(expr, Subquery(subqueryOrganization))
           case SubqueryType.EXISTS => Exists(subqueryOrganization)
           case SubqueryType.NOT_EXISTS => Not(Exists(subqueryOrganization))
           case SubqueryType.IN => In(expr, subqueryOrganization)
@@ -294,7 +305,11 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         case SubqueryLocation.FROM => Seq(SubqueryType.RELATION)
         case SubqueryLocation.WHERE => Seq(
           SubqueryType.SCALAR_PREDICATE_LESS_THAN,
+          SubqueryType.SCALAR_PREDICATE_LESS_THAN_OR_EQUALS,
+          SubqueryType.SCALAR_PREDICATE_GREATER_THAN,
+          SubqueryType.SCALAR_PREDICATE_GREATER_THAN_OR_EQUALS,
           SubqueryType.SCALAR_PREDICATE_EQUALS,
+          SubqueryType.SCALAR_PREDICATE_NOT_EQUALS,
           SubqueryType.IN,
           SubqueryType.NOT_IN,
           SubqueryType.EXISTS,

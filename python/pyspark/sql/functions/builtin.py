@@ -12426,6 +12426,51 @@ def url_decode(str: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def try_url_decode(str: "ColumnOrName") -> Column:
+    """
+    This is a special version of `url_decode` that performs the same operation, but returns a
+    NULL value instead of raising an error if the decoding cannot be performed.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        A column of strings, each representing a URL-encoded string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of strings, each representing the decoded string.
+
+    Examples
+    --------
+    Example 1: Decoding a URL-encoded string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2Fspark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show(truncate=False)
+    +------------------------+
+    |try_url_decode(url)     |
+    +------------------------+
+    |https://spark.apache.org|
+    +------------------------+
+
+    Example 2: Return NULL if the decoding cannot be performed.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("https%3A%2F%2spark.apache.org",)], ["url"])
+    >>> df.select(sf.try_url_decode(df.url)).show()
+    +-------------------+
+    |try_url_decode(url)|
+    +-------------------+
+    |               NULL|
+    +-------------------+
+    """
+    return _invoke_function_over_columns("try_url_decode", str)
+
+
+@_try_remote_functions
 def url_encode(str: "ColumnOrName") -> Column:
     """
     URL function: Encodes a string into a URL-encoded string in
@@ -16303,7 +16348,21 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
-    Example 2: Parsing XML with :class:`ArrayType` in schema
+    Example 2: Parsing XML with a :class:`StructType` schema
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import StructType, LongType
+    >>> data = [(1, '''<p><a>1</a></p>''')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> schema = StructType().add("a", LongType())
+    >>> df.select(sf.from_xml(df.value, schema)).show()
+    +---------------+
+    |from_xml(value)|
+    +---------------+
+    |            {1}|
+    +---------------+
+
+    Example 3: Parsing XML with :class:`ArrayType` in schema
 
     >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
@@ -16314,7 +16373,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
 
-    Example 3: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
+    Example 4: Parsing XML using :meth:`pyspark.sql.functions.schema_of_xml`
 
     >>> import pyspark.sql.functions as sf
     >>> # Sample data with an XML column

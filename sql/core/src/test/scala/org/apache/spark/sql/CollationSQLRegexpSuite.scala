@@ -430,7 +430,7 @@ class CollationSQLRegexpSuite
         sql(s"SELECT regexp_replace(collate('ABCDE','$c1'), '.c.', collate('FFF','$c2'))")
       },
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string`.`string collate UTF8_LCASE`")
+      parameters = Map("explicitTypes" -> "`string`, `string collate UTF8_LCASE`")
     )
     // Unsupported collations
     case class RegExpReplaceTestFail(l: String, r: String, c: String)
