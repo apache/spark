@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -29,32 +28,25 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
-  private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
+  private def verifySqlScriptResult(sqlText: String, expected: Seq[Array[Row]]): Unit = {
     val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody)
-    val result = executionPlan.flatMap {
-      case statement: SingleStatementExec =>
-        if (statement.collectResult) {
-          Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))
-        } else {
-          None
-        }
-      case _ => None
-    }.toArray
-
+    val result = interpreter.execute(compoundBody).toSeq
     assert(result.length == expected.length)
-    result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
+    result.zip(expected).foreach {
+      case (actualAnswer, expectedAnswer) =>
+        assert(actualAnswer.sameElements(expectedAnswer))
+    }
   }
 
   // Tests
   test("select 1") {
-    verifySqlScriptResult("SELECT 1;", Seq(Seq(Row(1))))
+    verifySqlScriptResult("SELECT 1;", Seq(Array(Row(1))))
   }
 
   // Tests
   test("select 1; select 2;") {
-    verifySqlScriptResult("BEGIN SELECT 1; SELECT 2; END", Seq(Seq(Row(1)), Seq(Row(2))))
+    verifySqlScriptResult("BEGIN SELECT 1; SELECT 2; END", Seq(Array(Row(1)), Array(Row(2))))
   }
 
   test("multi statement - simple") {
@@ -69,10 +61,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |END
           |""".stripMargin
       val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // select with filter
-        Seq(Row(1)) // select
+        Array.empty[Row], // create table
+        Array.empty[Row], // insert
+        Array.empty[Row], // select with filter
+        Array(Row(1)) // select
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -94,10 +86,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |END
           |""".stripMargin
       val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert #1
-        Seq.empty[Row], // insert #2
-        Seq(Row(false)) // select
+        Array.empty[Row], // create table
+        Array.empty[Row], // insert #1
+        Array.empty[Row], // insert #2
+        Array(Row(false)) // select
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -113,10 +105,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
+      Array.empty[Row], // declare var
+      Array.empty[Row], // set var
+      Array(Row(2)), // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -141,16 +132,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq(Row(1)), // select
-      Seq.empty[Row], // drop var
-      Seq.empty[Row], // declare var
-      Seq(Row(2)), // select
-      Seq.empty[Row], // drop var
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(4)), // select
-      Seq.empty[Row] // drop var
+      Array.empty[Row], // declare var
+      Array(Row(1)), // select
+      Array.empty[Row], // declare var
+      Array(Row(2)), // select
+      Array.empty[Row], // declare var
+      Array.empty[Row], // set var
+      Array(Row(4)), // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -193,11 +181,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row], // drop var - explicit
-      Seq.empty[Row] // drop var - implicit
+      Array.empty[Row], // declare var
+      Array.empty[Row], // set var
+      Array(Row(2)), // select
+      Array.empty[Row], // drop var - explicit
     )
     verifySqlScriptResult(sqlScript, expected)
   }
