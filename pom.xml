@@ -170,6 +170,7 @@
     <commons.collections4.version>4.4</commons.collections4.version>
     <scala.version>2.12.17</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scala-collection-compat.version>2.7.0</scala-collection-compat.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!--
       This needs to be managed in different profiles to avoid
@@ -1109,6 +1110,11 @@
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-xml_${scala.binary.version}</artifactId>
         <version>2.1.0</version>
+      </dependency>
+      <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-collection-compat_${scala.binary.version}</artifactId>
+        <version>${scala-collection-compat.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
