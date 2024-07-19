@@ -465,7 +465,7 @@ class DefaultParamsWriter(MLWriter):
             instance, sc, extraMetadata, paramMap
         )
         spark = SparkSession.getActiveSession()
-        spark.createDataFrame([(metadataJson,)], schema=["value"]).repartition(1).write.text(
+        spark.createDataFrame([(metadataJson,)], schema=["value"]).coalesce(1).write.text(
             metadataPath
         )
 
