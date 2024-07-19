@@ -1275,11 +1275,32 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
       "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, COT(BONUS) < -11.0, " +
       "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
-      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+    // When arguments for asin and acos are invalid (< -1 || > 1) in H2
+    val e = intercept[SparkException] {
+      checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
+        Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+    }
+    assert(e.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e.getCause.getMessage.contains("Invalid value"))
+
+    // When arguments for asin and acos are valid (>= -1 && <= 1) in H2
+    val df17 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE asin(bonus / salary) > 0.13
+        |AND acos(bonus / salary) < 1.47
+        |""".stripMargin)
+    checkFiltersRemoved(df17)
+    checkPushedInfo(df17, "PushedFilters: [" +
+      "BONUS IS NOT NULL, SALARY IS NOT NULL, " +
+      "ASIN(BONUS / CAST(SALARY AS double)) > 0.13, " +
+      "ACOS(BONUS / CAST(SALARY AS double)) < 1.47]")
+    checkAnswer(df17, Seq(Row(1, "cathy", 9000, 1200, false),
+      Row(2, "david", 10000, 1300, true)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
-    val df17 = sql(
+    val df18 = sql(
       """
         |SELECT * FROM h2.test.employee
         |WHERE log2(dept) > 2.5
@@ -1288,10 +1309,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |AND atanh(bonus / salary) > 0.1
         |AND cbrt(dept) > 1.8
         |""".stripMargin)
-    checkFiltersRemoved(df17, false)
-    checkPushedInfo(df17,
+    checkFiltersRemoved(df18, false)
+    checkPushedInfo(df18,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
-    checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+    checkAnswer(df18, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
