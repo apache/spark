@@ -1115,4 +1115,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       withIdentClause(ctx.identifierReference(), UnresolvedNamespace(_)),
       cleanedProperties)
   }
+
+  override def visitShowVariables(ctx: ShowVariablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowVariablesCommand(Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
 }

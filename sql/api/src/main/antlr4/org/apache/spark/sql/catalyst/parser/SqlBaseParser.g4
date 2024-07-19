@@ -236,6 +236,7 @@ statement
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
     | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
+    | SHOW VARIABLES (LIKE? pattern=stringLit)?                        #showVariables
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
@@ -1711,6 +1712,7 @@ ansiNonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIABLES
     | VARIANT
     | VERSION
     | VIEW
@@ -2080,6 +2082,7 @@ nonReserved
     | VARCHAR
     | VAR
     | VARIABLE
+    | VARIABLES
     | VARIANT
     | VERSION
     | VIEW
