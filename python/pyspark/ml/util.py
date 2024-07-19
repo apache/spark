@@ -464,7 +464,8 @@ class DefaultParamsWriter(MLWriter):
         metadataJson = DefaultParamsWriter._get_metadata_to_save(
             instance, sc, extraMetadata, paramMap
         )
-        sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
+        spark = SparkSession.getActiveSession()
+        spark.createDataFrame([(metadataJson,)], schema=["value"]).repartition(1).write.text(metadataPath)
 
     @staticmethod
     def _get_metadata_to_save(
@@ -577,7 +578,8 @@ class DefaultParamsReader(MLReader[RL]):
             If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
-        metadataStr = sc.textFile(metadataPath, 1).first()
+        spark = SparkSession.getActiveSession()
+        metadataStr = spark.read.text(metadataPath).first()[0]
         loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
         return loadedVals
 
