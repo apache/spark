@@ -275,7 +275,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       val schemaFilePath = Some(new Path(stateSchemaDir,
         s"${batchId}_${UUID.randomUUID().toString}"))
       val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-        stateSchemaVersion = stateSchemaVersion, schemaFilePath = schemaFilePath)
+        schemaFilePath = schemaFilePath)
       checker.createSchemaFile(storeColFamilySchema,
         SchemaHelper.SchemaWriter.createSchemaWriter(stateSchemaVersion))
       val stateSchema = checker.readSchemaFile()
