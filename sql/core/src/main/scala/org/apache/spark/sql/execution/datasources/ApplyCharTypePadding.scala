@@ -137,7 +137,8 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
             case (_, _: OuterReference) => Seq(right)
             case _ => Nil
           }
-          val newChildren = CharVarcharUtils.addPaddingInStringComparison(Seq(left, right))
+          val newChildren = CharVarcharUtils.addPaddingInStringComparison(
+            Seq(left, right), padCharCol)
           if (outerRefs.nonEmpty) {
             b.withNewChildren(newChildren.map(_.transform {
               case a: Attribute if outerRefs.exists(_.semanticEquals(a)) => OuterReference(a)
@@ -148,7 +149,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
         case i @ In(e @ AttrOrOuterRef(attr), list) if list.forall(_.isInstanceOf[Attribute]) =>
           val newChildren = CharVarcharUtils.addPaddingInStringComparison(
-            attr +: list.map(_.asInstanceOf[Attribute]))
+            attr +: list.map(_.asInstanceOf[Attribute]), padCharCol)
           if (e.isInstanceOf[OuterReference]) {
             i.copy(
               value = newChildren.head.transform {
