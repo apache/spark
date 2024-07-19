@@ -171,7 +171,9 @@ class CompoundBodyExec(
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(statement: SingleStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            statement.execute(session)  // Execute the leaf statement
+            if (!statement.isExecuted) {
+              statement.execute(session)  // Execute the leaf statement
+            }
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
