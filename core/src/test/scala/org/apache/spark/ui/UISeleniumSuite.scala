@@ -815,7 +815,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
           (jobsJson.children.head \ "numActiveTasks").extract[Int] should be (2)
         }
       } finally {
-        f.cancel()
+        f.cancel(reason = None)
       }
     }
   }

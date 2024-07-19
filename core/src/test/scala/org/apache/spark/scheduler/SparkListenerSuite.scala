@@ -473,7 +473,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       assert(!listener.startedTasks.isEmpty)
     }
 
-    f.cancel()
+    f.cancel(reason = None)
 
     // Ensure that onTaskEnd is called for all started tasks.
     finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
