@@ -696,7 +696,7 @@ jobs:
     - name: Scala structured logging check
       run: |
         if [ -f ./dev/structured_logging_style.py ]; then
-            ./dev/structured_logging_style.py
+            python3.9 ./dev/structured_logging_style.py
         fi
     - name: Java linter
       run: ./dev/lint-java
