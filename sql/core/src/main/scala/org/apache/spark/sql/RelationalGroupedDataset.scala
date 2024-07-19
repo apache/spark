@@ -733,7 +733,6 @@ class RelationalGroupedDataset protected[sql](
    * along with corresponding state, and the results for all groups are combined into a new
    * [[DataFrame]].
    *
-   *
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */

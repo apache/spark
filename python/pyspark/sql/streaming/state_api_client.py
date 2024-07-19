@@ -115,6 +115,8 @@ class StateApiClient:
 
     def _send_proto_message(self, message: stateMessage.StateRequest) -> None:
         serialized_msg = message.SerializeToString()
+        # Writing zero here to indicate message version. This allows us to evolve the message
+        # format or even changing the message protocol in the future.
         write_int(0, self.sockfile)
         write_int(len(serialized_msg), self.sockfile)
         self.sockfile.write(serialized_msg)

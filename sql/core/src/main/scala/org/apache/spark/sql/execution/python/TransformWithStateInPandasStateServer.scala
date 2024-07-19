@@ -34,24 +34,23 @@ import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.types.StructType
 
 /**
- * This class is used to handle the state requests from the Python side.
+ * This class is used to handle the state requests from the Python side. It processes following
+ * state requests and return responses to the Python side:
+ * - Requests for managing explicit grouping key.
+ * - Stateful processor requests.
+ * - Requests for managing state variables (e.g. valueState).
  */
 class TransformWithStateInPandasStateServer(
     private val stateServerSocket: ServerSocket,
     private val statefulProcessorHandle: StatefulProcessorHandleImpl,
     private val groupingKeySchema: StructType)
-  extends Runnable
-  with Logging{
-
+  extends Runnable with Logging {
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = _
-
   private val valueStates = mutable.HashMap[String, ValueState[Row]]()
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
-    logWarning(s"listening on socket - ${listeningSocket.getLocalAddress}")
-
     inputStream = new DataInputStream(
       new BufferedInputStream(listeningSocket.getInputStream))
     outputStream = new DataOutputStream(
@@ -60,21 +59,15 @@ class TransformWithStateInPandasStateServer(
 
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
-
       try {
         val version = inputStream.readInt()
-
         if (version != -1) {
           assert(version == 0)
           val messageLen = inputStream.readInt()
-
           val messageBytes = new Array[Byte](messageLen)
           inputStream.read(messageBytes)
-
           val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
-
           handleRequest(message)
-
           outputStream.flush()
         }
       } catch {

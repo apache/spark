@@ -75,7 +75,6 @@ case class TransformWithStateInPandasExec(
   private val groupingKeyExprEncoder = ExpressionEncoder(groupingKeySchema)
     .resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
-
   /** The keys that may have a watermark attribute. */
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
