@@ -48,7 +48,7 @@ case class StateStoreColFamilySchema(
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
-    stateSchemaVersion: Int = 2,
+    stateSchemaVersion: Int = StateSchemaCompatibilityChecker.DEFAULT_VERSION,
     schemaFilePath: Option[Path] = None) extends Logging {
 
   if (stateSchemaVersion == 3 && schemaFilePath.isEmpty) {
@@ -178,6 +178,8 @@ class StateSchemaCompatibilityChecker(
 }
 
 object StateSchemaCompatibilityChecker {
+  val DEFAULT_VERSION = 2
+
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
