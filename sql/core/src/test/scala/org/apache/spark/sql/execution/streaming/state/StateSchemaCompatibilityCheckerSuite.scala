@@ -248,33 +248,39 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
   }
 
-  test("checking for compatibility with schema version 3") {
-    val stateSchemaVersion = 3
-    val dir = newDir()
-    val queryId = UUID.randomUUID()
-    val providerId = StateStoreProviderId(
-      StateStoreId(dir, opId, partitionId), queryId)
-    val runId = UUID.randomUUID()
-    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
-    val storeColFamilySchema = List(
-      StateStoreColFamilySchema("test1", keySchema, valueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema)),
-      StateStoreColFamilySchema("test2", longKeySchema, longValueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, longKeySchema)),
-      StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)),
-      StateStoreColFamilySchema("test4", keySchema, valueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema),
-        userKeyEncoderSchema = Some(structSchema)))
-    val stateSchemaDir = stateSchemaDirPath(stateInfo)
-    val schemaFilePath = Some(new Path(stateSchemaDir,
-    s"${batchId}_${UUID.randomUUID().toString}"))
-    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-      stateSchemaVersion = stateSchemaVersion, schemaFilePath = schemaFilePath)
-    checker.createSchemaFile(storeColFamilySchema,
-      SchemaHelper.SchemaWriter.createSchemaWriter(stateSchemaVersion))
-    val stateSchema = checker.readSchemaFile()
-    assert(stateSchema.sortBy(_.colFamilyName) === storeColFamilySchema.sortBy(_.colFamilyName))
+  Seq("NoPrefixKeyStateEncoderSpec", "PrefixKeyScanStateEncoderSpec",
+    "RangeKeyScanStateEncoderSpec").foreach { encoderSpecStr =>
+    test(s"checking for compatibility with schema version 3 with encoderSpec=$encoderSpecStr") {
+      val stateSchemaVersion = 3
+      val dir = newDir()
+      val queryId = UUID.randomUUID()
+      val providerId = StateStoreProviderId(
+        StateStoreId(dir, opId, partitionId), queryId)
+      val runId = UUID.randomUUID()
+      val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+      val storeColFamilySchema = List(
+        StateStoreColFamilySchema("test1", keySchema, valueSchema,
+          keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema,
+            encoderSpecStr)),
+        StateStoreColFamilySchema("test2", longKeySchema, longValueSchema,
+          keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, longKeySchema,
+            encoderSpecStr)),
+        StateStoreColFamilySchema("test3", keySchema65535Bytes, valueSchema65535Bytes,
+          keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema65535Bytes)),
+        StateStoreColFamilySchema("test4", keySchema, valueSchema,
+          keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, keySchema,
+            encoderSpecStr),
+          userKeyEncoderSchema = Some(structSchema)))
+      val stateSchemaDir = stateSchemaDirPath(stateInfo)
+      val schemaFilePath = Some(new Path(stateSchemaDir,
+        s"${batchId}_${UUID.randomUUID().toString}"))
+      val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
+        stateSchemaVersion = stateSchemaVersion, schemaFilePath = schemaFilePath)
+      checker.createSchemaFile(storeColFamilySchema,
+        SchemaHelper.SchemaWriter.createSchemaWriter(stateSchemaVersion))
+      val stateSchema = checker.readSchemaFile()
+      assert(stateSchema.sortBy(_.colFamilyName) === storeColFamilySchema.sortBy(_.colFamilyName))
+    }
   }
 
   test("SPARK-39650: ignore value schema on compatibility check") {
@@ -333,10 +339,21 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     new Path(new Path(storeNamePath, "_metadata"), "schema")
   }
 
-  private def getKeyStateEncoderSpec(stateSchemaVersion: Int, keySchema: StructType):
-    Option[KeyStateEncoderSpec] = {
+  private def getKeyStateEncoderSpec(
+      stateSchemaVersion: Int,
+      keySchema: StructType,
+      encoderSpec: String = "NoPrefixKeyStateEncoderSpec"): Option[KeyStateEncoderSpec] = {
     if (stateSchemaVersion == 3) {
-      Some(NoPrefixKeyStateEncoderSpec(keySchema))
+      encoderSpec match {
+        case "NoPrefixKeyStateEncoderSpec" =>
+          Some(NoPrefixKeyStateEncoderSpec(keySchema))
+        case "PrefixKeyScanStateEncoderSpec" =>
+          Some(PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 1))
+        case "RangeKeyScanStateEncoderSpec" =>
+          Some(RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0)))
+        case _ =>
+          None
+      }
     } else {
       None
     }
