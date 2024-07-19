@@ -82,7 +82,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           isInternal = false)
     }
 
-  def execute(executionPlan: Iterator[CompoundStatementExec]): Iterator[Array[Row]] = {
+  def execute(compoundBody: CompoundBody): Iterator[Array[Row]] = {
+    val executionPlan = buildExecutionPlan(compoundBody)
     executionPlan.flatMap {
       case statement: SingleStatementExec if statement.collectResult
         && !statement.isInternal => statement.result
