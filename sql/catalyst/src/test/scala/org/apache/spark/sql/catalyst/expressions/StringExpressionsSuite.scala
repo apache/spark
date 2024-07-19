@@ -520,6 +520,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "true") {
       checkEvaluation(Base64(Literal(longString.getBytes)), chunkEncoded)
     }
+
+    // check if unbase64 works well for chunked and non-chunked encoded strings
+    checkEvaluation(StringDecode(UnBase64(Literal(encoded)), Literal("utf-8")), longString)
+    checkEvaluation(StringDecode(UnBase64(Literal(chunkEncoded)), Literal("utf-8")), longString)
   }
 
   test("initcap unit test") {
