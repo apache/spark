@@ -18,7 +18,7 @@ import datetime
 import json
 from typing import Tuple, Optional
 
-from pyspark.sql.types import Row, StructType, TimestampType
+from pyspark.sql.types import DateType, Row, StructType
 from pyspark.sql.utils import has_numpy
 
 __all__ = ["GroupState", "GroupStateTimeout"]
@@ -178,17 +178,7 @@ class GroupState:
             )
 
         if durationMs <= 0:
-<<<<<<< HEAD
             raise ValueError("Timeout duration must be positive")
-=======
-            raise PySparkValueError(
-                error_class="VALUE_NOT_POSITIVE",
-                message_parameters={
-                    "arg_name": "durationMs",
-                    "arg_value": type(durationMs).__name__,
-                },
-            )
->>>>>>> a54daa196c1 ([SPARK-48934][SS] Python datetime types converted incorrectly for setting timeout in applyInPandasWithState)
         self._timeout_timestamp = durationMs + self._batch_processing_time_ms
 
     # TODO(SPARK-40438): Implement additionalDuration parameter.
@@ -205,20 +195,10 @@ class GroupState:
             )
 
         if isinstance(timestampMs, datetime.datetime):
-            timestampMs = TimestampType().toInternal(timestampMs) / 1000
+            timestampMs = DateType().toInternal(timestampMs)
 
         if timestampMs <= 0:
-<<<<<<< HEAD
             raise ValueError("Timeout timestamp must be positive")
-=======
-            raise PySparkValueError(
-                error_class="VALUE_NOT_POSITIVE",
-                message_parameters={
-                    "arg_name": "timestampMs",
-                    "arg_value": type(timestampMs).__name__,
-                },
-            )
->>>>>>> a54daa196c1 ([SPARK-48934][SS] Python datetime types converted incorrectly for setting timeout in applyInPandasWithState)
 
         if (
             self._event_time_watermark_ms != GroupState.NO_TIMESTAMP
