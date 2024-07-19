@@ -102,7 +102,11 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.SQLImplicits.session"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession#implicits._sqlContext"),
     // SPARK-48900: Add `reason` string to all job / stage / job group cancellation calls
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.JobWaiter#cancel")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.scheduler.JobWaiter#cancel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ComplexFutureAction.cancel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FutureAction.cancel"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.cancel"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SimpleFutureAction.cancel")
   )
 
   // Default exclude rules
