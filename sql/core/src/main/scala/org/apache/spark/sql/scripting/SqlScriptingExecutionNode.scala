@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.parser.HandlerType
 import org.apache.spark.sql.catalyst.parser.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
@@ -222,14 +221,12 @@ class CompoundBodyExec(
             "No more elements to iterate through in the current SQL compound statement.")
           case Some(statement: SingleStatementExec) =>
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
-            statement.execute(session)
+            if (!statement.isExecuted) statement.execute(session)
             if (statement.raisedError) {
               val handler = getHandler(statement.errorState.get).get
-              handler.executeAndReset()
-              if (handler.getHandlerType == HandlerType.EXIT) {
-                // TODO: premature exit from the compound ...
-                curr = None // throws error because of none
-              }
+              // Reset handler body to execute it again
+              handler.getHandlerBody.reset()
+              return handler.getTreeIterator.next()
             }
             statement
           case Some(body: NonLeafStatementExec) =>
@@ -249,9 +246,13 @@ class CompoundBodyExec(
 
 class ErrorHandlerExec(
     body: CompoundBodyExec,
-    handlerType: HandlerType) extends CompoundStatementExec {
+    handlerType: HandlerType) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
 
   def getHandlerType: HandlerType = handlerType
+
+  def getHandlerBody: CompoundBodyExec = body
 
   def executeAndReset(): Unit = {
     execute()
