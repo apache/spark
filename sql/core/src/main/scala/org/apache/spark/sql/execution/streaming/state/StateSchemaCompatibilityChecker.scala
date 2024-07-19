@@ -147,6 +147,12 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  /**
+   * Function to validate the new state store schema and evolve the schema if required.
+   * @param newStateSchema - proposed new state store schema by the operator
+   * @param ignoreValueSchema - whether to ignore value schema compatibility checks or not
+   * @return - true if the schema has evolved, false otherwise
+   */
   def validateAndMaybeEvolveStateSchema(
       newStateSchema: List[StateStoreColFamilySchema],
       ignoreValueSchema: Boolean): Boolean = {
@@ -172,8 +178,6 @@ class StateSchemaCompatibilityChecker(
 }
 
 object StateSchemaCompatibilityChecker {
-  val VERSION = 2
-
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
     if (!UnsafeRowUtils.isBinaryStable(schema)) {
       throw new SparkUnsupportedOperationException(
@@ -229,6 +233,9 @@ object StateSchemaCompatibilityChecker {
     // if the format validation for value schema is disabled, we also disable the schema
     // compatibility checker for value schema as well.
 
+    // Currently - schema evolution can happen only once per query. Basically for the initial batch
+    // there is no previous schema. So we classify that case under schema evolution. In the future,
+    // newer stateSchemaVersions will support evolution through the lifetime of the query as well.
     var evolvedSchema = false
     val result = Try(
       checker.validateAndMaybeEvolveStateSchema(newStateSchema,
