@@ -39,20 +39,18 @@ private[sql] object SqlScriptingErrors extends QueryErrorsBase {
       messageParameters = Map("endLabel" -> endLabel))
   }
 
-  def variableDeclarationNotAllowedInScope(): Throwable = {
+  def variableDeclarationNotAllowedInScope(varName: String, lineNumber: String): Throwable = {
     new SparkException(
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
-      messageParameters = Map()
-    )
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
   }
 
-  def variableDeclarationOnlyAtBeginning(): Throwable = {
+  def variableDeclarationOnlyAtBeginning(varName: String, lineNumber: String): Throwable = {
     new SparkException(
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
-      messageParameters = Map()
-    )
+      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
   }
 
 }
